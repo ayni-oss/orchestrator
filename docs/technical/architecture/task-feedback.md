@@ -49,8 +49,8 @@ Reload and reconnect reconstruct notices from canonical retained reads rather th
 The gateway owns no attention state or new execution authority.
 
 Every record is `open` in this slice.
-There is no answer, dismiss, resolve, retry or continue mutation, and notices are not inserted into provider context automatically.
-Structured worker questions, recovery proposals and attention resolution belong to later [M6 slices](../research/project-workflow-m6-delivery-plan.md).
+Feedback has no dismiss, resolve, retry or continue mutation, and notices are not inserted into provider context automatically.
+[Recovery review](task-recovery.md) adds separate immutable proposals and operator question/answer records; those records leave attention open and dispatch no work. Structured worker questions and attention resolution belong to later [M6 slices](../research/project-workflow-m6-delivery-plan.md).
 
 ## Acceptance boundary
 

@@ -1,0 +1,68 @@
+// Canonical deployed recovery review, including accepted response loss and reload.
+import { chromium } from 'playwright';
+import assert from 'node:assert/strict';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+const endpoint = process.env.CONSOLE_URL;
+assert.equal(new URL(endpoint).hostname, '127.0.0.1');
+const coding = JSON.parse(await readFile(process.env.TASK_CONSOLE_SELECTION_FILE, 'utf8'));
+const scope = { workspaceId: coding.scope.workspace, projectId: coding.scope.project, conversationId: coding.scope.conversation };
+const evidence = process.env.TASK_CONSOLE_EVIDENCE_DIRECTORY;
+const browser = await chromium.launch();
+try {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  await context.addInitScript(scope => sessionStorage.setItem('selection', JSON.stringify(scope)), scope);
+  const page = await context.newPage(); const errors = []; const starts = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('request', r => { if (/\/api\/(StartTaskExecution|StartTaskPublication|SendMessage)$/.test(r.url())) starts.push(r.url()); });
+  const api = (method, body) => page.evaluate(async ({ method, body }) => {
+    const response = await fetch(`/api/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Console-Request': '1' }, body: JSON.stringify(body) });
+    if (!response.ok) throw new Error(`${method} failed`); return response.json();
+  }, { method, body });
+  await page.goto(endpoint);
+  await page.locator('[data-inspect-task]').first().click();
+  await page.locator('#task-auto-refresh').uncheck();
+  await page.getByRole('button', { name: 'Record recovery proposal', exact: true }).waitFor();
+  assert.match(await page.locator('#task-recovery').innerText(), /do not start work/);
+  const task = (await api('ListTasks', { ...scope, limit: 20 })).tasks[0];
+  const attemptId = (await api('GetTaskExecution', { ...scope, taskId: task.id })).preparation.attemptId;
+  const selected = { ...scope, taskId: task.id, attemptId };
+  const before = await api('GetTaskAttempt', selected);
+  await page.getByLabel('Record recovery proposal', { exact: true }).fill('Inspect saved changes <script>unsafe()</script> before continuing.');
+  await page.getByLabel('Additional seconds', { exact: true }).fill('180');
+  await page.getByLabel('Additional tokens', { exact: true }).fill('2048');
+  let accepted;
+  await page.route('**/api/RecordTaskRecovery', async route => {
+    const response = await route.fetch(); assert.equal(response.status(), 200);
+    accepted = { request: route.request().postDataJSON(), response: await response.json() }; await route.abort('failed');
+  }, { times: 1 });
+  await page.getByRole('button', { name: 'Record recovery proposal', exact: true }).click();
+  await page.locator('#pending').waitFor({ state: 'visible' });
+  await page.waitForFunction(() => !document.querySelector('#retry').disabled);
+  await page.reload(); await page.locator('#pending').waitFor({ state: 'visible' });
+  const replay = page.waitForResponse(r => r.url().endsWith('/api/RecordTaskRecovery'));
+  await page.locator('#retry').click(); const response = await replay;
+  assert.equal(response.status(), 200); assert.deepEqual(response.request().postDataJSON(), accepted.request); assert.deepEqual(await response.json(), accepted.response);
+  await page.locator(`[data-recovery-id="${accepted.response.record.id}"]`).waitFor();
+  assert.equal(await page.locator('#task-recovery script').count(), 0);
+  assert.match(await page.locator('#task-recovery').innerText(), /180 seconds and 2048 tokens/);
+  await page.getByLabel('Record operator question', { exact: true }).fill('Preserve the accepted patch?');
+  const questionResponse = page.waitForResponse(r => r.url().endsWith('/api/RecordTaskRecovery'));
+  await page.getByRole('button', { name: 'Record operator question', exact: true }).click();
+  const question = (await (await questionResponse).json()).record;
+  const questionNode = page.locator(`[data-recovery-id="${question.id}"]`);
+  await questionNode.getByLabel('Record answer', { exact: true }).fill('Preserve it and review the failed check.');
+  await questionNode.getByRole('button', { name: 'Record answer', exact: true }).click();
+  await page.waitForFunction(id => !document.querySelector(`[data-recovery-id="${id}"] form`), question.id);
+  await page.reload(); await page.locator(`[data-recovery-id="${question.id}"]`).waitFor();
+  assert.equal(await page.locator(`[data-recovery-id="${question.id}"] form`).count(), 0);
+  assert.deepEqual(await api('GetTaskAttempt', selected), before);
+  assert.equal((await api('ListTaskFeedback', { ...scope, limit: 32 })).feedback[0].state, 'open');
+  assert.deepEqual(starts, []); assert.deepEqual(errors, []);
+  await mkdir(evidence, { recursive: true });
+  await page.screenshot({ path: `${evidence}/recovery-desktop.png`, fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.screenshot({ path: `${evidence}/recovery-mobile.png`, fullPage: true });
+  await writeFile(`${evidence}/outcome.json`, JSON.stringify({ result: 'passed', scope, selected, accepted, question, cases: ['canonical-proposal', 'saved-work', 'bounded-allowance', 'accepted-response-loss', 'exact-reload-retry', 'question-answer', 'unchanged-attempt', 'open-attention', 'no-dispatch', 'escaped-text', 'mobile-layout'] }, null, 2));
+  console.log(`deployed recovery review passed; evidence=${evidence}`);
+} finally { await browser.close(); }

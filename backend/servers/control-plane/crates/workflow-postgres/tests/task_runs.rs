@@ -11,6 +11,8 @@ use ayni_orchestrator_workflow_postgres::{
 };
 use std::error::Error;
 use uuid::Uuid;
+#[path = "support/task_recovery.rs"]
+mod recovery;
 type Result = std::result::Result<(), Box<dyn Error + Send + Sync>>;
 fn key() -> String {
     Uuid::now_v7().to_string()
@@ -284,8 +286,7 @@ async fn serial_dispatch_fences_cancellation_and_recovers_exact_retained_results
     );
     prove_rollback_deadline_and_immutable_inputs(&store, scope, deadline, first, &admin, &runtime)
         .await?;
-    prove_failed_and_interrupted_feedback(&store, scope, &preparations[4..]).await?;
-    prove_feedback_scope_pagination_and_retention(&store, scope, wrong, &runtime).await
+    prove_retained_review(&store, scope, wrong, &preparations, &runtime).await
 }
 async fn prove_rollback_deadline_and_immutable_inputs(
     store: &WorkflowStore,
@@ -948,4 +949,24 @@ async fn prove_feedback_read_bounds(store: &WorkflowStore, scope: PlanScope<'_>)
         Err(StoreError::NotFound)
     ));
     Ok(())
+}
+
+async fn prove_retained_review(
+    store: &WorkflowStore,
+    scope: PlanScope<'_>,
+    wrong: PlanScope<'_>,
+    preparations: &[ayni_orchestrator_workflow_postgres::execution::TaskExecutionPreparation],
+    runtime: &str,
+) -> Result {
+    prove_failed_and_interrupted_feedback(store, scope, &preparations[4..]).await?;
+    recovery::prove(
+        store,
+        scope,
+        wrong,
+        &preparations[0],
+        &preparations[1],
+        runtime,
+    )
+    .await?;
+    prove_feedback_scope_pagination_and_retention(store, scope, wrong, runtime).await
 }

@@ -21,6 +21,8 @@ mod execution;
 mod plans;
 #[path = "workflow_acceptance/publication.rs"]
 mod publication;
+#[path = "workflow_acceptance/recovery.rs"]
+mod recovery;
 #[path = "workflow_acceptance/task_runs.rs"]
 mod task_runs;
 

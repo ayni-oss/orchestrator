@@ -100,6 +100,15 @@ pub fn router(console: Console) -> Router {
             }),
         )
         .route(
+            "/recovery.mjs",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+                    include_str!("../../../../../apps/console/recovery.mjs"),
+                )
+            }),
+        )
+        .route(
             "/feedback.mjs",
             get(|| async {
                 (
@@ -262,6 +271,18 @@ async fn rpc(
 // Task controls share the same request limits and canonical authority as plans.
 async fn task_rpc(console: &Console, method: &str, body: Value) -> Result<Json<Value>, ApiError> {
     match method {
+        "RecordTaskRecovery" => forward!(
+            body,
+            console.conversations(),
+            record_task_recovery,
+            v1::RecordTaskRecoveryRequest
+        ),
+        "ListTaskRecovery" => forward!(
+            body,
+            console.conversations(),
+            list_task_recovery,
+            v1::ListTaskRecoveryRequest
+        ),
         "ListTaskFeedback" => forward!(
             body,
             console.conversations(),

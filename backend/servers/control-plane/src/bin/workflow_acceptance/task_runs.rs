@@ -19,6 +19,8 @@ struct Evidence {
     quality_digest: String,
     #[serde(default)]
     feedback: Vec<u8>,
+    #[serde(default)]
+    recovery: Vec<u8>,
 }
 const PACK: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -170,10 +172,12 @@ async fn prepare_inner(
         quality_failed,
         quality_digest: String::new(),
         feedback: Vec::new(),
+        recovery: Vec::new(),
     };
     if !pending {
         let attempt = verify(client, &evidence).await?;
         evidence.feedback = feedback(client, &request, expected_feedback(&evidence)).await?;
+        evidence.recovery = super::recovery::record(client, &request).await?;
         if let Some(quality) = attempt.quality {
             evidence.quality_digest =
                 ayni_orchestrator_events::task_execution::digest(&quality.encode_to_vec());
@@ -292,6 +296,12 @@ async fn verify(client: &mut Client, evidence: &Evidence) -> Result<v1::TaskAtte
     .await?;
     if !evidence.feedback.is_empty() && retained != evidence.feedback {
         return Err("retained task feedback changed after restart".into());
+    }
+    if !evidence.recovery.is_empty() {
+        let start = v1::StartTaskExecutionRequest::decode(evidence.request.as_slice())?;
+        if super::recovery::read(client, &start).await? != evidence.recovery {
+            return Err("recovery records changed after restart".into());
+        }
     }
     Ok(attempt)
 }

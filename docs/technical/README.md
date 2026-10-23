@@ -24,6 +24,7 @@ The runtime combines the M1 durable foundation with shared immutable agent confi
 
 - [Plans and approval](architecture/plans-and-approval.md): M3 implementation contract for immutable versions, explicit approval, task admission and retained project/conversation origin; review, agent proposals and approval/admission are implemented; cumulative M3 gates are defined with deployed evidence required in the final delivery PR.
 - [M3 delivery plan](research/project-workflow-m3-delivery-plan.md): four cumulative PRs, contract completion gates and failure/recovery acceptance.
+- [Task recovery review](architecture/task-recovery.md): immutable proposals, saved evidence and operator question/answer records without execution authority.
 - [M6 delivery plan](research/project-workflow-m6-delivery-plan.md): five slices from durable attention to confirmed continuation, with preserved work and explicit allowances.
 - [M1 durable foundation](research/project-workflow-m1-durable-foundation.md): full milestone contract and later-slice handoffs.
 - [M1 acceptance evidence](research/project-workflow-m1-acceptance-evidence.md): executable gates, reproduction, and coverage limits.

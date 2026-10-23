@@ -45,10 +45,14 @@ import {
   ListPlanVersionsResponse,
   ListTaskFeedbackRequest,
   ListTaskFeedbackResponse,
+  ListTaskRecoveryRequest,
+  ListTaskRecoveryResponse,
   ListTasksRequest,
   ListTasksResponse,
   PrepareTaskExecutionRequest,
   PrepareTaskExecutionResponse,
+  RecordTaskRecoveryRequest,
+  RecordTaskRecoveryResponse,
   RevisePlanRequest,
   RevisePlanResponse,
   StartTaskExecutionRequest,
@@ -3806,6 +3810,28 @@ export const ProjectConversationServiceService = {
     responseSerialize: (value: ListTasksResponse): Buffer => Buffer.from(ListTasksResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ListTasksResponse => ListTasksResponse.decode(value),
   },
+  recordTaskRecovery: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/RecordTaskRecovery" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RecordTaskRecoveryRequest): Buffer =>
+      Buffer.from(RecordTaskRecoveryRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RecordTaskRecoveryRequest => RecordTaskRecoveryRequest.decode(value),
+    responseSerialize: (value: RecordTaskRecoveryResponse): Buffer =>
+      Buffer.from(RecordTaskRecoveryResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): RecordTaskRecoveryResponse => RecordTaskRecoveryResponse.decode(value),
+  },
+  listTaskRecovery: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/ListTaskRecovery" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListTaskRecoveryRequest): Buffer =>
+      Buffer.from(ListTaskRecoveryRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListTaskRecoveryRequest => ListTaskRecoveryRequest.decode(value),
+    responseSerialize: (value: ListTaskRecoveryResponse): Buffer =>
+      Buffer.from(ListTaskRecoveryResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListTaskRecoveryResponse => ListTaskRecoveryResponse.decode(value),
+  },
   listTaskFeedback: {
     path: "/ayni.orchestrator.v1.ProjectConversationService/ListTaskFeedback" as const,
     requestStream: false as const,
@@ -4013,6 +4039,8 @@ export interface ProjectConversationServiceServer extends UntypedServiceImplemen
   approvePlan: handleUnaryCall<ApprovePlanRequest, ApprovePlanResponse>;
   getPlanApproval: handleUnaryCall<GetPlanApprovalRequest, GetPlanApprovalResponse>;
   listTasks: handleUnaryCall<ListTasksRequest, ListTasksResponse>;
+  recordTaskRecovery: handleUnaryCall<RecordTaskRecoveryRequest, RecordTaskRecoveryResponse>;
+  listTaskRecovery: handleUnaryCall<ListTaskRecoveryRequest, ListTaskRecoveryResponse>;
   listTaskFeedback: handleUnaryCall<ListTaskFeedbackRequest, ListTaskFeedbackResponse>;
   getTask: handleUnaryCall<GetTaskRequest, GetTaskResponse>;
   createPlan: handleUnaryCall<CreatePlanRequest, CreatePlanResponse>;
@@ -4186,6 +4214,36 @@ export interface ProjectConversationServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListTasksResponse) => void,
+  ): ClientUnaryCall;
+  recordTaskRecovery(
+    request: RecordTaskRecoveryRequest,
+    callback: (error: ServiceError | null, response: RecordTaskRecoveryResponse) => void,
+  ): ClientUnaryCall;
+  recordTaskRecovery(
+    request: RecordTaskRecoveryRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: RecordTaskRecoveryResponse) => void,
+  ): ClientUnaryCall;
+  recordTaskRecovery(
+    request: RecordTaskRecoveryRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: RecordTaskRecoveryResponse) => void,
+  ): ClientUnaryCall;
+  listTaskRecovery(
+    request: ListTaskRecoveryRequest,
+    callback: (error: ServiceError | null, response: ListTaskRecoveryResponse) => void,
+  ): ClientUnaryCall;
+  listTaskRecovery(
+    request: ListTaskRecoveryRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListTaskRecoveryResponse) => void,
+  ): ClientUnaryCall;
+  listTaskRecovery(
+    request: ListTaskRecoveryRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListTaskRecoveryResponse) => void,
   ): ClientUnaryCall;
   listTaskFeedback(
     request: ListTaskFeedbackRequest,

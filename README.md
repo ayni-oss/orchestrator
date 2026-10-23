@@ -41,6 +41,9 @@ originating conversation and project attention. Notices link to task evidence;
 they do not authorize continuation or repair. See [task feedback](docs/technical/architecture/task-feedback.md)
 and the [M6 delivery plan](docs/technical/research/project-workflow-m6-delivery-plan.md)
 for the boundary between attention and later confirmed recovery.
+[Recovery review](docs/technical/architecture/task-recovery.md) lets operators record
+immutable proposals with frozen saved-work evidence and additional allowances, plus
+task questions and one answer per question. These records authorize no execution.
 
 ## Start locally
 
