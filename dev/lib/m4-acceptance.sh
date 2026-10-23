@@ -18,7 +18,12 @@ PY
 m4_restart_publisher() {
   local name="$1" pod
   pod="$(kubectl --context "$context" --namespace "$namespace" get pod \
-    -l app.kubernetes.io/name=ayni-task-publisher -o jsonpath='{.items[0].metadata.name}')"
+    -l app.kubernetes.io/name=ayni-task-publisher -o json | python3 -c '
+import json,sys
+pods=[p for p in json.load(sys.stdin)["items"] if not p["metadata"].get("deletionTimestamp")]
+assert len(pods)==1, "exactly one live publisher required"
+print(pods[0]["metadata"]["name"])
+')"
   # Freeze the process before deletion: a graceful shutdown can finish the
   # in-flight HTTP request and reconcile under the old generation.
   kubectl --context "$context" --namespace "$namespace" exec "$pod" -- /bin/sh -c 'kill -STOP 1' \

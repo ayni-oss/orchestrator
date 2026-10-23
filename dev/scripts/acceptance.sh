@@ -217,7 +217,7 @@ for scenario in cancellation pod-loss; do
       [[ -n "$supervisor_pod" ]] || { echo 'supervisor Pod identity missing' >&2; exit 1; }
       kubectl --context "$context" --namespace "$namespace" scale deployment/task-supervisor --replicas=0 > "$evidence/task-fence-supervisor-stop.txt"
       fence_supervisor_stopped=true
-      kubectl --context "$context" --namespace "$namespace" wait --for=delete "pod/$supervisor_pod" --timeout=2m >> "$evidence/task-fence-supervisor-stop.txt"
+      kubectl --context "$context" --namespace "$namespace" wait --for=delete pod -l app.kubernetes.io/name=ayni-task-supervisor --timeout=2m >> "$evidence/task-fence-supervisor-stop.txt"
       kubectl --context "$context" --namespace "$namespace" rollout status deployment/task-supervisor --timeout=2m >> "$evidence/task-fence-supervisor-stop.txt"
       kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
         /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --cancel-task-run-pending-stdin \
