@@ -109,6 +109,42 @@ Snapshot plan heads carry the approval identity; scoped approval/task reads
 reconstruct the receipt and task set after reconnect without another mutation.
 See [plan review](plan-review.md) and [task admission](task-admission.md).
 
+## Task observation and publication controls
+
+**Tasks** lists canonical admitted work in pages of 20, independent of the selected
+plan. `GetTask`, `GetTaskExecution` and `GetTaskAttempt` reconstruct the full
+origin, preparation, attempt and separate execution/quality/publication outcomes.
+One selected task refreshes every five seconds in a visible tab, without overlapping
+requests. Scope and selection generations fence late reads, including selection
+changes during an in-flight request. Hidden tabs issue no periodic reads. Failed
+reads clear stale detail and consent. The list refresh remains explicit so later
+inserts cannot silently replace an operator's pagination boundary.
+
+Accepted patches, quality artifacts and retained identities render as expandable
+text. Target counts and exit codes preserve observed zero. Provider uncertainty,
+failed quality, interrupted work and retained publication blockers have distinct
+guidance. There is no repair or new-attempt control. Trusted source verification,
+preparation and source-pack upload remain outside the browser allowlist; a task
+selection download carries only its originating scope and task ID.
+
+`ReviewTaskPublication` is a read-only local gateway composition of canonical task
+and attempt reads. It uses the same preview builder as `workflow-publish-task`.
+It owns no durable state, publication receipt or credential. The UI displays the
+canonical title, body, repository, source, branch, author and evidence digests;
+explicit consent authorizes `StartTaskPublication` with the reviewed attempt and
+exact patch/quality digests. State refresh invalidates an ineligible review;
+changing task or scope always clears it. PostgreSQL rechecks eligibility and
+competing publication keys transactionally. `CancelTaskPublication` is offered
+only before the once-only create permit, and canonical cancellation rechecks that
+fence. Publication authority remains separate from publisher credentials.
+
+Coding cancellation and publication commands share exact pending-command recovery
+across reloads. An accepted receipt refreshes only the task it belongs to. Creating
+or uncertain publication cannot authorize a second create request. Retained PR
+links must exactly match the recorded public GitHub repository and decimal PR
+number. The console reports the last recorded external state without implying a
+fresh GitHub read. See [draft publication](task-publication.md).
+
 ## Discovery, history and retries
 
 `ListWorkspaces`, `ListProjects` and `ListConversations` are canonical read-only

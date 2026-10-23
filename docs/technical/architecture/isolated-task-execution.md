@@ -117,7 +117,9 @@ Retain the start file for response-loss retries. It contains a source snapshot,
 so store it under the same access boundary as the checkout. Starting work is a
 trusted local command; browser and model tools cannot upload or authorize source.
 The console can read attempt state, retained patch, frozen identities and provider
-uncertainty, and can explicitly cancel an attempt. `GetTaskAttempt` enforces full
+uncertainty, and can explicitly cancel an attempt. Its **Tasks** panel refreshes the selected
+attempt, separates coding from quality and publication, and provides reviewed
+publication controls under the [console task contract](contributor-console.md#task-observation-and-publication-controls). `GetTaskAttempt` enforces full
 origin scope. Task changes emit `TASK_EXECUTION_CHANGED` observation updates.
 
 `taskExecution.fixtureEnabled` is disabled by default. Its scripted worker writes

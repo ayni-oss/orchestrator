@@ -2,8 +2,9 @@
 // Each run creates its own workspace and preserves accepted application data.
 import { chromium } from 'playwright';
 import { exercisePlans } from './plan-acceptance.mjs';
+import { exerciseTasks } from './task-acceptance.mjs';
 import assert from 'node:assert/strict';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 const endpoint = process.env.CONSOLE_URL || 'http://127.0.0.1:3000';
 const url = new URL(endpoint);
 assert.equal(url.hostname, '127.0.0.1', 'browser acceptance requires the local console');
@@ -221,6 +222,7 @@ try {
   // A replay burst must release the slow browser stream and catch up from its
   // processed cursor, keeping the local promise queue bounded.
   await exercisePlans({ page, context, endpoint, gateway, scope: firstScope });
+  await exerciseTasks({ page, gateway, scope: firstScope });
   const retainedCursor = await page.locator('#cursor').textContent();
   const burst = Array.from({ length: 80 }, () => `event: frame\ndata: ${JSON.stringify({ update: { cursor: retainedCursor, conversationRevision: '1' } })}\n\n`).join('');
   await page.route('**/watch?**', route => route.fulfill({ status: 200, contentType: 'text/event-stream', body: burst }), { times: 1 });
@@ -234,4 +236,11 @@ try {
   if (evidence) { await mkdir(evidence, { recursive: true }); await page.screenshot({ path: `${evidence}/console.png`, fullPage: true }); }
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ outcome: 'passed', workspace: run, checks: ['validation-correction', 'typed-capacity-rejection-resubmit-fixture', 'create/select', 'scripted-response', 'text-only-content', 'refresh', 'two-tabs', 'disconnect-replay', 'ambiguous-command-reload-retry', 'conversation-isolation', 'configuration-editor', 'immutable-turn-inputs', 'stale-configuration-conflict', 'session-isolation', 'session-replacement-retry', 'session-generation-wakeup', 'older-history', 'typed-cursor-expiry-fixture', 'slow-browser-replay-fixture', 'mobile-layout'] }));
+} catch (error) {
+  if (evidence) {
+    await mkdir(evidence, { recursive: true });
+    await page.screenshot({ path: `${evidence}/failure.png`, fullPage: true }).catch(() => {});
+    await writeFile(`${evidence}/failure.json`, JSON.stringify({ error: error.message, browserErrors: errors, selection: await selection(page).catch(() => null), status: await page.locator('body').innerText().catch(() => '') }, null, 2));
+  }
+  throw error;
 } finally { await browser.close(); }

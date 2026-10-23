@@ -272,12 +272,12 @@ async fn replay_watch(app: &axum::Router, scope: Value) -> Result {
 }
 
 #[tokio::test]
-async fn publication_commands_remain_outside_the_browser_mutation_boundary() -> Result {
+async fn source_upload_remains_outside_the_browser_mutation_boundary() -> Result {
     let app = router(Console::new(
         "127.0.0.1:3000".parse()?,
         "127.0.0.1:50051".parse()?,
     )?);
-    for method in ["StartTaskPublication", "CancelTaskPublication"] {
+    for method in ["PrepareTaskExecution", "StartTaskExecution"] {
         assert_eq!(
             call(&app, method, json!({})).await?.0,
             StatusCode::NOT_FOUND

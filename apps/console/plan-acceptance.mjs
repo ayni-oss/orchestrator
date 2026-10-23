@@ -134,7 +134,7 @@ async function exerciseApproval({ page, other, gateway, scope, planId, version, 
   await page.locator('#plan-admission [data-task-id]').first().waitFor();
   assert.equal(await page.locator('#plan-admission [data-task-id]').count(), content.tasks.length);
   const admissionText = await page.locator('#plan-admission').innerText();
-  assert.match(admissionText, /awaiting execution/);
+  assert.match(admissionText, /Inspect a task/);
   assert.match(admissionText, /Immutable origin/);
   assert.ok(admissionText.includes(scope.projectId) && admissionText.includes(scope.conversationId));
   assert.ok(admissionText.includes(eligible.contentDigest));

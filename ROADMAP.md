@@ -137,7 +137,10 @@ third slice: credential-free managed validation, frozen inputs and retained
 evidence separate from coding completion, delivered by PR #244.
 The [draft publication contract](docs/technical/architecture/task-publication.md)
 defines the fourth slice: explicit publication authority, deterministic Git
-identity and retained draft recovery. Each runtime PR extends
+identity and retained draft recovery, delivered by PR #245.
+The [console task contract](docs/technical/architecture/contributor-console.md#task-observation-and-publication-controls)
+defines the fifth slice: bounded task inspection, separate outcome/evidence views,
+cancellation and explicit reviewed draft publication. Each runtime PR extends
 the cumulative acceptance harness immediately. M4 begins with serial execution
 and isolated attempts; dependency scheduling and concurrent tasks remain M5,
 conversational recovery remains M6. Automatic quality-repair loops require explicit

@@ -359,3 +359,18 @@ h1 {
 #plan-editor input,#plan-editor textarea{width:100%;box-sizing:border-box}
 .plan-task{margin:16px 0;padding:12px 0;border-top:1px solid #dde4d9}
 @media(max-width:700px){.plans-panel{margin:0 16px 16px}}
+
+.tasks-panel{margin:0 0 24px;padding:20px 0;border-top:1px solid #dde4d9;min-width:0}
+#task-list{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+#task-list button{max-width:100%;text-align:left;overflow-wrap:anywhere}
+#task-list button[aria-current=true]{background:#dfe9d8}
+#task-detail{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px;margin-top:16px}
+.task-stage,#task-publication-review:not(:empty){border:1px solid #dde4d9;border-radius:8px;padding:16px;min-width:0}
+.task-stage h3,#task-publication-review h3{font-size:14px;margin-top:0}
+.tasks-panel p,.tasks-panel dd{white-space:pre-wrap;overflow-wrap:anywhere}
+.tasks-panel dl{font-size:12px}
+.tasks-panel dd{font-family:inherit}
+.tasks-panel pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:360px;overflow:auto;font-size:11px}
+.tasks-panel input[type=checkbox],#plan-approve-consent{width:auto}
+#task-publication-review{margin-top:16px}
+#task-publication-review dd{max-height:300px;overflow:auto}

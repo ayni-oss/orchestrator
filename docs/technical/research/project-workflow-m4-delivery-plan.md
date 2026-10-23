@@ -75,6 +75,18 @@ POST is authorized. Coding and quality credentials never enter this publisher.
 The cumulative acceptance uses actual Git transport and a retained GitHub
 protocol fixture; live GitHub authentication remains separately reported.
 
+## Fifth-slice decisions
+
+The [console task contract](../architecture/contributor-console.md#task-observation-and-publication-controls)
+defines bounded task discovery, restored selection and visible-tab progress reads.
+Coding, managed quality and publication remain distinct, with expandable retained
+changes, artifacts and identities. Cancellation and explicit digest-bound draft
+publication share exact pending-command recovery. The local helper still verifies
+and uploads source; browser observation does not acquire host filesystem access.
+The cumulative browser suite covers task controls and stale-read/response-loss
+fixtures alongside deployed canonical task reads. Real publication transport and
+managed quality retain their existing cumulative acceptance profiles.
+
 ## Scope boundaries and risks
 
 M4 starts with serial task execution and isolated attempts. Dependency scheduling

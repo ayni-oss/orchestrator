@@ -17,14 +17,14 @@ export function approvalCommand(scope, version) {
 }
 export function approvalBlocker(version, head, approval) {
   if (!version) return 'Select a retained plan to review.';
-  if (approval || head?.approvalId) return 'Approved. The admitted task set is immutable and awaiting execution.';
+  if (approval || head?.approvalId) return 'Approved. The admitted task set is immutable. Inspect Tasks for current progress.';
   if (head?.currentVersionId !== version.id) return 'A newer version exists. Your reviewed version and local draft remain unchanged. Select the plan to review its current version.';
   if (version.content.unresolvedQuestions?.length) return 'Resolve scope and acceptance questions in a new version before approval.';
   if (!version.content.tasks?.length || version.content.tasks.some(task => !task.acceptanceCriteria?.length)) return 'Approval requires proposed tasks with acceptance criteria.';
   return '';
 }
 
-export function mountPlans({ getScope, api, submit, showError, saved, store, controls }) {
+export function mountPlans({ getScope, api, submit, showError, saved, store, controls, tasks }) {
   let owner = '';
   let draft = { content: blank() };
   let reviewed;
@@ -79,7 +79,6 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
     approvalQuery++;
     $('plan-approve-consent').checked = false;
     $('plan-admission').replaceChildren();
-    $('task-detail').replaceChildren();
     $('plan-review').replaceChildren();
     const heading = document.createElement('h3'); heading.textContent = `${value.content.title} · version ${value.ordinal}`;
     $('plan-review').append(heading);
@@ -143,49 +142,12 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
     $('plan-admission').replaceChildren();
     if (approval) {
       paragraph($('plan-admission'), 'Approval receipt', `${approval.id}\nOperator ${approval.operator}\nCommand ${approval.commandId}\nVersion ${approval.versionId}\n${approval.contentDigest}\nApproved ${approval.createdAt}`);
-      paragraph($('plan-admission'), 'Admission', `${result.tasks.length} tasks admitted and awaiting execution. Coding work has not been dispatched.`);
+      paragraph($('plan-admission'), 'Admission', `${result.tasks.length} tasks admitted. Inspect a task for its current execution, quality and publication state.`);
       for (const task of result.tasks) {
         const article = document.createElement('article'); article.className = 'plan-task'; article.dataset.taskId = task.id;
         renderTask(article, task);
-        const button = document.createElement('button'); button.type = 'button'; button.textContent = `Refresh task ${task.proposedTaskKey}`;
-        button.onclick = async () => {
-          try {
-            const selected = { ...getScope() }; const ticket = query;
-            const response = await api('GetTask', { ...selected, taskId: task.id });
-            if (ticket !== query || scopeKey(selected) !== owner) return;
-            const execution = await api('GetTaskExecution', { ...selected, taskId: task.id });
-            if (ticket !== query || scopeKey(selected) !== owner) return;
-            $('task-detail').replaceChildren(); renderTask($('task-detail'), response.task);
-            const preparation = execution.preparation;
-            if (preparation) {
-              paragraph($('task-detail'), 'Execution preparation', preparation.attemptId ? `Prepared attempt ${preparation.attemptId}.` : 'Blocked');
-              paragraph($('task-detail'), 'Preparation blockers', preparation.blockers);
-              paragraph($('task-detail'), 'Frozen execution inputs', JSON.stringify(preparation.inputs, null, 2));
-              paragraph($('task-detail'), 'Frozen configuration', preparation.configurationRevisionId);
-              if (preparation.attemptId) {
-                let attempt;
-                try { attempt = (await api('GetTaskAttempt', { ...selected, taskId: task.id, attemptId: preparation.attemptId })).attempt; }
-                catch (error) { if (error.reason !== 'ERROR_REASON_RESOURCE_NOT_FOUND') throw error; }
-                if (ticket !== query || scopeKey(selected) !== owner) return;
-                paragraph($('task-detail'), 'Execution state', attempt?.state || 'Prepared; not started');
-                if (attempt) {
-                  paragraph($('task-detail'), 'Worker generation and provider state', `${attempt.generation} · ${attempt.providerState}`);
-                  paragraph($('task-detail'), 'Retained patch', attempt.patch || 'No accepted changes yet');
-                  paragraph($('task-detail'), 'Publication', attempt.publication ? JSON.stringify(attempt.publication, null, 2) : 'Not authorized');
-                  paragraph($('task-detail'), 'Coding outcome', attempt.executionOutcome || 'Pending');
-                  paragraph($('task-detail'), 'Quality outcome', attempt.quality ? `${attempt.quality.state} · ${attempt.quality.safeReason || 'Ayni evidence retained'}` : 'Pending');
-                  if (attempt.quality) paragraph($('task-detail'), 'Quality evidence', JSON.stringify(attempt.quality, null, 2));
-                  if (attempt.safeReason) paragraph($('task-detail'), 'Execution outcome', attempt.safeReason);
-                  if (['queued', 'claimed', 'reporting'].includes(attempt.state)) {
-                    const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel task execution'; cancel.dataset.cancelTask = task.id;
-                    cancel.onclick = () => submit('CancelTaskExecution', { ...selected, taskId: task.id, attemptId: preparation.attemptId });
-                    $('task-detail').append(cancel); controls();
-                  }
-                }
-              }
-            }
-          } catch (error) { showError(error); }
-        };
+        const button = document.createElement('button'); button.type = 'button'; button.textContent = `Inspect task ${task.proposedTaskKey}`;
+        button.onclick = () => tasks.open(task.id).catch(showError);
         article.append(button); $('plan-admission').append(article);
       }
     }
@@ -214,13 +176,13 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
     owner = next; query++; approvalQuery++; approval = undefined; reviewed = undefined; heads = []; historyPlan = ''; historyBefore = '0';
     draft = saved(planDraftKey(getScope())) || { content: blank() };
     $('plan-review').replaceChildren(); $('plan-history').replaceChildren(); $('plan-list').replaceChildren();
-    $('plan-admission').replaceChildren(); $('task-detail').replaceChildren(); $('plan-approve-consent').checked = false; $('plan-approval-basis').textContent = '';
+    $('plan-admission').replaceChildren(); $('plan-approve-consent').checked = false; $('plan-approval-basis').textContent = '';
     $('plan-history-more').hidden = true; $('plan-review-status').textContent = 'Select a retained plan to review.';
     renderEditor();
   }
   function accepted(command, result) {
-    if (command.method === 'CancelTaskExecution') { if (scopeKey(command.body) === owner) paragraph($('task-detail'), 'Cancellation requested', 'The worker is fenced. Refresh the task to inspect its retained state.'); return; }
     if (command.method === 'ApprovePlan') {
+      tasks.refreshList();
       if (scopeKey(command.body) === owner && reviewed?.planId === command.body.planId) { approvalQuery++; showApproval(result); }
       if (scopeKey(command.body) === owner) api('ListPlans', getScope()).then(value => { if (scopeKey(command.body) === owner) update(value.plans); }).catch(showError);
       return;
