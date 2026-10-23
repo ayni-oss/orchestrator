@@ -19,8 +19,12 @@ m4_restart_publisher() {
   local name="$1" pod
   pod="$(kubectl --context "$context" --namespace "$namespace" get pod \
     -l app.kubernetes.io/name=ayni-task-publisher -o jsonpath='{.items[0].metadata.name}')"
-  kubectl --context "$context" --namespace "$namespace" delete pod "$pod" --wait=true --timeout=90s \
+  # Freeze the process before deletion: a graceful shutdown can finish the
+  # in-flight HTTP request and reconcile under the old generation.
+  kubectl --context "$context" --namespace "$namespace" exec "$pod" -- /bin/sh -c 'kill -STOP 1' \
     > "$evidence/$name-publisher-loss.txt"
+  kubectl --context "$context" --namespace "$namespace" delete pod "$pod" --grace-period=1 --wait=true --timeout=90s \
+    >> "$evidence/$name-publisher-loss.txt"
   kubectl --context "$context" --namespace "$namespace" rollout status deployment/task-publisher --timeout=2m \
     >> "$evidence/$name-publisher-loss.txt"
 }
