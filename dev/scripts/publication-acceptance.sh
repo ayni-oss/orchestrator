@@ -3,6 +3,7 @@ set -euo pipefail
 readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$dev_directory/lib/common.sh"
 source "$dev_directory/lib/images.sh"
+export HELM_NO_PLUGINS=1
 readonly context="$(dev_context)"
 readonly namespace="$(dev_namespace)"
 [[ $# -eq 1 && "$1" == /* && ! -e "$1" ]] || {
@@ -48,12 +49,16 @@ fixture_image="$(dev_build_image publication-fixture)"
 dev_load_image "$fixture_image"
 printf '%s\n' "$fixture_image" > "$evidence/fixture-image.txt"
 dev_build_chart_dependencies
+control_image="$(kubectl --context "$context" --namespace "$namespace" get deployment control-plane -o jsonpath='{.spec.template.spec.containers[0].image}')"
+executor_image="$(kubectl --context "$context" --namespace "$namespace" get statefulset scripted-executor -o jsonpath='{.spec.template.spec.containers[0].image}')"
 bind_scope() {
   local workspace
   workspace="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["scope"]["workspace"])' "$1")"
   [[ "$workspace" =~ ^[a-f0-9-]{36}$ ]] || { echo 'invalid frozen fixture workspace' >&2; exit 1; }
-  helm upgrade "$DEV_RELEASE_NAME" "$DEV_CHART" --reuse-values \
+  helm upgrade "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-then-reuse-values \
     --kube-context "$context" --namespace "$namespace" \
+    --set-string "ayni-orchestrator.images.controlPlane=$control_image" \
+    --set-string "ayni-orchestrator.images.scriptedExecutor=$executor_image" \
     --set publicationFixture.enabled=true --set-string "publicationFixture.image=$fixture_image" \
     --set ayni-orchestrator.publication.enabled=true \
     --set-string "ayni-orchestrator.publication.workspaceId=$workspace" \
