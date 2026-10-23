@@ -12,11 +12,12 @@ RUN --mount=type=cache,id=ayni-orchestrator-control-cargo-registry,target=/usr/l
     --mount=type=cache,id=ayni-orchestrator-control-cargo-git,target=/usr/local/cargo/git \
     --mount=type=cache,id=ayni-orchestrator-control-target,target=/workspace/target \
     cargo build --locked --release --package ayni-orchestrator-control-plane \
-      --bin ayni-orchestrator-control-plane --bin workflow-migrate --bin workflow-diagnostic --bin workflow-acceptance \
+      --bin ayni-orchestrator-control-plane --bin workflow-migrate --bin workflow-diagnostic --bin workflow-acceptance --bin workflow-publish-task \
     && install --mode=0755 target/release/ayni-orchestrator-control-plane /tmp/ayni-orchestrator-control-plane \
     && install --mode=0755 target/release/workflow-migrate /tmp/workflow-migrate \
     && install --mode=0755 target/release/workflow-diagnostic /tmp/workflow-diagnostic \
-    && install --mode=0755 target/release/workflow-acceptance /tmp/workflow-acceptance
+    && install --mode=0755 target/release/workflow-acceptance /tmp/workflow-acceptance \
+    && install --mode=0755 target/release/workflow-publish-task /tmp/workflow-publish-task
 
 FROM debian:bookworm-slim
 
@@ -31,3 +32,5 @@ COPY --from=builder /tmp/workflow-diagnostic /usr/local/bin/workflow-diagnostic
 COPY --from=builder /tmp/workflow-acceptance /usr/local/bin/workflow-acceptance
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/ayni-orchestrator-control-plane"]
+
+COPY --from=builder /tmp/workflow-publish-task /usr/local/bin/workflow-publish-task

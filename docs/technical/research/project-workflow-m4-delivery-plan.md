@@ -64,6 +64,17 @@ The cumulative local acceptance adds a real dependency-free managed Rust runtime
 alongside the explicitly scripted coding fixture, with retained pass/fail quality
 results verified after owner restarts.
 
+## Fourth-slice decisions
+
+The [draft publication contract](../architecture/task-publication.md) freezes
+reviewed patch and managed-quality digests under explicit publication authority.
+A dedicated publisher reconstructs deterministic Git objects without executing
+source, creates an expected-absent branch and consumes one draft-create permit.
+Ambiguous create responses reconcile by reads across all PR states; no second
+POST is authorized. Coding and quality credentials never enter this publisher.
+The cumulative acceptance uses actual Git transport and a retained GitHub
+protocol fixture; live GitHub authentication remains separately reported.
+
 ## Scope boundaries and risks
 
 M4 starts with serial task execution and isolated attempts. Dependency scheduling

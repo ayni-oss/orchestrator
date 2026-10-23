@@ -1,5 +1,6 @@
 //! Verification wire contracts. Successful decoding conveys no admission authority.
 pub mod task_execution;
+pub mod task_publication;
 pub mod task_quality;
 use cloudevents::event::{ExtensionValue, SpecVersion};
 use cloudevents::{AttributesReader, Data, Event, EventBuilder, EventBuilderV10};

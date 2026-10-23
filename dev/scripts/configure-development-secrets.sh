@@ -124,3 +124,14 @@ else
   create_immutable_secret workflow-session-authority --from-file=token="$authority_directory/token"
   echo "created immutable local session authority Secret"
 fi
+
+# Publication uses a distinct local authority. This is never a GitHub token.
+if secret_exists workflow-publication-authority; then
+  echo "local publication authority Secret already exists"
+else
+  publication_directory="$scratch/workflow-publication-authority"
+  mkdir -m 0700 "$publication_directory"
+  openssl rand -hex 32 > "$publication_directory/token"
+  create_immutable_secret workflow-publication-authority --from-file=token="$publication_directory/token"
+  echo "created immutable local publication authority Secret"
+fi

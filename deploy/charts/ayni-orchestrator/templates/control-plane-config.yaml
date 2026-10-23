@@ -42,4 +42,9 @@ data:
   ORCHESTRATOR_WORKFLOW_BROKER_URL: {{ .Values.workflowJetstream.url | quote }}
   ORCHESTRATOR_WORKFLOW_BROKER_USERNAME: {{ .Values.workflowJetstream.username | quote }}
   ORCHESTRATOR_WORKFLOW_BROKER_PASSWORD_PATH: /var/run/secrets/ayni/workflow-jetstream-application/password
+{{- if .Values.publication.enabled }}
+  ORCHESTRATOR_PUBLICATION_AUTHORITY_TOKEN_PATH: /var/run/secrets/ayni/publication-authority/token
+  ORCHESTRATOR_PUBLICATION_WORKSPACE_ID: {{ .Values.publication.workspaceId | quote }}
+  ORCHESTRATOR_PUBLICATION_REPOSITORY: {{ .Values.publication.repository | quote }}
+{{- end }}
 {{- end }}

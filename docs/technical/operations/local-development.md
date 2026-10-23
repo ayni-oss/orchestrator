@@ -46,7 +46,7 @@ the credentials or writing them to configuration files.
 
 All use seven-day age limits, a two-minute duplicate window, one local replica, and a 260-KiB maximum stored message. The combined 512-MiB stream budget sits below the 1-GiB server budget on a retained 2-GiB PVC. The executor has a retained 512-MiB PVC and enforces a 192-MiB authority ledger plus a 64-MiB quarantine subquota within a 256-MiB combined logical cap.
 
-`dev/ctl check` verifies workload readiness, migration history through ordinal 17, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
+`dev/ctl check` verifies workload readiness, migration history through ordinal 19, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
 
 ## Contributor console
 
@@ -271,7 +271,7 @@ pnpm proto:check
 pnpm docs:check
 ```
 
-The PostgreSQL gate covers migrations through ordinal 17, frozen configuration, scoped context and session generations, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. Task-quality coverage additionally verifies immutable evidence retries, accepted snapshot/runtime identities, scoped reads and cancellation/deadline fencing. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
+The PostgreSQL gate covers migrations through ordinal 19, frozen configuration, scoped context and session generations, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. Task-quality coverage additionally verifies immutable evidence retries, accepted snapshot/runtime identities, scoped reads and cancellation/deadline fencing. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
 
 After browser acceptance creates at least two conversations, inspect the deployed
 session boundary without reading Secret data:
@@ -287,7 +287,7 @@ establish NetworkPolicy enforcement by the cluster network plugin.
 ## Managed task quality acceptance
 
 Build and load the dependency-free [managed fixture](../../../dev/fixtures/task-quality/README.md)
-using the pinned Ayni 0.15.0 CLI:
+using the pinned Ayni 0.16.2 CLI:
 
 ```sh
 dev/ctl quality-runtime
@@ -313,6 +313,36 @@ lock/runtime consistency and protected content; it does not claim a trusted
 builder signature or real paid-provider execution. See the
 [quality contract](../architecture/task-quality.md) for evidence requirements and
 failure boundaries. Retained acceptance state is preserved for inspection.
+
+## Task publication acceptance
+
+Use the actual managed Ayni 0.16.2 fixture runtime and an isolated namespace:
+
+```sh
+dev/ctl quality-runtime
+AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-publication \
+  AYNI_ORCHESTRATOR_TASK_FIXTURE=true dev/ctl deploy
+AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-publication \
+  dev/ctl acceptance /absolute/new/publication-evidence --publication-only
+```
+
+The profile first runs the cumulative quality gates, then builds and loads the
+local publication fixture. It binds the publisher's workspace and repository
+explicitly in Helm after creating the approved source task. It supplies only a
+public synthetic fixture token, never an existing GitHub credential.
+
+The fixture uses a real bare Git remote and GitHub-compatible HTTP responses.
+Its Git objects and PR ledger have retained storage. The profile loses a create
+response after durable acceptance, verifies one exact draft/commit, rejects failed
+quality, cancels an unclaimed intent and checks branch-collision fencing. It then
+restarts every owner, including the fixture, and verifies the original identity.
+A closed external PR is retried through the same retained intent without creating
+another draft.
+
+This establishes actual Git transport and protocol recovery. It does not establish
+live GitHub authentication or compatibility with protected-branch signing policy.
+The [publication contract](../architecture/task-publication.md) describes the
+separate credential boundary and trusted operator submission workflow.
 
 ## Cleanup
 

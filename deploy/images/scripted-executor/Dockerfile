@@ -9,11 +9,12 @@ RUN --mount=type=cache,id=ayni-orchestrator-executor-cargo-registry,target=/usr/
     --mount=type=cache,id=ayni-orchestrator-executor-cargo-git,target=/usr/local/cargo/git \
     --mount=type=cache,id=ayni-orchestrator-executor-target,target=/workspace/target \
     cargo build --locked --release --package ayni-orchestrator-scripted-executor \
-      --bin ayni-orchestrator-scripted-executor --bin ayni-task-worker --bin ayni-task-supervisor \
+      --bin ayni-orchestrator-scripted-executor --bin ayni-task-worker --bin ayni-task-supervisor --bin ayni-task-publisher \
     && install --mode=0755 target/release/ayni-orchestrator-scripted-executor \
       /tmp/ayni-orchestrator-scripted-executor \
     && install --mode=0755 target/release/ayni-task-worker /tmp/ayni-task-worker \
-    && install --mode=0755 target/release/ayni-task-supervisor /tmp/ayni-task-supervisor
+    && install --mode=0755 target/release/ayni-task-supervisor /tmp/ayni-task-supervisor \
+    && install --mode=0755 target/release/ayni-task-publisher /tmp/ayni-task-publisher
 
 FROM debian:bookworm-slim
 
@@ -27,3 +28,5 @@ COPY --from=builder /tmp/ayni-orchestrator-scripted-executor \
 COPY --from=builder /tmp/ayni-task-worker /usr/local/bin/ayni-task-worker
 COPY --from=builder /tmp/ayni-task-supervisor /usr/local/bin/ayni-task-supervisor
 ENTRYPOINT ["/usr/local/bin/ayni-orchestrator-scripted-executor"]
+
+COPY --from=builder /tmp/ayni-task-publisher /usr/local/bin/ayni-task-publisher

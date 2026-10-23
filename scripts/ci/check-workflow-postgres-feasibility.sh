@@ -59,6 +59,7 @@ export AYNI_POSTGRES_RUNTIME_FEASIBILITY_ROLE="$RUNTIME_ROLE"
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test feasibility -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test plans -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test task_runs -- --ignored --nocapture
+cargo test --locked -p ayni-orchestrator-workflow-postgres --test publications -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test task_execution -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test plan_approval -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test plan_proposals -- --ignored --nocapture

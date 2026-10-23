@@ -55,6 +55,8 @@ mod tests {
                         "GetTask",
                         "PrepareTaskExecution",
                         "GetTaskExecution",
+                        "StartTaskPublication",
+                        "CancelTaskPublication",
                         "StartTaskExecution",
                         "CancelTaskExecution",
                         "GetTaskAttempt",

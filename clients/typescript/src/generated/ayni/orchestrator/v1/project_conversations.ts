@@ -25,6 +25,8 @@ import {
   ApprovePlanResponse,
   CancelTaskExecutionRequest,
   CancelTaskExecutionResponse,
+  CancelTaskPublicationRequest,
+  CancelTaskPublicationResponse,
   CreatePlanRequest,
   CreatePlanResponse,
   GetPlanApprovalRequest,
@@ -49,6 +51,8 @@ import {
   RevisePlanResponse,
   StartTaskExecutionRequest,
   StartTaskExecutionResponse,
+  StartTaskPublicationRequest,
+  StartTaskPublicationResponse,
 } from "./plans";
 import {
   CommandReceipt,
@@ -3694,6 +3698,28 @@ export const AcknowledgeProviderUncertaintyResponse: MessageFns<AcknowledgeProvi
 /** Scoped conversation execution and operator plan review on the trusted listener. */
 export type ProjectConversationServiceService = typeof ProjectConversationServiceService;
 export const ProjectConversationServiceService = {
+  startTaskPublication: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/StartTaskPublication" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: StartTaskPublicationRequest): Buffer =>
+      Buffer.from(StartTaskPublicationRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): StartTaskPublicationRequest => StartTaskPublicationRequest.decode(value),
+    responseSerialize: (value: StartTaskPublicationResponse): Buffer =>
+      Buffer.from(StartTaskPublicationResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): StartTaskPublicationResponse => StartTaskPublicationResponse.decode(value),
+  },
+  cancelTaskPublication: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/CancelTaskPublication" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CancelTaskPublicationRequest): Buffer =>
+      Buffer.from(CancelTaskPublicationRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CancelTaskPublicationRequest => CancelTaskPublicationRequest.decode(value),
+    responseSerialize: (value: CancelTaskPublicationResponse): Buffer =>
+      Buffer.from(CancelTaskPublicationResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CancelTaskPublicationResponse => CancelTaskPublicationResponse.decode(value),
+  },
   startTaskExecution: {
     path: "/ayni.orchestrator.v1.ProjectConversationService/StartTaskExecution" as const,
     requestStream: false as const,
@@ -3964,6 +3990,8 @@ export const ProjectConversationServiceService = {
 } as const;
 
 export interface ProjectConversationServiceServer extends UntypedServiceImplementation {
+  startTaskPublication: handleUnaryCall<StartTaskPublicationRequest, StartTaskPublicationResponse>;
+  cancelTaskPublication: handleUnaryCall<CancelTaskPublicationRequest, CancelTaskPublicationResponse>;
   startTaskExecution: handleUnaryCall<StartTaskExecutionRequest, StartTaskExecutionResponse>;
   cancelTaskExecution: handleUnaryCall<CancelTaskExecutionRequest, CancelTaskExecutionResponse>;
   getTaskAttempt: handleUnaryCall<GetTaskAttemptRequest, GetTaskAttemptResponse>;
@@ -3995,6 +4023,36 @@ export interface ProjectConversationServiceServer extends UntypedServiceImplemen
 }
 
 export interface ProjectConversationServiceClient extends Client {
+  startTaskPublication(
+    request: StartTaskPublicationRequest,
+    callback: (error: ServiceError | null, response: StartTaskPublicationResponse) => void,
+  ): ClientUnaryCall;
+  startTaskPublication(
+    request: StartTaskPublicationRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: StartTaskPublicationResponse) => void,
+  ): ClientUnaryCall;
+  startTaskPublication(
+    request: StartTaskPublicationRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: StartTaskPublicationResponse) => void,
+  ): ClientUnaryCall;
+  cancelTaskPublication(
+    request: CancelTaskPublicationRequest,
+    callback: (error: ServiceError | null, response: CancelTaskPublicationResponse) => void,
+  ): ClientUnaryCall;
+  cancelTaskPublication(
+    request: CancelTaskPublicationRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CancelTaskPublicationResponse) => void,
+  ): ClientUnaryCall;
+  cancelTaskPublication(
+    request: CancelTaskPublicationRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CancelTaskPublicationResponse) => void,
+  ): ClientUnaryCall;
   startTaskExecution(
     request: StartTaskExecutionRequest,
     callback: (error: ServiceError | null, response: StartTaskExecutionResponse) => void,

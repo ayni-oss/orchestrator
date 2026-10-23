@@ -14,8 +14,12 @@ dev_build_image() {
       repository=ayni-orchestrator-scripted-executor
       dockerfile="$DEV_REPOSITORY_ROOT/deploy/images/scripted-executor/Dockerfile"
       ;;
+    publication-fixture)
+      repository=ayni-orchestrator-publication-fixture
+      dockerfile="$DEV_REPOSITORY_ROOT/dev/fixtures/publication/Dockerfile"
+      ;;
     *)
-      echo "component must be control-plane or scripted-executor" >&2
+      echo "component must be control-plane, scripted-executor or publication-fixture" >&2
       return 2
       ;;
   esac
@@ -82,6 +86,7 @@ dev_prune_images() (
   case "$component" in
     control-plane) repository=ayni-orchestrator-control-plane ;;
     scripted-executor) repository=ayni-orchestrator-scripted-executor ;;
+    publication-fixture) repository=ayni-orchestrator-publication-fixture ;;
     *) echo "unknown image component: $component" >&2; return 2 ;;
   esac
   local node_id temporary_directory keep runtime_ref local_ref image_ref

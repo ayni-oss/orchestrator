@@ -134,7 +134,10 @@ defines the second slice: a durable serial task queue, isolated retained checkou
 bounded coding, cancellation fencing and exact result acceptance, delivered by PR #243.
 The [task quality contract](docs/technical/architecture/task-quality.md) owns the
 third slice: credential-free managed validation, frozen inputs and retained
-evidence separate from coding completion. Each runtime PR extends
+evidence separate from coding completion, delivered by PR #244.
+The [draft publication contract](docs/technical/architecture/task-publication.md)
+defines the fourth slice: explicit publication authority, deterministic Git
+identity and retained draft recovery. Each runtime PR extends
 the cumulative acceptance harness immediately. M4 begins with serial execution
 and isolated attempts; dependency scheduling and concurrent tasks remain M5,
 conversational recovery remains M6. Automatic quality-repair loops require explicit

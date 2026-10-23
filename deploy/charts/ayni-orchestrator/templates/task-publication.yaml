@@ -1,0 +1,124 @@
+{{- if and .Values.enabled .Values.publication.enabled }}
+{{- $publication := .Values.publication }}
+{{- if or (eq $publication.authoritySecretName $publication.githubSecretName) (eq $publication.authoritySecretName .Values.providers.sessionAuthoritySecretName) (eq $publication.githubSecretName .Values.providers.sessionAuthoritySecretName) }}
+{{- fail "publication authority, GitHub and session capability Secrets must differ" }}
+{{- end }}
+{{- range $secret := list $publication.authoritySecretName $publication.githubSecretName }}
+{{- if or (eq $secret $.Values.workflowPostgres.runtimeSecretName) (eq $secret $.Values.workflowPostgres.migratorSecretName) (eq $secret $.Values.workflowJetstream.applicationSecretName) (eq $secret $.Values.workflowJetstream.executorSecretName) }}
+{{- fail "publication capabilities must differ from database and broker Secrets" }}
+{{- end }}
+{{- end }}
+{{- if $publication.fixtureEnabled }}
+{{- if or (ne $publication.fixtureApiUrl (printf "http://publication-fixture.%s.svc:8080" .Release.Namespace)) (ne $publication.fixtureGitUrl (printf "git://publication-fixture.%s.svc:9418/fixture/repo.git" .Release.Namespace)) (ne $publication.repository "https://github.com/fixture/repo.git") }}
+{{- fail "publication fixture requires its scoped local endpoints and fixture repository" }}
+{{- end }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: task-publisher
+  labels:
+    app.kubernetes.io/name: ayni-task-publisher
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ayni-task-publisher
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ayni-task-publisher
+      annotations:
+        build.ayni/publication-workspace: {{ $publication.workspaceId | quote }}
+        build.ayni/publication-repository: {{ $publication.repository | quote }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: publisher
+          image: {{ .Values.images.scriptedExecutor | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: ["/usr/local/bin/ayni-task-publisher"]
+          env:
+            - name: ORCHESTRATOR_PUBLICATION_AUTHORITY_URL
+              value: http://control-plane.{{ .Release.Namespace }}.svc:{{ .Values.controlPlane.httpPort }}
+            - name: ORCHESTRATOR_PUBLICATION_AUTHORITY_TOKEN_PATH
+              value: /var/run/publication-authority/token
+            - name: ORCHESTRATOR_PUBLICATION_GITHUB_TOKEN_PATH
+              value: /var/run/publication-github/token
+            - name: ORCHESTRATOR_PUBLICATION_WORKSPACE_ID
+              value: {{ required "publication.workspaceId is required" $publication.workspaceId | quote }}
+            - name: ORCHESTRATOR_PUBLICATION_REPOSITORY
+              value: {{ required "publication.repository is required" $publication.repository | quote }}
+            - name: ORCHESTRATOR_PUBLICATION_POD_UID
+              valueFrom: { fieldRef: { fieldPath: metadata.uid } }
+            - name: ORCHESTRATOR_PUBLICATION_FIXTURE_ENABLED
+              value: {{ $publication.fixtureEnabled | quote }}
+            {{- if $publication.fixtureEnabled }}
+            - name: ORCHESTRATOR_PUBLICATION_FIXTURE_API_URL
+              value: {{ $publication.fixtureApiUrl | quote }}
+            - name: ORCHESTRATOR_PUBLICATION_FIXTURE_GIT_URL
+              value: {{ $publication.fixtureGitUrl | quote }}
+            {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: "1", memory: 512Mi, ephemeral-storage: 512Mi }
+          volumeMounts:
+            - { name: scratch, mountPath: /tmp }
+            - { name: authority, mountPath: /var/run/publication-authority, readOnly: true }
+            - { name: github, mountPath: /var/run/publication-github, readOnly: true }
+      volumes:
+        - name: scratch
+          emptyDir: { sizeLimit: 512Mi }
+        - name: authority
+          secret:
+            secretName: {{ required "publication.authoritySecretName is required" $publication.authoritySecretName | quote }}
+            items: [{ key: token, path: token }]
+        - name: github
+          secret:
+            secretName: {{ required "publication.githubSecretName is required" $publication.githubSecretName | quote }}
+            items: [{ key: token, path: token }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: task-publisher-isolation
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: ayni-task-publisher }
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports: [{ protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]
+    - to:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: ayni-orchestrator-control-plane }
+      ports: [{ protocol: TCP, port: {{ .Values.controlPlane.httpPort }} }]
+    {{- if $publication.fixtureEnabled }}
+    - to:
+        - podSelector:
+            matchLabels: { app: publication-fixture }
+      ports: [{ protocol: TCP, port: 8080 }, { protocol: TCP, port: 9418 }]
+    {{- else }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4]
+      ports: [{ protocol: TCP, port: 443 }]
+    {{- end }}
+{{- end }}

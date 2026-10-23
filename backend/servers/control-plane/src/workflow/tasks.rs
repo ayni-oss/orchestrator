@@ -54,11 +54,29 @@ pub(super) async fn get(
         )
         .await
         .map_err(|e| context.store(&e))?;
+    let publication = store
+        .get_task_publication(
+            plans::scope(&v.workspace_id, &v.project_id, &v.conversation_id),
+            &v.task_id,
+            &v.attempt_id,
+        )
+        .await
+        .map_err(|e| context.store(&e))?;
+    let quality_digest = r
+        .quality
+        .as_ref()
+        .map(serde_json::to_vec)
+        .transpose()
+        .map_err(|_| Status::internal("quality evidence unavailable"))?
+        .map(|b| ayni_orchestrator_events::task_execution::digest(&b))
+        .unwrap_or_default();
     let outcome = r.outcome.unwrap_or_default();
     let hash = ayni_orchestrator_events::task_execution::digest(outcome.patch.as_bytes());
     Ok(context.response(v1::GetTaskAttemptResponse {
         attempt: Some(v1::TaskAttempt {
             execution_outcome: outcome.state,
+            quality_digest,
+            publication: publication.map(super::publications::projection),
             quality: r.quality.map(|q| v1::TaskQualityOutcome {
                 state: q.state,
                 safe_reason: q.safe_reason,

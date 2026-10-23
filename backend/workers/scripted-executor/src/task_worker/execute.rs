@@ -39,6 +39,12 @@ async fn execute_inner(
             return Err("provider_disabled");
         }
         // Only explicit deterministic acceptance uses this branch; it claims no Ayni compatibility.
+        if c.objective == "Task publication no-op fixture" {
+            return Ok(TaskOutcome {
+                state: "completed".into(),
+                ..Default::default()
+            });
+        }
         let patch = task_files::apply(
             &worker.source,
             &[if c.objective == "Task quality failure fixture" {

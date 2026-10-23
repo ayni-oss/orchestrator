@@ -208,4 +208,35 @@ if helm template invalid "$reusable_chart" \
   exit 1
 fi
 
+# Publication has a separate, scoped capability and never inherits worker credentials.
+publication_options=(
+  --set publication.enabled=true
+  --set-string publication.workspaceId=11111111-1111-4111-8111-111111111111
+  --set-string publication.repository=https://github.com/fixture/repo.git
+  --set-string publication.githubSecretName=publication-fixture-github
+)
+publication_render="$scratch/publication.yaml"
+helm template publication "$reusable_chart" --namespace test "${publication_options[@]}" > "$publication_render"
+publisher_container="$(awk '/^        - name: publisher$/{capture=1} /^      volumes:/{if(capture){exit}} capture{print}' "$publication_render")"
+grep -q 'ayni-task-publisher' <<<"$publisher_container"
+grep -q 'mountPath: /var/run/publication-authority' <<<"$publisher_container"
+grep -q 'mountPath: /var/run/publication-github' <<<"$publisher_container"
+! grep -Eq 'workflow-postgres|workflow-jetstream|session-authority|OPENAI' <<<"$publisher_container"
+grep -q 'strategy: { type: Recreate }' "$publication_render"
+grep -q 'name: task-publisher-isolation' "$publication_render"
+for aliased_secret in workflow-publication-authority workflow-session-authority workflow-postgres-runtime workflow-jetstream-executor; do
+  if helm template invalid "$reusable_chart" "${publication_options[@]}" \
+    --set-string publication.githubSecretName="$aliased_secret" >/dev/null 2>&1; then
+    echo "publication chart accepted an aliased capability Secret" >&2
+    exit 1
+  fi
+done
+if helm template invalid "$reusable_chart" --namespace test "${publication_options[@]}" \
+  --set publication.fixtureEnabled=true \
+  --set-string publication.fixtureApiUrl=http://unrelated.example:8080 \
+  --set-string publication.fixtureGitUrl=git://publication-fixture.test.svc:9418/fixture/repo.git >/dev/null 2>&1; then
+  echo "publication fixture accepted an unrelated endpoint" >&2
+  exit 1
+fi
+
 echo "Helm authenticated workflow and provider isolation checks passed"

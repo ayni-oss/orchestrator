@@ -1,5 +1,6 @@
 mod plans;
 mod projections;
+mod publications;
 mod tasks;
 use projections::{
     agent_configuration, conversation, history_record, project, receipt, session, snapshot,
@@ -284,6 +285,18 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
 
 #[tonic::async_trait]
 impl v1::project_conversation_service_server::ProjectConversationService for WorkflowGrpc {
+    async fn start_task_publication(
+        &self,
+        request: Request<v1::StartTaskPublicationRequest>,
+    ) -> Result<Response<v1::StartTaskPublicationResponse>, Status> {
+        publications::start(&self.store, request).await
+    }
+    async fn cancel_task_publication(
+        &self,
+        request: Request<v1::CancelTaskPublicationRequest>,
+    ) -> Result<Response<v1::CancelTaskPublicationResponse>, Status> {
+        publications::cancel(&self.store, request).await
+    }
     async fn start_task_execution(
         &self,
         request: Request<v1::StartTaskExecutionRequest>,
