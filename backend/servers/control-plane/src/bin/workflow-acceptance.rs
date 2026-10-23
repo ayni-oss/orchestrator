@@ -19,6 +19,8 @@ use uuid::Uuid;
 mod execution;
 #[path = "workflow_acceptance/plans.rs"]
 mod plans;
+#[path = "workflow_acceptance/publication.rs"]
+mod publication;
 #[path = "workflow_acceptance/task_runs.rs"]
 mod task_runs;
 
@@ -147,6 +149,9 @@ async fn dispatch(
     client: &mut Client,
     projects: &mut ProjectServiceClient<Channel>,
 ) -> Result {
+    if mode.contains("publication") {
+        return dispatch_publication(mode, client, projects).await;
+    }
     match mode {
         "--prepare-task-quality-failed-run" => {
             return task_runs::prepare_quality_failed(projects, client).await;
@@ -183,6 +188,41 @@ async fn dispatch(
         _ => return Err("unknown acceptance mode".into()),
     }
     measure_all(projects, client).await
+}
+
+async fn dispatch_publication(
+    mode: &str,
+    client: &mut Client,
+    projects: &mut ProjectServiceClient<Channel>,
+) -> Result {
+    match mode {
+        "--prepare-publication-task" => {
+            return task_runs::prepare_publication_quality(projects, client, false).await;
+        }
+        "--prepare-publication-failed-quality-task" => {
+            return task_runs::prepare_publication_quality(projects, client, true).await;
+        }
+        "--start-publication-stdin" => return publication::start_stdin(client, true).await,
+        "--start-publication-pending-stdin" => {
+            return publication::start_stdin(client, false).await;
+        }
+        "--reject-publication-quality-stdin" => {
+            return publication::reject_quality_stdin(client).await;
+        }
+        "--verify-publication-stdin" => return publication::verify_stdin(client, "draft").await,
+        "--verify-publication-uncertain-stdin" => {
+            return publication::verify_stdin(client, "uncertain").await;
+        }
+        "--inspect-publication-stdin" => return publication::inspect_stdin(client).await,
+        "--verify-publication-blocked-stdin" => {
+            return publication::verify_stdin(client, "blocked").await;
+        }
+        "--cancel-publication-stdin" => return publication::cancel_stdin(client).await,
+        "--verify-publication-cancelled-stdin" => {
+            return publication::verify_stdin(client, "cancelled").await;
+        }
+        _ => Err("unknown acceptance mode".into()),
+    }
 }
 
 async fn prepare_pending(

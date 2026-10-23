@@ -99,7 +99,18 @@ spec:
             - name: session-authority
               mountPath: /var/run/secrets/ayni/session-authority
               readOnly: true
+            {{- if .Values.publication.enabled }}
+            - name: publication-authority
+              mountPath: /var/run/secrets/ayni/publication-authority
+              readOnly: true
+            {{- end }}
       volumes:
+        {{- if .Values.publication.enabled }}
+        - name: publication-authority
+          secret:
+            secretName: {{ .Values.publication.authoritySecretName | quote }}
+            items: [{ key: token, path: token }]
+        {{- end }}
         - name: session-authority
           secret:
             secretName: {{ .Values.providers.sessionAuthoritySecretName | quote }}

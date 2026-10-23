@@ -26,6 +26,22 @@ const META: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../../dev/fixtures/task-source/source.json"
 ));
+pub async fn prepare_publication_quality(
+    projects: &mut ProjectServiceClient<Channel>,
+    client: &mut Client,
+    failed: bool,
+) -> Result {
+    prepare_inner(
+        projects,
+        client,
+        if failed {
+            Profile::PublicationFailed
+        } else {
+            Profile::PublicationPassed
+        },
+    )
+    .await
+}
 pub async fn prepare_quality(
     projects: &mut ProjectServiceClient<Channel>,
     client: &mut Client,
@@ -60,6 +76,8 @@ enum Profile {
     Pending,
     QualityPassed,
     QualityFailed,
+    PublicationPassed,
+    PublicationFailed,
 }
 async fn prepare_inner(
     projects: &mut ProjectServiceClient<Channel>,
@@ -67,8 +85,8 @@ async fn prepare_inner(
     profile: Profile,
 ) -> Result {
     let pending = profile == Profile::Pending;
-    let quality = matches!(profile, Profile::QualityPassed | Profile::QualityFailed);
-    let quality_failed = profile == Profile::QualityFailed;
+    let quality = !matches!(profile, Profile::Coding | Profile::Pending);
+    let quality_failed = matches!(profile, Profile::QualityFailed | Profile::PublicationFailed);
     let scope = create_scope(projects, client).await?;
     let (meta, pack) = source_fixture(quality);
     let metadata: serde_json::Value = serde_json::from_str(meta)?;
@@ -106,7 +124,7 @@ async fn prepare_inner(
             task_id: task.id.clone(),
             idempotency_key: Uuid::now_v7().to_string(),
             inputs: Some(v1::TaskExecutionInputs {
-                repository: "https://example.invalid/task-source.git".into(),
+                repository: fixture_repository(profile).into(),
                 source_ref: "refs/heads/main".into(),
                 source_commit: metadata["source_commit"]
                     .as_str()
@@ -368,6 +386,17 @@ const fn source_fixture(quality: bool) -> (&'static str, &'static [u8]) {
     (meta, pack)
 }
 
+const fn fixture_repository(profile: Profile) -> &'static str {
+    if matches!(
+        profile,
+        Profile::PublicationPassed | Profile::PublicationFailed
+    ) {
+        "https://github.com/fixture/repo.git"
+    } else {
+        "https://example.invalid/task-source.git"
+    }
+}
+
 fn plan_content(profile: Profile) -> v1::PlanContent {
     v1::PlanContent {
         title: "Isolated coding fixture".into(),
@@ -375,7 +404,7 @@ fn plan_content(profile: Profile) -> v1::PlanContent {
         scope: "Task execution acceptance".into(),
         tasks: vec![v1::PlanTaskSpecification {
             key: "coding".into(),
-            objective: if profile == Profile::QualityFailed {
+            objective: if matches!(profile, Profile::QualityFailed | Profile::PublicationFailed) {
                 "Task quality failure fixture"
             } else if profile == Profile::Pending {
                 "Task cancellation fixture"
@@ -385,7 +414,7 @@ fn plan_content(profile: Profile) -> v1::PlanContent {
             .into(),
             scope: "Only this checkout".into(),
             acceptance_criteria: vec!["Retained patch survives restart".into()],
-            repository: "https://example.invalid/task-source.git".into(),
+            repository: fixture_repository(profile).into(),
             source_ref: "refs/heads/main".into(),
             ..Default::default()
         }],

@@ -320,6 +320,8 @@ message TaskAttempt {
   string configuration_revision_id = 12;
   TaskQualityOutcome quality = 13;
   string execution_outcome = 14;
+  TaskPublication publication = 15;
+  string quality_digest = 16;
 }
 message GetTaskAttemptResponse {
   TaskAttempt attempt = 1;
@@ -344,4 +346,53 @@ message TaskQualityOutcome {
   string lock_fingerprint = 15;
   string source_fingerprint = 16;
   string validation_input_digest = 17;
+}
+
+message StartTaskPublicationRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string task_id = 4;
+  string attempt_id = 5;
+  string idempotency_key = 6;
+  string expected_patch_digest = 7;
+  string expected_quality_digest = 8;
+}
+message CancelTaskPublicationRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string task_id = 4;
+  string attempt_id = 5;
+  string idempotency_key = 6;
+}
+message TaskPublicationCommandReceipt {
+  string command_id = 1;
+  string publication_id = 2;
+  string attempt_id = 3;
+  uint64 conversation_revision = 4;
+  string resume_cursor = 5;
+}
+message StartTaskPublicationResponse {
+  TaskPublicationCommandReceipt receipt = 1;
+}
+message CancelTaskPublicationResponse {
+  TaskPublicationCommandReceipt receipt = 1;
+}
+message TaskPublication {
+  string publication_id = 1;
+  string attempt_id = 2;
+  string state = 3;
+  uint64 generation = 4;
+  string branch = 5;
+  string base_branch = 6;
+  string commit_sha = 7;
+  string tree_sha = 8;
+  uint64 pr_number = 9;
+  string pr_url = 10;
+  string safe_reason = 11;
+  string quality_digest = 12;
+  string patch_digest = 13;
+  string repository = 14;
+  string pr_state = 15;
 }

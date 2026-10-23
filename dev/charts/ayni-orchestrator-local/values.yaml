@@ -60,3 +60,8 @@ jetstream:
     limits:
       cpu: 500m
       memory: 1Gi
+
+# Explicit local-only GitHub protocol and real bare-Git acceptance service.
+publicationFixture:
+  enabled: false
+  image: ""

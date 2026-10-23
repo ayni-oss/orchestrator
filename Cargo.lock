@@ -350,6 +350,7 @@ dependencies = [
  "axum",
  "ayni-orchestrator-events",
  "ayni-orchestrator-providers",
+ "base64 0.22.1",
  "ed25519-dalek",
  "futures-util",
  "k8s-openapi",

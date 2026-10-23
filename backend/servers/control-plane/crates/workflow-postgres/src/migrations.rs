@@ -3,7 +3,7 @@ use thiserror::Error;
 use tokio_postgres::{Client, Transaction};
 
 pub const MIGRATION_LOCK_ID: i64 = 4_702_199_126_064_921;
-pub const CURRENT_SCHEMA_VERSION: i64 = 17;
+pub const CURRENT_SCHEMA_VERSION: i64 = 19;
 
 const MIGRATION_1: &str = include_str!("../migrations/0001_durable_foundation.sql");
 const MIGRATION_2: &str = include_str!("../migrations/0002_report_acceptance.sql");
@@ -13,6 +13,8 @@ const MIGRATION_5: &str = include_str!("../migrations/0005_delivery_accounting.s
 const MIGRATION_6: &str = include_str!("../migrations/0006_transport_rejections.sql");
 const MIGRATION_7: &str = include_str!("../migrations/0007_broker_capacity.sql");
 const MIGRATION_8: &str = include_str!("../migrations/0008_agent_configuration.sql");
+const MIGRATION_19: &str = include_str!("../migrations/0019_publication_report_history.sql");
+const MIGRATION_18: &str = include_str!("../migrations/0018_task_publication.sql");
 const MIGRATION_17: &str = include_str!("../migrations/0017_task_quality.sql");
 const MIGRATION_16: &str = include_str!("../migrations/0016_task_runs.sql");
 const MIGRATION_15: &str = include_str!("../migrations/0015_task_execution_preparation.sql");
@@ -168,6 +170,8 @@ async fn apply_pending_migrations(
         (15_i64, MIGRATION_15, "Frozen task execution preparation"),
         (16_i64, MIGRATION_16, "Isolated task execution authority"),
         (17_i64, MIGRATION_17, "Immutable task quality evidence"),
+        (18_i64, MIGRATION_18, "Frozen draft publication authority"),
+        (19_i64, MIGRATION_19, "Immutable publication report history"),
     ] {
         if current < version {
             transaction.batch_execute(source).await?;
@@ -238,6 +242,8 @@ async fn validate_inner(client: &Client) -> Result<(), MigrationError> {
         (15_i64, MIGRATION_15),
         (16_i64, MIGRATION_16),
         (17_i64, MIGRATION_17),
+        (18_i64, MIGRATION_18),
+        (19_i64, MIGRATION_19),
     ];
     if rows.len() != migrations.len() {
         return Err(MigrationError::InvalidHistory);
@@ -292,6 +298,8 @@ async fn validate_checksum(transaction: &Transaction<'_>) -> Result<(), Migratio
         (15_i64, MIGRATION_15),
         (16_i64, MIGRATION_16),
         (17_i64, MIGRATION_17),
+        (18_i64, MIGRATION_18),
+        (19_i64, MIGRATION_19),
     ] {
         let checksum: String = transaction
             .query_one(
@@ -345,12 +353,13 @@ async fn apply_runtime_privileges(
                workflow_workspaces, workflow_projects, workflow_conversations, \
                workflow_command_receipts, workflow_messages, workflow_turns, \
                workflow_activities, workflow_updates, workflow_dispatch_intents, \
-               workflow_outbox, workflow_history_snapshots, workflow_report_receipts, workflow_transport_quarantine, workflow_watch_watermarks, workflow_pending_reports, workflow_transport_rejections, workflow_broker_capacity, workflow_agent_configurations, workflow_agent_configuration_heads, workflow_configuration_receipts, workflow_turn_inputs, workflow_sessions, workflow_turn_sessions, workflow_session_receipts, workflow_context_manifests, workflow_context_manifest_messages, workflow_provider_calls, workflow_cancellation_receipts, workflow_provider_uncertainty_receipts, workflow_plans, workflow_plan_versions, workflow_plan_receipts, workflow_plan_proposals, workflow_plan_approvals, workflow_tasks, workflow_task_preparations, workflow_task_attempts, workflow_task_runs, workflow_task_run_receipts, workflow_task_quality FROM {role};\
+               workflow_outbox, workflow_history_snapshots, workflow_report_receipts, workflow_transport_quarantine, workflow_watch_watermarks, workflow_pending_reports, workflow_transport_rejections, workflow_broker_capacity, workflow_agent_configurations, workflow_agent_configuration_heads, workflow_configuration_receipts, workflow_turn_inputs, workflow_sessions, workflow_turn_sessions, workflow_session_receipts, workflow_context_manifests, workflow_context_manifest_messages, workflow_provider_calls, workflow_cancellation_receipts, workflow_provider_uncertainty_receipts, workflow_plans, workflow_plan_versions, workflow_plan_receipts, workflow_plan_proposals, workflow_plan_approvals, workflow_tasks, workflow_task_preparations, workflow_task_attempts, workflow_task_runs, workflow_task_run_receipts, workflow_task_quality, workflow_task_publications, workflow_task_publication_receipts, workflow_task_publication_reports FROM {role};\
              GRANT SELECT, INSERT ON TABLE \
                workflow_workspaces, workflow_projects, workflow_conversations, \
                workflow_command_receipts, workflow_messages, workflow_turns, \
                workflow_activities, workflow_updates, workflow_dispatch_intents, \
-               workflow_outbox, workflow_history_snapshots, workflow_report_receipts, workflow_transport_quarantine, workflow_watch_watermarks, workflow_pending_reports, workflow_transport_rejections, workflow_broker_capacity, workflow_agent_configurations, workflow_agent_configuration_heads, workflow_configuration_receipts, workflow_turn_inputs, workflow_sessions, workflow_turn_sessions, workflow_session_receipts, workflow_context_manifests, workflow_context_manifest_messages, workflow_provider_calls, workflow_cancellation_receipts, workflow_provider_uncertainty_receipts, workflow_plans, workflow_plan_versions, workflow_plan_receipts, workflow_plan_proposals, workflow_plan_approvals, workflow_tasks, workflow_task_preparations, workflow_task_attempts, workflow_task_runs, workflow_task_run_receipts, workflow_task_quality TO {role};\
+               workflow_outbox, workflow_history_snapshots, workflow_report_receipts, workflow_transport_quarantine, workflow_watch_watermarks, workflow_pending_reports, workflow_transport_rejections, workflow_broker_capacity, workflow_agent_configurations, workflow_agent_configuration_heads, workflow_configuration_receipts, workflow_turn_inputs, workflow_sessions, workflow_turn_sessions, workflow_session_receipts, workflow_context_manifests, workflow_context_manifest_messages, workflow_provider_calls, workflow_cancellation_receipts, workflow_provider_uncertainty_receipts, workflow_plans, workflow_plan_versions, workflow_plan_receipts, workflow_plan_proposals, workflow_plan_approvals, workflow_tasks, workflow_task_preparations, workflow_task_attempts, workflow_task_runs, workflow_task_run_receipts, workflow_task_quality, workflow_task_publications, workflow_task_publication_receipts, workflow_task_publication_reports TO {role};\
+             GRANT UPDATE (state,generation,pod_uid,lease_until,commit_sha,tree_sha,outcome) ON workflow_task_publications TO {role};\
              GRANT UPDATE (state,generation,pod_uid,deadline_at,provider_state,request_digest,outcome) ON workflow_task_runs TO {role};\
               GRANT UPDATE (current_version_id) ON workflow_plans TO {role};\
              GRANT UPDATE (state,evidence,safe_reason,reservation_settled) ON workflow_provider_calls TO {role};\
@@ -397,7 +406,7 @@ fn validate_role_name(runtime_role: &str) -> Result<(), MigrationError> {
 }
 
 const SCHEMA_MANIFEST_CHECKSUM: &str =
-    "sha256:76e5b9c6c7f0678f11fde1bcdf589855405a584f1ed9413fbdcd2e9b66237a56";
+    "sha256:ef6e464b1702bd6d68af4dbc924f53ad582febfeeddddb9e8edecb9c4530f074";
 
 async fn validate_schema(transaction: &Transaction<'_>) -> Result<(), MigrationError> {
     let manifest: String = transaction
@@ -560,7 +569,8 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                          candidate.column_name, 'UPDATE' \
                      ) \
                      AND NOT ( \
-                         (candidate.table_name='workflow_task_runs' AND candidate.column_name IN ('state','generation','pod_uid','deadline_at','provider_state','request_digest','outcome')) \
+                         (candidate.table_name='workflow_task_publications' AND candidate.column_name IN ('state','generation','pod_uid','lease_until','commit_sha','tree_sha','outcome')) \
+                         OR (candidate.table_name='workflow_task_runs' AND candidate.column_name IN ('state','generation','pod_uid','deadline_at','provider_state','request_digest','outcome')) \
                          OR (candidate.table_name='workflow_plans' AND candidate.column_name='current_version_id') \
                          OR (candidate.table_name='workflow_provider_calls' AND candidate.column_name IN ('state','evidence','safe_reason','reservation_settled')) \
                          OR (candidate.table_name='workflow_turns' AND candidate.column_name='execution_binding_revision') \

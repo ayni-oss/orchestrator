@@ -22,8 +22,12 @@ Durable-workflow local Docker Desktop development:
   prepare-task submit-start FROZEN_START_JSON
                                 Verify source evidence or authorize task preparation
   scenario                      Run the message-to-scripted-response diagnostic
+  publish-task prepare SELECTION_JSON FROZEN_JSON
+  publish-task submit FROZEN_JSON
+  publish-task cancel CANCEL_JSON
+                                Review and authorize exact draft publication
   quality-runtime               Build/load the local managed task-quality fixture
-  acceptance ABSOLUTE_DIRECTORY [--plans-only|--tasks-only|--coding-only|--quality-only]
+  acceptance ABSOLUTE_DIRECTORY [--plans-only|--tasks-only|--coding-only|--quality-only|--publication-only]
                                 Run cumulative gates or scoped plan/task recovery
   status                        Show the release, pods, and retained claims
   cleanup | down                Uninstall while preserving authoritative stores
@@ -88,6 +92,9 @@ case "$command" in
     ;;
   quality-runtime)
     "$scripts/quality-runtime.sh" "$@"
+    ;;
+  publish-task)
+    "$scripts/publish-task.sh" "$@"
     ;;
   prepare-task)
     "$scripts/prepare-task.sh" "$@"

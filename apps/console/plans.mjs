@@ -171,6 +171,7 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
                 if (attempt) {
                   paragraph($('task-detail'), 'Worker generation and provider state', `${attempt.generation} · ${attempt.providerState}`);
                   paragraph($('task-detail'), 'Retained patch', attempt.patch || 'No accepted changes yet');
+                  paragraph($('task-detail'), 'Publication', attempt.publication ? JSON.stringify(attempt.publication, null, 2) : 'Not authorized');
                   paragraph($('task-detail'), 'Coding outcome', attempt.executionOutcome || 'Pending');
                   paragraph($('task-detail'), 'Quality outcome', attempt.quality ? `${attempt.quality.state} · ${attempt.quality.safeReason || 'Ayni evidence retained'}` : 'Pending');
                   if (attempt.quality) paragraph($('task-detail'), 'Quality evidence', JSON.stringify(attempt.quality, null, 2));

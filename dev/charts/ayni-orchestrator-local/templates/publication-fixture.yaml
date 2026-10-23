@@ -1,0 +1,77 @@
+{{- if .Values.publicationFixture.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: publication-fixture-github
+  annotations: { helm.sh/resource-policy: keep }
+immutable: true
+type: Opaque
+stringData:
+  # This public fixture value grants no access outside the local protocol server.
+  token: fixture-publication-github-token
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: publication-fixture
+  annotations: { helm.sh/resource-policy: keep }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: { storage: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: publication-fixture
+spec:
+  selector: { app: publication-fixture }
+  ports:
+    - { name: http, port: 8080, targetPort: http }
+    - { name: git, port: 9418, targetPort: git }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: publication-fixture
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: publication-fixture }
+  template:
+    metadata:
+      labels: { app: publication-fixture }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: fixture
+          image: {{ required "publicationFixture.image is required" .Values.publicationFixture.image | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 8080 }
+            - { name: git, containerPort: 9418 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 25m, memory: 32Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          readinessProbe:
+            httpGet: { path: /fixture/state, port: http }
+          volumeMounts:
+            - { name: state, mountPath: /var/lib/publication-fixture }
+            - { name: temporary, mountPath: /tmp }
+      volumes:
+        - name: state
+          persistentVolumeClaim: { claimName: publication-fixture }
+        - name: temporary
+          emptyDir: { sizeLimit: 64Mi }
+{{- end }}

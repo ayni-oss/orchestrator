@@ -232,6 +232,73 @@
           "type": "boolean"
         }
       }
+    },
+    "publication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "workspaceId",
+        "repository",
+        "authoritySecretName",
+        "githubSecretName",
+        "fixtureEnabled",
+        "fixtureApiUrl",
+        "fixtureGitUrl"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "workspaceId": {
+          "type": "string"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "authoritySecretName": {
+          "type": "string"
+        },
+        "githubSecretName": {
+          "type": "string"
+        },
+        "fixtureEnabled": {
+          "type": "boolean"
+        },
+        "fixtureApiUrl": {
+          "type": "string"
+        },
+        "fixtureGitUrl": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "workspaceId": {
+                "pattern": "^[a-f0-9-]{36}$"
+              },
+              "repository": {
+                "pattern": "^https://github.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+[.]git$"
+              },
+              "authoritySecretName": {
+                "minLength": 1
+              },
+              "githubSecretName": {
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
     }
   },
   "$defs": {

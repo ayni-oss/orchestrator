@@ -39,3 +39,5 @@ The [event-platform history](history/event-platform/index.md) is retained as dat
 - [Isolated task execution](architecture/isolated-task-execution.md): durable serial dispatch, bounded coding and cancellation fencing.
 
 - [Task quality](architecture/task-quality.md): frozen validation, managed Ayni execution and separate retained evidence.
+
+- [Task draft publication](architecture/task-publication.md): explicit scoped authority, deterministic Git changes and recoverable draft identity.

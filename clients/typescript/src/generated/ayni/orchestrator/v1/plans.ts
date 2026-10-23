@@ -370,6 +370,8 @@ export interface TaskAttempt {
   configurationRevisionId: string;
   quality?: TaskQualityOutcome | undefined;
   executionOutcome: string;
+  publication?: TaskPublication | undefined;
+  qualityDigest: string;
 }
 
 export interface GetTaskAttemptResponse {
@@ -395,6 +397,60 @@ export interface TaskQualityOutcome {
   lockFingerprint: string;
   sourceFingerprint: string;
   validationInputDigest: string;
+}
+
+export interface StartTaskPublicationRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  taskId: string;
+  attemptId: string;
+  idempotencyKey: string;
+  expectedPatchDigest: string;
+  expectedQualityDigest: string;
+}
+
+export interface CancelTaskPublicationRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  taskId: string;
+  attemptId: string;
+  idempotencyKey: string;
+}
+
+export interface TaskPublicationCommandReceipt {
+  commandId: string;
+  publicationId: string;
+  attemptId: string;
+  conversationRevision: string;
+  resumeCursor: string;
+}
+
+export interface StartTaskPublicationResponse {
+  receipt?: TaskPublicationCommandReceipt | undefined;
+}
+
+export interface CancelTaskPublicationResponse {
+  receipt?: TaskPublicationCommandReceipt | undefined;
+}
+
+export interface TaskPublication {
+  publicationId: string;
+  attemptId: string;
+  state: string;
+  generation: string;
+  branch: string;
+  baseBranch: string;
+  commitSha: string;
+  treeSha: string;
+  prNumber: string;
+  prUrl: string;
+  safeReason: string;
+  qualityDigest: string;
+  patchDigest: string;
+  repository: string;
+  prState: string;
 }
 
 function createBasePlanTaskSpecification(): PlanTaskSpecification {
@@ -6461,6 +6517,8 @@ function createBaseTaskAttempt(): TaskAttempt {
     configurationRevisionId: "",
     quality: undefined,
     executionOutcome: "",
+    publication: undefined,
+    qualityDigest: "",
   };
 }
 
@@ -6507,6 +6565,12 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
     }
     if (message.executionOutcome !== "") {
       writer.uint32(114).string(message.executionOutcome);
+    }
+    if (message.publication !== undefined) {
+      TaskPublication.encode(message.publication, writer.uint32(122).fork()).join();
+    }
+    if (message.qualityDigest !== "") {
+      writer.uint32(130).string(message.qualityDigest);
     }
     return writer;
   },
@@ -6636,6 +6700,22 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
             message.executionOutcome = reader.string();
             continue;
           }
+          case 15: {
+            if (tag !== 122) {
+              break;
+            }
+
+            message.publication = TaskPublication.decode(reader, reader.uint32());
+            continue;
+          }
+          case 16: {
+            if (tag !== 130) {
+              break;
+            }
+
+            message.qualityDigest = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -6704,6 +6784,12 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
         : isSet(object.execution_outcome)
         ? globalThis.String(object.execution_outcome)
         : "",
+      publication: isSet(object.publication) ? TaskPublication.fromJSON(object.publication) : undefined,
+      qualityDigest: isSet(object.qualityDigest)
+        ? globalThis.String(object.qualityDigest)
+        : isSet(object.quality_digest)
+        ? globalThis.String(object.quality_digest)
+        : "",
     };
   },
 
@@ -6751,6 +6837,12 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
     if (message.executionOutcome !== "") {
       obj.executionOutcome = message.executionOutcome;
     }
+    if (message.publication !== undefined) {
+      obj.publication = TaskPublication.toJSON(message.publication);
+    }
+    if (message.qualityDigest !== "") {
+      obj.qualityDigest = message.qualityDigest;
+    }
     return obj;
   },
 
@@ -6775,6 +6867,10 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
       ? TaskQualityOutcome.fromPartial(object.quality)
       : undefined;
     message.executionOutcome = object.executionOutcome ?? "";
+    message.publication = (object.publication !== undefined && object.publication !== null)
+      ? TaskPublication.fromPartial(object.publication)
+      : undefined;
+    message.qualityDigest = object.qualityDigest ?? "";
     return message;
   },
 };
@@ -7247,6 +7343,1045 @@ export const TaskQualityOutcome: MessageFns<TaskQualityOutcome> = {
     message.lockFingerprint = object.lockFingerprint ?? "";
     message.sourceFingerprint = object.sourceFingerprint ?? "";
     message.validationInputDigest = object.validationInputDigest ?? "";
+    return message;
+  },
+};
+
+function createBaseStartTaskPublicationRequest(): StartTaskPublicationRequest {
+  return {
+    workspaceId: "",
+    projectId: "",
+    conversationId: "",
+    taskId: "",
+    attemptId: "",
+    idempotencyKey: "",
+    expectedPatchDigest: "",
+    expectedQualityDigest: "",
+  };
+}
+
+export const StartTaskPublicationRequest: MessageFns<StartTaskPublicationRequest> = {
+  encode(message: StartTaskPublicationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.taskId !== "") {
+      writer.uint32(34).string(message.taskId);
+    }
+    if (message.attemptId !== "") {
+      writer.uint32(42).string(message.attemptId);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(50).string(message.idempotencyKey);
+    }
+    if (message.expectedPatchDigest !== "") {
+      writer.uint32(58).string(message.expectedPatchDigest);
+    }
+    if (message.expectedQualityDigest !== "") {
+      writer.uint32(66).string(message.expectedQualityDigest);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StartTaskPublicationRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseStartTaskPublicationRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.taskId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.attemptId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.expectedPatchDigest = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.expectedQualityDigest = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): StartTaskPublicationRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      taskId: isSet(object.taskId)
+        ? globalThis.String(object.taskId)
+        : isSet(object.task_id)
+        ? globalThis.String(object.task_id)
+        : "",
+      attemptId: isSet(object.attemptId)
+        ? globalThis.String(object.attemptId)
+        : isSet(object.attempt_id)
+        ? globalThis.String(object.attempt_id)
+        : "",
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      expectedPatchDigest: isSet(object.expectedPatchDigest)
+        ? globalThis.String(object.expectedPatchDigest)
+        : isSet(object.expected_patch_digest)
+        ? globalThis.String(object.expected_patch_digest)
+        : "",
+      expectedQualityDigest: isSet(object.expectedQualityDigest)
+        ? globalThis.String(object.expectedQualityDigest)
+        : isSet(object.expected_quality_digest)
+        ? globalThis.String(object.expected_quality_digest)
+        : "",
+    };
+  },
+
+  toJSON(message: StartTaskPublicationRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.taskId !== "") {
+      obj.taskId = message.taskId;
+    }
+    if (message.attemptId !== "") {
+      obj.attemptId = message.attemptId;
+    }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.expectedPatchDigest !== "") {
+      obj.expectedPatchDigest = message.expectedPatchDigest;
+    }
+    if (message.expectedQualityDigest !== "") {
+      obj.expectedQualityDigest = message.expectedQualityDigest;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<StartTaskPublicationRequest>): StartTaskPublicationRequest {
+    return StartTaskPublicationRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<StartTaskPublicationRequest>): StartTaskPublicationRequest {
+    const message = createBaseStartTaskPublicationRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.taskId = object.taskId ?? "";
+    message.attemptId = object.attemptId ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.expectedPatchDigest = object.expectedPatchDigest ?? "";
+    message.expectedQualityDigest = object.expectedQualityDigest ?? "";
+    return message;
+  },
+};
+
+function createBaseCancelTaskPublicationRequest(): CancelTaskPublicationRequest {
+  return { workspaceId: "", projectId: "", conversationId: "", taskId: "", attemptId: "", idempotencyKey: "" };
+}
+
+export const CancelTaskPublicationRequest: MessageFns<CancelTaskPublicationRequest> = {
+  encode(message: CancelTaskPublicationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.taskId !== "") {
+      writer.uint32(34).string(message.taskId);
+    }
+    if (message.attemptId !== "") {
+      writer.uint32(42).string(message.attemptId);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(50).string(message.idempotencyKey);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CancelTaskPublicationRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCancelTaskPublicationRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.taskId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.attemptId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): CancelTaskPublicationRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      taskId: isSet(object.taskId)
+        ? globalThis.String(object.taskId)
+        : isSet(object.task_id)
+        ? globalThis.String(object.task_id)
+        : "",
+      attemptId: isSet(object.attemptId)
+        ? globalThis.String(object.attemptId)
+        : isSet(object.attempt_id)
+        ? globalThis.String(object.attempt_id)
+        : "",
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+    };
+  },
+
+  toJSON(message: CancelTaskPublicationRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.taskId !== "") {
+      obj.taskId = message.taskId;
+    }
+    if (message.attemptId !== "") {
+      obj.attemptId = message.attemptId;
+    }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<CancelTaskPublicationRequest>): CancelTaskPublicationRequest {
+    return CancelTaskPublicationRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CancelTaskPublicationRequest>): CancelTaskPublicationRequest {
+    const message = createBaseCancelTaskPublicationRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.taskId = object.taskId ?? "";
+    message.attemptId = object.attemptId ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    return message;
+  },
+};
+
+function createBaseTaskPublicationCommandReceipt(): TaskPublicationCommandReceipt {
+  return { commandId: "", publicationId: "", attemptId: "", conversationRevision: "0", resumeCursor: "" };
+}
+
+export const TaskPublicationCommandReceipt: MessageFns<TaskPublicationCommandReceipt> = {
+  encode(message: TaskPublicationCommandReceipt, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.commandId !== "") {
+      writer.uint32(10).string(message.commandId);
+    }
+    if (message.publicationId !== "") {
+      writer.uint32(18).string(message.publicationId);
+    }
+    if (message.attemptId !== "") {
+      writer.uint32(26).string(message.attemptId);
+    }
+    if (message.conversationRevision !== "0") {
+      writer.uint32(32).uint64(message.conversationRevision);
+    }
+    if (message.resumeCursor !== "") {
+      writer.uint32(42).string(message.resumeCursor);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TaskPublicationCommandReceipt {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTaskPublicationCommandReceipt();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.commandId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.publicationId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.attemptId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.conversationRevision = reader.uint64().toString();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.resumeCursor = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): TaskPublicationCommandReceipt {
+    return {
+      commandId: isSet(object.commandId)
+        ? globalThis.String(object.commandId)
+        : isSet(object.command_id)
+        ? globalThis.String(object.command_id)
+        : "",
+      publicationId: isSet(object.publicationId)
+        ? globalThis.String(object.publicationId)
+        : isSet(object.publication_id)
+        ? globalThis.String(object.publication_id)
+        : "",
+      attemptId: isSet(object.attemptId)
+        ? globalThis.String(object.attemptId)
+        : isSet(object.attempt_id)
+        ? globalThis.String(object.attempt_id)
+        : "",
+      conversationRevision: isSet(object.conversationRevision)
+        ? globalThis.String(object.conversationRevision)
+        : isSet(object.conversation_revision)
+        ? globalThis.String(object.conversation_revision)
+        : "0",
+      resumeCursor: isSet(object.resumeCursor)
+        ? globalThis.String(object.resumeCursor)
+        : isSet(object.resume_cursor)
+        ? globalThis.String(object.resume_cursor)
+        : "",
+    };
+  },
+
+  toJSON(message: TaskPublicationCommandReceipt): unknown {
+    const obj: any = {};
+    if (message.commandId !== "") {
+      obj.commandId = message.commandId;
+    }
+    if (message.publicationId !== "") {
+      obj.publicationId = message.publicationId;
+    }
+    if (message.attemptId !== "") {
+      obj.attemptId = message.attemptId;
+    }
+    if (message.conversationRevision !== "0") {
+      obj.conversationRevision = message.conversationRevision;
+    }
+    if (message.resumeCursor !== "") {
+      obj.resumeCursor = message.resumeCursor;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<TaskPublicationCommandReceipt>): TaskPublicationCommandReceipt {
+    return TaskPublicationCommandReceipt.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<TaskPublicationCommandReceipt>): TaskPublicationCommandReceipt {
+    const message = createBaseTaskPublicationCommandReceipt();
+    message.commandId = object.commandId ?? "";
+    message.publicationId = object.publicationId ?? "";
+    message.attemptId = object.attemptId ?? "";
+    message.conversationRevision = object.conversationRevision ?? "0";
+    message.resumeCursor = object.resumeCursor ?? "";
+    return message;
+  },
+};
+
+function createBaseStartTaskPublicationResponse(): StartTaskPublicationResponse {
+  return { receipt: undefined };
+}
+
+export const StartTaskPublicationResponse: MessageFns<StartTaskPublicationResponse> = {
+  encode(message: StartTaskPublicationResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.receipt !== undefined) {
+      TaskPublicationCommandReceipt.encode(message.receipt, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StartTaskPublicationResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseStartTaskPublicationResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.receipt = TaskPublicationCommandReceipt.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): StartTaskPublicationResponse {
+    return { receipt: isSet(object.receipt) ? TaskPublicationCommandReceipt.fromJSON(object.receipt) : undefined };
+  },
+
+  toJSON(message: StartTaskPublicationResponse): unknown {
+    const obj: any = {};
+    if (message.receipt !== undefined) {
+      obj.receipt = TaskPublicationCommandReceipt.toJSON(message.receipt);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<StartTaskPublicationResponse>): StartTaskPublicationResponse {
+    return StartTaskPublicationResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<StartTaskPublicationResponse>): StartTaskPublicationResponse {
+    const message = createBaseStartTaskPublicationResponse();
+    message.receipt = (object.receipt !== undefined && object.receipt !== null)
+      ? TaskPublicationCommandReceipt.fromPartial(object.receipt)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseCancelTaskPublicationResponse(): CancelTaskPublicationResponse {
+  return { receipt: undefined };
+}
+
+export const CancelTaskPublicationResponse: MessageFns<CancelTaskPublicationResponse> = {
+  encode(message: CancelTaskPublicationResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.receipt !== undefined) {
+      TaskPublicationCommandReceipt.encode(message.receipt, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CancelTaskPublicationResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCancelTaskPublicationResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.receipt = TaskPublicationCommandReceipt.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): CancelTaskPublicationResponse {
+    return { receipt: isSet(object.receipt) ? TaskPublicationCommandReceipt.fromJSON(object.receipt) : undefined };
+  },
+
+  toJSON(message: CancelTaskPublicationResponse): unknown {
+    const obj: any = {};
+    if (message.receipt !== undefined) {
+      obj.receipt = TaskPublicationCommandReceipt.toJSON(message.receipt);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<CancelTaskPublicationResponse>): CancelTaskPublicationResponse {
+    return CancelTaskPublicationResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CancelTaskPublicationResponse>): CancelTaskPublicationResponse {
+    const message = createBaseCancelTaskPublicationResponse();
+    message.receipt = (object.receipt !== undefined && object.receipt !== null)
+      ? TaskPublicationCommandReceipt.fromPartial(object.receipt)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseTaskPublication(): TaskPublication {
+  return {
+    publicationId: "",
+    attemptId: "",
+    state: "",
+    generation: "0",
+    branch: "",
+    baseBranch: "",
+    commitSha: "",
+    treeSha: "",
+    prNumber: "0",
+    prUrl: "",
+    safeReason: "",
+    qualityDigest: "",
+    patchDigest: "",
+    repository: "",
+    prState: "",
+  };
+}
+
+export const TaskPublication: MessageFns<TaskPublication> = {
+  encode(message: TaskPublication, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.publicationId !== "") {
+      writer.uint32(10).string(message.publicationId);
+    }
+    if (message.attemptId !== "") {
+      writer.uint32(18).string(message.attemptId);
+    }
+    if (message.state !== "") {
+      writer.uint32(26).string(message.state);
+    }
+    if (message.generation !== "0") {
+      writer.uint32(32).uint64(message.generation);
+    }
+    if (message.branch !== "") {
+      writer.uint32(42).string(message.branch);
+    }
+    if (message.baseBranch !== "") {
+      writer.uint32(50).string(message.baseBranch);
+    }
+    if (message.commitSha !== "") {
+      writer.uint32(58).string(message.commitSha);
+    }
+    if (message.treeSha !== "") {
+      writer.uint32(66).string(message.treeSha);
+    }
+    if (message.prNumber !== "0") {
+      writer.uint32(72).uint64(message.prNumber);
+    }
+    if (message.prUrl !== "") {
+      writer.uint32(82).string(message.prUrl);
+    }
+    if (message.safeReason !== "") {
+      writer.uint32(90).string(message.safeReason);
+    }
+    if (message.qualityDigest !== "") {
+      writer.uint32(98).string(message.qualityDigest);
+    }
+    if (message.patchDigest !== "") {
+      writer.uint32(106).string(message.patchDigest);
+    }
+    if (message.repository !== "") {
+      writer.uint32(114).string(message.repository);
+    }
+    if (message.prState !== "") {
+      writer.uint32(122).string(message.prState);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TaskPublication {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTaskPublication();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.publicationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.attemptId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.generation = reader.uint64().toString();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.branch = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.baseBranch = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.commitSha = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.treeSha = reader.string();
+            continue;
+          }
+          case 9: {
+            if (tag !== 72) {
+              break;
+            }
+
+            message.prNumber = reader.uint64().toString();
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.prUrl = reader.string();
+            continue;
+          }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.safeReason = reader.string();
+            continue;
+          }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.qualityDigest = reader.string();
+            continue;
+          }
+          case 13: {
+            if (tag !== 106) {
+              break;
+            }
+
+            message.patchDigest = reader.string();
+            continue;
+          }
+          case 14: {
+            if (tag !== 114) {
+              break;
+            }
+
+            message.repository = reader.string();
+            continue;
+          }
+          case 15: {
+            if (tag !== 122) {
+              break;
+            }
+
+            message.prState = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): TaskPublication {
+    return {
+      publicationId: isSet(object.publicationId)
+        ? globalThis.String(object.publicationId)
+        : isSet(object.publication_id)
+        ? globalThis.String(object.publication_id)
+        : "",
+      attemptId: isSet(object.attemptId)
+        ? globalThis.String(object.attemptId)
+        : isSet(object.attempt_id)
+        ? globalThis.String(object.attempt_id)
+        : "",
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+      generation: isSet(object.generation) ? globalThis.String(object.generation) : "0",
+      branch: isSet(object.branch) ? globalThis.String(object.branch) : "",
+      baseBranch: isSet(object.baseBranch)
+        ? globalThis.String(object.baseBranch)
+        : isSet(object.base_branch)
+        ? globalThis.String(object.base_branch)
+        : "",
+      commitSha: isSet(object.commitSha)
+        ? globalThis.String(object.commitSha)
+        : isSet(object.commit_sha)
+        ? globalThis.String(object.commit_sha)
+        : "",
+      treeSha: isSet(object.treeSha)
+        ? globalThis.String(object.treeSha)
+        : isSet(object.tree_sha)
+        ? globalThis.String(object.tree_sha)
+        : "",
+      prNumber: isSet(object.prNumber)
+        ? globalThis.String(object.prNumber)
+        : isSet(object.pr_number)
+        ? globalThis.String(object.pr_number)
+        : "0",
+      prUrl: isSet(object.prUrl)
+        ? globalThis.String(object.prUrl)
+        : isSet(object.pr_url)
+        ? globalThis.String(object.pr_url)
+        : "",
+      safeReason: isSet(object.safeReason)
+        ? globalThis.String(object.safeReason)
+        : isSet(object.safe_reason)
+        ? globalThis.String(object.safe_reason)
+        : "",
+      qualityDigest: isSet(object.qualityDigest)
+        ? globalThis.String(object.qualityDigest)
+        : isSet(object.quality_digest)
+        ? globalThis.String(object.quality_digest)
+        : "",
+      patchDigest: isSet(object.patchDigest)
+        ? globalThis.String(object.patchDigest)
+        : isSet(object.patch_digest)
+        ? globalThis.String(object.patch_digest)
+        : "",
+      repository: isSet(object.repository) ? globalThis.String(object.repository) : "",
+      prState: isSet(object.prState)
+        ? globalThis.String(object.prState)
+        : isSet(object.pr_state)
+        ? globalThis.String(object.pr_state)
+        : "",
+    };
+  },
+
+  toJSON(message: TaskPublication): unknown {
+    const obj: any = {};
+    if (message.publicationId !== "") {
+      obj.publicationId = message.publicationId;
+    }
+    if (message.attemptId !== "") {
+      obj.attemptId = message.attemptId;
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    if (message.generation !== "0") {
+      obj.generation = message.generation;
+    }
+    if (message.branch !== "") {
+      obj.branch = message.branch;
+    }
+    if (message.baseBranch !== "") {
+      obj.baseBranch = message.baseBranch;
+    }
+    if (message.commitSha !== "") {
+      obj.commitSha = message.commitSha;
+    }
+    if (message.treeSha !== "") {
+      obj.treeSha = message.treeSha;
+    }
+    if (message.prNumber !== "0") {
+      obj.prNumber = message.prNumber;
+    }
+    if (message.prUrl !== "") {
+      obj.prUrl = message.prUrl;
+    }
+    if (message.safeReason !== "") {
+      obj.safeReason = message.safeReason;
+    }
+    if (message.qualityDigest !== "") {
+      obj.qualityDigest = message.qualityDigest;
+    }
+    if (message.patchDigest !== "") {
+      obj.patchDigest = message.patchDigest;
+    }
+    if (message.repository !== "") {
+      obj.repository = message.repository;
+    }
+    if (message.prState !== "") {
+      obj.prState = message.prState;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<TaskPublication>): TaskPublication {
+    return TaskPublication.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<TaskPublication>): TaskPublication {
+    const message = createBaseTaskPublication();
+    message.publicationId = object.publicationId ?? "";
+    message.attemptId = object.attemptId ?? "";
+    message.state = object.state ?? "";
+    message.generation = object.generation ?? "0";
+    message.branch = object.branch ?? "";
+    message.baseBranch = object.baseBranch ?? "";
+    message.commitSha = object.commitSha ?? "";
+    message.treeSha = object.treeSha ?? "";
+    message.prNumber = object.prNumber ?? "0";
+    message.prUrl = object.prUrl ?? "";
+    message.safeReason = object.safeReason ?? "";
+    message.qualityDigest = object.qualityDigest ?? "";
+    message.patchDigest = object.patchDigest ?? "";
+    message.repository = object.repository ?? "";
+    message.prState = object.prState ?? "";
     return message;
   },
 };

@@ -2,55 +2,173 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["ayni-orchestrator", "postgres", "jetstream"],
+  "required": [
+    "ayni-orchestrator",
+    "postgres",
+    "jetstream"
+  ],
   "properties": {
-    "ayni-orchestrator": { "type": "object" },
+    "ayni-orchestrator": {
+      "type": "object"
+    },
     "postgres": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled", "image", "serviceName", "storage", "secrets", "resources"],
+      "required": [
+        "enabled",
+        "image",
+        "serviceName",
+        "storage",
+        "secrets",
+        "resources"
+      ],
       "properties": {
-        "enabled": { "type": "boolean" },
-        "image": { "type": "string", "const": "postgres:17.6-bookworm@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3" },
-        "serviceName": { "type": "string", "minLength": 1 },
-        "storage": { "type": "string", "minLength": 1 },
+        "enabled": {
+          "type": "boolean"
+        },
+        "image": {
+          "type": "string",
+          "const": "postgres:17.6-bookworm@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3"
+        },
+        "serviceName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "storage": {
+          "type": "string",
+          "minLength": 1
+        },
         "secrets": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["admin", "migrator", "runtime"],
+          "required": [
+            "admin",
+            "migrator",
+            "runtime"
+          ],
           "properties": {
-            "admin": { "type": "string", "minLength": 1 },
-            "migrator": { "type": "string", "minLength": 1 },
-            "runtime": { "type": "string", "minLength": 1 }
+            "admin": {
+              "type": "string",
+              "minLength": 1
+            },
+            "migrator": {
+              "type": "string",
+              "minLength": 1
+            },
+            "runtime": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         },
-        "resources": { "type": "object" }
+        "resources": {
+          "type": "object"
+        }
       }
     },
     "jetstream": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled", "serverImage", "toolingImage", "storage", "maxFileBytes", "executorInstanceId", "secrets", "resources"],
+      "required": [
+        "enabled",
+        "serverImage",
+        "toolingImage",
+        "storage",
+        "maxFileBytes",
+        "executorInstanceId",
+        "secrets",
+        "resources"
+      ],
       "properties": {
-        "enabled": { "type": "boolean" },
-        "serverImage": { "type": "string", "const": "nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4" },
-        "toolingImage": { "type": "string", "const": "natsio/nats-box:0.20.0@sha256:d2f04223f40e016f77922a8115d34b0cd5fad2ec10b19b39316ae92d07f3d295" },
-        "storage": { "type": "string", "const": "2Gi" },
-        "maxFileBytes": { "type": "integer", "const": 1073741824 },
-        "executorInstanceId": { "type": "string", "const": "018f0f7b-6a4d-7a11-8d77-010203040506" },
+        "enabled": {
+          "type": "boolean"
+        },
+        "serverImage": {
+          "type": "string",
+          "const": "nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4"
+        },
+        "toolingImage": {
+          "type": "string",
+          "const": "natsio/nats-box:0.20.0@sha256:d2f04223f40e016f77922a8115d34b0cd5fad2ec10b19b39316ae92d07f3d295"
+        },
+        "storage": {
+          "type": "string",
+          "const": "2Gi"
+        },
+        "maxFileBytes": {
+          "type": "integer",
+          "const": 1073741824
+        },
+        "executorInstanceId": {
+          "type": "string",
+          "const": "018f0f7b-6a4d-7a11-8d77-010203040506"
+        },
         "secrets": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["admin", "application", "executor", "acceptance"],
+          "required": [
+            "admin",
+            "application",
+            "executor",
+            "acceptance"
+          ],
           "properties": {
-            "admin": { "type": "string", "minLength": 1 },
-            "application": { "type": "string", "minLength": 1 },
-            "executor": { "type": "string", "minLength": 1 },
-            "acceptance": { "type": "string", "minLength": 1 }
+            "admin": {
+              "type": "string",
+              "minLength": 1
+            },
+            "application": {
+              "type": "string",
+              "minLength": 1
+            },
+            "executor": {
+              "type": "string",
+              "minLength": 1
+            },
+            "acceptance": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         },
-        "resources": { "type": "object" }
+        "resources": {
+          "type": "object"
+        }
       }
+    },
+    "publicationFixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "image"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "image": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "image": {
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }
