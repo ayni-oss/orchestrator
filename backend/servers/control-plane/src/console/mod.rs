@@ -100,6 +100,15 @@ pub fn router(console: Console) -> Router {
             }),
         )
         .route(
+            "/feedback.mjs",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript")],
+                    include_str!("../../../../../apps/console/feedback.mjs"),
+                )
+            }),
+        )
+        .route(
             "/state.mjs",
             get(|| async {
                 (
@@ -253,6 +262,12 @@ async fn rpc(
 // Task controls share the same request limits and canonical authority as plans.
 async fn task_rpc(console: &Console, method: &str, body: Value) -> Result<Json<Value>, ApiError> {
     match method {
+        "ListTaskFeedback" => forward!(
+            body,
+            console.conversations(),
+            list_task_feedback,
+            v1::ListTaskFeedbackRequest
+        ),
         "ReviewTaskPublication" => {
             let selected: v1::GetTaskAttemptRequest = decode(body)?;
             let preview = tokio::time::timeout(

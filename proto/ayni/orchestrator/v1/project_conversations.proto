@@ -17,6 +17,7 @@ service ProjectConversationService {
   rpc ApprovePlan(ApprovePlanRequest) returns (ApprovePlanResponse);
   rpc GetPlanApproval(GetPlanApprovalRequest) returns (GetPlanApprovalResponse);
   rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
+  rpc ListTaskFeedback(ListTaskFeedbackRequest) returns (ListTaskFeedbackResponse);
   rpc GetTask(GetTaskRequest) returns (GetTaskResponse);
   rpc CreatePlan(CreatePlanRequest) returns (CreatePlanResponse);
   rpc RevisePlan(RevisePlanRequest) returns (RevisePlanResponse);

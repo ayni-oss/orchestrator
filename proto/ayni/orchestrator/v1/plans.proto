@@ -396,3 +396,32 @@ message TaskPublication {
   string repository = 14;
   string pr_state = 15;
 }
+
+// Immutable first actionable execution/quality feedback for an attempt.
+// Recovery and resolution commands are introduced separately.
+message TaskFeedback {
+  string id = 1;
+  string workspace_id = 2;
+  string project_id = 3;
+  string conversation_id = 4;
+  string task_id = 5;
+  string attempt_id = 6;
+  string category = 7;
+  string state = 8;
+  string safe_reason = 9;
+  string summary = 10;
+  google.protobuf.Timestamp created_at = 11;
+}
+message ListTaskFeedbackRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  // Empty lists project attention; otherwise selects the exact origin.
+  string conversation_id = 3;
+  string after_id = 4;
+  // Default 20, maximum 32. Exclusive ascending ID-keyset pagination.
+  uint32 limit = 5;
+}
+message ListTaskFeedbackResponse {
+  repeated TaskFeedback feedback = 1;
+  string next_after_id = 2;
+}

@@ -151,6 +151,35 @@ bounded authorization before implementation. M4's six delivery slices are implem
 executed cumulative closure evidence; the local profile uses scripted coding, real managed
 quality and Git transport, and an explicit GitHub protocol fixture.
 
+### M6 delivery scopes
+
+The [M6 delivery plan](docs/technical/research/project-workflow-m6-delivery-plan.md)
+defines five sequential PRs. Conversations are the interface for task feedback and
+confirmed recovery. Continue existing work where safe, preserve saved changes and
+evidence, and authorize each recovery proposal once with bounded additional time
+and tokens. Explain possible earlier provider charges before approval. Downstream
+tasks keep their selected inputs until an explicit decision changes them.
+
+| PR | Observable outcome |
+| --- | --- |
+| 1: Durable feedback and attention | Accepted execution and quality problems appear once in the originating conversation and project attention, surviving reconnect and restart. |
+| 2: Recovery proposals and saved work | Users inspect immutable continuation proposals, saved changes, evidence and additional allowance; task questions and answers gain a retained lifecycle. |
+| 3: Confirmed continuation | Exact, once-only approval safely continues existing work or explicitly links a replacement attempt, respecting frozen dependencies and stale-worker fences. |
+| 4: Complete conversation recovery | Questions, proposal review, consent, attention resolution and outcomes form one usable conversation journey. |
+| 5: Cumulative M6 acceptance | Deployed pod loss, interruption, cancellation, duplicate confirmation and retained-work recovery close the milestone. |
+
+M5 scheduling and concurrency remain planned. The first M6 slice can build on M4
+independently; dependency-aware recovery and full M6 acceptance require M5
+integration. The [task feedback contract](docs/technical/architecture/task-feedback.md)
+defines the first-slice scope: immutable execution/quality notices and bounded
+conversation/project reads, with no recovery or resolution authority. Worker
+questions, publication attention resolution and automatic quality repair are not
+implemented by this slice. Each delivery PR owns its executed evidence and status.
+
+Use explicit `docker-desktop` Kubernetes for runtime acceptance. Create owned
+test namespaces and clean them up after testing. Preserve stores within each
+restart/recovery test to prove durability before purging its test deployment.
+
 ### Validation at every milestone
 
 | Level | Evidence |

@@ -3,6 +3,7 @@
 import { chromium } from 'playwright';
 import { exercisePlans } from './plan-acceptance.mjs';
 import { exerciseTasks } from './task-acceptance.mjs';
+import { exerciseFeedback } from './feedback-acceptance.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 const endpoint = process.env.CONSOLE_URL || 'http://127.0.0.1:3000';
@@ -223,6 +224,7 @@ try {
   // processed cursor, keeping the local promise queue bounded.
   await exercisePlans({ page, context, endpoint, gateway, scope: firstScope });
   await exerciseTasks({ page, gateway, scope: firstScope });
+  await exerciseFeedback({ page, gateway, scope: firstScope });
   const retainedCursor = await page.locator('#cursor').textContent();
   const burst = Array.from({ length: 80 }, () => `event: frame\ndata: ${JSON.stringify({ update: { cursor: retainedCursor, conversationRevision: '1' } })}\n\n`).join('');
   await page.route('**/watch?**', route => route.fulfill({ status: 200, contentType: 'text/event-stream', body: burst }), { times: 1 });

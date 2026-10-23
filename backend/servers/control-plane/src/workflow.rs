@@ -285,6 +285,12 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
 
 #[tonic::async_trait]
 impl v1::project_conversation_service_server::ProjectConversationService for WorkflowGrpc {
+    async fn list_task_feedback(
+        &self,
+        request: Request<v1::ListTaskFeedbackRequest>,
+    ) -> Result<Response<v1::ListTaskFeedbackResponse>, Status> {
+        tasks::feedback(&self.store, request).await
+    }
     async fn start_task_publication(
         &self,
         request: Request<v1::StartTaskPublicationRequest>,

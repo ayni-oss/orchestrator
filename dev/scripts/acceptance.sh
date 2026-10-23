@@ -306,6 +306,10 @@ for workload in deployment/control-plane deployment/task-supervisor statefulset/
     < "$evidence/execution-before-restart.json" > "$evidence/execution-replay-$name.txt"
   if [[ "$profile" == --coding-only || "$profile" == --quality-only ]]; then
   kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
+    /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-interrupted-task-stdin \
+    < "$evidence/task-pod-loss.json" > "$evidence/task-feedback-pod-loss-$name.txt"
+  cmp "$evidence/task-pod-loss-result.txt" "$evidence/task-feedback-pod-loss-$name.txt"
+  kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
     /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-task-run-stdin \
     < "$evidence/task-run.json" > "$evidence/task-run-replay-$name.txt"
   if [[ "$profile" == --quality-only ]]; then

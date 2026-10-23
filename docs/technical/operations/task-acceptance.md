@@ -82,6 +82,12 @@ permit permits reconciliation reads, never another create request. An uncertain
 coding call is not retried, and deleting its Pod or ledger cannot authorize a new
 paid call.
 
+Execution and quality problems also retain conversation feedback and project
+attention under the [task feedback contract](../architecture/task-feedback.md).
+The same failure/restart cases must preserve exact notice identities and origin,
+with duplicate reports and stale workers unable to create duplicate feedback.
+The delivery PR owns executed first-slice feedback evidence.
+
 Interrupted coding and failed quality require a new reviewed follow-up plan until
 confirmed recovery is implemented in M6. Dependency scheduling and concurrent
 execution remain M5. Users retain merge authority; successful M4 acceptance ends
