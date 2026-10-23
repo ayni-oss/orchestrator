@@ -94,7 +94,15 @@ impl WorkflowStore {
     ) -> Result<Option<TaskExecutionPreparation>, StoreError> {
         self.get_task(scope, task).await?;
         let (client, driver) = crate::connect(&self.database_url).await?;
-        let result = client.query_opt("SELECT result FROM workflow_task_preparations WHERE workspace_id=$1 AND project_id=$2 AND conversation_id=$3 AND task_id=$4 ORDER BY command_id DESC LIMIT 1", &[&scope.workspace,&scope.project,&scope.conversation,&task]).await?.map(|row| decode(&row.get::<_,Vec<u8>>(0))).transpose()?;
+        let mut result: Option<TaskExecutionPreparation> = client.query_opt("SELECT result FROM workflow_task_preparations WHERE workspace_id=$1 AND project_id=$2 AND conversation_id=$3 AND task_id=$4 ORDER BY command_id DESC LIMIT 1", &[&scope.workspace,&scope.project,&scope.conversation,&task]).await?.map(|row| decode(&row.get::<_,Vec<u8>>(0))).transpose()?;
+        if let Some(ref mut preparation) = result
+            && let Some(row) = client.query_opt("SELECT c.result,a.inputs,a.configuration_revision_id,workflow_ts_seconds(r.created_at),workflow_ts_nanos(r.created_at) FROM workflow_task_recovery_confirmations c JOIN workflow_task_runs r ON r.attempt_id=c.attempt_id JOIN workflow_task_attempts a ON a.id=r.attempt_id WHERE r.workspace_id=$1 AND r.project_id=$2 AND r.conversation_id=$3 AND r.task_id=$4 ORDER BY r.created_at DESC,r.attempt_id DESC LIMIT 1", &[&scope.workspace,&scope.project,&scope.conversation,&task]).await? {
+                let confirmation: super::task_recovery::RecoveryConfirmation = serde_json::from_slice(&row.get::<_,Vec<u8>>(0)).map_err(|_|StoreError::CorruptState)?;
+                preparation.command_id=confirmation.command_id;preparation.attempt_id=confirmation.attempt_id;
+                preparation.inputs=serde_json::from_slice(&row.get::<_,Vec<u8>>(1)).map_err(|_|StoreError::CorruptState)?;
+                preparation.configuration_revision_id=row.get(2);preparation.conversation_revision=confirmation.conversation_revision;preparation.resume_cursor=confirmation.resume_cursor;
+                preparation.created_at=support::timestamp(row.get(3),row.get(4))?;
+        }
         driver.abort();
         Ok(result)
     }

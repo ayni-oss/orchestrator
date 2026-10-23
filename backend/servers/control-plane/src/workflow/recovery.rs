@@ -68,6 +68,7 @@ pub(super) async fn list(
     Ok(context.response(v1::ListTaskRecoveryResponse {
         records: page.records.into_iter().map(projection).collect(),
         next_after_id: page.next_after_id,
+        confirmations: page.confirmations.into_iter().map(confirmation).collect(),
     }))
 }
 fn projection(r: RecoveryRecord) -> v1::TaskRecoveryRecord {
@@ -115,5 +116,44 @@ fn projection(r: RecoveryRecord) -> v1::TaskRecoveryRecord {
         created_at: Some(super::timestamp(r.created_at)),
         author: "local-operator".into(),
         content: Some(content),
+    }
+}
+
+pub(super) async fn confirm(
+    store: &WorkflowStore,
+    request: Request<v1::ConfirmTaskRecoveryRequest>,
+) -> Result<Response<v1::ConfirmTaskRecoveryResponse>, Status> {
+    use ayni_orchestrator_workflow_postgres::store::task_recovery::ConfirmRecovery;
+    let context = RequestContext::new(&request);
+    let v = request.into_inner();
+    let result = store
+        .confirm_task_recovery(
+            plans::scope(&v.workspace_id, &v.project_id, &v.conversation_id),
+            &v.task_id,
+            &ConfirmRecovery {
+                proposal_id: &v.proposal_id,
+                proposal_digest: &v.proposal_digest,
+                key: &v.idempotency_key,
+                acknowledge_uncertainty: v.acknowledge_provider_uncertainty,
+            },
+        )
+        .await
+        .map_err(|e| context.store(&e))?;
+    Ok(context.response(v1::ConfirmTaskRecoveryResponse {
+        confirmation: Some(confirmation(result)),
+    }))
+}
+fn confirmation(
+    r: ayni_orchestrator_workflow_postgres::store::task_recovery::RecoveryConfirmation,
+) -> v1::TaskRecoveryConfirmation {
+    v1::TaskRecoveryConfirmation {
+        command_id: r.command_id,
+        proposal_id: r.proposal_id,
+        proposal_digest: r.proposal_digest,
+        parent_attempt_id: r.parent_attempt_id,
+        attempt_id: r.attempt_id,
+        conversation_revision: r.conversation_revision,
+        resume_cursor: r.resume_cursor,
+        acknowledged_provider_uncertainty: r.acknowledged_provider_uncertainty,
     }
 }

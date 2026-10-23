@@ -29,7 +29,8 @@ contracts before claiming execution readiness and accepted quality. Do not treat
 The complete approved task specification, including natural-language limits,
 remains authoritative. Repository and source declarations cannot be substituted.
 Unresolved approved inputs remain blockers; no free-text answer silently changes
-approved scope. A linked follow-up plan is required to change the reviewed work.
+approved scope. A linked follow-up plan is required to change the reviewed work. [Confirmed recovery](task-recovery.md)
+can link another execution segment using the same frozen inputs and a newly approved allowance.
 
 ## Durable preparation
 
@@ -54,7 +55,9 @@ grants permit insertion and reading, never rewriting or deleting this evidence.
 
 The receipt retains command/task/attempt identities, exact inputs, blockers,
 configuration revision, timestamp and conversation revision/cursor.
-`GetTaskExecution` reads the latest retained preparation in full task scope.
+`GetTaskExecution` reads the latest execution selection in full task scope. After recovery
+it projects the linked attempt and its confirmation, while original preparation receipt
+replay remains unchanged.
 Older receipt replay does not replace the latest preparation. Admission state and
 original approval receipts stay unchanged; prepared execution is a separate projection.
 Watch updates use `TASK_EXECUTION_PREPARED`, with a safe reason distinguishing

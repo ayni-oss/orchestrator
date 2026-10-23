@@ -11,6 +11,8 @@ use ayni_orchestrator_workflow_postgres::{
 };
 use std::error::Error;
 use uuid::Uuid;
+#[path = "support/task_confirmation.rs"]
+mod confirmation;
 #[path = "support/task_recovery.rs"]
 mod recovery;
 type Result = std::result::Result<(), Box<dyn Error + Send + Sync>>;
@@ -968,5 +970,6 @@ async fn prove_retained_review(
         runtime,
     )
     .await?;
-    prove_feedback_scope_pagination_and_retention(store, scope, wrong, runtime).await
+    prove_feedback_scope_pagination_and_retention(store, scope, wrong, runtime).await?;
+    confirmation::prove(store, scope, wrong, preparations, runtime).await
 }

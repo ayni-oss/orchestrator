@@ -21,6 +21,8 @@ struct Evidence {
     feedback: Vec<u8>,
     #[serde(default)]
     recovery: Vec<u8>,
+    #[serde(default)]
+    continuation: Vec<u8>,
 }
 const PACK: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -91,7 +93,9 @@ async fn prepare_inner(
     let pending = profile == Profile::Pending;
     let quality = !matches!(profile, Profile::Coding | Profile::Pending);
     let quality_failed = matches!(profile, Profile::QualityFailed | Profile::PublicationFailed);
-    let scope = create_scope(projects, client).await?;
+    let scope = create_scope(projects, client)
+        .await
+        .map_err(|e| format!("task scope: {e}"))?;
     let (meta, pack) = source_fixture(quality);
     let metadata: serde_json::Value = serde_json::from_str(meta)?;
     let created = client
@@ -103,7 +107,8 @@ async fn prepare_inner(
             content: Some(plan_content(profile)),
             ..Default::default()
         })
-        .await?
+        .await
+        .map_err(|e| format!("task plan: {e}"))?
         .into_inner()
         .version
         .ok_or("version missing")?;
@@ -117,7 +122,8 @@ async fn prepare_inner(
             expected_version_id: created.id,
             content_digest: created.content_digest,
         })
-        .await?
+        .await
+        .map_err(|e| format!("task approval: {e}"))?
         .into_inner();
     let task = approved.tasks.first().ok_or("task missing")?;
     let prepared = client
@@ -147,7 +153,8 @@ async fn prepare_inner(
                 max_tokens: 10000,
             }),
         })
-        .await?
+        .await
+        .map_err(|e| format!("task preparation: {e}"))?
         .into_inner()
         .preparation
         .ok_or("preparation missing")?;
@@ -162,7 +169,8 @@ async fn prepare_inner(
     };
     let receipt = client
         .start_task_execution(request.clone())
-        .await?
+        .await
+        .map_err(|e| format!("task start: {e}"))?
         .into_inner();
     let mut evidence = Evidence {
         scope,
@@ -173,15 +181,10 @@ async fn prepare_inner(
         quality_digest: String::new(),
         feedback: Vec::new(),
         recovery: Vec::new(),
+        continuation: Vec::new(),
     };
     if !pending {
-        let attempt = verify(client, &evidence).await?;
-        evidence.feedback = feedback(client, &request, expected_feedback(&evidence)).await?;
-        evidence.recovery = super::recovery::record(client, &request).await?;
-        if let Some(quality) = attempt.quality {
-            evidence.quality_digest =
-                ayni_orchestrator_events::task_execution::digest(&quality.encode_to_vec());
-        }
+        retain_completed(client, &mut evidence).await?;
     }
     println!("{}", serde_json::to_string(&evidence)?);
     Ok(())
@@ -303,6 +306,7 @@ async fn verify(client: &mut Client, evidence: &Evidence) -> Result<v1::TaskAtte
             return Err("recovery records changed after restart".into());
         }
     }
+    super::continuation::verify(client, &evidence.continuation).await?;
     Ok(attempt)
 }
 
@@ -428,17 +432,22 @@ async fn feedback(
         .list_task_feedback(request.clone())
         .await?
         .into_inner();
+    let mut selected = page.clone();
+    selected
+        .feedback
+        .retain(|f| f.task_id == start.task_id && f.attempt_id == start.attempt_id);
+    selected.next_after_id.clear();
     if let Some(reason) = expected {
-        if page.feedback.len() != 1
-            || page.feedback[0].safe_reason != reason
-            || page.feedback[0].task_id != start.task_id
-            || page.feedback[0].attempt_id != start.attempt_id
-            || page.feedback[0].conversation_id != start.conversation_id
-            || page.feedback[0].state != "open"
+        if selected.feedback.len() != 1
+            || selected.feedback[0].safe_reason != reason
+            || selected.feedback[0].task_id != start.task_id
+            || selected.feedback[0].attempt_id != start.attempt_id
+            || selected.feedback[0].conversation_id != start.conversation_id
+            || selected.feedback[0].state != "open"
         {
             return Err("actionable feedback missing or duplicated at immutable origin".into());
         }
-    } else if !page.feedback.is_empty() {
+    } else if !selected.feedback.is_empty() {
         return Err("successful task created actionable feedback".into());
     }
     let project = client
@@ -454,7 +463,7 @@ async fn feedback(
     if client.list_task_feedback(request).await?.into_inner() != page {
         return Err("repeated feedback read changed".into());
     }
-    Ok(page.encode_to_vec())
+    Ok(selected.encode_to_vec())
 }
 async fn terminal(
     client: &mut Client,
@@ -588,6 +597,28 @@ fn verify_quality_outcome(
             )
             .into());
         }
+    }
+    Ok(())
+}
+
+async fn retain_completed(client: &mut Client, evidence: &mut Evidence) -> Result {
+    let request = v1::StartTaskExecutionRequest::decode(evidence.request.as_slice())?;
+
+    let attempt = verify(client, evidence)
+        .await
+        .map_err(|e| format!("parent outcome: {e}"))?;
+    evidence.feedback = feedback(client, &request, expected_feedback(evidence))
+        .await
+        .map_err(|e| format!("parent feedback: {e}"))?;
+    evidence.recovery = super::recovery::record(client, &request)
+        .await
+        .map_err(|e| format!("recovery proposal: {e}"))?;
+    evidence.continuation = super::continuation::confirm(client, &request)
+        .await
+        .map_err(|e| format!("confirmed continuation: {e}"))?;
+    if let Some(quality) = attempt.quality {
+        evidence.quality_digest =
+            ayni_orchestrator_events::task_execution::digest(&quality.encode_to_vec());
     }
     Ok(())
 }

@@ -161,6 +161,16 @@ async fn build_command(
     quality_digest: &str,
 ) -> Result<PublicationCommand, StoreError> {
     let row=tx.query_opt("SELECT r.command,r.state,r.outcome,q.outcome,a.inputs,workflow_ts_seconds(clock_timestamp()) FROM workflow_task_runs r JOIN workflow_task_quality q ON q.attempt_id=r.attempt_id JOIN workflow_task_attempts a ON a.id=r.attempt_id WHERE r.workspace_id=$1 AND r.project_id=$2 AND r.conversation_id=$3 AND r.task_id=$4 AND r.attempt_id=$5 FOR UPDATE OF r",&[&s.workspace,&s.project,&s.conversation,&task,&attempt]).await?.ok_or(StoreError::NotFound)?;
+    if tx
+        .query_opt(
+            "SELECT 1 FROM workflow_task_recovery_confirmations WHERE parent_attempt_id=$1",
+            &[&attempt],
+        )
+        .await?
+        .is_some()
+    {
+        return Err(StoreError::TaskExecutionConflict);
+    }
     let coding: TaskCommand = decode(&row.get::<_, Vec<u8>>(0))?;
     let outcome: TaskOutcome = decode(
         &row.get::<_, Option<Vec<u8>>>(2)

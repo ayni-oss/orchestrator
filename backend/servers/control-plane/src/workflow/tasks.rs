@@ -74,6 +74,26 @@ pub(super) async fn get(
     let hash = ayni_orchestrator_events::task_execution::digest(outcome.patch.as_bytes());
     Ok(context.response(v1::GetTaskAttemptResponse {
         attempt: Some(v1::TaskAttempt {
+            max_seconds: r.command.max_seconds,
+            max_tokens: r.command.max_tokens,
+            saved_input_patch: r
+                .command
+                .recovery
+                .as_ref()
+                .map(|c| c.seed_patch.clone())
+                .unwrap_or_default(),
+            parent_attempt_id: r
+                .command
+                .recovery
+                .as_ref()
+                .map(|c| c.parent_attempt_id.clone())
+                .unwrap_or_default(),
+            recovery_proposal_id: r
+                .command
+                .recovery
+                .as_ref()
+                .map(|c| c.proposal_id.clone())
+                .unwrap_or_default(),
             execution_outcome: outcome.state,
             quality_digest,
             publication: publication.map(super::publications::projection),

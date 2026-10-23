@@ -86,4 +86,5 @@ pub struct RecoveryRecord {
 pub struct RecoveryPage {
     pub records: Vec<RecoveryRecord>,
     pub next_after_id: String,
+    pub confirmations: Vec<super::RecoveryConfirmation>,
 }

@@ -372,6 +372,11 @@ export interface TaskAttempt {
   executionOutcome: string;
   publication?: TaskPublication | undefined;
   qualityDigest: string;
+  parentAttemptId: string;
+  recoveryProposalId: string;
+  savedInputPatch: string;
+  maxSeconds: number;
+  maxTokens: number;
 }
 
 export interface GetTaskAttemptResponse {
@@ -573,6 +578,34 @@ export interface ListTaskRecoveryRequest {
 export interface ListTaskRecoveryResponse {
   records: TaskRecoveryRecord[];
   nextAfterId: string;
+  /** Separate once-only authority; proposal content remains immutable. */
+  confirmations: TaskRecoveryConfirmation[];
+}
+
+export interface ConfirmTaskRecoveryRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  taskId: string;
+  proposalId: string;
+  proposalDigest: string;
+  idempotencyKey: string;
+  acknowledgeProviderUncertainty: boolean;
+}
+
+export interface TaskRecoveryConfirmation {
+  commandId: string;
+  proposalId: string;
+  proposalDigest: string;
+  parentAttemptId: string;
+  attemptId: string;
+  conversationRevision: string;
+  resumeCursor: string;
+  acknowledgedProviderUncertainty: boolean;
+}
+
+export interface ConfirmTaskRecoveryResponse {
+  confirmation?: TaskRecoveryConfirmation | undefined;
 }
 
 function createBasePlanTaskSpecification(): PlanTaskSpecification {
@@ -6641,6 +6674,11 @@ function createBaseTaskAttempt(): TaskAttempt {
     executionOutcome: "",
     publication: undefined,
     qualityDigest: "",
+    parentAttemptId: "",
+    recoveryProposalId: "",
+    savedInputPatch: "",
+    maxSeconds: 0,
+    maxTokens: 0,
   };
 }
 
@@ -6693,6 +6731,21 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
     }
     if (message.qualityDigest !== "") {
       writer.uint32(130).string(message.qualityDigest);
+    }
+    if (message.parentAttemptId !== "") {
+      writer.uint32(138).string(message.parentAttemptId);
+    }
+    if (message.recoveryProposalId !== "") {
+      writer.uint32(146).string(message.recoveryProposalId);
+    }
+    if (message.savedInputPatch !== "") {
+      writer.uint32(154).string(message.savedInputPatch);
+    }
+    if (message.maxSeconds !== 0) {
+      writer.uint32(160).uint32(message.maxSeconds);
+    }
+    if (message.maxTokens !== 0) {
+      writer.uint32(168).uint32(message.maxTokens);
     }
     return writer;
   },
@@ -6838,6 +6891,46 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
             message.qualityDigest = reader.string();
             continue;
           }
+          case 17: {
+            if (tag !== 138) {
+              break;
+            }
+
+            message.parentAttemptId = reader.string();
+            continue;
+          }
+          case 18: {
+            if (tag !== 146) {
+              break;
+            }
+
+            message.recoveryProposalId = reader.string();
+            continue;
+          }
+          case 19: {
+            if (tag !== 154) {
+              break;
+            }
+
+            message.savedInputPatch = reader.string();
+            continue;
+          }
+          case 20: {
+            if (tag !== 160) {
+              break;
+            }
+
+            message.maxSeconds = reader.uint32();
+            continue;
+          }
+          case 21: {
+            if (tag !== 168) {
+              break;
+            }
+
+            message.maxTokens = reader.uint32();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -6912,6 +7005,31 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
         : isSet(object.quality_digest)
         ? globalThis.String(object.quality_digest)
         : "",
+      parentAttemptId: isSet(object.parentAttemptId)
+        ? globalThis.String(object.parentAttemptId)
+        : isSet(object.parent_attempt_id)
+        ? globalThis.String(object.parent_attempt_id)
+        : "",
+      recoveryProposalId: isSet(object.recoveryProposalId)
+        ? globalThis.String(object.recoveryProposalId)
+        : isSet(object.recovery_proposal_id)
+        ? globalThis.String(object.recovery_proposal_id)
+        : "",
+      savedInputPatch: isSet(object.savedInputPatch)
+        ? globalThis.String(object.savedInputPatch)
+        : isSet(object.saved_input_patch)
+        ? globalThis.String(object.saved_input_patch)
+        : "",
+      maxSeconds: isSet(object.maxSeconds)
+        ? globalThis.Number(object.maxSeconds)
+        : isSet(object.max_seconds)
+        ? globalThis.Number(object.max_seconds)
+        : 0,
+      maxTokens: isSet(object.maxTokens)
+        ? globalThis.Number(object.maxTokens)
+        : isSet(object.max_tokens)
+        ? globalThis.Number(object.max_tokens)
+        : 0,
     };
   },
 
@@ -6965,6 +7083,21 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
     if (message.qualityDigest !== "") {
       obj.qualityDigest = message.qualityDigest;
     }
+    if (message.parentAttemptId !== "") {
+      obj.parentAttemptId = message.parentAttemptId;
+    }
+    if (message.recoveryProposalId !== "") {
+      obj.recoveryProposalId = message.recoveryProposalId;
+    }
+    if (message.savedInputPatch !== "") {
+      obj.savedInputPatch = message.savedInputPatch;
+    }
+    if (message.maxSeconds !== 0) {
+      obj.maxSeconds = Math.round(message.maxSeconds);
+    }
+    if (message.maxTokens !== 0) {
+      obj.maxTokens = Math.round(message.maxTokens);
+    }
     return obj;
   },
 
@@ -6993,6 +7126,11 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
       ? TaskPublication.fromPartial(object.publication)
       : undefined;
     message.qualityDigest = object.qualityDigest ?? "";
+    message.parentAttemptId = object.parentAttemptId ?? "";
+    message.recoveryProposalId = object.recoveryProposalId ?? "";
+    message.savedInputPatch = object.savedInputPatch ?? "";
+    message.maxSeconds = object.maxSeconds ?? 0;
+    message.maxTokens = object.maxTokens ?? 0;
     return message;
   },
 };
@@ -10489,7 +10627,7 @@ export const ListTaskRecoveryRequest: MessageFns<ListTaskRecoveryRequest> = {
 };
 
 function createBaseListTaskRecoveryResponse(): ListTaskRecoveryResponse {
-  return { records: [], nextAfterId: "" };
+  return { records: [], nextAfterId: "", confirmations: [] };
 }
 
 export const ListTaskRecoveryResponse: MessageFns<ListTaskRecoveryResponse> = {
@@ -10499,6 +10637,9 @@ export const ListTaskRecoveryResponse: MessageFns<ListTaskRecoveryResponse> = {
     }
     if (message.nextAfterId !== "") {
       writer.uint32(18).string(message.nextAfterId);
+    }
+    for (const v of message.confirmations) {
+      TaskRecoveryConfirmation.encode(v!, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -10532,6 +10673,14 @@ export const ListTaskRecoveryResponse: MessageFns<ListTaskRecoveryResponse> = {
             message.nextAfterId = reader.string();
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.confirmations.push(TaskRecoveryConfirmation.decode(reader, reader.uint32()));
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -10554,6 +10703,9 @@ export const ListTaskRecoveryResponse: MessageFns<ListTaskRecoveryResponse> = {
         : isSet(object.next_after_id)
         ? globalThis.String(object.next_after_id)
         : "",
+      confirmations: globalThis.Array.isArray(object?.confirmations)
+        ? object.confirmations.map((e: any) => TaskRecoveryConfirmation.fromJSON(e))
+        : [],
     };
   },
 
@@ -10565,6 +10717,9 @@ export const ListTaskRecoveryResponse: MessageFns<ListTaskRecoveryResponse> = {
     if (message.nextAfterId !== "") {
       obj.nextAfterId = message.nextAfterId;
     }
+    if (message.confirmations?.length) {
+      obj.confirmations = message.confirmations.map((e) => TaskRecoveryConfirmation.toJSON(e));
+    }
     return obj;
   },
 
@@ -10575,6 +10730,522 @@ export const ListTaskRecoveryResponse: MessageFns<ListTaskRecoveryResponse> = {
     const message = createBaseListTaskRecoveryResponse();
     message.records = object.records?.map((e) => TaskRecoveryRecord.fromPartial(e)) || [];
     message.nextAfterId = object.nextAfterId ?? "";
+    message.confirmations = object.confirmations?.map((e) => TaskRecoveryConfirmation.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseConfirmTaskRecoveryRequest(): ConfirmTaskRecoveryRequest {
+  return {
+    workspaceId: "",
+    projectId: "",
+    conversationId: "",
+    taskId: "",
+    proposalId: "",
+    proposalDigest: "",
+    idempotencyKey: "",
+    acknowledgeProviderUncertainty: false,
+  };
+}
+
+export const ConfirmTaskRecoveryRequest: MessageFns<ConfirmTaskRecoveryRequest> = {
+  encode(message: ConfirmTaskRecoveryRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.taskId !== "") {
+      writer.uint32(34).string(message.taskId);
+    }
+    if (message.proposalId !== "") {
+      writer.uint32(42).string(message.proposalId);
+    }
+    if (message.proposalDigest !== "") {
+      writer.uint32(50).string(message.proposalDigest);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(58).string(message.idempotencyKey);
+    }
+    if (message.acknowledgeProviderUncertainty !== false) {
+      writer.uint32(64).bool(message.acknowledgeProviderUncertainty);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ConfirmTaskRecoveryRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseConfirmTaskRecoveryRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.taskId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.proposalId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.proposalDigest = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.acknowledgeProviderUncertainty = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ConfirmTaskRecoveryRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      taskId: isSet(object.taskId)
+        ? globalThis.String(object.taskId)
+        : isSet(object.task_id)
+        ? globalThis.String(object.task_id)
+        : "",
+      proposalId: isSet(object.proposalId)
+        ? globalThis.String(object.proposalId)
+        : isSet(object.proposal_id)
+        ? globalThis.String(object.proposal_id)
+        : "",
+      proposalDigest: isSet(object.proposalDigest)
+        ? globalThis.String(object.proposalDigest)
+        : isSet(object.proposal_digest)
+        ? globalThis.String(object.proposal_digest)
+        : "",
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      acknowledgeProviderUncertainty: isSet(object.acknowledgeProviderUncertainty)
+        ? globalThis.Boolean(object.acknowledgeProviderUncertainty)
+        : isSet(object.acknowledge_provider_uncertainty)
+        ? globalThis.Boolean(object.acknowledge_provider_uncertainty)
+        : false,
+    };
+  },
+
+  toJSON(message: ConfirmTaskRecoveryRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.taskId !== "") {
+      obj.taskId = message.taskId;
+    }
+    if (message.proposalId !== "") {
+      obj.proposalId = message.proposalId;
+    }
+    if (message.proposalDigest !== "") {
+      obj.proposalDigest = message.proposalDigest;
+    }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.acknowledgeProviderUncertainty !== false) {
+      obj.acknowledgeProviderUncertainty = message.acknowledgeProviderUncertainty;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ConfirmTaskRecoveryRequest>): ConfirmTaskRecoveryRequest {
+    return ConfirmTaskRecoveryRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ConfirmTaskRecoveryRequest>): ConfirmTaskRecoveryRequest {
+    const message = createBaseConfirmTaskRecoveryRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.taskId = object.taskId ?? "";
+    message.proposalId = object.proposalId ?? "";
+    message.proposalDigest = object.proposalDigest ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.acknowledgeProviderUncertainty = object.acknowledgeProviderUncertainty ?? false;
+    return message;
+  },
+};
+
+function createBaseTaskRecoveryConfirmation(): TaskRecoveryConfirmation {
+  return {
+    commandId: "",
+    proposalId: "",
+    proposalDigest: "",
+    parentAttemptId: "",
+    attemptId: "",
+    conversationRevision: "0",
+    resumeCursor: "",
+    acknowledgedProviderUncertainty: false,
+  };
+}
+
+export const TaskRecoveryConfirmation: MessageFns<TaskRecoveryConfirmation> = {
+  encode(message: TaskRecoveryConfirmation, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.commandId !== "") {
+      writer.uint32(10).string(message.commandId);
+    }
+    if (message.proposalId !== "") {
+      writer.uint32(18).string(message.proposalId);
+    }
+    if (message.proposalDigest !== "") {
+      writer.uint32(26).string(message.proposalDigest);
+    }
+    if (message.parentAttemptId !== "") {
+      writer.uint32(34).string(message.parentAttemptId);
+    }
+    if (message.attemptId !== "") {
+      writer.uint32(42).string(message.attemptId);
+    }
+    if (message.conversationRevision !== "0") {
+      writer.uint32(48).uint64(message.conversationRevision);
+    }
+    if (message.resumeCursor !== "") {
+      writer.uint32(58).string(message.resumeCursor);
+    }
+    if (message.acknowledgedProviderUncertainty !== false) {
+      writer.uint32(64).bool(message.acknowledgedProviderUncertainty);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TaskRecoveryConfirmation {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTaskRecoveryConfirmation();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.commandId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.proposalId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.proposalDigest = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.parentAttemptId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.attemptId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.conversationRevision = reader.uint64().toString();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.resumeCursor = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.acknowledgedProviderUncertainty = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): TaskRecoveryConfirmation {
+    return {
+      commandId: isSet(object.commandId)
+        ? globalThis.String(object.commandId)
+        : isSet(object.command_id)
+        ? globalThis.String(object.command_id)
+        : "",
+      proposalId: isSet(object.proposalId)
+        ? globalThis.String(object.proposalId)
+        : isSet(object.proposal_id)
+        ? globalThis.String(object.proposal_id)
+        : "",
+      proposalDigest: isSet(object.proposalDigest)
+        ? globalThis.String(object.proposalDigest)
+        : isSet(object.proposal_digest)
+        ? globalThis.String(object.proposal_digest)
+        : "",
+      parentAttemptId: isSet(object.parentAttemptId)
+        ? globalThis.String(object.parentAttemptId)
+        : isSet(object.parent_attempt_id)
+        ? globalThis.String(object.parent_attempt_id)
+        : "",
+      attemptId: isSet(object.attemptId)
+        ? globalThis.String(object.attemptId)
+        : isSet(object.attempt_id)
+        ? globalThis.String(object.attempt_id)
+        : "",
+      conversationRevision: isSet(object.conversationRevision)
+        ? globalThis.String(object.conversationRevision)
+        : isSet(object.conversation_revision)
+        ? globalThis.String(object.conversation_revision)
+        : "0",
+      resumeCursor: isSet(object.resumeCursor)
+        ? globalThis.String(object.resumeCursor)
+        : isSet(object.resume_cursor)
+        ? globalThis.String(object.resume_cursor)
+        : "",
+      acknowledgedProviderUncertainty: isSet(object.acknowledgedProviderUncertainty)
+        ? globalThis.Boolean(object.acknowledgedProviderUncertainty)
+        : isSet(object.acknowledged_provider_uncertainty)
+        ? globalThis.Boolean(object.acknowledged_provider_uncertainty)
+        : false,
+    };
+  },
+
+  toJSON(message: TaskRecoveryConfirmation): unknown {
+    const obj: any = {};
+    if (message.commandId !== "") {
+      obj.commandId = message.commandId;
+    }
+    if (message.proposalId !== "") {
+      obj.proposalId = message.proposalId;
+    }
+    if (message.proposalDigest !== "") {
+      obj.proposalDigest = message.proposalDigest;
+    }
+    if (message.parentAttemptId !== "") {
+      obj.parentAttemptId = message.parentAttemptId;
+    }
+    if (message.attemptId !== "") {
+      obj.attemptId = message.attemptId;
+    }
+    if (message.conversationRevision !== "0") {
+      obj.conversationRevision = message.conversationRevision;
+    }
+    if (message.resumeCursor !== "") {
+      obj.resumeCursor = message.resumeCursor;
+    }
+    if (message.acknowledgedProviderUncertainty !== false) {
+      obj.acknowledgedProviderUncertainty = message.acknowledgedProviderUncertainty;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<TaskRecoveryConfirmation>): TaskRecoveryConfirmation {
+    return TaskRecoveryConfirmation.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<TaskRecoveryConfirmation>): TaskRecoveryConfirmation {
+    const message = createBaseTaskRecoveryConfirmation();
+    message.commandId = object.commandId ?? "";
+    message.proposalId = object.proposalId ?? "";
+    message.proposalDigest = object.proposalDigest ?? "";
+    message.parentAttemptId = object.parentAttemptId ?? "";
+    message.attemptId = object.attemptId ?? "";
+    message.conversationRevision = object.conversationRevision ?? "0";
+    message.resumeCursor = object.resumeCursor ?? "";
+    message.acknowledgedProviderUncertainty = object.acknowledgedProviderUncertainty ?? false;
+    return message;
+  },
+};
+
+function createBaseConfirmTaskRecoveryResponse(): ConfirmTaskRecoveryResponse {
+  return { confirmation: undefined };
+}
+
+export const ConfirmTaskRecoveryResponse: MessageFns<ConfirmTaskRecoveryResponse> = {
+  encode(message: ConfirmTaskRecoveryResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.confirmation !== undefined) {
+      TaskRecoveryConfirmation.encode(message.confirmation, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ConfirmTaskRecoveryResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseConfirmTaskRecoveryResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.confirmation = TaskRecoveryConfirmation.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ConfirmTaskRecoveryResponse {
+    return {
+      confirmation: isSet(object.confirmation) ? TaskRecoveryConfirmation.fromJSON(object.confirmation) : undefined,
+    };
+  },
+
+  toJSON(message: ConfirmTaskRecoveryResponse): unknown {
+    const obj: any = {};
+    if (message.confirmation !== undefined) {
+      obj.confirmation = TaskRecoveryConfirmation.toJSON(message.confirmation);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ConfirmTaskRecoveryResponse>): ConfirmTaskRecoveryResponse {
+    return ConfirmTaskRecoveryResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ConfirmTaskRecoveryResponse>): ConfirmTaskRecoveryResponse {
+    const message = createBaseConfirmTaskRecoveryResponse();
+    message.confirmation = (object.confirmation !== undefined && object.confirmation !== null)
+      ? TaskRecoveryConfirmation.fromPartial(object.confirmation)
+      : undefined;
     return message;
   },
 };

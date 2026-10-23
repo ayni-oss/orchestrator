@@ -322,6 +322,11 @@ message TaskAttempt {
   string execution_outcome = 14;
   TaskPublication publication = 15;
   string quality_digest = 16;
+  string parent_attempt_id = 17;
+  string recovery_proposal_id = 18;
+  string saved_input_patch = 19;
+  uint32 max_seconds = 20;
+  uint32 max_tokens = 21;
 }
 message GetTaskAttemptResponse {
   TaskAttempt attempt = 1;
@@ -505,4 +510,29 @@ message ListTaskRecoveryRequest {
 message ListTaskRecoveryResponse {
   repeated TaskRecoveryRecord records = 1;
   string next_after_id = 2;
+  // Separate once-only authority; proposal content remains immutable.
+  repeated TaskRecoveryConfirmation confirmations = 3;
+}
+message ConfirmTaskRecoveryRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string task_id = 4;
+  string proposal_id = 5;
+  string proposal_digest = 6;
+  string idempotency_key = 7;
+  bool acknowledge_provider_uncertainty = 8;
+}
+message TaskRecoveryConfirmation {
+  string command_id = 1;
+  string proposal_id = 2;
+  string proposal_digest = 3;
+  string parent_attempt_id = 4;
+  string attempt_id = 5;
+  uint64 conversation_revision = 6;
+  string resume_cursor = 7;
+  bool acknowledged_provider_uncertainty = 8;
+}
+message ConfirmTaskRecoveryResponse {
+  TaskRecoveryConfirmation confirmation = 1;
 }

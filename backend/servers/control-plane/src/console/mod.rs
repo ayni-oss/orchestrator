@@ -271,6 +271,12 @@ async fn rpc(
 // Task controls share the same request limits and canonical authority as plans.
 async fn task_rpc(console: &Console, method: &str, body: Value) -> Result<Json<Value>, ApiError> {
     match method {
+        "ConfirmTaskRecovery" => forward!(
+            body,
+            console.conversations(),
+            confirm_task_recovery,
+            v1::ConfirmTaskRecoveryRequest
+        ),
         "RecordTaskRecovery" => forward!(
             body,
             console.conversations(),

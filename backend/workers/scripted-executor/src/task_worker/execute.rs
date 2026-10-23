@@ -47,16 +47,34 @@ async fn execute_inner(
         }
         let patch = task_files::apply(
             &worker.source,
-            &[if c.objective == "Task quality failure fixture" {
-                FileChange {
+            &[match &c.recovery {
+                Some(recovery) => {
+                    if c.objective == "Task quality failure fixture"
+                        && recovery.action == "repair_quality"
+                    {
+                        FileChange {
+                            path: "src/lib.rs".into(),
+                            content: "#[test]\nfn repaired_quality() { assert_eq!(1, 1); }\n"
+                                .into(),
+                        }
+                    } else {
+                        FileChange {
+                            path: "task-recovery-result.txt".into(),
+                            content: format!(
+                                "Continued from {} with saved patch {}.\n",
+                                recovery.parent_attempt_id, recovery.seed_patch_digest
+                            ),
+                        }
+                    }
+                }
+                None if c.objective == "Task quality failure fixture" => FileChange {
                     path: "src/lib.rs".into(),
                     content: "#[test]\nfn fails_quality() { assert_eq!(1, 2); }\n".into(),
-                }
-            } else {
-                FileChange {
+                },
+                None => FileChange {
                     path: "task-result.txt".into(),
                     content: "Task execution fixture completed.\n".into(),
-                }
+                },
             }],
         )
         .map_err(|_| "source_invalid")?;
@@ -113,7 +131,7 @@ async fn call(
 ) -> std::result::Result<ResponseEvidence, &'static str> {
     let files = task_files::context(&worker.source, &c.source_commit)
         .map_err(|_| "source_context_limit")?;
-    let task = json!({"objective":c.objective,"scope":c.scope,"out_of_scope":c.out_of_scope,"acceptance_criteria":c.acceptance_criteria,"execution_limits":c.execution_limits,"source_commit":c.source_commit,"files":files});
+    let task = json!({"objective":c.objective,"scope":c.scope,"out_of_scope":c.out_of_scope,"acceptance_criteria":c.acceptance_criteria,"execution_limits":c.execution_limits,"source_commit":c.source_commit,"attempt_id":c.attempt_id,"recovery":c.recovery.as_ref().map(|r|json!({"parent_attempt_id":r.parent_attempt_id,"action":r.action,"explanation":r.explanation,"quality_reason":r.quality_reason,"quality_evidence":r.quality_artifact})),"files":files});
     let request = coding::prepare(
         &c.model,
         &c.instructions,

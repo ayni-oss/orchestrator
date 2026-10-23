@@ -43,7 +43,9 @@ and the [M6 delivery plan](docs/technical/research/project-workflow-m6-delivery-
 for the boundary between attention and later confirmed recovery.
 [Recovery review](docs/technical/architecture/task-recovery.md) lets operators record
 immutable proposals with frozen saved-work evidence and additional allowances, plus
-task questions and one answer per question. These records authorize no execution.
+task questions and one answer per question. Recording them authorizes no execution.
+Exact confirmation can now authorize one bounded linked attempt with preserved saved
+changes and parent evidence. Dependency-aware continuation still requires M5.
 
 ## Start locally
 

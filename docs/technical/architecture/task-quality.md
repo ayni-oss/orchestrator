@@ -125,3 +125,7 @@ See [isolated execution](isolated-task-execution.md) for dispatch and cancellati
 [execution preparation](task-execution.md) for frozen authority, and
 [local acceptance](../operations/local-development.md#managed-task-quality-acceptance)
 for deployment and evidence reproduction.
+
+A [confirmed recovery](task-recovery.md) may seed a linked attempt with the accepted
+patch and run one bounded repair pass. It creates fresh coding and quality outcomes;
+this attempt's retained quality result and patch remain unchanged.

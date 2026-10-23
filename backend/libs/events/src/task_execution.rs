@@ -35,6 +35,21 @@ pub struct TaskCommand {
     pub model: String,
     pub max_input_tokens: u64,
     pub max_output_tokens: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery: Option<TaskRecoveryCommand>,
+}
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskRecoveryCommand {
+    pub parent_attempt_id: String,
+    pub proposal_id: String,
+    pub proposal_digest: String,
+    pub action: String,
+    pub explanation: String,
+    pub seed_patch: String,
+    pub seed_patch_digest: String,
+    pub quality_reason: String,
+    pub quality_artifact: String,
 }
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -47,6 +62,19 @@ pub struct TaskOutcome {
     pub input_tokens: Option<u64>,
     pub output_tokens: Option<u64>,
     pub total_tokens: Option<u64>,
+}
+/// Prefer accepted coding output; otherwise retain the approved input patch across failed continuations.
+#[must_use]
+pub fn saved_patch<'a>(command: &'a TaskCommand, outcome: Option<&'a TaskOutcome>) -> &'a str {
+    outcome.filter(|o| o.state == "completed").map_or_else(
+        || {
+            command
+                .recovery
+                .as_ref()
+                .map_or("", |r| r.seed_patch.as_str())
+        },
+        |o| o.patch.as_str(),
+    )
 }
 impl TaskOutcome {
     #[must_use]

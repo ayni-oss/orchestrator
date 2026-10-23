@@ -15,11 +15,9 @@ fn list(start: &v1::StartTaskExecutionRequest) -> v1::ListTaskRecoveryRequest {
     }
 }
 pub async fn read(client: &mut Client, start: &v1::StartTaskExecutionRequest) -> Result<Vec<u8>> {
-    Ok(client
-        .list_task_recovery(list(start))
-        .await?
-        .into_inner()
-        .encode_to_vec())
+    let mut page = client.list_task_recovery(list(start)).await?.into_inner();
+    page.confirmations.clear();
+    Ok(page.encode_to_vec())
 }
 pub async fn record(client: &mut Client, start: &v1::StartTaskExecutionRequest) -> Result<Vec<u8>> {
     let feedback = client
@@ -57,7 +55,12 @@ pub async fn record(client: &mut Client, start: &v1::StartTaskExecutionRequest) 
             v1::TaskRecoveryProposal {
                 feedback_id: f.id.clone(),
                 explanation: "Inspect saved changes and failed checks before continuing.".into(),
-                action: "continue".into(),
+                action: if f.safe_reason == "quality_failed" {
+                    "repair_quality"
+                } else {
+                    "continue"
+                }
+                .into(),
                 additional_seconds: 300,
                 additional_tokens: 4096,
                 ..Default::default()

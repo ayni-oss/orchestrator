@@ -113,3 +113,23 @@ AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-review \
 The browser profile requires an already completed fixture attempt with actionable feedback.
 It checks saved-work review, explicit allowances, accepted response loss, exact retry
 after reload, operator questions/answers, retained attention and unchanged task execution.
+
+## Confirmed continuation extension
+
+The coding and quality profiles confirm one exact recovery proposal concurrently with
+different keys, assert one linked attempt, and wait for the real supervisor/worker result.
+They compare frozen inputs, saved input patch, independent parent evidence, child result
+and exact confirmation replay after the existing control-plane and PostgreSQL restarts.
+The failed-quality fixture proposes one bounded repair pass; it does not establish live
+provider repair. Successful tasks without feedback create no recovery.
+
+For browser confirmation, run the existing gateway wrapper with `--continuation` and the
+coding profile's task evidence. The browser exercises consent, accepted confirmation
+response loss, exact reload retry, and navigation between the parent and continued attempt:
+
+```sh
+AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-continuation \
+  dev/scripts/task-console-acceptance.sh /absolute/coding/task-run.json /absolute/new-browser-evidence --continuation
+```
+
+M5 dependencies, attention resolution and full conversation recovery remain outside these gates.

@@ -27,6 +27,8 @@ import {
   CancelTaskExecutionResponse,
   CancelTaskPublicationRequest,
   CancelTaskPublicationResponse,
+  ConfirmTaskRecoveryRequest,
+  ConfirmTaskRecoveryResponse,
   CreatePlanRequest,
   CreatePlanResponse,
   GetPlanApprovalRequest,
@@ -3810,6 +3812,17 @@ export const ProjectConversationServiceService = {
     responseSerialize: (value: ListTasksResponse): Buffer => Buffer.from(ListTasksResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ListTasksResponse => ListTasksResponse.decode(value),
   },
+  confirmTaskRecovery: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/ConfirmTaskRecovery" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ConfirmTaskRecoveryRequest): Buffer =>
+      Buffer.from(ConfirmTaskRecoveryRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ConfirmTaskRecoveryRequest => ConfirmTaskRecoveryRequest.decode(value),
+    responseSerialize: (value: ConfirmTaskRecoveryResponse): Buffer =>
+      Buffer.from(ConfirmTaskRecoveryResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ConfirmTaskRecoveryResponse => ConfirmTaskRecoveryResponse.decode(value),
+  },
   recordTaskRecovery: {
     path: "/ayni.orchestrator.v1.ProjectConversationService/RecordTaskRecovery" as const,
     requestStream: false as const,
@@ -4039,6 +4052,7 @@ export interface ProjectConversationServiceServer extends UntypedServiceImplemen
   approvePlan: handleUnaryCall<ApprovePlanRequest, ApprovePlanResponse>;
   getPlanApproval: handleUnaryCall<GetPlanApprovalRequest, GetPlanApprovalResponse>;
   listTasks: handleUnaryCall<ListTasksRequest, ListTasksResponse>;
+  confirmTaskRecovery: handleUnaryCall<ConfirmTaskRecoveryRequest, ConfirmTaskRecoveryResponse>;
   recordTaskRecovery: handleUnaryCall<RecordTaskRecoveryRequest, RecordTaskRecoveryResponse>;
   listTaskRecovery: handleUnaryCall<ListTaskRecoveryRequest, ListTaskRecoveryResponse>;
   listTaskFeedback: handleUnaryCall<ListTaskFeedbackRequest, ListTaskFeedbackResponse>;
@@ -4214,6 +4228,21 @@ export interface ProjectConversationServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListTasksResponse) => void,
+  ): ClientUnaryCall;
+  confirmTaskRecovery(
+    request: ConfirmTaskRecoveryRequest,
+    callback: (error: ServiceError | null, response: ConfirmTaskRecoveryResponse) => void,
+  ): ClientUnaryCall;
+  confirmTaskRecovery(
+    request: ConfirmTaskRecoveryRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ConfirmTaskRecoveryResponse) => void,
+  ): ClientUnaryCall;
+  confirmTaskRecovery(
+    request: ConfirmTaskRecoveryRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ConfirmTaskRecoveryResponse) => void,
   ): ClientUnaryCall;
   recordTaskRecovery(
     request: RecordTaskRecoveryRequest,

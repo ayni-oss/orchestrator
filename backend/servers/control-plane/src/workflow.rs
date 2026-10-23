@@ -286,6 +286,12 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
 
 #[tonic::async_trait]
 impl v1::project_conversation_service_server::ProjectConversationService for WorkflowGrpc {
+    async fn confirm_task_recovery(
+        &self,
+        request: Request<v1::ConfirmTaskRecoveryRequest>,
+    ) -> Result<Response<v1::ConfirmTaskRecoveryResponse>, Status> {
+        recovery::confirm(&self.store, request).await
+    }
     async fn record_task_recovery(
         &self,
         request: Request<v1::RecordTaskRecoveryRequest>,

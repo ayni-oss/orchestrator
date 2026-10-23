@@ -31,10 +31,10 @@ let currentSession;
 let providerQuery = 0;
 const tasks = mountTasks({ getScope: scopeBody, api, submit, showError, saved, store, controls });
 const plans = mountPlans({ getScope: scopeBody, api, submit, showError, saved, store, controls, tasks });
-const feedback = mountFeedback({ getScope: scopeBody, api, showError, openTask: async (origin, taskId, fromProject) => {
+const feedback = mountFeedback({ getScope: scopeBody, api, showError, openTask: async (origin, taskId, fromProject, attemptId) => {
   if (fromProject || scope.conversationId !== origin.conversationId) await selectConversation(origin.conversationId);
   if (scopeKey(scope) !== scopeKey(origin)) return;
-  await tasks.open(taskId);
+  await tasks.open(taskId, attemptId);
   $(fromProject ? 'conversation-feedback' : 'task-detail').scrollIntoView({ block: 'start', behavior: 'smooth' });
 } });
 
@@ -63,7 +63,7 @@ function controls() {
   $('replace-session').disabled = !currentSession?.canReplace || !!pending || sending || discoveryBusy;
   $('refresh-provider-calls').disabled = !scope.conversationId || sending;
   $('task-refresh').disabled = !scope.conversationId;
-  for (const button of document.querySelectorAll('[data-task-action]')) button.disabled = !!pending || sending || discoveryBusy || (button.dataset.taskAction === 'StartTaskPublication' && !$('task-publication-consent')?.checked);
+  for (const button of document.querySelectorAll('[data-task-action]')) button.disabled = !!pending || sending || discoveryBusy || (button.dataset.taskAction === 'ConfirmTaskRecovery' && (!button.closest('article')?.querySelector('[data-recovery-consent]')?.checked || (button.closest('article')?.querySelector('[data-recovery-uncertainty]') && !button.closest('article').querySelector('[data-recovery-uncertainty]').checked))) || (button.dataset.taskAction === 'StartTaskPublication' && !$('task-publication-consent')?.checked);
   for (const button of document.querySelectorAll('[data-cancel-turn]')) button.disabled = !!pending || sending || discoveryBusy;
   for (const button of document.querySelectorAll('[data-acknowledge-call]')) button.disabled = !!pending || sending || discoveryBusy || !button.closest('article').querySelector('input[type=checkbox]')?.checked;
 }
@@ -80,7 +80,7 @@ async function retry() {
     const command = pending;
     const result = await api(command.method, command.body);
     pending = null; store('pending', null);
-    $('receipt').textContent = result.receipt?.commandId || result.approval?.commandId || result.record?.id || 'Accepted';
+    $('receipt').textContent = result.receipt?.commandId || result.approval?.commandId || result.record?.id || result.confirmation?.commandId || 'Accepted';
     if (tasks.accepted(command, result)) {
       // Task receipts share the exact pending-command recovery path.
     } else if (['CreatePlan', 'RevisePlan', 'ApprovePlan'].includes(command.method)) {

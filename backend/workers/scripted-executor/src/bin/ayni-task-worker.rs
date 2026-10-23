@@ -151,7 +151,8 @@ async fn initialize(worker: &Worker) -> Result {
             return Err("task input identity mismatch".into());
         }
     } else {
-        if task_files::checkout(&worker.source, &response.source_pack, &command).is_err() {
+        if task_files::checkout_for_coding(&worker.source, &response.source_pack, &command).is_err()
+        {
             fs::create_dir_all(&worker.source)?;
             let ledger = ledger::Ledger::open(&worker.root, &command)?;
             ledger.finish(&ayni_orchestrator_events::task_execution::TaskOutcome {
