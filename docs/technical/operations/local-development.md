@@ -78,7 +78,8 @@ pnpm exec playwright install chromium
 pnpm console:acceptance
 ```
 
-The scenario creates a separate workspace and retains its accepted data. It checks
+Run browser acceptance against a deployment separate from an active restart/PVC
+inventory acceptance profile. The scenario creates a separate workspace and retains its accepted data. It checks
 scripted responses, refresh, two tabs, reconnect, a lost command response followed
 by reload/retry, conversation isolation, older history, content escaping and mobile
 layout. It also verifies configuration edits, frozen turn inputs, stale-tab
@@ -113,14 +114,60 @@ consent, then choose **Approve reviewed version and admit tasks**. A newer strea
 version never changes what you reviewed; select the plan again and review it
 before approval. Approval freezes the plan and atomically admits its complete task
 set. The receipt and task detail retain workspace, project, originating conversation,
-version and digest. Tasks await execution capability; source verification, runtime
-selection and authorized execution budget remain visible blockers. No coding work
-is dispatched. A follow-up requires a new plan.
+version and digest. Tasks initially await source verification, runtime
+selection and an authorized execution budget. Approval dispatches no coding work;
+inspect **Tasks** for the current execution state. A follow-up requires a new plan.
 
 The cumulative browser acceptance includes structured task editing, lost-response
 replay, two-tab revision and approval conflicts, exact approval retry, draft preservation, history, task pagination and scope checks.
 See [M3 acceptance](plan-acceptance.md) for cumulative outage/restart gates,
 [plan review](../architecture/plan-review.md) and [task admission](../architecture/task-admission.md) for limits and retained-state rules.
+
+## Task inspection and controls
+
+Open **Tasks** in a selected conversation to browse admitted work across its plans.
+**Refresh tasks** reloads the catalog; **Load more tasks** reads the next bounded
+page. Select a task to inspect preparation, coding, managed quality and draft
+publication separately. The selected task is restored after reload. Automatic
+refresh reads its current state every five seconds while the tab is visible;
+uncheck it for manual inspection. A failed read clears stale controls and reports
+that current state could not be loaded.
+
+Preparation shows frozen repository, source commit, runtime and execution budgets.
+Coding shows the retained outcome and provider state, with expandable accepted
+patch and worker identities. Quality shows target completion, exit code and
+expandable identities and artifacts. Failed quality preserves coding completion
+and blocks publication. Provider uncertainty remains explicit and never enables
+a fresh coding retry. Recovery or repair requires a new reviewed plan until
+confirmed recovery is implemented.
+
+**Download task selection** supplies the full originating scope and task ID for
+the trusted [preparation helper](../architecture/task-execution.md#operator-workflow).
+Add `inputs` with `runtimeImage`, `maxSeconds` and `maxTokens` to the downloaded
+selection before running verification. Verify source and upload the frozen source
+snapshot through the local helper;
+the browser cannot read a host checkout or submit source packs. **Cancel task
+execution** fences queued or active work. An already sent provider request may
+have incurred a charge; cancelling work does not resolve its external outcome.
+
+After reviewing an accepted patch and passing quality evidence, choose **Review
+draft publication**. Inspect the exact repository, source, branch, base, title,
+body, commit identity and evidence digests. Check the explicit consent and choose
+**Authorize draft publication**. This creates publication authority without
+rerunning coding or quality. A configured publisher with its own scoped
+credential is still required to perform external work.
+
+**Cancel draft publication** is available before draft creation begins. A pushed
+branch may remain. Creating or uncertain publication permits reconciliation of the
+original request, with no second create command. The retained PR link validates
+against the recorded GitHub repository and PR number. External PR state is the
+last retained observation, not a live GitHub poll.
+
+Task commands use the same pending panel as plan approval. After a lost response,
+reload and **Retry the same command** to replay its exact scope, attempt, evidence
+and key. Switching conversations clears review consent; late responses cannot
+replace another task's details. Concurrent operators can see stale controls, but
+the canonical command rechecks publication eligibility and cancellation fences.
 
 ## Shared configuration and session controls
 
@@ -326,6 +373,7 @@ AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-publication \
   dev/ctl acceptance /absolute/new/publication-evidence --publication-only
 ```
 
+Install the browser once with `pnpm exec playwright install chromium`.
 The profile first runs the cumulative quality gates, then builds and loads the
 local publication fixture. It binds the publisher's workspace and repository
 explicitly in Helm after creating the approved source task. It supplies only a
@@ -337,7 +385,10 @@ response after durable acceptance, verifies one exact draft/commit, rejects fail
 quality, cancels an unclaimed intent and checks branch-collision fencing. It then
 restarts every owner, including the fixture, and verifies the original identity.
 A closed external PR is retried through the same retained intent without creating
-another draft.
+another draft. It also exercises canonical publication preview, consent, a lost
+accepted response, reload/exact retry and queued cancellation through the browser
+on a separate managed-quality task. Desktop/mobile screenshots and retained
+command/evidence identities are saved under `console/`.
 
 This establishes actual Git transport and protocol recovery. It does not establish
 live GitHub authentication or compatibility with protected-branch signing policy.

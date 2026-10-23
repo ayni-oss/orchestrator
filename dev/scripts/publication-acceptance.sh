@@ -125,6 +125,11 @@ prepare_task --prepare-publication-task > "$evidence/cancel-task.json"
 command_stdin --start-publication-pending-stdin "$evidence/cancel-task.json" > "$evidence/cancel-publication.json"
 command_stdin --cancel-publication-stdin "$evidence/cancel-publication.json" > "$evidence/cancel-result.txt"
 
+# The operator console exercises real canonical publication admission/retry and
+# cancellation against a managed-quality task outside the publisher's bound workspace.
+prepare_task --prepare-publication-task > "$evidence/console-task.json"
+"$dev_directory/scripts/task-console-acceptance.sh" "$evidence/console-task.json" "$evidence/console"
+
 # The expected-absent branch lease cannot overwrite another remote head.
 prepare_task --prepare-publication-task > "$evidence/collision-task.json"
 bind_scope "$evidence/collision-task.json"

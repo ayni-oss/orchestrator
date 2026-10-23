@@ -91,6 +91,15 @@ pub fn router(console: Console) -> Router {
             }),
         )
         .route(
+            "/tasks.mjs",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript")],
+                    include_str!("../../../../../apps/console/tasks.mjs"),
+                )
+            }),
+        )
+        .route(
             "/state.mjs",
             get(|| async {
                 (
@@ -147,43 +156,6 @@ async fn rpc(
         .try_acquire_owned()
         .map_err(|_| ApiError::from(Status::resource_exhausted("console request limit")))?;
     match method.as_str() {
-        "ApprovePlan" => forward!(
-            body,
-            console.conversations(),
-            approve_plan,
-            v1::ApprovePlanRequest
-        ),
-        "GetPlanApproval" => forward!(
-            body,
-            console.conversations(),
-            get_plan_approval,
-            v1::GetPlanApprovalRequest
-        ),
-        "ListTasks" => forward!(
-            body,
-            console.conversations(),
-            list_tasks,
-            v1::ListTasksRequest
-        ),
-        "GetTaskAttempt" => forward!(
-            body,
-            console.conversations(),
-            get_task_attempt,
-            v1::GetTaskAttemptRequest
-        ),
-        "CancelTaskExecution" => forward!(
-            body,
-            console.conversations(),
-            cancel_task_execution,
-            v1::CancelTaskExecutionRequest
-        ),
-        "GetTaskExecution" => forward!(
-            body,
-            console.conversations(),
-            get_task_execution,
-            v1::GetTaskExecutionRequest
-        ),
-        "GetTask" => forward!(body, console.conversations(), get_task, v1::GetTaskRequest),
         "CreatePlan" => forward!(
             body,
             console.conversations(),
@@ -274,7 +246,79 @@ async fn rpc(
             list_conversation_history,
             v1::ListConversationHistoryRequest
         ),
-        _ => project_rpc(&console, &method, body).await,
+        _ => task_rpc(&console, &method, body).await,
+    }
+}
+
+// Task controls share the same request limits and canonical authority as plans.
+async fn task_rpc(console: &Console, method: &str, body: Value) -> Result<Json<Value>, ApiError> {
+    match method {
+        "ReviewTaskPublication" => {
+            let selected: v1::GetTaskAttemptRequest = decode(body)?;
+            let preview = tokio::time::timeout(
+                Duration::from_secs(12),
+                crate::publication_review::review(
+                    &mut console.conversations(),
+                    selected,
+                    &uuid::Uuid::now_v7().to_string(),
+                ),
+            )
+            .await
+            .map_err(|_| {
+                ApiError::from(Status::deadline_exceeded("publication review timed out"))
+            })??;
+            encode(preview).map(Json)
+        }
+        "StartTaskPublication" => forward!(
+            body,
+            console.conversations(),
+            start_task_publication,
+            v1::StartTaskPublicationRequest
+        ),
+        "CancelTaskPublication" => forward!(
+            body,
+            console.conversations(),
+            cancel_task_publication,
+            v1::CancelTaskPublicationRequest
+        ),
+        "ApprovePlan" => forward!(
+            body,
+            console.conversations(),
+            approve_plan,
+            v1::ApprovePlanRequest
+        ),
+        "GetPlanApproval" => forward!(
+            body,
+            console.conversations(),
+            get_plan_approval,
+            v1::GetPlanApprovalRequest
+        ),
+        "ListTasks" => forward!(
+            body,
+            console.conversations(),
+            list_tasks,
+            v1::ListTasksRequest
+        ),
+        "GetTaskAttempt" => forward!(
+            body,
+            console.conversations(),
+            get_task_attempt,
+            v1::GetTaskAttemptRequest
+        ),
+        "CancelTaskExecution" => forward!(
+            body,
+            console.conversations(),
+            cancel_task_execution,
+            v1::CancelTaskExecutionRequest
+        ),
+        "GetTaskExecution" => forward!(
+            body,
+            console.conversations(),
+            get_task_execution,
+            v1::GetTaskExecutionRequest
+        ),
+        "GetTask" => forward!(body, console.conversations(), get_task, v1::GetTaskRequest),
+        _ => project_rpc(console, method, body).await,
     }
 }
 

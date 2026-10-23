@@ -17,7 +17,15 @@ The first profile supports canonical `https://github.com/owner/repo.git` reposit
 one workspace and repository. Its dedicated application capability differs from
 conversation and task-worker authority.
 
-Use the trusted local helper to review the exact title, body, repository, source,
+In the contributor console, select a task under **Tasks**, inspect its accepted
+patch and managed quality evidence, then choose **Review draft publication**.
+Review the exact preview and explicitly consent before **Authorize draft
+publication**. The console can cancel publication before draft creation begins;
+creating or uncertain requests remain under read-only reconciliation. The
+[console contract](contributor-console.md#task-observation-and-publication-controls)
+defines pending-command recovery and stale-review fencing.
+
+Alternatively, use the trusted local helper to review the exact title, body, repository, source,
 branch and evidence before submission:
 
 ```sh

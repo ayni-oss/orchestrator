@@ -1,3 +1,4 @@
+import { mountTasks } from './tasks.mjs';
 import { mountPlans } from './plans.mjs';
 import { newerOrEqual, describe, scopeKey, makeCommand, appendActivity, providerCallView } from './state.mjs';
 
@@ -27,7 +28,8 @@ let queuedFrames = 0;
 let configuration;
 let currentSession;
 let providerQuery = 0;
-const plans = mountPlans({ getScope: scopeBody, api, submit, showError, saved, store, controls });
+const tasks = mountTasks({ getScope: scopeBody, api, submit, showError, saved, store, controls });
+const plans = mountPlans({ getScope: scopeBody, api, submit, showError, saved, store, controls, tasks });
 
 function showError(error) { $('error').textContent = error.message || String(error); $('error').hidden = false; }
 function clearError() { $('error').hidden = true; }
@@ -53,7 +55,8 @@ function controls() {
   $('refresh-session').disabled = !scope.conversationId || sending;
   $('replace-session').disabled = !currentSession?.canReplace || !!pending || sending || discoveryBusy;
   $('refresh-provider-calls').disabled = !scope.conversationId || sending;
-  for (const button of document.querySelectorAll('[data-cancel-task]')) button.disabled = !!pending || sending || discoveryBusy;
+  $('task-refresh').disabled = !scope.conversationId;
+  for (const button of document.querySelectorAll('[data-task-action]')) button.disabled = !!pending || sending || discoveryBusy || (button.dataset.taskAction === 'StartTaskPublication' && !$('task-publication-consent')?.checked);
   for (const button of document.querySelectorAll('[data-cancel-turn]')) button.disabled = !!pending || sending || discoveryBusy;
   for (const button of document.querySelectorAll('[data-acknowledge-call]')) button.disabled = !!pending || sending || discoveryBusy || !button.closest('article').querySelector('input[type=checkbox]')?.checked;
 }
@@ -71,7 +74,9 @@ async function retry() {
     const result = await api(command.method, command.body);
     pending = null; store('pending', null);
     $('receipt').textContent = result.receipt?.commandId || result.approval?.commandId || 'Accepted';
-    if (['CreatePlan', 'RevisePlan', 'ApprovePlan', 'CancelTaskExecution'].includes(command.method)) {
+    if (tasks.accepted(command, result)) {
+      // Task receipts share the exact pending-command recovery path.
+    } else if (['CreatePlan', 'RevisePlan', 'ApprovePlan'].includes(command.method)) {
       plans.accepted(command, result);
     } else if (command.method === 'SendMessage') {
       if (scopeKey(command.body) === scopeKey(scope)) $('content').value = '';
@@ -295,7 +300,7 @@ function openWatch(version) {
 async function selectConversation(id) {
   closeWatch(); generation++; providerQuery++; paused = false; cursor = ''; snapshot = null; activities = []; chain = Promise.resolve();
   scope.conversationId = id || ''; store('selection', scope);
-  plans.select();
+  plans.select(); tasks.select();
   currentSession = undefined; $('session-state').textContent = 'No session.';
   $('provider-call-status').textContent = 'No conversation selected.'; $('provider-calls').replaceChildren(); $('turn-controls').replaceChildren();
   $('messages').replaceChildren(); $('history').replaceChildren(); $('activity').replaceChildren(); historyBefore = '0'; historySnapshotId = ''; historyHasMore = true; historyIds = new Set();
