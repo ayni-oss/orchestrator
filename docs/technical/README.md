@@ -13,6 +13,7 @@ The runtime combines the M1 durable foundation with shared immutable agent confi
 - [Conversation execution](architecture/conversation-execution.md): consolidated M2 contract, alpha v1 policy, frozen configuration, isolated sessions, provider uncertainty and tool authority.
 - [Code organization](architecture/code-organization.md): production ownership and dependency direction.
 - [Local development](operations/local-development.md): Docker Desktop deployment, diagnostics, validation, restart, and cleanup.
+- [Task delivery acceptance](operations/task-acceptance.md): cumulative M4 interruption, fencing, publication uncertainty and retained cleanup gates.
 - [Plan acceptance](operations/plan-acceptance.md): cumulative M3 approval, proposal, outage and retained-origin recovery gates.
 - [Conversation acceptance](operations/conversation-acceptance.md): cumulative M2 recovery gates and evidence limits.
 - [Operations](operations/operations.md): startup, probes, schema changes, credentials, backup, and failure handling.

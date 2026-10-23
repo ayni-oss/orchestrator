@@ -9,6 +9,7 @@ import signal
 import socket
 import subprocess
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
@@ -30,6 +31,7 @@ class Store:
         self.repository = self.directory / "fixture/repo.git"
         self.path = self.directory / "github.json"
         self.lock = threading.RLock()
+        self.waiting = {"pause_list": 0, "pause_create_response": 0}
         self.state = (json.loads(self.path.read_text()) if self.path.exists() else {
             "pulls": [], "create_calls": 0, "list_calls": 0,
             "drop_create_response": 0, "hold_create": False,
@@ -66,9 +68,32 @@ class Store:
 
     def snapshot(self):
         value = json.loads(json.dumps(self.state))
+        value["waiting"] = dict(self.waiting)
         value["references"] = self.git("for-each-ref", "--format=%(refname) %(objectname)",
                                         "refs/heads").splitlines()
         return value
+
+
+    def wait_at(self, name):
+        # Release the lock while paused: controls and retained observations must
+        # remain available while a publisher is deliberately interrupted.
+        with self.lock:
+            enabled = self.state.get(name, False)
+            if enabled:
+                self.waiting[name] += 1
+        if not enabled:
+            return
+        try:
+            deadline = time.monotonic() + 180
+            while time.monotonic() < deadline:
+                with self.lock:
+                    if not self.state.get(name, False):
+                        return
+                time.sleep(.05)
+            raise ConnectionAbortedError("fixture pause expired")
+        finally:
+            with self.lock:
+                self.waiting[name] -= 1
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -84,7 +109,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def read_body(self):
         length = int(self.headers.get("Content-Length", "0"))
@@ -98,23 +126,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlsplit(self.path)
         store = self.server.store
+        if parsed.path == f"/repos/{REPOSITORY}/pulls":
+            return self.list_pulls(parsed)
         with store.lock:
             if parsed.path == "/healthz":
                 return self.respond(200, {"ready": True})
             if parsed.path == "/fixture/state":
                 return self.respond(200, store.snapshot())
-            if parsed.path == f"/repos/{REPOSITORY}/pulls":
-                query = parse_qs(parsed.query)
-                head = query.get("head", [""])[0].removeprefix("fixture:")
-                base = query.get("base", [""])[0]
-                state = query.get("state", ["open"])[0]
-                store.state["list_calls"] += 1
-                store.persist()
-                pulls = [pull for pull in store.state["pulls"]
-                         if (not head or pull["head"]["ref"] == head)
-                         and (not base or pull["base"]["ref"] == base)
-                         and (state == "all" or pull["state"] == state)]
-                return self.respond(200, pulls)
             match = re.fullmatch(r"/repos/fixture/repo/pulls/(\d+)", parsed.path)
             if match:
                 pull = next((p for p in store.state["pulls"]
@@ -131,6 +149,22 @@ class Handler(BaseHTTPRequestHandler):
                                          "object": {"type": "commit", "sha": sha}})
             self.respond(404, {"message": "unsupported fixture operation"})
 
+    def list_pulls(self, parsed):
+        store = self.server.store
+        with store.lock:
+            query = parse_qs(parsed.query)
+            head = query.get("head", [""])[0].removeprefix("fixture:")
+            base = query.get("base", [""])[0]
+            state = query.get("state", ["open"])[0]
+            store.state["list_calls"] += 1
+            store.persist()
+            pulls = [pull for pull in store.state["pulls"]
+                     if (not head or pull["head"]["ref"] == head)
+                     and (not base or pull["base"]["ref"] == base)
+                     and (state == "all" or pull["state"] == state)]
+        store.wait_at("pause_list")
+        self.respond(200, pulls)
+
     def do_POST(self):
         try:
             body = self.read_body()
@@ -143,7 +177,7 @@ class Handler(BaseHTTPRequestHandler):
         store = self.server.store
         with store.lock:
             if path == "/fixture/control":
-                for name in ("drop_create_response", "hold_create"):
+                for name in ("drop_create_response", "hold_create", "pause_list", "pause_create_response"):
                     if name in body:
                         if name == "drop_create_response":
                             if type(body[name]) is not int or not 0 <= body[name] <= 16:
@@ -215,7 +249,8 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError:
                     pass
                 return
-            self.respond(201, pull)
+        store.wait_at("pause_create_response")
+        self.respond(201, pull)
 
 
 def main():
@@ -232,6 +267,7 @@ def main():
                                f"--base-path={store.directory}", str(store.directory)],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     server = ThreadingHTTPServer(("0.0.0.0", args.http_port), Handler)
+    server.daemon_threads = True
     server.store = store
     signal.signal(signal.SIGTERM, lambda _signum, _frame: (_ for _ in ()).throw(SystemExit(0)))
     try:

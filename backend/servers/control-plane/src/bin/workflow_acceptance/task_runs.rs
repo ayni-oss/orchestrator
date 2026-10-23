@@ -292,7 +292,7 @@ fn stdin_evidence() -> Result<Evidence> {
     }
     Ok(serde_json::from_slice(&bytes)?)
 }
-pub async fn cancel_stdin(client: &mut Client) -> Result {
+pub async fn cancel_stdin(client: &mut Client, wait: bool) -> Result {
     let evidence = stdin_evidence()?;
     let start = v1::StartTaskExecutionRequest::decode(evidence.request.as_slice())?;
     let request = v1::CancelTaskExecutionRequest {
@@ -310,9 +310,49 @@ pub async fn cancel_stdin(client: &mut Client) -> Result {
     if client.cancel_task_execution(request).await?.into_inner() != receipt {
         return Err("cancel receipt changed".into());
     }
-    terminal(client, &start, "cancelled").await?;
+    if wait {
+        terminal(client, &start, "cancelled").await?;
+        println!(
+            "task-cancellation: real-worker-stop=pass exact-retry=pass fence=pass retained-storage=pass"
+        );
+    } else {
+        println!("task-cancellation: fence-recorded=pass exact-retry=pass");
+    }
+    Ok(())
+}
+pub async fn fenced_stdin(client: &mut Client) -> Result {
+    let evidence = stdin_evidence()?;
+    let start = v1::StartTaskExecutionRequest::decode(evidence.request.as_slice())?;
+    let attempt = client
+        .get_task_attempt(v1::GetTaskAttemptRequest {
+            workspace_id: start.workspace_id.clone(),
+            project_id: start.project_id.clone(),
+            conversation_id: start.conversation_id.clone(),
+            task_id: start.task_id.clone(),
+            attempt_id: start.attempt_id.clone(),
+        })
+        .await?
+        .into_inner()
+        .attempt
+        .ok_or("fenced attempt missing")?;
+    if attempt.state != "cancelling"
+        || attempt.generation <= 1
+        || !attempt.patch.is_empty()
+        || attempt.quality.is_some()
+    {
+        return Err("late worker changed cancelled execution evidence".into());
+    }
+    if client
+        .start_task_execution(start)
+        .await?
+        .into_inner()
+        .encode_to_vec()
+        != evidence.receipt
+    {
+        return Err("fenced start replay changed".into());
+    }
     println!(
-        "task-cancellation: real-worker-stop=pass exact-retry=pass fence=pass retained-storage=pass"
+        "task-fence: advanced-generation=pass late-report-not-accepted=pass original-start-receipt=pass"
     );
     Ok(())
 }

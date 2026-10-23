@@ -395,6 +395,24 @@ live GitHub authentication or compatibility with protected-branch signing policy
 The [publication contract](../architecture/task-publication.md) describes the
 separate credential boundary and trusted operator submission workflow.
 
+## Complete task delivery acceptance
+
+Use the [M4 acceptance matrix](task-acceptance.md) and the cumulative profile:
+
+```sh
+export AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-m4
+dev/ctl quality-runtime
+AYNI_ORCHESTRATOR_TASK_FIXTURE=true dev/ctl deploy
+dev/ctl acceptance /absolute/new/m4-evidence --m4
+```
+
+This extends the publication profile with a live stale-worker cancellation fence,
+publisher interruption around draft creation, uncertainty without a remote PR and
+retained cleanup/redeployment. It preserves all authoritative stores and writes
+`acceptance.json` only after the complete deployed matrix passes. Use a separate
+deployment for ordinary console acceptance to keep retained PVC inventories stable.
+The matrix documents fixture boundaries, required repository checks and recovery.
+
 ## Cleanup
 
 ```sh

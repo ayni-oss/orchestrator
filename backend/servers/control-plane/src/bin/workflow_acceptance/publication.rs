@@ -101,16 +101,51 @@ pub async fn reject_quality_stdin(client: &mut Client) -> Result {
 }
 pub async fn verify_stdin(client: &mut Client, expected: &str) -> Result {
     let evidence: Evidence = input()?;
-    let publication = terminal(client, &evidence, expected).await?;
-    if !evidence.publication_result.is_empty()
-        && publication.encode_to_vec() != evidence.publication_result
-    {
-        return Err("retained publication identity changed".into());
+    let mut publication = terminal(client, &evidence, expected).await?;
+    if !evidence.publication_result.is_empty() {
+        let original = v1::TaskPublication::decode(evidence.publication_result.as_slice())?;
+        if expected == "uncertain" {
+            if publication.generation < original.generation {
+                return Err("publication ownership generation moved backwards".into());
+            }
+            publication.generation = original.generation;
+        }
+        if publication != original {
+            return Err("retained publication identity changed".into());
+        }
     }
     println!(
         "publication: state={} retained-identity=pass exact-retry=pass real-git=true github-protocol-fixture=true live-github-auth=false",
         publication.state
     );
+    Ok(())
+}
+pub async fn capture_stdin(client: &mut Client, expected: &str) -> Result {
+    let mut evidence: Evidence = input()?;
+    evidence.publication_result = terminal(client, &evidence, expected).await?.encode_to_vec();
+    println!("{}", serde_json::to_string(&evidence)?);
+    Ok(())
+}
+pub async fn reject_cancel_stdin(client: &mut Client) -> Result {
+    let evidence: Evidence = input()?;
+    let start = v1::StartTaskExecutionRequest::decode(evidence.execution_request.as_slice())?;
+    let before = attempt(client, &start).await?;
+    let status = client
+        .cancel_task_publication(v1::CancelTaskPublicationRequest {
+            workspace_id: start.workspace_id.clone(),
+            project_id: start.project_id.clone(),
+            conversation_id: start.conversation_id.clone(),
+            task_id: start.task_id.clone(),
+            attempt_id: start.attempt_id.clone(),
+            idempotency_key: format!("reject-cancel-{}", start.attempt_id),
+        })
+        .await
+        .err()
+        .ok_or("consumed publication permit was cancellable")?;
+    if status.code() != Code::FailedPrecondition || attempt(client, &start).await? != before {
+        return Err("rejected cancellation changed retained publication".into());
+    }
+    println!("consumed-publication-cancel: rejected=pass retained-identity=pass");
     Ok(())
 }
 pub async fn inspect_stdin(client: &mut Client) -> Result {
@@ -123,7 +158,7 @@ pub async fn inspect_stdin(client: &mut Client) -> Result {
     println!(
         "{}",
         serde_json::json!({
-            "workspace_id":start.workspace_id,"publication_id":publication.publication_id,
+            "workspace_id":start.workspace_id,"generation":publication.generation,"publication_id":publication.publication_id,
             "state":publication.state,"branch":publication.branch,"base_branch":publication.base_branch,
             "commit_sha":publication.commit_sha,"tree_sha":publication.tree_sha,
             "pr_number":publication.pr_number,"pr_url":publication.pr_url,

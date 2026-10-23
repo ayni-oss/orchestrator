@@ -169,7 +169,9 @@ async fn dispatch(
         "--prepare-task-run-pending" => {
             return task_runs::prepare(projects, client, true).await;
         }
-        "--cancel-task-run-stdin" => return task_runs::cancel_stdin(client).await,
+        "--cancel-task-run-stdin" => return task_runs::cancel_stdin(client, true).await,
+        "--cancel-task-run-pending-stdin" => return task_runs::cancel_stdin(client, false).await,
+        "--verify-task-fenced-stdin" => return task_runs::fenced_stdin(client).await,
         "--verify-interrupted-task-stdin" => {
             return task_runs::interrupted_stdin(client).await;
         }
@@ -212,6 +214,13 @@ async fn dispatch_publication(
         "--verify-publication-stdin" => return publication::verify_stdin(client, "draft").await,
         "--verify-publication-uncertain-stdin" => {
             return publication::verify_stdin(client, "uncertain").await;
+        }
+        "--capture-publication-stdin" => return publication::capture_stdin(client, "draft").await,
+        "--capture-publication-uncertain-stdin" => {
+            return publication::capture_stdin(client, "uncertain").await;
+        }
+        "--reject-publication-cancel-stdin" => {
+            return publication::reject_cancel_stdin(client).await;
         }
         "--inspect-publication-stdin" => return publication::inspect_stdin(client).await,
         "--verify-publication-blocked-stdin" => {

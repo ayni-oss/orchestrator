@@ -87,6 +87,21 @@ The cumulative browser suite covers task controls and stale-read/response-loss
 fixtures alongside deployed canonical task reads. Real publication transport and
 managed quality retain their existing cumulative acceptance profiles.
 
+## Sixth-slice decisions
+
+The [task acceptance matrix](../operations/task-acceptance.md) maps every M4
+boundary to cumulative deployed and repository gates. The `--m4` profile adds
+late-worker report rejection after cancellation, publisher Pod loss before create
+and after durable remote creation, retained uncertainty with no visible PR, and
+cleanup/redeployment of the exact workload images. Application credentials and
+parent/worker volume identities are preserved without reading Secret contents.
+
+The final bundle records immutable source/image identities, individual proofs and
+external-action counts. Coding remains a deterministic fixture; managed Ayni and
+Git transport are actual integrations. GitHub is an explicitly retained protocol
+fixture. Live paid coding and live GitHub policy/authentication are not established
+by this profile. The final delivery PR owns executed closure status.
+
 ## Scope boundaries and risks
 
 M4 starts with serial task execution and isolated attempts. Dependency scheduling
