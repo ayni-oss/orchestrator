@@ -66,7 +66,7 @@ cargo test --locked -p ayni-orchestrator-workflow-postgres --test task_execution
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test plan_approval -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test plan_proposals -- --ignored --nocapture
 # Continuity includes explicit bounded assessment consent, coalescing and restart replay.
-cargo test --locked -p ayni-orchestrator-workflow-postgres --test project_continuity -- --ignored --nocapture
+cargo test --locked -p ayni-orchestrator-workflow-postgres --test project_continuity -- --ignored --nocapture --test-threads=1
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test configuration -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test sessions -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test provider_calls -- --ignored --nocapture

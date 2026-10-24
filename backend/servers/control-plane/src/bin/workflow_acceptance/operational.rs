@@ -7,7 +7,7 @@ use std::{collections::BTreeSet, io::Read as _, time::Duration};
 use tonic::transport::Channel;
 use uuid::Uuid;
 
-pub(super) async fn dispatch(
+pub async fn dispatch(
     mode: &str,
     client: &mut Client,
     projects: &mut ProjectServiceClient<Channel>,
@@ -87,9 +87,8 @@ fn inputs() -> Result<v1::TaskExecutionInputs> {
     })
 }
 
-pub async fn prepare(projects: &mut ProjectServiceClient<Channel>, client: &mut Client) -> Result {
-    let scope = create_scope(projects, client).await?;
-    let mut content = v1::PlanContent {
+fn plan_content() -> v1::PlanContent {
+    v1::PlanContent {
         title: "Concurrent isolated ownership".into(),
         objective: "Exercise four active slots with two queued tasks".into(),
         scope: "Explicit deterministic local acceptance fixture".into(),
@@ -110,7 +109,12 @@ pub async fn prepare(projects: &mut ProjectServiceClient<Channel>, client: &mut 
             })
             .collect(),
         ..Default::default()
-    };
+    }
+}
+
+pub async fn prepare(projects: &mut ProjectServiceClient<Channel>, client: &mut Client) -> Result {
+    let scope = create_scope(projects, client).await?;
+    let mut content = plan_content();
     let request = |content| v1::CreatePlanRequest {
         workspace_id: scope.workspace.clone(),
         project_id: scope.project.clone(),
@@ -234,7 +238,7 @@ pub async fn capture(client: &mut Client) -> Result {
             }
             evidence.active = observations
                 .iter()
-                .map(|value| value.encode_to_vec())
+                .map(prost::Message::encode_to_vec)
                 .collect();
             return output(&evidence);
         }
@@ -290,7 +294,7 @@ pub async fn cancel(client: &mut Client) -> Result {
                 .as_ref()
                 .is_some_and(|a| a.state == "cancelled" && a.generation == 2 && a.patch.is_empty())
         }) {
-            evidence.terminal = terminal.iter().map(|value| value.encode_to_vec()).collect();
+            evidence.terminal = terminal.iter().map(prost::Message::encode_to_vec).collect();
             return output(&evidence);
         }
         tokio::time::sleep(Duration::from_millis(500)).await;

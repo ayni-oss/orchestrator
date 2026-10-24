@@ -11,6 +11,10 @@ use ayni_orchestrator_workflow_postgres::{
     plans::{PlanContent, PlanScope, PlanTaskSpecification},
 };
 use uuid::Uuid;
+// Supervisor polling and assessment sweeps intentionally exercise global authority.
+// Each scenario owns that fixture authority until all its task runs are stopped.
+static FIXTURE_AUTHORITY: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 fn key() -> String {
     Uuid::now_v7().to_string()
@@ -157,7 +161,7 @@ async fn accept_coding(f: &Fixture) -> Result {
         .ok_or("claim missing")?;
     assert_eq!(
         claimed.command.attempt_id, prepared.attempt_id,
-        "fixture must own the serial claim"
+        "fixture must own the selected claim"
     );
     store
         .task_supervisor(&S::Observe {
@@ -187,6 +191,7 @@ async fn accept_coding(f: &Fixture) -> Result {
 #[tokio::test]
 #[ignore = "requires disposable PostgreSQL with separate runtime role"]
 async fn continuity_is_scoped_bounded_and_frozen_with_separate_accepted_outcomes() -> Result {
+    let _authority = FIXTURE_AUTHORITY.lock().await;
     let f = fixture().await?;
     accept_coding(&f).await?;
     let Fixture {
@@ -243,6 +248,7 @@ async fn continuity_is_scoped_bounded_and_frozen_with_separate_accepted_outcomes
     cancel_after_coding(&f).await?;
     replay_and_current(&f, &client, &fresh, &replay_key, &receipt, &before).await?;
     foreign_scope(&f, &client).await?;
+    cleanup_origin(&f).await?;
     driver.abort();
     Ok(())
 }
@@ -373,6 +379,7 @@ async fn command_bytes(client: &tokio_postgres::Client, turn: &str) -> Result<Ve
     reason = "one retained consent, coalescing and revocation lifecycle scenario"
 )]
 async fn assessments_require_bounded_consent_coalesce_and_replay_without_extra_turns() -> Result {
+    let _authority = FIXTURE_AUTHORITY.lock().await;
     let f = fixture().await?;
     let configuration = f.store.get_agent_configuration(&f.workspace.id, "").await?;
     let consent_key = key();
@@ -480,6 +487,7 @@ async fn assessments_require_bounded_consent_coalesce_and_replay_without_extra_t
             .await
             .is_err()
     );
+    cleanup_origin(&f).await?;
     driver.abort();
     Ok(())
 }
@@ -487,6 +495,7 @@ async fn assessments_require_bounded_consent_coalesce_and_replay_without_extra_t
 #[tokio::test]
 #[ignore = "requires disposable PostgreSQL with separate runtime role"]
 async fn an_old_attempts_new_outcome_enters_the_bounded_assessment_selection() -> Result {
+    let _authority = FIXTURE_AUTHORITY.lock().await;
     let f = fixture().await?;
     let siblings = f.store.list_tasks(f.scope(), "", 32).await?.tasks;
     for task in siblings
@@ -548,6 +557,34 @@ async fn an_old_attempts_new_outcome_enters_the_bounded_assessment_selection() -
             .any(|fact| fact["attempt_id"] == f.prepared.attempt_id)
     }));
     cancel_after_coding(&f).await?;
+    cleanup_origin(&f).await?;
+    driver.abort();
+    Ok(())
+}
+
+async fn cleanup_origin(f: &Fixture) -> Result {
+    let configuration = f.store.get_agent_configuration(&f.workspace.id, "").await?;
+    f.store
+        .authorize_outcome_assessments(f.scope(), &key(), &configuration.revision_id, 0)
+        .await?;
+    let snapshot = f
+        .store
+        .get_snapshot(&f.workspace.id, &f.project.id, &f.origin.id)
+        .await?;
+    for turn in snapshot.nonterminal_turns {
+        f.store
+            .cancel_turn(
+                &f.workspace.id,
+                &f.project.id,
+                &f.origin.id,
+                &turn.id,
+                &key(),
+            )
+            .await?;
+    }
+    let (db, driver) = connect(&f.runtime).await?;
+    let pending:i64=db.query_one("SELECT count(*) FROM workflow_task_runs WHERE conversation_id=$1 AND state IN ('queued','claimed','reporting','cancelling')", &[&f.origin.id]).await?.get(0);
+    assert_eq!(pending, 0, "scenario must stop every admitted task run");
     driver.abort();
     Ok(())
 }

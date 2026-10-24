@@ -39,6 +39,25 @@ class OperationalReportTests(unittest.TestCase):
             self.assertIn("orchestrator-self-development-through-managed-quality-and-draft-publication", report["unmeasured_gates"])
             self.assertIn("concurrency-terminal.json", report["artifacts_sha256"])
 
+    def test_self_development_requires_its_own_passing_managed_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            own_source = {"result": "passed", "quality": {"state": "passed"},
+                          "actual_source_repository": "https://github.com/ayni-oss/orchestrator.git",
+                          "selected_source_paths": ["README.md"], "publication": {"protocol_fixture": True},
+                          "live_provider": False, "live_github": False}
+            self.write(root, "self-development/self-development.json", json.dumps(own_source))
+            report = module.build_report(root)
+            gate = "orchestrator-self-development-through-managed-quality-and-draft-publication"
+            self.assertIn(gate, report["completed_gates"])
+            self.assertNotIn(gate, report["unmeasured_gates"])
+            self.assertFalse(report["milestone_complete"])
+            own_source["quality"]["state"] = "failed"
+            self.write(root, "self-development/self-development.json", json.dumps(own_source))
+            with self.assertRaises(ValueError):
+                module.build_report(root)
+
     def test_missing_replay_or_partial_terminal_evidence_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

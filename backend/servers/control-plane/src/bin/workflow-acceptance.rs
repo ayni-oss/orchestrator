@@ -166,7 +166,7 @@ async fn dispatch(
         return dispatch_publication(mode, client, projects).await;
     }
     if mode.contains("operational-concurrency") {
-        return operational::dispatch(mode, client, projects).await;
+        return Box::pin(operational::dispatch(mode, client, projects)).await;
     }
     match mode {
         "--prepare-task-recovery-review" => {
