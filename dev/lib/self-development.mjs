@@ -86,6 +86,7 @@ function launch(program, args, log) {
   const child = spawn(program, args, { cwd: root, stdio: ['ignore', descriptor, descriptor] });
   fs.closeSync(descriptor);
   reconnectedProcesses.push(child);
+  child.unref();
   return child;
 }
 async function reconnectGateway() {
