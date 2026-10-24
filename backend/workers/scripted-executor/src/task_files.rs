@@ -90,6 +90,49 @@ pub fn checkout(root: &Path, pack: &[u8], command: &TaskCommand) -> io::Result<(
     }
     Ok(())
 }
+/// Reconstruct coding inputs with an approved retained patch before any provider permit.
+/// # Errors
+/// Rejects changed patch identities, protected paths, symlinks and invalid Git patches.
+pub fn checkout_for_coding(root: &Path, pack: &[u8], command: &TaskCommand) -> io::Result<()> {
+    checkout(root, pack, command)?;
+    let Some(recovery) = &command.recovery else {
+        return Ok(());
+    };
+    if recovery.seed_patch.len() > MAX_PATCH
+        || digest(recovery.seed_patch.as_bytes()) != recovery.seed_patch_digest
+    {
+        return Err(io::Error::other("saved patch identity mismatch"));
+    }
+    git(
+        root,
+        &[
+            "apply",
+            "--allow-empty",
+            "--index",
+            "--whitespace=nowarn",
+            "-",
+        ],
+        Some(recovery.seed_patch.as_bytes()),
+    )?;
+    let names = git(
+        root,
+        &["diff", "--name-only", "--no-renames", "-z", "HEAD", "--"],
+        None,
+    )?;
+    for name in names.split(|b| *b == 0).filter(|p| !p.is_empty()) {
+        let path = std::str::from_utf8(name).map_err(|_| io::Error::other("saved path invalid"))?;
+        parts(path)?;
+        if matches!(path, ".ayni.lock" | ".ayni.toml") {
+            return Err(io::Error::other("saved protected input"));
+        }
+        // No deletions, symlinks, binary content or unavailable file content may reach coding.
+        read_file(root, path, 128 * 1024)?;
+    }
+    if digest(read_file(root, ".ayni.lock", 4 * 1024 * 1024)?.as_bytes()) != command.lock_digest {
+        return Err(io::Error::other("saved lock changed"));
+    }
+    Ok(())
+}
 fn parts(path: &str) -> io::Result<Vec<&str>> {
     if path.len() > 256 || path.is_empty() {
         return Err(io::Error::other("task path invalid"));
@@ -167,7 +210,11 @@ pub fn read_file(root: &Path, path: &str, maximum: usize) -> io::Result<String> 
 /// # Errors
 /// Rejects invalid paths, unavailable objects, symlinks or exceeded bounds.
 pub fn context(root: &Path, commit: &str) -> io::Result<Vec<FileChange>> {
-    let names = git(root, &["ls-tree", "-r", "--name-only", "-z", commit], None)?;
+    let head = git(root, &["rev-parse", "HEAD"], None)?;
+    if String::from_utf8_lossy(&head).trim() != commit {
+        return Err(io::Error::other("source commit changed"));
+    }
+    let names = git(root, &["ls-files", "--cached", "-z"], None)?;
     let names = names
         .split(|b| *b == 0)
         .filter(|p| !p.is_empty())
@@ -328,6 +375,40 @@ mod snapshot_tests {
         assert!(patch.contains("+after"));
         assert!(patch.contains("nested/new.txt"));
         assert_eq!(apply(target.path(), &changes)?, patch);
+        let mut continued = command.clone();
+        continued.recovery = Some(
+            ayni_orchestrator_events::task_execution::TaskRecoveryCommand {
+                seed_patch: patch.clone(),
+                seed_patch_digest: digest(patch.as_bytes()),
+                ..Default::default()
+            },
+        );
+        let next = tempfile::tempdir()?;
+        checkout_for_coding(next.path(), &pack, &continued)?;
+        let context = context(next.path(), &command.source_commit)?;
+        assert!(
+            context
+                .iter()
+                .any(|f| f.path == "nested/new.txt" && f.content == "new\n")
+        );
+        assert_eq!(read_file(next.path(), "file.txt", 128)?, "after\n");
+        let final_patch = apply(
+            next.path(),
+            &[FileChange {
+                path: "next.txt".into(),
+                content: "continued\n".into(),
+            }],
+        )?;
+        assert!(final_patch.contains("+after"));
+        assert!(final_patch.contains("nested/new.txt"));
+        assert!(final_patch.contains("next.txt"));
+        continued
+            .recovery
+            .as_mut()
+            .ok_or_else(|| io::Error::other("recovery missing"))?
+            .seed_patch_digest = digest(b"wrong");
+        assert!(checkout_for_coding(tempfile::tempdir()?.path(), &pack, &continued).is_err());
+
         assert!(checkout(tempfile::tempdir()?.path(), b"corrupt", &command).is_err());
         Ok(())
     }

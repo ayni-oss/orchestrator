@@ -15,7 +15,7 @@ pub struct RunReceipt {
     pub resume_cursor: String,
 }
 const SELECT_RUN: &str = "SELECT command,state,generation,pod_uid,COALESCE(workflow_ts_seconds(deadline_at),0),provider_state,outcome,(SELECT outcome FROM workflow_task_quality q WHERE q.attempt_id=workflow_task_runs.attempt_id) FROM workflow_task_runs";
-async fn lock(tx: &Transaction<'_>) -> Result<(), StoreError> {
+pub(super) async fn lock(tx: &Transaction<'_>) -> Result<(), StoreError> {
     tx.query_one(
         "SELECT pg_advisory_xact_lock($1)",
         &[&(crate::migration_lock_id() + 4)],
@@ -54,7 +54,7 @@ fn origin(command: &TaskCommand) -> PlanScope<'_> {
         conversation: &command.conversation_id,
     }
 }
-async fn read(
+pub(super) async fn read(
     client: &(impl GenericClient + Sync),
     scope: PlanScope<'_>,
     task: &str,
@@ -63,7 +63,7 @@ async fn read(
     let row=client.query_opt(&format!("{SELECT_RUN} WHERE workspace_id=$1 AND project_id=$2 AND conversation_id=$3 AND task_id=$4 AND attempt_id=$5"), &[&scope.workspace,&scope.project,&scope.conversation,&task,&attempt]).await?.ok_or(StoreError::NotFound)?;
     run_row(&row)
 }
-async fn update(
+pub(super) async fn update(
     tx: &Transaction<'_>,
     scope: PlanScope<'_>,
     task: &str,

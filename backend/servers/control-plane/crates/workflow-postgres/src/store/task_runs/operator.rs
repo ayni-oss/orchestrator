@@ -201,5 +201,6 @@ async fn build_command(
         model: row.get(9),
         max_input_tokens: support::unsigned(row.get(10))?,
         max_output_tokens: support::unsigned(row.get(11))?,
+        recovery: None,
     })
 }

@@ -27,7 +27,7 @@ export function taskGuidance(preparation, attempt) {
   if (attempt.publication?.state === 'cancelled') return 'Publication was cancelled. A branch pushed before cancellation may remain.';
   if (attempt.publication?.state === 'blocked') return 'Publication is blocked. Inspect the retained reason and remote branch state; this attempt does not authorize another draft.';
   if (attempt.publication?.state === 'draft') return 'The retained pull request is available for review. Its external state is the last recorded observation.';
-  if (['interrupted', 'failed', 'cancelled'].includes(attempt.state)) return 'Inspect the retained outcome and changes. Review saved evidence and record a recovery proposal with an additional allowance. Continuation is not available yet.';
+  if (['interrupted', 'failed', 'cancelled'].includes(attempt.state)) return 'Inspect the retained outcome and changes. Review saved evidence and record a recovery proposal with an additional allowance. Confirm an exact proposal to authorize bounded continuation.';
   if (attempt.state === 'completed' && !attempt.patch) return 'Coding completed without accepted changes. There is nothing to publish.';
   if (attempt.quality && attempt.quality.state !== 'passed') return 'Quality did not pass. Coding results remain retained. Publication is unavailable. Record a recovery proposal for review; it will not start repair.';
   if (taskActions(attempt).reviewPublication) return 'Review the accepted patch and passing quality evidence, then review and authorize a draft publication.';
@@ -54,7 +54,8 @@ export function publicationCommand(scope, taskId, attempt, preview) {
 }
 
 export function mountTasks({ getScope, api, submit, showError, saved, store, controls }) {
-  const recovery = mountRecovery({ api, submit, showError, controls });
+  const recovery = mountRecovery({ api, submit, showError, controls, openAttempt: id => open(selectedId, id).catch(showError) });
+  let selectedAttemptId = '';
   let owner = '';
   let selectedId = '';
   let next = '';
@@ -105,7 +106,7 @@ export function mountTasks({ getScope, api, submit, showError, saved, store, con
     $('task-status').dataset.publicationState = run?.publication?.state || '';
     const scope = { ...getScope(), taskId: task.id };
     group(task.specification.objective, [['Task', task.id], ['Approved scope', task.specification.scope], ['Acceptance criteria', task.specification.acceptanceCriteria]]);
-    const source = preparation?.inputs;
+    const source = run ? { ...preparation?.inputs, sourceCommit: run.sourceCommit, runtimeImage: run.runtimeImage, maxSeconds: run.maxSeconds, maxTokens: run.maxTokens } : preparation?.inputs;
     const setup = group('Preparation', [
       ['Status', !preparation ? 'Not prepared' : preparation.attemptId ? 'Prepared' : 'Blocked'],
       ['Preparation blockers', preparation ? preparation.blockers || [] : task.executionBlockers],
@@ -113,13 +114,15 @@ export function mountTasks({ getScope, api, submit, showError, saved, store, con
       ['Source reference', source?.sourceRef || task.specification.sourceRef], ['Source commit', source?.sourceCommit],
       ['Runtime image', source?.runtimeImage], ['Time budget (seconds)', source?.maxSeconds], ['Token budget', source?.maxTokens],
     ]);
-    disclosure(setup, 'Origin and frozen preparation evidence', JSON.stringify({ origin: task, preparation }, null, 2), 'origin');
+    disclosure(setup, 'Task origin and current execution selection', JSON.stringify({ origin: task, preparation }, null, 2), 'origin');
     const coding = group('Coding', [
       ['Status', human(run?.state || (preparation?.attemptId ? 'not_started' : 'awaiting_preparation'))],
       ['Outcome', human(run?.executionOutcome || 'pending')], ['Provider', human(run?.providerState || 'not_started')],
-      ['Attempt', preparation?.attemptId], ['Reason', run?.safeReason],
+      ['Attempt', run?.attemptId || preparation?.attemptId], ['Previous attempt', run?.parentAttemptId], ['Recovery proposal', run?.recoveryProposalId], ['Reason', run?.safeReason],
     ]);
     if (run) {
+      if (run.savedInputPatch) disclosure(coding, 'Saved input patch from previous attempt', run.savedInputPatch, 'saved-input');
+      if (run.parentAttemptId) { const previous = document.createElement('button'); previous.type = 'button'; previous.textContent = 'Inspect previous attempt'; previous.onclick = () => open(selectedId, run.parentAttemptId).catch(showError); coding.append(previous); }
       disclosure(coding, 'Accepted patch', run.patch || 'No accepted changes.', 'patch');
       disclosure(coding, 'Worker and source identities', JSON.stringify({ generation: run.generation, podUid: run.podUid, sourceCommit: run.sourceCommit, runtimeImage: run.runtimeImage, configurationRevisionId: run.configurationRevisionId, patchDigest: run.patchDigest }, null, 2), 'worker');
       if (taskActions(run).cancelCoding) {
@@ -173,12 +176,14 @@ export function mountTasks({ getScope, api, submit, showError, saved, store, con
       if (!current()) return;
       const preparation = execution.preparation;
       let run;
-      if (preparation?.attemptId) {
-        try { run = (await api('GetTaskAttempt', { ...scope, attemptId: preparation.attemptId })).attempt; }
+      const attemptId = selectedAttemptId || preparation?.attemptId;
+      if (attemptId) {
+        try { run = (await api('GetTaskAttempt', { ...scope, attemptId })).attempt; }
         catch (error) { if (error.reason !== 'ERROR_REASON_RESOURCE_NOT_FOUND') throw error; }
       }
       if (!current()) return;
       attempt = run;
+      if (run && !selectedAttemptId) { selectedAttemptId = run.attemptId; store(`task-attempt:${owner}`, selectedAttemptId); }
       recovery.select(run ? { ...scope, attemptId: run.attemptId } : undefined);
       if (preview && (!taskActions(run).reviewPublication || preview.request.expectedPatchDigest !== run.patchDigest || preview.request.expectedQualityDigest !== run.qualityDigest)) resetReview();
       render(taskResult.task, preparation, run);
@@ -208,7 +213,8 @@ export function mountTasks({ getScope, api, submit, showError, saved, store, con
     next = page.nextAfterId || ''; $('task-more').hidden = !next;
     $('task-list-status').textContent = $('task-list').children.length ? 'Select a task to inspect its current attempt.' : 'No admitted tasks in this conversation. Approve a reviewed plan to admit work.';
   }
-  async function open(id) {
+  async function open(id, attemptId = '') {
+    selectedAttemptId = attemptId; store(`task-attempt:${owner}`, attemptId);
     recovery.select();
     detailQuery++; resetReview(); attempt = undefined; selectedId = id; store(selectionKey(), id);
     $('task-detail').replaceChildren(); $('task-status').textContent = 'Loading task…'; $('task-updated').textContent = '';
@@ -238,7 +244,7 @@ export function mountTasks({ getScope, api, submit, showError, saved, store, con
     const key = scopeKey(getScope()); if (key === owner) return;
     recovery.select();
     owner = key; listQuery++; detailQuery++; clearTimeout(timer); resetReview(); attempt = undefined;
-    selectedId = saved(selectionKey()) || ''; next = '';
+    selectedId = saved(selectionKey()) || ''; selectedAttemptId = saved(`task-attempt:${owner}`) || ''; next = '';
     for (const id of ['task-list', 'task-detail']) $(id).replaceChildren();
     $('task-updated').textContent = ''; $('task-more').hidden = true;
     $('task-status').textContent = ''; $('task-list-status').textContent = getScope().conversationId ? 'Loading admitted tasks…' : 'Choose a conversation.';
@@ -246,7 +252,7 @@ export function mountTasks({ getScope, api, submit, showError, saved, store, con
     controls();
   }
   function accepted(command, result) {
-    if (command.method === 'RecordTaskRecovery') { recovery.accepted(command); return true; }
+    if (['RecordTaskRecovery', 'ConfirmTaskRecovery'].includes(command.method)) { recovery.accepted(command); return true; }
     if (!['CancelTaskExecution', 'StartTaskPublication', 'CancelTaskPublication'].includes(command.method)) return false;
     if (scopeKey(command.body) === owner && command.body.taskId === selectedId) {
       resetReview(); $('task-status').textContent = `Command accepted · ${result.receipt?.commandId || 'receipt retained'}. Refreshing current state…`;

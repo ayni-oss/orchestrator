@@ -389,3 +389,5 @@ h1 {
 #task-recovery input,#task-recovery textarea,#task-recovery select{width:100%;max-width:100%;box-sizing:border-box;min-width:0}
 #task-recovery textarea{min-height:72px}
 #task-recovery small{overflow-wrap:anywhere}
+
+#task-recovery input[type=checkbox]{width:auto}

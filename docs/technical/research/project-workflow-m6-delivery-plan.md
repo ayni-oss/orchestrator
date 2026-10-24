@@ -119,6 +119,15 @@ Operator questions accept one retained answer. Neither recording nor answering s
 work or resolves attention. Worker-originated questions and model-generated recovery
 proposals remain later M6 scope; the coding protocol cannot express them yet.
 
+### Third-slice dependency boundary
+
+The current task model still has no M5 graph or upstream selection records. Confirmed
+continuation therefore uses the existing independent-task runtime and changes no other
+task's inputs. It does not refresh moving refs or claim dependency integration. M5
+integration and complete M6 closure remain prerequisites for dependent-task recovery.
+The [recovery contract](../architecture/task-recovery.md) defines exact once-only consent,
+linked attempts, saved-work reconstruction, charge acknowledgement and retained history.
+
 ## Where the detail lives
 
 - [Roadmap](../../../ROADMAP.md#m6-delivery-scopes) records agreed milestone direction and prerequisites.

@@ -178,7 +178,11 @@ implemented by the first slice. The [recovery review contract](docs/technical/ar
 defines the second slice: immutable operator proposals with frozen saved-work evidence
 and additional allowance, plus operator question/answer records. Recording or answering
 authorizes no execution. Worker questions and model-generated recovery proposals remain
-later scope. Each delivery PR owns its executed evidence and status.
+later scope. The third slice confirms an exact proposal once and admits a linked
+independent-task attempt with frozen inputs, saved changes, explicit additional allowance
+and charge acknowledgement. M5 has no implemented dependency graph or scheduler selections;
+this independent-task slice does not establish dependency-aware recovery or full M6 closure.
+Each delivery PR owns its executed evidence and status.
 
 Use explicit `docker-desktop` Kubernetes for runtime acceptance. Create owned
 test namespaces and clean them up after testing. Preserve stores within each

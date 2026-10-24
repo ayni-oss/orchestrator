@@ -1,9 +1,11 @@
-//! Immutable operator review records. No dispatch, allowance consumption or attention resolution.
+//! Immutable review records; exact confirmation alone admits a linked execution segment.
+mod confirmation;
 mod records;
 use super::{StoreError, WorkflowStore, support};
 use crate::plans::PlanScope;
 use ayni_orchestrator_events::task_execution::{TaskCommand, TaskOutcome, digest};
 use ayni_orchestrator_events::task_quality::QualityOutcome;
+pub use confirmation::{ConfirmRecovery, RecoveryConfirmation};
 pub use records::*;
 use tokio_postgres::{Row, Transaction};
 
@@ -38,7 +40,15 @@ async fn frozen_evidence(
     // Serialize review writes and terminal worker reconciliation on the attempt row.
     let r=tx.query_opt("SELECT command,state,generation,provider_state,outcome,(SELECT outcome FROM workflow_task_quality WHERE attempt_id=$5) FROM workflow_task_runs WHERE workspace_id=$1 AND project_id=$2 AND conversation_id=$3 AND task_id=$4 AND attempt_id=$5 FOR UPDATE", &[&scope.workspace,&scope.project,&scope.conversation,&task,&attempt]).await?.ok_or(StoreError::NotFound)?;
     let state: String = r.get(1);
-    if !["completed", "failed", "interrupted", "cancelled"].contains(&state.as_str()) {
+    if ![
+        "completed",
+        "failed",
+        "interrupted",
+        "cancelled",
+        "uncertain",
+    ]
+    .contains(&state.as_str())
+    {
         return Err(StoreError::TaskExecutionConflict);
     }
     let command: TaskCommand = decode(&r.get::<_, Vec<u8>>(0))?;
@@ -53,13 +63,20 @@ async fn frozen_evidence(
         .map(|b| decode::<QualityOutcome>(b))
         .transpose()?;
     let provider: String = r.get(3);
+    let patch = ayni_orchestrator_events::task_execution::saved_patch(&command, outcome.as_ref());
+    let patch_available = !patch.is_empty();
+    let patch_digest = if outcome.is_some() || command.recovery.is_some() {
+        digest(patch.as_bytes())
+    } else {
+        String::new()
+    };
     Ok(SavedEvidence {
         state, generation: support::unsigned(r.get(2))?,
         provider_uncertain: provider == "uncertain" || outcome.as_ref().is_some_and(|o|o.state=="uncertain"),
         source_commit: command.source_commit, runtime_image: command.runtime_image,
         configuration_revision_id: command.configuration_revision_id,
-        patch_available: outcome.as_ref().is_some_and(|o|!o.patch.is_empty()),
-        patch_digest: outcome.as_ref().map(|o|digest(o.patch.as_bytes())).unwrap_or_default(),
+        patch_available,
+        patch_digest,
         outcome_digest: outcome_bytes.as_ref().map(|b|digest(b)).unwrap_or_default(),
         quality_digest: quality_bytes.as_ref().map(|b|digest(b)).unwrap_or_default(),
         quality_state: quality.as_ref().map(|q|q.state.clone()).unwrap_or_default(),
@@ -204,11 +221,22 @@ impl WorkflowStore {
         } else {
             String::new()
         };
+        let ids: Vec<_> = records.iter().map(|r| r.id.as_str()).collect();
+        let confirmations = tx
+            .query(
+                "SELECT result FROM workflow_task_recovery_confirmations WHERE proposal_id=ANY($1)",
+                &[&ids],
+            )
+            .await?
+            .iter()
+            .map(|r| decode(&r.get::<_, Vec<u8>>(0)))
+            .collect::<Result<Vec<_>, _>>()?;
         tx.commit().await?;
         driver.abort();
         Ok(RecoveryPage {
             records,
             next_after_id,
+            confirmations,
         })
     }
 }

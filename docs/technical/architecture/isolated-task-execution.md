@@ -3,8 +3,8 @@
 An operator starts an exact prepared attempt with a bounded Git snapshot pack.
 One task runs at a time, in its own checkout and retained PVC. Accepted changes
 remain a patch and workspace for review. The separate [quality boundary](task-quality.md)
-validates a frozen reconstruction and retains Ayni evidence. Git push, publication,
-automatic repair and cross-task scheduling belong to later slices.
+validates a frozen reconstruction and retains Ayni evidence. Git push and publication require separate authority. A bounded repair pass requires
+[exact recovery confirmation](task-recovery.md); automatic repair and cross-task scheduling remain unavailable.
 
 ## Durable dispatch and authority
 
@@ -96,8 +96,8 @@ call may have an uncertain charge; cancellation never authorizes resending it.
 The slot is released only after the trusted supervisor confirms the owned Pod has
 disappeared, or accepts its terminal state. Pod loss after registration becomes an
 interrupted run with retained work and possible provider uncertainty. It does not
-silently create a replacement Pod or retry coding. Confirmed recovery belongs to
-M6. A process/container restart inside the same Pod can use the original ledger;
+silently create a replacement Pod or retry coding. Confirmed recovery uses the [M6 recovery contract](task-recovery.md): an exact proposal
+can authorize one linked attempt with its own ledger and allowance. A process/container restart inside the same Pod can use the original ledger;
 a retained sending record still prevents another paid call.
 
 Completed/failed Pods, source PVCs and scoped capability Secrets remain inspectable.

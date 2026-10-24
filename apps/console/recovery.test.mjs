@@ -20,3 +20,14 @@ test('foreign recovery records fail closed and clear displayed history', async (
   const history=createRecoveryHistory({api:async()=>({records:[{...scope,taskId:'foreign'}]}),changed:s=>{result=s;},failed:e=>{error=e;} });
   history.select(scope);await history.load();assert.equal(result.error,true);assert.deepEqual(result.records,[]);assert.ok(error);
 });
+
+test('confirmation requires exact originating attempt, explicit consent and possible-charge acknowledgement', async () => {
+  const { confirmationCommand } = await import('./recovery.mjs');
+  const record = { ...scope, id: 'proposal', contentDigest: 'sha256:exact', proposal: { evidence: { providerUncertain: true } } };
+  assert.throws(() => confirmationCommand(scope, record, false, true));
+  assert.throws(() => confirmationCommand(scope, record, true, false));
+  assert.throws(() => confirmationCommand({ ...scope, attemptId: 'foreign' }, record, true, true));
+  const command = confirmationCommand(scope, record, true, true);
+  assert.equal(command.method, 'ConfirmTaskRecovery');
+  assert.deepEqual(command.body, { workspaceId: 'w', projectId: 'p', conversationId: 'c', taskId: 't', proposalId: 'proposal', proposalDigest: 'sha256:exact', acknowledgeProviderUncertainty: true });
+});

@@ -65,7 +65,7 @@ export function mountFeedback({ getScope, api, showError, openTask }) {
         const current = getScope();
         if (current.workspaceId === selected.workspaceId && current.projectId === selected.projectId
           && (projectWide || current.conversationId === selected.conversationId)) {
-          Promise.resolve(openTask(selected, item.taskId, projectWide)).catch(showError);
+          Promise.resolve(openTask(selected, item.taskId, projectWide, item.attemptId)).catch(showError);
         }
       };
       article.append(heading, summary, origin, button); list.append(article);
