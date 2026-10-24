@@ -173,6 +173,11 @@ lock, runtime, quality and resulting draft commit. It never publishes to live
 GitHub or invokes a paid coding provider. The source, evidence and fixture remote
 remain available for inspection.
 
+Read-only attempt polling retries transient transport cancellation, unavailability
+and deadline errors up to three times with bounded backoff. Each retry is retained
+in `read-only-poll-retries.jsonl`; terminal task and quality failures still fail
+the profile immediately.
+
 `--m8` requires `AYNI_ORCHESTRATOR_SELF_DEVELOPMENT_RUNTIME_IMAGE` and includes this profile in its cumulative evidence.
 A second reviewed task against the same frozen source is cancelled while queued.
 Supervisor, publisher and PostgreSQL restarts must preserve the successful draft, cancelled attempt and exact receipts.

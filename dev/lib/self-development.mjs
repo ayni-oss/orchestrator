@@ -27,11 +27,18 @@ function command(program, args, filename, options = {}) {
   }
 }
 async function rpc(method, body, filename) {
-  const response = await fetch(`${base}/api/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-console-request': '1', Origin: base }, body: JSON.stringify(body), signal: AbortSignal.timeout(20_000) });
-  const result = await response.json();
-  if (filename) output(filename, { request: body, response: result });
-  assert(response.ok, `${method}: ${JSON.stringify(result)}`);
-  return result;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const response = await fetch(`${base}/api/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-console-request': '1', Origin: base }, body: JSON.stringify(body), signal: AbortSignal.timeout(20_000) });
+    const result = await response.json();
+    if (!response.ok && method === 'GetTaskAttempt' && ['Cancelled', 'Unavailable', 'DeadlineExceeded'].includes(result.code) && attempt < 3) {
+      fs.appendFileSync(path.join(evidence, 'read-only-poll-retries.jsonl'), JSON.stringify({ method, code: result.code, retry: attempt + 1 }) + '\n');
+      await delay(250 * 2 ** attempt);
+      continue;
+    }
+    if (filename) output(filename, { request: body, response: result });
+    assert(response.ok, `${method}: ${JSON.stringify(result)}`);
+    return result;
+  }
 }
 async function waitConsole() {
   for (let i = 0; i < 100; i++) {
