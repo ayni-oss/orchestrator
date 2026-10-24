@@ -80,7 +80,10 @@ bounds stdout at 512 KiB and diagnostics at 8 KiB, stopping oversized producers.
 The serial task slot and bounded attempt deadline cover all stages.
 
 The initial supported runtime profile uses four CPU and 8 GiB memory limits,
-matching Ayni 0.16.2's generated lock defaults. The unsigned local fixture
+matching Ayni 0.16.2's generated lock defaults. Managed preparation and quality
+share an 8-GiB bounded scratch volume for dependency caches and complete repository
+build output. This permits full Rust repository validation without exceeding the
+previous 2-GiB scratch cap. The unsigned local fixture
 certificate establishes runtime consistency. Trusted builder certification also
 requires the project's configured signing keys.
 

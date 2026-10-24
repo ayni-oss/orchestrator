@@ -226,7 +226,7 @@ fn pod_spec(s: &Supervisor, run: &TaskRun, name: &str) -> Result<Pod> {
     let mut volumes = json!([
         {"name":"work","persistentVolumeClaim":{"claimName":name}},{"name":"tools","emptyDir":{}},
         {"name":"coding-temporary","emptyDir":{"sizeLimit":"256Mi"}},
-        {"name":"runtime-temporary","emptyDir":{"sizeLimit":"2Gi"}},
+        {"name":"runtime-temporary","emptyDir":{"sizeLimit":"8Gi"}},
         {"name":"capability","secret":{"secretName":name}}
     ]);
     if (command.provider == "openai" && s.openai)
@@ -303,6 +303,21 @@ mod tests {
         };
         let pod = pod_spec(&supervisor, &run, "task-fixture")?;
         let spec = pod.spec.ok_or("pod spec")?;
+        let runtime_scratch = spec
+            .volumes
+            .as_ref()
+            .ok_or("volumes")?
+            .iter()
+            .find(|volume| volume.name == "runtime-temporary")
+            .ok_or("runtime scratch")?;
+        assert_eq!(
+            runtime_scratch
+                .empty_dir
+                .as_ref()
+                .and_then(|directory| directory.size_limit.as_ref())
+                .map(|quantity| quantity.0.as_str()),
+            Some("8Gi")
+        );
         let init = spec.init_containers.ok_or("init stages")?;
         for stage in &init {
             let mounts = stage.volume_mounts.as_ref().ok_or("mounts")?;
