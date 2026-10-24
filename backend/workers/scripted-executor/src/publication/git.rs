@@ -18,6 +18,7 @@ pub struct Prepared {
     pub commit: String,
     pub tree: String,
     pub root: PathBuf,
+    source: String,
 }
 fn command(root: &Path) -> tokio::process::Command {
     let mut command = tokio::process::Command::new("git");
@@ -176,7 +177,12 @@ pub async fn prepare(
         .env("GIT_COMMITTER_DATE", &date)
         .args(["commit-tree", &tree, "-p", &c.source_commit, "-F", "-"]);
     let commit = object(execute(commit, Some(c.commit_message.as_bytes())).await?)?;
-    Ok(Prepared { commit, tree, root })
+    Ok(Prepared {
+        commit,
+        tree,
+        root,
+        source: c.source_commit.clone(),
+    })
 }
 fn remote(root: &Path, c: &Configuration) -> tokio::process::Command {
     let mut command = command(root);
@@ -213,7 +219,70 @@ pub async fn head(prepared: &Prepared, c: &Configuration, branch: &str) -> Resul
     }
     Ok(Some(commit.into()))
 }
+async fn fetch_commits(prepared: &Prepared, c: &Configuration, commits: &[String]) -> Result {
+    let mut command = remote(&prepared.root, c);
+    command
+        .args([
+            "fetch",
+            "--depth=1",
+            "--filter=tree:0",
+            "--no-tags",
+            "--no-write-fetch-head",
+            &c.remote,
+        ])
+        .args(commits);
+    execute(command, None).await?;
+    Ok(())
+}
+async fn restore_publication_ancestry(prepared: &Prepared, c: &Configuration) -> Result {
+    let bytes = git(
+        &prepared.root,
+        &["cat-file", "commit", &prepared.source],
+        None,
+    )
+    .await?;
+    let commit = std::str::from_utf8(&bytes).map_err(|_| "publication source commit invalid")?;
+    let parents = commit
+        .lines()
+        .take_while(|line| !line.is_empty())
+        .filter_map(|line| line.strip_prefix("parent "))
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    if parents.is_empty() {
+        return Ok(());
+    }
+    if parents.len() > 32 || parents.iter().any(|parent| !sha(parent)) {
+        return Err("publication source ancestry exceeds bound".into());
+    }
+    // The frozen archive intentionally contains one snapshot, not Git history.
+    // Start with a shallow boundary so negotiation never traverses absent objects.
+    let shallow = prepared.root.join(".git/shallow");
+    fs::write(&shallow, format!("{}\n", prepared.source))?;
+    // An existing remote source is enough; fetch only its immutable identity.
+    if fetch_commits(prepared, c, std::slice::from_ref(&prepared.source))
+        .await
+        .is_ok()
+    {
+        return Ok(());
+    }
+    // An operator's unpublished merge commit instead needs its exact parents.
+    // No moving branch is fetched and these objects never change the frozen tree.
+    fetch_commits(prepared, c, &parents).await?;
+    let boundaries = fs::read_to_string(&shallow)?;
+    let retained = boundaries
+        .lines()
+        .filter(|line| *line != prepared.source)
+        .collect::<Vec<_>>()
+        .join("\n");
+    if retained.is_empty() {
+        fs::remove_file(shallow)?;
+    } else {
+        fs::write(shallow, format!("{retained}\n"))?;
+    }
+    Ok(())
+}
 pub async fn push(prepared: &Prepared, c: &Configuration, branch: &str) -> Result {
+    restore_publication_ancestry(prepared, c).await?;
     let reference = format!("refs/heads/{branch}");
     let lease = format!("--force-with-lease={reference}:");
     let target = format!("{}:{reference}", prepared.commit);
@@ -287,6 +356,153 @@ mod tests {
         assert!(prepare(&configuration, &command, &pack).await.is_err());
         Ok(())
     }
+    async fn snapshot(root: &Path, commit: &str) -> Result<Vec<u8>> {
+        let mut ids = std::collections::BTreeSet::from([commit.to_owned()]);
+        ids.insert(object(
+            git(root, &["rev-parse", &format!("{commit}^{{tree}}")], None).await?,
+        )?);
+        let entries = git(root, &["ls-tree", "-r", "-t", commit], None).await?;
+        for entry in std::str::from_utf8(&entries)?.lines() {
+            ids.insert(
+                entry
+                    .split_whitespace()
+                    .nth(2)
+                    .ok_or("fixture tree")?
+                    .to_owned(),
+            );
+        }
+        git(
+            root,
+            &["pack-objects", "--stdout"],
+            Some((ids.into_iter().collect::<Vec<_>>().join("\n") + "\n").as_bytes()),
+        )
+        .await
+    }
+    async fn descendant(root: &Path, tree: &str, parents: &[&str], name: &str) -> Result<String> {
+        let mut command = command(root);
+        command
+            .env("GIT_AUTHOR_NAME", "Fixture")
+            .env("GIT_AUTHOR_EMAIL", "fixture@example.invalid")
+            .env("GIT_COMMITTER_NAME", "Fixture")
+            .env("GIT_COMMITTER_EMAIL", "fixture@example.invalid")
+            .args(["commit-tree", tree, "-m", name]);
+        for parent in parents {
+            command.args(["-p", parent]);
+        }
+        object(execute(command, None).await?)
+    }
+    async fn upstream_sources(
+        source: &Path,
+        initial: &[u8],
+        base: &str,
+    ) -> Result<(String, String, String)> {
+        git(source, &["init"], None).await?;
+        git(source, &["unpack-objects", "-q"], Some(initial)).await?;
+        let tree = object(git(source, &["rev-parse", &format!("{base}^{{tree}}")], None).await?)?;
+        let first = descendant(source, &tree, &[base], "first upstream").await?;
+        let second = descendant(source, &tree, &[base], "second upstream").await?;
+        Ok((tree, first, second))
+    }
+    #[tokio::test]
+    #[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+    async fn snapshot_publication_restores_only_immutable_source_or_merge_parents_requires_loopback()
+    -> Result {
+        let root = tempfile::tempdir()?;
+        let remote_root = tempfile::tempdir()?;
+        let source_root = tempfile::tempdir()?;
+        let (mut configuration, mut publication, initial) = fixture(root.path())?;
+        let (_daemon, port) = daemon(remote_root.path()).await?;
+        configuration.remote = format!("git://127.0.0.1:{port}/repo.git");
+        let (tree, first, second) =
+            upstream_sources(source_root.path(), &initial, &publication.source_commit).await?;
+        let bare = remote_root.path().join("repo.git");
+        // A fixture remote may itself contain only a non-root source snapshot.
+        let first_snapshot = snapshot(source_root.path(), &first).await?;
+        git(&bare, &["unpack-objects", "-q"], Some(&first_snapshot)).await?;
+        git(&bare, &["update-ref", "refs/heads/first", &first], None).await?;
+        fs::write(bare.join("shallow"), format!("{first}\n"))?;
+        publication.patch_digest = digest(publication.patch.as_bytes());
+        // The known non-root source can remain a shallow boundary at the remote.
+        publication.source_commit = first.clone();
+        let pack = snapshot(source_root.path(), &first).await?;
+        publication.source_pack_digest = digest(&pack);
+        let known = prepare(&configuration, &publication, &pack).await?;
+        push(&known, &configuration, "task/known").await?;
+        assert_eq!(
+            head(&known, &configuration, "task/known").await?,
+            Some(known.commit.clone())
+        );
+        // Seed the real Git transport with the reviewed upstream identities.
+        for commit in [&first, &second] {
+            let objects = git(
+                source_root.path(),
+                &["rev-list", "--objects", "--no-object-names", commit],
+                None,
+            )
+            .await?;
+            let pack = git(
+                source_root.path(),
+                &["pack-objects", "--stdout"],
+                Some(&objects),
+            )
+            .await?;
+            git(&bare, &["unpack-objects", "-q"], Some(&pack)).await?;
+        }
+        git(&bare, &["update-ref", "refs/heads/first", &first], None).await?;
+        git(&bare, &["update-ref", "refs/heads/second", &second], None).await?;
+        // An unpublished integrated source instead resolves both exact parents.
+        let integrated = descendant(
+            source_root.path(),
+            &tree,
+            &[&first, &second],
+            "reviewed integration",
+        )
+        .await?;
+        publication.publication_id = uuid::Uuid::now_v7().to_string();
+        publication.source_commit = integrated.clone();
+        let pack = snapshot(source_root.path(), &integrated).await?;
+        publication.source_pack_digest = digest(&pack);
+        let merged = prepare(&configuration, &publication, &pack).await?;
+        push(&merged, &configuration, "task/integrated").await?;
+        assert_eq!(
+            head(&merged, &configuration, "task/integrated").await?,
+            Some(merged.commit.clone())
+        );
+        assert!(
+            git(
+                &merged.root,
+                &[
+                    "cat-file",
+                    "-e",
+                    &format!("{}^{{commit}}", publication.source_commit)
+                ],
+                None
+            )
+            .await
+            .is_ok()
+        );
+        assert_eq!(
+            object(git(&bare, &["rev-parse", &format!("{}^", merged.commit)], None).await?)?,
+            integrated
+        );
+        // An unknown immutable parent stays blocked; no branch can substitute it.
+        let unpublished =
+            descendant(source_root.path(), &tree, &[&first], "unpublished parent").await?;
+        let blocked =
+            descendant(source_root.path(), &tree, &[&unpublished], "blocked source").await?;
+        publication.publication_id = uuid::Uuid::now_v7().to_string();
+        publication.source_commit = blocked.clone();
+        let pack = snapshot(source_root.path(), &blocked).await?;
+        publication.source_pack_digest = digest(&pack);
+        let blocked = prepare(&configuration, &publication, &pack).await?;
+        assert!(
+            push(&blocked, &configuration, "task/blocked")
+                .await
+                .is_err()
+        );
+        assert_eq!(head(&blocked, &configuration, "task/blocked").await?, None);
+        Ok(())
+    }
     #[test]
     fn git_credentials_are_environment_only_and_global_configuration_is_disabled() -> Result {
         let root = tempfile::tempdir()?;
@@ -314,6 +530,12 @@ mod tests {
     }
     async fn daemon(root: &Path) -> Result<(tokio::process::Child, u16)> {
         git(root, &["init", "--bare", "repo.git"], None).await?;
+        git(
+            &root.join("repo.git"),
+            &["config", "uploadpack.allowFilter", "true"],
+            None,
+        )
+        .await?;
         let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
         let port = listener.local_addr()?.port();
         drop(listener);

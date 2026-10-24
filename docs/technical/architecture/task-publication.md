@@ -73,6 +73,15 @@ The publisher uses Git object operations without checking out source. It runs no
 project hooks, dependency preparation or quality commands. Commit metadata and
 timestamp are frozen, so recovery produces the same commit and tree.
 
+The frozen archive contains the selected source snapshot without its history.
+Before pushing, the publisher fetches only that exact source commit at depth one,
+without trees or blobs, from its configured remote. If the source is an unpublished
+integration commit, it instead fetches its exact parent commits, up to 32, and
+preserves the frozen source tree and commit identity. Those parents must already
+be available from the same remote; unavailable ancestry blocks publication.
+No moving branch is fetched or substituted, and create-only branch leases still
+protect existing remote work.
+
 The fixed service identity is `Ayni Orchestrator <orchestrator@ayni.build>`.
 Commits carry its DCO sign-off and an `ai-generated: true` trailer. They have no
 personal cryptographic signature; a remote policy requiring one rejects this

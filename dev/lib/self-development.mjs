@@ -26,12 +26,20 @@ function command(program, args, filename, options = {}) {
     throw new Error(`${program} failed${filename ? `; see ${filename}` : ''}`);
   }
 }
-async function rpc(method, body, filename) {
-  const response = await fetch(`${base}/api/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-console-request': '1', Origin: base }, body: JSON.stringify(body), signal: AbortSignal.timeout(20_000) });
-  const result = await response.json();
-  if (filename) output(filename, { request: body, response: result });
-  assert(response.ok, `${method}: ${JSON.stringify(result)}`);
-  return result;
+async function rpc(method, body, filename, deadline = Date.now() + 45_000) {
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(`${base}/api/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-console-request': '1', Origin: base }, body: JSON.stringify(body), signal: AbortSignal.timeout(Math.max(1, Math.min(20_000, deadline - Date.now()))) });
+    const result = await response.json();
+    const pause = Math.min(5000, 250 * 2 ** Math.min(attempt, 5));
+    if (!response.ok && method === 'GetTaskAttempt' && ['Cancelled', 'Unavailable', 'DeadlineExceeded'].includes(result.code) && Date.now() + pause < deadline) {
+      fs.appendFileSync(path.join(evidence, 'read-only-poll-retries.jsonl'), JSON.stringify({ method, code: result.code, retry: attempt + 1 }) + '\n');
+      await delay(pause);
+      continue;
+    }
+    if (filename) output(filename, { request: body, response: result });
+    assert(response.ok, `${method}: ${JSON.stringify(result)}`);
+    return result;
+  }
 }
 async function waitConsole() {
   for (let i = 0; i < 100; i++) {
@@ -44,7 +52,7 @@ async function waitAttempt(selection, stage, check, maxSeconds) {
   const end = Date.now() + maxSeconds * 1000;
   let last;
   while (Date.now() < end) {
-    last = (await rpc('GetTaskAttempt', selection)).attempt;
+    last = (await rpc('GetTaskAttempt', selection, undefined, end)).attempt;
     assert(last, 'attempt missing');
     if (check(last)) { output(`${stage}.json`, last); return last; }
     if (['failed', 'uncertain', 'interrupted', 'cancelled'].includes(last.state)) {
@@ -78,6 +86,7 @@ function launch(program, args, log) {
   const child = spawn(program, args, { cwd: root, stdio: ['ignore', descriptor, descriptor] });
   fs.closeSync(descriptor);
   reconnectedProcesses.push(child);
+  child.unref();
   return child;
 }
 async function reconnectGateway() {
@@ -179,5 +188,47 @@ try {
   assert.equal(pull.draft, true);
   assert(remote.references.includes(`refs/heads/${published.publication.branch} ${published.publication.commitSha}`));
 } finally { fixtureForward.kill(); fs.closeSync(fixtureLog); }
+// A second exact reviewed own-source task exercises cancellation before dispatch.
+const cancelledContent = structuredClone(plan.content);
+cancelledContent.title = 'Cancel queued own-source execution';
+cancelledContent.objective = 'Retain cancellation against the same frozen Orchestrator source.';
+const cancelledPlan = (await rpc('CreatePlan', { ...scope, idempotencyKey: randomUUID(), content: cancelledContent }, 'cancellation-plan.json')).version;
+const cancelledApproval = await rpc('ApprovePlan', { ...scope, idempotencyKey: randomUUID(), planId: cancelledPlan.planId, expectedVersionId: cancelledPlan.id, contentDigest: cancelledPlan.contentDigest }, 'cancellation-approval.json');
+assert.equal(cancelledApproval.tasks.length, 1);
+const cancellationPreparation = { ...preparationSelection, taskId: cancelledApproval.tasks[0].id, idempotencyKey: randomUUID() };
+output('cancellation-preparation-selection.json', cancellationPreparation);
+command(binary('workflow-prepare-task'), ['verify', address, checkout, file('cancellation-preparation-selection.json'), file('cancellation-preparation-request.json')], 'cancellation-verification.txt');
+const cancellationPrepared = JSON.parse(command(binary('workflow-prepare-task'), ['submit', address, file('cancellation-preparation-request.json')], 'cancellation-preparation-receipt.json')).preparation;
+assert(cancellationPrepared.attemptId && !cancellationPrepared.blockers?.length);
+const cancelledSelection = { ...scope, taskId: cancelledApproval.tasks[0].id, attemptId: cancellationPrepared.attemptId };
+command(binary('workflow-prepare-task'), ['start', address, checkout, file('cancellation-preparation-request.json'), file('cancellation-start-request.json')], 'cancellation-start-verification.txt');
+const kube = (...args) => command('kubectl', ['--context', 'docker-desktop', '--namespace', namespace, ...args]);
+kube('scale', 'deployment/task-supervisor', '--replicas=0');
+let cancellationRequest, cancellationReceipt, cancelled;
+try {
+  kube('wait', '--for=delete', 'pod', '-l', 'app.kubernetes.io/name=ayni-task-supervisor', '--timeout=2m');
+  command(binary('workflow-prepare-task'), ['submit-start', address, file('cancellation-start-request.json')], 'cancellation-start-receipt.json');
+  await waitAttempt(cancelledSelection, 'cancellation-queued', a => a.state === 'queued', 30);
+  cancellationRequest = { ...cancelledSelection, idempotencyKey: randomUUID() };
+  cancellationReceipt = await rpc('CancelTaskExecution', cancellationRequest, 'cancellation-receipt.json');
+  assert.deepEqual(await rpc('CancelTaskExecution', cancellationRequest), cancellationReceipt);
+  cancelled = await waitAttempt(cancelledSelection, 'cancellation-terminal', a => a.state === 'cancelled', 60);
+  assert.equal(cancelled.patch || '', '');
+  assert.equal(cancelled.sourceCommit, sourceCommit);
+  assert.equal(cancelled.runtimeImage, runtime);
+} finally { kube('scale', 'deployment/task-supervisor', '--replicas=1'); }
+kube('rollout', 'status', 'deployment/task-supervisor', '--timeout=2m');
+// Retained successful/cancelled authority must outlive the runtime owners.
+for (const workload of ['deployment/task-supervisor', 'deployment/task-publisher', 'statefulset/workflow-postgres']) {
+  const name = workload.split('/')[1];
+  command('kubectl', ['--context', 'docker-desktop', '--namespace', namespace, 'rollout', 'restart', workload], `self-development-restart-${name}.txt`);
+  kube('rollout', 'status', workload, '--timeout=3m');
+  assert.deepEqual((await rpc('GetTaskAttempt', selection)).attempt, published);
+  assert.deepEqual((await rpc('GetTaskAttempt', cancelledSelection)).attempt, cancelled);
+  assert.deepEqual(await rpc('CancelTaskExecution', cancellationRequest), cancellationReceipt);
+  assert.deepEqual(JSON.parse(command(binary('workflow-prepare-task'), ['submit-start', address, file('start-request.json')], `start-replay-${name}.json`)), JSON.parse(fs.readFileSync(file('start-receipt.json'), 'utf8')));
+  assert.deepEqual(JSON.parse(command(binary('workflow-publish-task'), ['submit', address, file('publication-request.json')], `publication-replay-${name}.json`)), JSON.parse(fs.readFileSync(file('publication-receipt.json'), 'utf8')));
+}
+output('cancellation-replay.json', { request: cancellationRequest, receipt: cancellationReceipt, terminal: cancelled, source_commit: sourceCommit, runtime_image: runtime });
 const image = JSON.parse(command('docker', ['image', 'inspect', fixtureImage]))[0];
-output('self-development.json', { schema: 'build.ayni.orchestrator.self-development-acceptance.v1', result: 'passed', actual_source_repository: 'https://github.com/ayni-oss/orchestrator.git', source_commit: sourceCommit, source_pack_digest: sha(pack), source_pack_bytes: pack.length, lock_digest: lockDigest, runtime_image: runtime, selected_source_paths: ['README.md'], coding: 'explicit deterministic fixture using actual Orchestrator source', quality: quality.quality, quality_digest: quality.qualityDigest, patch_digest: quality.patchDigest, publication: { protocol_fixture: true, declared_repository: fixtureRepository, image_id: image.Id, commit_sha: published.publication.commitSha, branch: published.publication.branch, pr_number: published.publication.prNumber }, live_provider: false, live_github: false, scope, task_id: task.id, attempt_id: preparation.attemptId });
+output('self-development.json', { schema: 'build.ayni.orchestrator.self-development-acceptance.v1', result: 'passed', gates: ['own-source-managed-quality-and-draft', 'own-source-queued-cancellation', 'own-source-owner-restart-exact-replay'], actual_source_repository: 'https://github.com/ayni-oss/orchestrator.git', source_commit: sourceCommit, source_pack_digest: sha(pack), source_pack_bytes: pack.length, lock_digest: lockDigest, runtime_image: runtime, selected_source_paths: ['README.md'], coding: 'explicit deterministic fixture using actual Orchestrator source', quality: quality.quality, quality_digest: quality.qualityDigest, patch_digest: quality.patchDigest, publication: { protocol_fixture: true, declared_repository: fixtureRepository, image_id: image.Id, commit_sha: published.publication.commitSha, branch: published.publication.branch, pr_number: published.publication.prNumber }, live_provider: false, live_github: false, scope, task_id: task.id, attempt_id: preparation.attemptId });

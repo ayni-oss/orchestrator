@@ -4,9 +4,11 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const port = Number(process.env.PORT || 8080);
 const delay = Number(process.env.PROVIDER_FIXTURE_DELAY_MS || 5000);
 const effectsPath = process.env.MCP_FIXTURE_EFFECTS_PATH;
-let priorEffects = 0;
-try { if (effectsPath) priorEffects = Number(readFileSync(effectsPath, 'utf8')); } catch {}
-const counters = { anthropicCalls:0, anthropicModes:{}, mcpReads: 0, mcpEffects: priorEffects, calls: 0, modes: {}, requestIds: [], toolContinuations: 0 };
+const retainedEffect = suffix => {
+  try { return effectsPath ? Number(readFileSync(effectsPath + suffix, 'utf8')) : 0; } catch { return 0; }
+};
+const counters = { anthropicCalls:0, anthropicModes:{}, mcpReads: 0, mcpEffects: retainedEffect(''), mcpLostEffects: retainedEffect('-lost'), mcpCancelledEffects: retainedEffect('-cancel'), calls: 0, modes: {}, requestIds: [], toolContinuations: 0 };
+const mcpTools = mode => mode === 'mcp-lost' ? ['mcp_fixture_lost'] : mode === 'mcp-cancel' ? ['mcp_fixture_cancel'] : ['mcp_fixture_read', 'mcp_fixture_write'];
 const toolNames = ['read_workspace_instructions', 'read_project_status', 'read_conversation_history'];
 const validTools = tools => tools === undefined || (Array.isArray(tools) && (tools.length >= 3 && tools.length <= 9) && new Set(tools.map(tool => tool.name)).size === tools.length && toolNames.every(name => tools.some(tool => tool.name === name)) && tools.every(tool => {
   if (tool.type !== 'function' || tool.strict !== true || tool.parameters?.type !== 'object' || tool.parameters?.additionalProperties !== false) return false;
@@ -37,16 +39,16 @@ const server = http.createServer(async (request, response) => {
     if (body.model!=='fixture-model' || body.stream!==false || body.thinking?.type!=='disabled' || !Number.isInteger(body.max_tokens) || !Array.isArray(body.messages) || !Array.isArray(body.tools) || body.messages.some(message=>!['user','assistant'].includes(message.role)||!Array.isArray(message.content)) || body.tools.some(tool=>!tool.name||!tool.input_schema||tool.type)) {response.writeHead(400).end();return;}
     const blocks=body.messages.flatMap(message=>message.content);
     const content=blocks.filter(block=>block.type==='text').map(block=>block.text).join(' ');
-    const mode=['disconnect','delay','mcp'].find(mode=>content.includes(`fixture:${mode}`))||'completed';
+    const mode=['disconnect','delay','mcp-lost','mcp-cancel','mcp'].find(mode=>content.includes(`fixture:${mode}`))||'completed';
     counters.calls++; counters.anthropicCalls++; counters.anthropicModes[mode]=(counters.anthropicModes[mode]||0)+1;
     counters.requestIds.push(request.headers['x-client-request-id']||'missing');
     if (mode==='disconnect') {response.destroy();return;}
     if (mode==='delay') await new Promise(resolve=>setTimeout(resolve,delay));
     const results=blocks.filter(block=>block.type==='tool_result');
     if (results.length && results.some(result=>!blocks.some(block=>block.type==='tool_use'&&block.id===result.tool_use_id)||typeof result.content!=='string')) {response.writeHead(400).end();return;}
-    const use=mode==='mcp'&&results.length===0;
-    if (use&&!['mcp_fixture_read','mcp_fixture_write'].every(name=>body.tools.some(tool=>tool.name===name))) {response.writeHead(400).end();return;}
-    const result={id:`msg_fixture_${counters.calls}`,type:'message',role:'assistant',model:'fixture-model',stop_reason:use?'tool_use':'end_turn',content:use?['mcp_fixture_read','mcp_fixture_write'].map((name,index)=>({type:'tool_use',id:`mcp_fixture_${index}`,name,input:{}})):[{type:'text',text:'Anthropic fixture completed.'}],usage:{input_tokens:12,output_tokens:8}};
+    const use=mode.startsWith('mcp')&&results.length===0;
+    if (use&&!mcpTools(mode).every(name=>body.tools.some(tool=>tool.name===name))) {response.writeHead(400).end();return;}
+    const result={id:`msg_fixture_${counters.calls}`,type:'message',role:'assistant',model:'fixture-model',stop_reason:use?'tool_use':'end_turn',content:use?mcpTools(mode).map((name,index)=>({type:'tool_use',id:`mcp_fixture_${index}`,name,input:{}})):[{type:'text',text:'Anthropic fixture completed.'}],usage:{input_tokens:12,output_tokens:8}};
     if (results.length) counters.toolContinuations++;
     response.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify(result));return;
   }
@@ -57,11 +59,20 @@ const server = http.createServer(async (request, response) => {
     let result;
     if (body.method === 'initialize') result = { protocolVersion:'2025-03-26', capabilities:{tools:{}}, serverInfo:{name:'ayni-fixture',version:'0.1.0'} };
     else if (body.method === 'notifications/initialized') { response.writeHead(202).end(); return; }
-    else if (body.method === 'tools/list') result = {tools:['fixture_read','fixture_write'].map(name => ({name,inputSchema:{type:'object',properties:{},required:[],additionalProperties:false}}))};
+    else if (body.method === 'tools/list') result = {tools:['fixture_read','fixture_write','fixture_lost','fixture_cancel'].map(name => ({name,inputSchema:{type:'object',properties:{},required:[],additionalProperties:false}}))};
     else if (body.method === 'tools/call' && body.params?.name === 'fixture_read') { counters.mcpReads++; result = {content:[{type:'text',text:'Fixture project fact.'}]}; }
     else if (body.method === 'tools/call' && body.params?.name === 'fixture_write') {
       counters.mcpEffects++; if (effectsPath) writeFileSync(effectsPath,String(counters.mcpEffects));
       result = {content:[{type:'text',text:'Fixture external action retained.'}]};
+    } else if (body.method === 'tools/call' && ['fixture_lost', 'fixture_cancel'].includes(body.params?.name)) {
+      const lost = body.params.name === 'fixture_lost';
+      const counter = lost ? 'mcpLostEffects' : 'mcpCancelledEffects';
+      counters[counter]++;
+      if (effectsPath) writeFileSync(effectsPath + (lost ? '-lost' : '-cancel'), String(counters[counter]));
+      // The external effect is durable before its response is lost or cancelled.
+      if (lost) { response.destroy(); return; }
+      await new Promise(resolve => setTimeout(resolve, 30000));
+      result = {content:[{type:'text',text:'Delayed fixture action retained.'}]};
     } else { response.writeHead(400).end(); return; }
     response.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({jsonrpc:'2.0',id:body.id,result})); return;
   }
@@ -79,7 +90,7 @@ const server = http.createServer(async (request, response) => {
     response.writeHead(400).end(); return;
   }
   const content = body.input.filter(item => item.role === 'user').at(-1)?.content || '';
-  const mode = ['proposal-malformed', 'proposal-scope', 'proposal-delay', 'proposal-mixed', 'proposal', 'no-usage', 'disconnect', 'delay', 'tool-scope', 'tool-limit', 'tool-args', 'tool-unknown', 'tool-restart', 'tools', 'mcp'].find(value => content.includes(`fixture:${value}`)) || (content.startsWith('Authorized task outcome assessment.') ? 'assessment' : 'completed');
+  const mode = ['proposal-malformed', 'proposal-scope', 'proposal-delay', 'proposal-mixed', 'proposal', 'no-usage', 'disconnect', 'delay', 'tool-scope', 'tool-limit', 'tool-args', 'tool-unknown', 'tool-restart', 'tools', 'mcp-lost', 'mcp-cancel', 'mcp'].find(value => content.includes(`fixture:${value}`)) || (content.startsWith('Authorized task outcome assessment.') ? 'assessment' : 'completed');
   counters.calls++;
   const sequence = counters.calls;
   counters.modes[mode] = (counters.modes[mode] || 0) + 1;
@@ -115,7 +126,7 @@ const server = http.createServer(async (request, response) => {
     const names = mode === 'tool-limit' ? Array.from({ length: 9 }, () => toolNames[0]) : mode === 'tools' ? toolNames : [mode === 'tool-unknown' ? 'shell' : toolNames[0]];
     result.output = names.map((name, index) => ({ id: `fc_fixture_${sequence}_${index}`, type: 'function_call', status: 'completed', call_id: `call_fixture_${sequence}_${index}`, name, arguments: mode === 'tool-scope' ? '{"conversation_id":"another-conversation"}' : mode === 'tool-args' ? JSON.stringify({ payload: 'x'.repeat(4096) }) : '{}' }));
   }
-  if (mode === 'mcp' && outputs.length === 0) result.output = ['mcp_fixture_read','mcp_fixture_write'].map((name,index) => ({id:`mcp_${index}`,type:'function_call',status:'completed',call_id:`mcp_fixture_${index}`,name,arguments:'{}'}));
+  if (mode.startsWith('mcp') && outputs.length === 0) result.output = mcpTools(mode).map((name,index) => ({id:`mcp_${index}`,type:'function_call',status:'completed',call_id:`mcp_fixture_${index}`,name,arguments:'{}'}));
   if (mode.startsWith('proposal') || mode === 'assessment') {
     if (!body.tools?.some(tool => tool.name === 'propose_plan')) { response.writeHead(400).end(); return; }
     const value = proposal();

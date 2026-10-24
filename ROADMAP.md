@@ -253,17 +253,26 @@ not establish live provider behavior or production capacity.
 
 ### M8 operational acceptance
 
-The combined change adds delayed source-archive reclamation, lifecycle/storage
-metrics, bounded concurrent dispatch acceptance, restart/replay evidence and a
-cumulative `--m8` operational profile. Eligible archives receive a retained 30-day
-grace period; unresolved work, provider uncertainty and recovery decisions protect
-their inputs. Commands, patches, quality evidence and authorization receipts remain.
+M8 extends the cumulative local profile across retention, diagnostics, capacity,
+clean-slate cutover and own-source execution. The required profile now includes
+successful multi-upstream integration and confirmed repair, worker-originated
+questions and proposals, deployed outcome assessment, OpenAI/Anthropic MCP
+recovery and managed Orchestrator self-development through a retained draft.
+Own-source cancellation and exact replay survive owner restarts.
+
+Eligible source archives retain a 30-day grace period. Accelerated persisted-clock
+integration checks exercise expiry and protection for unresolved work; commands,
+patches, quality evidence and authorization receipts remain retained. Deployed
+readiness and storage metrics accompany hardware, limits, immutable identities
+and the local four-active/two-queued dispatch observation.
 
 The [operational acceptance contract](docs/technical/operations/operational-acceptance.md)
-defines retention, diagnostics, clean-slate cutover, self-development and evidence
-boundaries. Each runnable report distinguishes passed gates from unmeasured ones.
-The final milestone remains open until its required cumulative deployed scenarios
-have executed successfully; implementation does not waive acceptance.
+defines required runtimes, retained evidence and report validation. Required
+profiles cannot be skipped to produce a passing cumulative report. Local passing
+evidence remains distinct from unmeasured live additional-provider qualification
+and sustained production capacity. The final milestone remains open until its
+recorded acceptance requirements have passing execution evidence; implementation
+alone does not close it.
 
 ### Validation at every milestone
 
