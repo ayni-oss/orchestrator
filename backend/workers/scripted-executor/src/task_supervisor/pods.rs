@@ -189,7 +189,7 @@ fn pod_spec(s: &Supervisor, run: &TaskRun, name: &str) -> Result<Pod> {
     let runtime_env = json!([
         {"name":"HOME","value":"/tmp/home"},{"name":"XDG_CACHE_HOME","value":"/tmp/cache"},
         {"name":"MISE_CACHE_DIR","value":"/tmp/mise"},{"name":"CARGO_HOME","value":"/tmp/cargo"},
-        {"name":"CARGO_TARGET_DIR","value":"/tmp/target"},{"name":"npm_config_cache","value":"/tmp/npm"},
+        {"name":"CARGO_INCREMENTAL","value":"0"},{"name":"CARGO_TARGET_DIR","value":"/tmp/target"},{"name":"npm_config_cache","value":"/tmp/npm"},
         {"name":"GIT_CONFIG_COUNT","value":"1"},{"name":"GIT_CONFIG_KEY_0","value":"safe.directory"},{"name":"GIT_CONFIG_VALUE_0","value":"/workspace"},
         {"name":"GRADLE_USER_HOME","value":"/tmp/gradle"},{"name":"UV_CACHE_DIR","value":"/tmp/uv"}
     ]);
@@ -226,7 +226,7 @@ fn pod_spec(s: &Supervisor, run: &TaskRun, name: &str) -> Result<Pod> {
     let mut volumes = json!([
         {"name":"work","persistentVolumeClaim":{"claimName":name}},{"name":"tools","emptyDir":{}},
         {"name":"coding-temporary","emptyDir":{"sizeLimit":"256Mi"}},
-        {"name":"runtime-temporary","emptyDir":{"sizeLimit":"8Gi"}},
+        {"name":"runtime-temporary","emptyDir":{"sizeLimit":"16Gi"}},
         {"name":"capability","secret":{"secretName":name}}
     ]);
     if (command.provider == "openai" && s.openai)
@@ -316,7 +316,7 @@ mod tests {
                 .as_ref()
                 .and_then(|directory| directory.size_limit.as_ref())
                 .map(|quantity| quantity.0.as_str()),
-            Some("8Gi")
+            Some("16Gi")
         );
         let init = spec.init_containers.ok_or("init stages")?;
         for stage in &init {
@@ -391,6 +391,7 @@ mod tests {
                 .all(|v| !v.name.starts_with("ORCHESTRATOR_") && v.name != "OPENAI_BASE_URL")
         );
         for (name, value) in [
+            ("CARGO_INCREMENTAL", "0"),
             ("GIT_CONFIG_COUNT", "1"),
             ("GIT_CONFIG_KEY_0", "safe.directory"),
             ("GIT_CONFIG_VALUE_0", "/workspace"),
