@@ -68,6 +68,19 @@ A process-level seccomp filter allows only Unix sockets. It also blocks io_uring
 and cross-process descriptor acquisition. Preparation, checks and their
 descendants inherit this filter regardless of cluster NetworkPolicy enforcement.
 
+### Test capability prerequisites
+
+Orchestrator's managed checks compile every workspace test target under the
+strict socket filter. Pure tests and network-denial assertions run there. Tests
+that require a real loopback HTTP, gRPC or Git fixture declare that prerequisite
+and remain ignored in this environment, following the existing disposable
+PostgreSQL and JetStream fixture pattern. The required host gate
+`scripts/ci/check-workflow-loopback.sh` verifies socket capability and the complete
+declared test inventory before running all loopback fixtures. CI requires this
+gate in addition to workspace tests and the database/broker integration gates.
+A passing managed artifact alone does not claim those host integration proofs.
+The jail and managed Ayni configuration and lock stay unchanged.
+
 ### Retention and resources
 
 The launcher captures output in root-owned mode-0600 regular files. The trusted

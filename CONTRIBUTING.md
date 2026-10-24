@@ -66,6 +66,7 @@ Use the pinned toolchain in `rust-toolchain.toml`:
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --all-targets
+scripts/ci/check-workflow-loopback.sh
 cargo check --workspace --all-targets
 pnpm install --frozen-lockfile
 pnpm typecheck
@@ -80,6 +81,14 @@ scripts/ci/check-workflow-private-v1-feasibility.sh
 Run affected protocol, Helm and repository quality checks described by
 `.github/workflows/pr-validation.yml` and `.ayni.toml`. Runtime behavior changes
 also require the explicit Docker Desktop Kubernetes topology.
+
+Tests that bind real TCP fixtures declare a loopback prerequisite with an
+explicit ignore reason and a `_requires_loopback` suffix. The mandatory host
+loopback gate checks socket capability, reconciles the declared source inventory
+with Cargo's ignored-test inventory, and executes every listed fixture. It fails
+when networking is unavailable or an inventory differs. The Rust and PostgreSQL
+CI job runs this gate after workspace tests. PostgreSQL and JetStream retain their
+separate required integration gates.
 
 ## Shared CI
 

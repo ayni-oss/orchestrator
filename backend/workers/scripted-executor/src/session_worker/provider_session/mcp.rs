@@ -463,7 +463,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn http_profile_initializes_scoped_tool_and_returns_only_bounded_result()
+    #[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+    async fn http_profile_initializes_scoped_tool_and_returns_only_bounded_result_requires_loopback()
     -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::post};
         async fn handler(Json(body): Json<Value>) -> axum::response::Response {

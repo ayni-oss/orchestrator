@@ -73,7 +73,8 @@ async fn trusted_listener_and_readiness_cover_private_workflow_boundary() -> Tes
 }
 
 #[tokio::test]
-async fn readiness_fails_closed_and_listener_rejects_public_bind() -> TestResult {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn readiness_fails_closed_and_listener_rejects_public_bind_requires_loopback() -> TestResult {
     let readiness = router(WorkflowReadiness::new(
         "postgresql://127.0.0.1:1/unavailable",
         "ayni_runtime",

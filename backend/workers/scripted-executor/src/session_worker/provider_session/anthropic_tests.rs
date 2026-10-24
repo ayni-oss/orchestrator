@@ -31,7 +31,9 @@ async fn anthropic_fixture(malformed: bool) -> Fixture {
 }
 
 #[tokio::test]
-async fn anthropic_uses_selected_transport_and_retained_uncertainty_without_resending() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn anthropic_uses_selected_transport_and_retained_uncertainty_without_resending_requires_loopback()
+ {
     for malformed in [false, true] {
         let fixture = anthropic_fixture(malformed).await;
         let directory = tempfile::tempdir().unwrap();

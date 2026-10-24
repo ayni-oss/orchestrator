@@ -345,7 +345,9 @@ mod tests {
         Err("fixture Git daemon unavailable".into())
     }
     #[tokio::test]
-    async fn create_only_push_recovers_same_commit_and_never_overwrites_another_head() -> Result {
+    #[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+    async fn create_only_push_recovers_same_commit_and_never_overwrites_another_head_requires_loopback()
+    -> Result {
         let root = tempfile::tempdir()?;
         let remote_root = tempfile::tempdir()?;
         let (mut configuration, mut command, pack) = fixture(root.path())?;

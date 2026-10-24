@@ -186,6 +186,8 @@ jobs:
         run: python3 -m unittest discover -s dev/lib -p 'test_*.py'
       - name: Test workspace
         run: cargo test --workspace --all-targets
+      - name: Test required loopback fixtures
+        run: scripts/ci/check-workflow-loopback.sh
       - name: Lint workspace
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test cumulative M1 authority, transport and recovery

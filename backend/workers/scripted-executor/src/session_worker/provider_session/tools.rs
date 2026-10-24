@@ -748,7 +748,9 @@ mod tests {
         clippy::too_many_lines,
         reason = "one retained-ledger external-effect scenario"
     )]
-    async fn exact_external_effect_consent_is_consumed_once_and_survives_ledger_reopen() {
+    #[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+    async fn exact_external_effect_consent_is_consumed_once_and_survives_ledger_reopen_requires_loopback()
+     {
         use axum::{Json, Router, response::IntoResponse, routing::post};
         use std::sync::atomic::{AtomicUsize, Ordering};
         let count = Arc::new(AtomicUsize::new(0));
