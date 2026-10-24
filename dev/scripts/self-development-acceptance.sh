@@ -19,8 +19,8 @@ trap cleanup EXIT INT TERM
 cd "$DEV_REPOSITORY_ROOT"
 # Only committed source enters the snapshot. The disposable checkout's fixture
 # remote identity is deliberate and recorded separately from its actual lineage.
-git diff --quiet HEAD -- backend Cargo.toml Cargo.lock proto .ayni.toml .ayni.lock || {
-  echo 'commit the frozen Rust/protocol/managed inputs before self-development acceptance' >&2; exit 1;
+[[ -z "$(git status --porcelain --untracked-files=all)" ]] || {
+  echo 'commit all tracked and untracked source before own-source self-development acceptance' >&2; exit 1;
 }
 cargo build --locked -p ayni-orchestrator-control-plane \
   --bin workflow-console --bin workflow-prepare-task --bin workflow-publish-task > "$evidence/host-helper-build.txt" 2>&1
