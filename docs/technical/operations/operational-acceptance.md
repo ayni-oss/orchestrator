@@ -1,37 +1,56 @@
 # Operational acceptance
 
-Run the cumulative operational profile in an owned Docker Desktop namespace:
+Run the cumulative local profile against a committed checkout in an owned Docker Desktop namespace.
+Build and load the digest-pinned managed runtime for the full Orchestrator source before starting.
+The profile requires the task-quality fixture runtime, local Rust/Node tooling and installed Playwright Chromium.
+It rejects a missing own-source runtime before running the expensive deployed gates.
 
 ```sh
 AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-example \
+AYNI_ORCHESTRATOR_SELF_DEVELOPMENT_RUNTIME_IMAGE=docker.io/local/orchestrator-runtime@sha256:REPLACE_WITH_ACTUAL_DIGEST \
   dev/ctl acceptance /absolute/new/evidence-directory --m8
 ```
 
-The profile runs the existing M4 publication/failure matrix and M6 independent-task
-recovery matrix, then adds six concurrent task admissions. With dispatch paused,
-all six are durably queued. Once resumed, four distinct attempts receive distinct
-Pod identities while two remain queued. A reviewed cyclic graph is rejected and
-unselected dependency commits keep a dependent task blocked. A supervisor restart
-must adopt the exact active identities. Cancellation then settles all six tasks;
-control-plane, supervisor and PostgreSQL restarts must preserve terminal evidence
-and exact start/cancel receipts.
+## Required local evidence
 
-The profile also runs deployed readiness and the ordinary conversation diagnostic.
-A separate disposable PostgreSQL suite checks accepted multi-upstream selections,
-retained recovery, bounded assessment consent and source-reclamation safety. These
-are database integration results; the report preserves that boundary.
+| Gate | Observable result |
+| --- | --- |
+| Cumulative M4 and M6 | Publication, cancellation, pod loss, fenced reports and retained cleanup replay their accepted identities. |
+| Dependencies | Two accepted upstream draft commits become explicit, frozen inputs to a dependent attempt and its confirmed repair. |
+| Worker recovery | A worker question and model proposal require an answer and exact confirmation before bounded continuation. |
+| Outcome assessment | Accepted worker results trigger bounded assessment; changed outcomes reject stale proposals and consent survives response loss. |
+| MCP and providers | OpenAI and Anthropic protocol fixtures exercise tool consent, external-effect uncertainty, cancellation and retained replay after pod replacement. |
+| Own-source execution | Reviewed Orchestrator source passes actual managed quality, retains one draft, and preserves cancellation and replay across owner restarts. |
+| Retention and cutover | Disposable PostgreSQL tests exercise persisted grace-period expiry; the exact private-v1 inventory rejects obsolete entry points. |
+| Diagnostics and capacity | Readiness, lifecycle/storage metrics, hardware, resource limits and image/source/lock identities accompany four active and two queued attempts. |
 
-`acceptance.json` records completed and unmeasured gates and fingerprints retained
-evidence. `outcome.json` reports whether the runnable profile passed. Neither a
-passing profile nor its four-slot capacity observation declares all M8 acceptance
-complete. Full closure still needs the separately identified deployed integration,
-provider, retention-window, production-capacity and self-development evidence.
-Live provider execution and live GitHub publication are absent from this fixture
-profile.
+The capacity scenario first pauses dispatch so all six admissions remain durably queued.
+Resuming dispatch must produce four distinct active Pod identities and two queued attempts.
+Supervisor restart preserves those identities; cancellation and owner restarts preserve exact start/cancel receipts.
+The cycle and unresolved-upstream checks reject work before execution.
 
-Evidence and authoritative stores remain after the run. Use the existing local
-cleanup workflow to stop the deployment while retaining data. Permanent namespace
-or retained-store removal requires an explicit separate decision.
+## Reading the report
+
+`acceptance.json` validates required profile schemas, gates, retained artifact fingerprints and frozen source identity.
+Incomplete profiles, changed artifacts, duplicate attempts and changed adoption identities fail aggregation.
+`outcome.json` reports failure when any required profile fails, including own-source execution.
+Both reports retain the distinction between local completion and milestone qualification.
+
+| Field | Meaning |
+| --- | --- |
+| `cumulative_profile_complete` | Every required runnable local profile passed. |
+| `local_acceptance_complete` | Required deployed local scenarios and managed self-development passed. |
+| `milestone_complete` | Remains false while live additional-provider qualification and sustained production capacity remain unmeasured. |
+| `artifacts_sha256` | Fingerprints of retained inputs, reports and observations for review. |
+
+The provider and coding profiles use explicitly deterministic fixtures; publication uses real Git transport and a local GitHub protocol fixture.
+These results establish protocol and recovery behavior without asserting autonomous coding ability, live-provider behavior or production throughput.
+The accelerated persisted-clock retention tests establish grace-period policy correctness without waiting thirty days.
+They do not measure production storage growth.
+
+Evidence and authoritative stores remain after the run, including the MCP session namespace and ledger.
+Use the existing local cleanup workflow to stop deployments while retaining data.
+Permanent namespace or retained-store removal requires an explicit separate decision.
 
 ## Retained source archives
 
@@ -93,8 +112,8 @@ frozen Orchestrator source commit, execute in isolated worktrees, validate with
 the actual managed Ayni runtime, retain complete quality evidence and end at a
 reviewable draft. Capture cancellation and restart behavior and the exact
 source/image/lock identities. The own-source deterministic coding profile below
-validates the bounded execution, managed-quality and draft-publication topology;
-it does not establish autonomous coding capability. A passing host check, this
+validates execution, managed quality, cancellation, restart replay and draft publication.
+It does not establish autonomous coding capability. A passing host check, this
 implementation PR, or manual commits alone do not satisfy the deployed gate.
 Users retain merge and deployment authority. Keep `milestone_complete` false
 until every recorded prerequisite and cumulative deployed gate has passing
@@ -154,6 +173,11 @@ lock, runtime, quality and resulting draft commit. It never publishes to live
 GitHub or invokes a paid coding provider. The source, evidence and fixture remote
 remain available for inspection.
 
-Set `AYNI_ORCHESTRATOR_SELF_DEVELOPMENT_RUNTIME_IMAGE` when running `--m8` to
-include this profile in the cumulative evidence. Its passing topology evidence
-does not establish general autonomous coding capability.
+Read-only attempt polling retries transient transport cancellation, unavailability
+and deadline errors up to three times with bounded backoff. Each retry is retained
+in `read-only-poll-retries.jsonl`; terminal task and quality failures still fail
+the profile immediately.
+
+`--m8` requires `AYNI_ORCHESTRATOR_SELF_DEVELOPMENT_RUNTIME_IMAGE` and includes this profile in its cumulative evidence.
+A second reviewed task against the same frozen source is cancelled while queued.
+Supervisor, publisher and PostgreSQL restarts must preserve the successful draft, cancelled attempt and exact receipts.

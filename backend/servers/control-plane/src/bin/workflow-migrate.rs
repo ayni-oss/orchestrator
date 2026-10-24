@@ -16,6 +16,7 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             error!(
+                target: "ayni_orchestrator_control_plane::migration",
                 reason_code = "workflow_migration_failed",
                 error = %ayni_orchestrator_observability::redact(&error.to_string()),
                 "workflow migration runner failed"
@@ -34,6 +35,6 @@ async fn migrate() -> Result<(), io::Error> {
     )
     .await
     .map_err(io::Error::other)?;
-    info!("workflow schema migration and validation passed");
+    info!(target: "ayni_orchestrator_control_plane::migration", "workflow schema migration and validation passed");
     Ok(())
 }

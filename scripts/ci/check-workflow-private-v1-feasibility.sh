@@ -86,10 +86,16 @@ PY
 
 # Superseded handwritten private-v1 RPC consumers must not survive the reset.
 legacy='GetWorkspace|UpdateWorkspace|ArchiveWorkspace|WatchProjects|ListProjectSummaries|GetProject|UpdateProject|ArchiveProject|UpdateProjectConversationSettings|CancelProjectAgentRun|GetProjectConversationContext|ListProjectConversationHistory|WatchProjectConversation|CreateProjectConversation|ListProjectConversations|GetProjectConversation|SendProjectMessage|DecideProjectPlan|DecideProjectProposal'
-if rg -n --glob '!**/src/generated/**' --glob '!docs/**' --glob '!scripts/ci/check-workflow-private-v1-feasibility.sh' \
-  "$legacy" backend clients packages apps dev; then
+if git grep -n -I -E --untracked --exclude-standard "$legacy" -- \
+  backend clients apps dev ':(exclude)**/src/generated/**'; then
   printf '%s\n' 'superseded handwritten private-v1 consumer remains' >&2
   exit 1
+else
+  search_status=$?
+  if [ "$search_status" -ne 1 ]; then
+    printf '%s\n' "private-v1 consumer scan failed (git grep exit $search_status)" >&2
+    exit "$search_status"
+  fi
 fi
 
 # Workflow services are wired only to the trusted loopback listener. There is
@@ -97,9 +103,16 @@ fi
 grep -q 'DEFAULT_GRPC_BIND_ADDRESS.*' backend/servers/control-plane/src/configuration.rs
 grep -q '"127.0.0.1:50051"' backend/servers/control-plane/src/configuration.rs
 grep -q 'if !address.ip().is_loopback()' backend/servers/control-plane/src/workflow.rs
-if rg -n '50052|custom.?client' backend/servers/control-plane/src deploy/charts/ayni-orchestrator/templates dev/charts/ayni-orchestrator-local/templates; then
+if git grep -n -I -E --untracked --exclude-standard '50052|custom.?client' -- \
+  backend/servers/control-plane/src deploy/charts/ayni-orchestrator/templates dev/charts/ayni-orchestrator-local/templates; then
   printf '%s\n' 'custom-client workflow exposure remains in the current runtime' >&2
   exit 1
+else
+  search_status=$?
+  if [ "$search_status" -ne 1 ]; then
+    printf '%s\n' "private-v1 listener scan failed (git grep exit $search_status)" >&2
+    exit "$search_status"
+  fi
 fi
 
 printf '%s\n' 'private-v1-cutover: canonical-surface=pass stale-consumers=absent trusted-loopback=pass custom-listener=absent'

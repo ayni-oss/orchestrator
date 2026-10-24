@@ -10,6 +10,8 @@ use ayni_orchestrator_events::{
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 use std::error::Error;
+#[path = "mcp_acceptance/external_effects.rs"]
+mod external_effects;
 const TOKEN: &str = "public-mcp-acceptance-session-token-01234567890123456789";
 fn id(n: u8) -> String {
     format!("019a0000-0000-7000-8000-{n:012}")
@@ -29,19 +31,24 @@ async fn main() -> DriverResult<()> {
     let before = read_stats(&client, &fixture).await?;
     let (prepared, command_digest) =
         prepare_fixture(&client, &worker, provider, "fixture:mcp", 6).await?;
-    if replay {
+    let result = if replay {
         require_result(&prepared)?;
+        prepared["result"].clone()
     } else {
-        execute_success(&client, &worker, provider, &prepared).await?;
-    }
+        execute_success(&client, &worker, provider, &prepared).await?
+    };
     let after = read_stats(&client, &fixture).await?;
     validate_effects(&before, &after, replay)?;
-    if anthropic {
-        failure_profiles(&client, &worker, &fixture, replay).await?;
-    }
+    let external_effects =
+        external_effects::profiles(&client, &worker, &fixture, provider, replay).await?;
+    let provider_failures = if anthropic {
+        failure_profiles(&client, &worker, &fixture, replay).await?
+    } else {
+        Vec::new()
+    };
     println!(
         "{}",
-        json!({"outcome":"passed","profile":"deployed-provider-mcp-worker","provider":provider,"replay":replay,"checks":["selected-provider-headers","tool-discovery","frozen-tools","exact-external-effect-consent","retained-tool-output","pod-replacement-replay"],"provider_failure_checks":anthropic,"external_effects":after["mcpEffects"],"command_id":id(6),"command_digest":command_digest})
+        json!({"outcome":"passed","profile":"deployed-provider-mcp-worker","provider":provider,"replay":replay,"checks":["selected-provider-headers","tool-discovery","frozen-tools","exact-external-effect-consent","retained-tool-output","pod-replacement-replay"],"provider_failure_checks":anthropic,"external_effects":after["mcpEffects"],"command_id":id(6),"command_digest":command_digest,"success_result":result,"external_effect_failures":external_effects,"provider_failures":provider_failures,"final_stats":read_stats(&client, &fixture).await?})
     );
     Ok(())
 }
@@ -90,7 +97,7 @@ async fn execute_success(
     worker: &str,
     provider: &str,
     prepared: &Value,
-) -> DriverResult<()> {
+) -> DriverResult<Value> {
     let result: Value = send_request(client, worker, prepared, 6)
         .send()
         .await?
@@ -111,7 +118,7 @@ async fn execute_success(
     if tools.len() != 2 || tools.iter().any(|tool| tool["state"] != "completed") {
         return Err("scoped MCP evidence incomplete".into());
     }
-    Ok(())
+    Ok(result)
 }
 
 type FixtureCommand = (Vec<u8>, Vec<ConversationContextRecord>);
@@ -229,13 +236,15 @@ async fn failure_profiles(
     worker: &str,
     fixture: &str,
     replay: bool,
-) -> DriverResult<()> {
+) -> DriverResult<Vec<Value>> {
+    let mut results = Vec::new();
     for (mode, seed) in [("fixture:disconnect", 20), ("fixture:delay", 40)] {
         let before = read_stats(client, fixture).await?;
         let (prepared, command_digest) =
             prepare_fixture(client, worker, "anthropic", mode, seed).await?;
-        if replay {
+        let result = if replay {
             require_result(&prepared)?;
+            prepared["result"].clone()
         } else {
             execute_failure(
                 client,
@@ -246,8 +255,10 @@ async fn failure_profiles(
                 &command_digest,
                 seed,
             )
-            .await?;
-        }
+            .await?
+        };
+        validate_failure(&result, seed)?;
+        results.push(result);
         let after = read_stats(client, fixture).await?;
         let (retained, _) = prepare_fixture(client, worker, "anthropic", mode, seed).await?;
         require_result(&retained)?;
@@ -256,7 +267,7 @@ async fn failure_profiles(
             return Err("uncertainty or cancellation replay resent provider request".into());
         }
     }
-    Ok(())
+    Ok(results)
 }
 async fn execute_failure(
     client: &reqwest::Client,
@@ -266,14 +277,15 @@ async fn execute_failure(
     prepared: &Value,
     command_digest: &str,
     seed: u8,
-) -> DriverResult<()> {
+) -> DriverResult<Value> {
     let request = send_request(client, worker, prepared, seed);
     let result = if seed == 40 {
         cancel_in_flight(client, worker, fixture, before, request, command_digest).await?
     } else {
         request.send().await?.error_for_status()?.json().await?
     };
-    validate_failure(&result, seed)
+    validate_failure(&result, seed)?;
+    Ok(result)
 }
 fn validate_failure(result: &Value, seed: u8) -> DriverResult<()> {
     if seed == 20 && result["provider_call"]["state"] != "uncertain" {

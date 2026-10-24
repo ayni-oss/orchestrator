@@ -44,8 +44,13 @@ class Store:
             commit = json.loads(Path(metadata).read_text())["source_commit"]
             self.git("update-ref", "refs/heads/main", commit)
             self.git("symbolic-ref", "HEAD", "refs/heads/main")
+            # Source packs freeze one snapshot rather than its full history.
+            # A non-root seed must be an explicit shallow repository boundary.
+            if any(line.startswith("parent ") for line in self.git("cat-file", "commit", commit).splitlines()):
+                (self.repository / "shallow").write_text(commit + "\n")
             self.git("config", "receive.denyNonFastForwards", "true")
             self.git("config", "receive.denyDeletes", "true")
+        self.git("config", "uploadpack.allowFilter", "true")
         self.persist()
 
     def git(self, *arguments, input=None):
