@@ -250,7 +250,7 @@ for scenario in cancellation pod-loss; do
     /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 "$mode" \
     < "$evidence/task-$scenario.json" > "$evidence/task-$scenario-result.txt"
 done
-kubectl --context "$context" --namespace "${namespace}-sessions" get pvc -o json | python3 -c 'import json,sys; print(json.dumps(sorted((p["metadata"]["name"],p["metadata"]["uid"],p["spec"].get("volumeName","")) for p in json.load(sys.stdin)["items"])))' > "$evidence/task-pvc-before.json"
+kubectl --context "$context" --namespace "${namespace}-sessions" get pvc -o json | python3 -c 'import json,sys; print(json.dumps(sorted((p["metadata"]["name"],p["metadata"]["uid"],p["spec"].get("volumeName","")) for p in json.load(sys.stdin)["items"])))' > "$evidence/task-pvc-before-delivery.json"
 pvc_identity > "$evidence/pvc-after-task-provisioning.json"
 pvc_expected="$evidence/pvc-after-task-provisioning.json"
 fi
@@ -279,6 +279,32 @@ fi
 kubectl --context "$context" --namespace "$namespace" scale "$scaled_down" --replicas=1 >> "$evidence/broker-outage.txt"
 kubectl --context "$context" --namespace "$namespace" rollout status "$scaled_down" --timeout=3m >> "$evidence/broker-outage.txt"
 scaled_down=
+if [[ "$profile" == --coding-only || "$profile" == --quality-only ]]; then
+  # Broker recovery must settle every admitted continuity conversation before
+  # freezing retained session storage. No PVC identity comparison is relaxed.
+  pod="$(control_pod)"
+  continuity_cases=(task-run)
+  if [[ "$profile" == --quality-only ]]; then
+    continuity_cases+=(task-quality-run task-quality-failed-run)
+  fi
+  for continuity_case in "${continuity_cases[@]}"; do
+    kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
+      /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --settle-project-continuity-stdin \
+      < "$evidence/$continuity_case.json" > "$evidence/continuity-$continuity_case-completed.txt"
+  done
+kubectl --context "$context" --namespace "${namespace}-sessions" get pvc -o json | python3 -c 'import json,sys; print(json.dumps(sorted((p["metadata"]["name"],p["metadata"]["uid"],p["spec"].get("volumeName","")) for p in json.load(sys.stdin)["items"])))' > "$evidence/task-pvc-before.json"
+  python3 - "$evidence" <<'PYCODE'
+from pathlib import Path
+import json, sys
+root=Path(sys.argv[1])
+before=json.loads(root.joinpath('task-pvc-before-delivery.json').read_text())
+after=json.loads(root.joinpath('task-pvc-before.json').read_text())
+assert all(identity in after for identity in before), 'delivery recovery lost or replaced retained task/session PVCs'
+root.joinpath('task-pvc-delivery-retention.json').write_text(json.dumps({
+    'result':'passed','retained_identities':len(before),'settled_identities':len(after)
+},indent=2)+'\n')
+PYCODE
+fi
 if [[ "$profile" == full ]]; then
 pod="$(control_pod)"
 kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane --   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-pending-stdin   < "$evidence/pending-before-restart.json" > "$evidence/pending-after-restart.json"

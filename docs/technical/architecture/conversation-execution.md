@@ -120,12 +120,15 @@ The initial tool set consists only of scoped reads:
 | Tool | Allowed input and output |
 | --- | --- |
 | `read_workspace_instructions` | Read the instructions in the turn's frozen configuration revision. |
-| `read_project_status` | Read the originating project's objective and factual status at an explicitly retained snapshot. No other conversation transcript, plan or reasoning. |
+| `read_project_status` | Read the originating project's objective, factual status, bounded task lifecycle facts and accepted outcomes at a retained snapshot. No other conversation transcript, plan or reasoning. |
 | `read_conversation_history` | Read bounded accepted history from the originating conversation through the frozen eligibility boundary. |
 
 Project status freezes at turn eligibility alongside the originating conversation
-context. It contains the project objective and factual status, never another
-conversation transcript. Replaying the command uses that retained snapshot.
+context. It contains the project objective, factual status and at most 20 task
+facts, with `total_tasks` and `has_more_tasks` describing the selection. Coding, quality
+and publication remain separate. Replaying the command uses that retained
+snapshot. The [factual continuity contract](project-continuity.md) owns selection,
+privacy and outcome interpretation.
 
 Each invocation carries the turn/assignment/generation, a stable invocation ID,
 validated arguments, an input digest and bounded retained output. Tools cannot

@@ -218,6 +218,31 @@ export interface ProjectStatusSnapshot {
   status: string;
   contextRevision: string;
   projectResourceVersion: string;
+  /**
+   * Latest attempt per admitted task, including terminal or awaiting-execution work.
+   * Facts are ordered by attempt creation time then task ID.
+   * Bounded to 20 facts; omission is explicit and never implies completion.
+   */
+  tasks: ProjectTaskFact[];
+  /** Absent on retained commands that predate task continuity; absence means unknown. */
+  totalTasks?: string | undefined;
+  hasMoreTasks: boolean;
+}
+
+/** Factual lifecycle and accepted evidence only; no transcript, plan text or patch. */
+export interface ProjectTaskFact {
+  taskId: string;
+  attemptId: string;
+  parentAttemptId: string;
+  codingState: string;
+  qualityState: string;
+  qualityArtifactDigest: string;
+  publicationState: string;
+  publicationId: string;
+  pullRequestUrl: string;
+  /** Terminal coding result retained by the canonical report acceptance path. */
+  acceptedCodingState: string;
+  providerState: string;
 }
 
 /** Safe metadata only. Arguments and output remain in the scoped worker ledger. */
@@ -2295,6 +2320,9 @@ function createBaseProjectStatusSnapshot(): ProjectStatusSnapshot {
     status: "",
     contextRevision: "0",
     projectResourceVersion: "0",
+    tasks: [],
+    totalTasks: undefined,
+    hasMoreTasks: false,
   };
 }
 
@@ -2317,6 +2345,15 @@ export const ProjectStatusSnapshot: MessageFns<ProjectStatusSnapshot> = {
     }
     if (message.projectResourceVersion !== "0") {
       writer.uint32(48).uint64(message.projectResourceVersion);
+    }
+    for (const v of message.tasks) {
+      ProjectTaskFact.encode(v!, writer.uint32(58).fork()).join();
+    }
+    if (message.totalTasks !== undefined) {
+      writer.uint32(64).uint64(message.totalTasks);
+    }
+    if (message.hasMoreTasks !== false) {
+      writer.uint32(72).bool(message.hasMoreTasks);
     }
     return writer;
   },
@@ -2382,6 +2419,30 @@ export const ProjectStatusSnapshot: MessageFns<ProjectStatusSnapshot> = {
             message.projectResourceVersion = reader.uint64().toString();
             continue;
           }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.tasks.push(ProjectTaskFact.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.totalTasks = reader.uint64().toString();
+            continue;
+          }
+          case 9: {
+            if (tag !== 72) {
+              break;
+            }
+
+            message.hasMoreTasks = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2418,6 +2479,19 @@ export const ProjectStatusSnapshot: MessageFns<ProjectStatusSnapshot> = {
         : isSet(object.project_resource_version)
         ? globalThis.String(object.project_resource_version)
         : "0",
+      tasks: globalThis.Array.isArray(object?.tasks)
+        ? object.tasks.map((e: any) => ProjectTaskFact.fromJSON(e))
+        : [],
+      totalTasks: isSet(object.totalTasks)
+        ? globalThis.String(object.totalTasks)
+        : isSet(object.total_tasks)
+        ? globalThis.String(object.total_tasks)
+        : undefined,
+      hasMoreTasks: isSet(object.hasMoreTasks)
+        ? globalThis.Boolean(object.hasMoreTasks)
+        : isSet(object.has_more_tasks)
+        ? globalThis.Boolean(object.has_more_tasks)
+        : false,
     };
   },
 
@@ -2441,6 +2515,15 @@ export const ProjectStatusSnapshot: MessageFns<ProjectStatusSnapshot> = {
     if (message.projectResourceVersion !== "0") {
       obj.projectResourceVersion = message.projectResourceVersion;
     }
+    if (message.tasks?.length) {
+      obj.tasks = message.tasks.map((e) => ProjectTaskFact.toJSON(e));
+    }
+    if (message.totalTasks !== undefined) {
+      obj.totalTasks = message.totalTasks;
+    }
+    if (message.hasMoreTasks !== false) {
+      obj.hasMoreTasks = message.hasMoreTasks;
+    }
     return obj;
   },
 
@@ -2455,6 +2538,294 @@ export const ProjectStatusSnapshot: MessageFns<ProjectStatusSnapshot> = {
     message.status = object.status ?? "";
     message.contextRevision = object.contextRevision ?? "0";
     message.projectResourceVersion = object.projectResourceVersion ?? "0";
+    message.tasks = object.tasks?.map((e) => ProjectTaskFact.fromPartial(e)) || [];
+    message.totalTasks = object.totalTasks ?? undefined;
+    message.hasMoreTasks = object.hasMoreTasks ?? false;
+    return message;
+  },
+};
+
+function createBaseProjectTaskFact(): ProjectTaskFact {
+  return {
+    taskId: "",
+    attemptId: "",
+    parentAttemptId: "",
+    codingState: "",
+    qualityState: "",
+    qualityArtifactDigest: "",
+    publicationState: "",
+    publicationId: "",
+    pullRequestUrl: "",
+    acceptedCodingState: "",
+    providerState: "",
+  };
+}
+
+export const ProjectTaskFact: MessageFns<ProjectTaskFact> = {
+  encode(message: ProjectTaskFact, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.taskId !== "") {
+      writer.uint32(10).string(message.taskId);
+    }
+    if (message.attemptId !== "") {
+      writer.uint32(18).string(message.attemptId);
+    }
+    if (message.parentAttemptId !== "") {
+      writer.uint32(26).string(message.parentAttemptId);
+    }
+    if (message.codingState !== "") {
+      writer.uint32(34).string(message.codingState);
+    }
+    if (message.qualityState !== "") {
+      writer.uint32(42).string(message.qualityState);
+    }
+    if (message.qualityArtifactDigest !== "") {
+      writer.uint32(50).string(message.qualityArtifactDigest);
+    }
+    if (message.publicationState !== "") {
+      writer.uint32(58).string(message.publicationState);
+    }
+    if (message.publicationId !== "") {
+      writer.uint32(66).string(message.publicationId);
+    }
+    if (message.pullRequestUrl !== "") {
+      writer.uint32(74).string(message.pullRequestUrl);
+    }
+    if (message.acceptedCodingState !== "") {
+      writer.uint32(82).string(message.acceptedCodingState);
+    }
+    if (message.providerState !== "") {
+      writer.uint32(90).string(message.providerState);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProjectTaskFact {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProjectTaskFact();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.taskId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.attemptId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.parentAttemptId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.codingState = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.qualityState = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.qualityArtifactDigest = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.publicationState = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.publicationId = reader.string();
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.pullRequestUrl = reader.string();
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.acceptedCodingState = reader.string();
+            continue;
+          }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.providerState = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ProjectTaskFact {
+    return {
+      taskId: isSet(object.taskId)
+        ? globalThis.String(object.taskId)
+        : isSet(object.task_id)
+        ? globalThis.String(object.task_id)
+        : "",
+      attemptId: isSet(object.attemptId)
+        ? globalThis.String(object.attemptId)
+        : isSet(object.attempt_id)
+        ? globalThis.String(object.attempt_id)
+        : "",
+      parentAttemptId: isSet(object.parentAttemptId)
+        ? globalThis.String(object.parentAttemptId)
+        : isSet(object.parent_attempt_id)
+        ? globalThis.String(object.parent_attempt_id)
+        : "",
+      codingState: isSet(object.codingState)
+        ? globalThis.String(object.codingState)
+        : isSet(object.coding_state)
+        ? globalThis.String(object.coding_state)
+        : "",
+      qualityState: isSet(object.qualityState)
+        ? globalThis.String(object.qualityState)
+        : isSet(object.quality_state)
+        ? globalThis.String(object.quality_state)
+        : "",
+      qualityArtifactDigest: isSet(object.qualityArtifactDigest)
+        ? globalThis.String(object.qualityArtifactDigest)
+        : isSet(object.quality_artifact_digest)
+        ? globalThis.String(object.quality_artifact_digest)
+        : "",
+      publicationState: isSet(object.publicationState)
+        ? globalThis.String(object.publicationState)
+        : isSet(object.publication_state)
+        ? globalThis.String(object.publication_state)
+        : "",
+      publicationId: isSet(object.publicationId)
+        ? globalThis.String(object.publicationId)
+        : isSet(object.publication_id)
+        ? globalThis.String(object.publication_id)
+        : "",
+      pullRequestUrl: isSet(object.pullRequestUrl)
+        ? globalThis.String(object.pullRequestUrl)
+        : isSet(object.pull_request_url)
+        ? globalThis.String(object.pull_request_url)
+        : "",
+      acceptedCodingState: isSet(object.acceptedCodingState)
+        ? globalThis.String(object.acceptedCodingState)
+        : isSet(object.accepted_coding_state)
+        ? globalThis.String(object.accepted_coding_state)
+        : "",
+      providerState: isSet(object.providerState)
+        ? globalThis.String(object.providerState)
+        : isSet(object.provider_state)
+        ? globalThis.String(object.provider_state)
+        : "",
+    };
+  },
+
+  toJSON(message: ProjectTaskFact): unknown {
+    const obj: any = {};
+    if (message.taskId !== "") {
+      obj.taskId = message.taskId;
+    }
+    if (message.attemptId !== "") {
+      obj.attemptId = message.attemptId;
+    }
+    if (message.parentAttemptId !== "") {
+      obj.parentAttemptId = message.parentAttemptId;
+    }
+    if (message.codingState !== "") {
+      obj.codingState = message.codingState;
+    }
+    if (message.qualityState !== "") {
+      obj.qualityState = message.qualityState;
+    }
+    if (message.qualityArtifactDigest !== "") {
+      obj.qualityArtifactDigest = message.qualityArtifactDigest;
+    }
+    if (message.publicationState !== "") {
+      obj.publicationState = message.publicationState;
+    }
+    if (message.publicationId !== "") {
+      obj.publicationId = message.publicationId;
+    }
+    if (message.pullRequestUrl !== "") {
+      obj.pullRequestUrl = message.pullRequestUrl;
+    }
+    if (message.acceptedCodingState !== "") {
+      obj.acceptedCodingState = message.acceptedCodingState;
+    }
+    if (message.providerState !== "") {
+      obj.providerState = message.providerState;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ProjectTaskFact>): ProjectTaskFact {
+    return ProjectTaskFact.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ProjectTaskFact>): ProjectTaskFact {
+    const message = createBaseProjectTaskFact();
+    message.taskId = object.taskId ?? "";
+    message.attemptId = object.attemptId ?? "";
+    message.parentAttemptId = object.parentAttemptId ?? "";
+    message.codingState = object.codingState ?? "";
+    message.qualityState = object.qualityState ?? "";
+    message.qualityArtifactDigest = object.qualityArtifactDigest ?? "";
+    message.publicationState = object.publicationState ?? "";
+    message.publicationId = object.publicationId ?? "";
+    message.pullRequestUrl = object.pullRequestUrl ?? "";
+    message.acceptedCodingState = object.acceptedCodingState ?? "";
+    message.providerState = object.providerState ?? "";
     return message;
   },
 };

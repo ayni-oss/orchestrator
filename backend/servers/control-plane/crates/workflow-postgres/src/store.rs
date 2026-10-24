@@ -7,6 +7,7 @@ mod delivery_failure;
 mod discovery;
 mod execution;
 mod plans;
+mod project_continuity;
 pub mod provider_calls;
 pub mod publications;
 pub mod task_feedback;

@@ -364,6 +364,7 @@ fn project_snapshot_cannot_expand_command_scope_or_claim_completion() -> Result<
             status: "registered".into(),
             context_revision: binding.context_revision,
             project_resource_version: 1,
+            ..Default::default()
         }),
         ..Default::default()
     };
@@ -481,4 +482,73 @@ fn proposal_invocation_and_exact_bytes_are_covered_by_terminal_signature()
         .invocation_id = "other".into();
     assert!(verify_report_signature(&identity, &changed, Some(&key)).is_err());
     Ok(())
+}
+
+#[test]
+#[allow(
+    clippy::unwrap_used,
+    reason = "fixture assertions fail immediately on missing test scope"
+)]
+fn project_task_facts_preserve_accepted_results_and_reject_unbounded_or_inconsistent_snapshots() {
+    use crate::v1::{ProjectStatusSnapshot, ProjectTaskFact};
+    let id = identity();
+    let binding = binding(&id.id);
+    let fact = ProjectTaskFact {
+        task_id: "task:00000000-0000-7000-8000-000000000001".into(),
+        attempt_id: "attempt:00000000-0000-7000-8000-000000000002".into(),
+        coding_state: "cancelled".into(),
+        accepted_coding_state: "completed".into(),
+        provider_state: "uncertain".into(),
+        quality_state: "interrupted".into(),
+        ..Default::default()
+    };
+    assert!(valid_project_task(&fact));
+    let snapshot = ProjectStatusSnapshot {
+        snapshot_id: id.id.clone(),
+        project_id: binding.project_id.clone(),
+        objective: "Facts".into(),
+        status: "registered".into(),
+        context_revision: binding.context_revision,
+        project_resource_version: 1,
+        tasks: vec![fact.clone()],
+        total_tasks: Some(1),
+        has_more_tasks: false,
+    };
+    let payload = ConversationTurnRequested {
+        binding: Some(binding),
+        project_status: Some(snapshot.clone()),
+        ..Default::default()
+    };
+    assert!(validate_project_snapshot(&payload, payload.binding.as_ref().unwrap(), &id).is_ok());
+    for change in 0..7 {
+        let mut altered = snapshot.clone();
+        match change {
+            0 => altered.total_tasks = Some(0),
+            1 => altered.has_more_tasks = true,
+            2 => altered.tasks.push(fact.clone()),
+            3 => {
+                altered.tasks = vec![fact.clone(); 21];
+                altered.total_tasks = Some(21);
+            }
+            4 => altered.tasks[0].quality_artifact_digest = "bad-digest".into(),
+            5 => altered.tasks[0].accepted_coding_state = "merged".into(),
+            _ => altered.total_tasks = None,
+        }
+        let mut payload = payload.clone();
+        payload.project_status = Some(altered);
+        assert!(
+            validate_project_snapshot(&payload, payload.binding.as_ref().unwrap(), &id).is_err()
+        );
+    }
+    let mut reporting = fact;
+    reporting.coding_state = "reporting".into();
+    reporting.quality_state = "passed".into();
+    assert!(valid_project_task(&reporting));
+    reporting.accepted_coding_state = "failed".into();
+    assert!(!valid_project_task(&reporting));
+    let mut legacy = payload;
+    let legacy_snapshot = legacy.project_status.as_mut().unwrap();
+    legacy_snapshot.tasks.clear();
+    legacy_snapshot.total_tasks = None;
+    assert!(validate_project_snapshot(&legacy, legacy.binding.as_ref().unwrap(), &id).is_ok());
 }

@@ -199,6 +199,36 @@ Use explicit `docker-desktop` Kubernetes for runtime acceptance. Create owned
 test namespaces and clean them up after testing. Preserve stores within each
 restart/recovery test to prove durability before purging its test deployment.
 
+### M7 delivery scopes
+
+The [M7 delivery plan](docs/technical/research/project-workflow-m7-delivery-plan.md)
+stages project continuity and integrations on the existing retained authorities.
+Fresh conversations receive factual project status without inheriting other
+conversations' transcripts, plans or reasoning. Assessments and proposed actions
+remain scoped to the originating conversation and preserve explicit approval.
+
+| PR | Observable outcome |
+| --- | --- |
+| 1: Factual project continuity | Frozen project status includes bounded task lifecycle facts and accepted outcomes with separate coding, quality and publication states. |
+| 2: Bounded outcome assessment | Meaningful outcomes trigger retained, budgeted assessment in the originating conversation; ordinary progress invokes no model. |
+| 3: Proactive proposals | Assessments produce reviewable plans or recovery proposals without granting execution authority. |
+| 4: Scoped MCP integrations | Configured servers and tools respect workspace/project scope, budgets, credentials, cancellation and external-effect recovery. |
+| 5: Additional providers | A selected provider passes the existing context, tools, reservation, uncertainty and cancellation contracts after MCP integration. |
+| 6: Cumulative M7 acceptance | Deployed isolation, interruption, duplicate delivery, stale-result and uncertain-effect gates close the milestone. |
+
+The [factual continuity contract](docs/technical/architecture/project-continuity.md)
+defines the first slice. The existing private-v1 project snapshot retains at most
+20 task facts with `total_tasks` and `has_more_tasks` describing admitted work beyond the selection. The
+`read_project_status` tool reads those exact eligibility-time inputs; it does not
+invoke a model or infer project completion. Later outcomes affect later snapshots.
+
+This independent-task slice can proceed before M5 scheduling. Dependency-aware
+assessment and recovery still require frozen upstream selections. M6's recorded
+closure gaps remain: M5 integration, worker-originated structured questions with
+answer delivery, and model-generated recovery proposals. Passing a factual
+continuity gate cannot waive those prerequisites. Each PR owns its acceptance
+evidence and starts from current `origin/alpha` after its prerequisite merges.
+
 ### Validation at every milestone
 
 | Level | Evidence |

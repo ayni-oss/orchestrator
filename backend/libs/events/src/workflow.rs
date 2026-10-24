@@ -13,6 +13,11 @@ use sha2::{Digest as _, Sha256};
 mod workflow_hex;
 use workflow_hex::{canonical_hex, lowercase_hexadecimal};
 
+mod project_continuity;
+#[cfg(test)]
+use project_continuity::valid_project_task;
+use project_continuity::validate_project_snapshot;
+
 pub mod transport;
 
 pub const APPLICATION_SOURCE: &str = "ayni://orchestrator/supervisors/workflow-application";
@@ -594,28 +599,6 @@ fn validate_binding(binding: &ConversationTurnBinding, report: bool) -> Result<(
         || (!report && !binding.command_digest.is_empty())
     {
         return Err(ContractError::Invalid("workflow binding"));
-    }
-    Ok(())
-}
-
-#[allow(
-    clippy::suspicious_operation_groupings,
-    reason = "snapshot identity binds the event while scope and revision bind its turn"
-)]
-fn validate_project_snapshot(
-    payload: &ConversationTurnRequested,
-    binding: &ConversationTurnBinding,
-    identity: &EventIdentity,
-) -> Result<(), ContractError> {
-    if let Some(snapshot) = &payload.project_status
-        && (snapshot.snapshot_id != identity.id
-            || snapshot.project_id != binding.project_id
-            || snapshot.context_revision != binding.context_revision
-            || snapshot.project_resource_version == 0
-            || snapshot.objective.len() > MAX_CONTENT_BYTES
-            || snapshot.status != "registered")
-    {
-        return Err(ContractError::Invalid("project status snapshot"));
     }
     Ok(())
 }

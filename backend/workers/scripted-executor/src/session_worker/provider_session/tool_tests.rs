@@ -22,6 +22,12 @@ async fn tool_fixture() -> Fixture {
                 assert_eq!(outputs.len(),3);
                 assert_eq!(outputs[0]["instructions"],"frozen instructions");
                 assert_eq!(outputs[1]["objective"],"frozen objective");
+                assert_eq!(outputs[1]["task_facts_available"],true);
+                assert_eq!(outputs[1]["total_tasks"],1);
+                assert_eq!(outputs[1]["tasks"][0]["coding_state"],"cancelled");
+                assert_eq!(outputs[1]["tasks"][0]["accepted_coding_state"],"completed");
+                assert_eq!(outputs[1]["tasks"][0]["provider_state"],"uncertain");
+                assert_eq!(outputs[1]["tasks"][0]["quality_state"],"interrupted");
                 assert_eq!(outputs[2]["records"][0]["content"],"hello");
                 SUCCESS.into()
             }
@@ -54,6 +60,17 @@ fn tool_input(state: &WorkerState) -> PrepareInput {
         status: "registered".into(),
         context_revision: 1,
         project_resource_version: 1,
+        tasks: vec![ayni_orchestrator_events::v1::ProjectTaskFact {
+            task_id: "task:00000000-0000-7000-8000-000000000001".into(),
+            attempt_id: "attempt:00000000-0000-7000-8000-000000000002".into(),
+            coding_state: "cancelled".into(),
+            accepted_coding_state: "completed".into(),
+            provider_state: "uncertain".into(),
+            quality_state: "interrupted".into(),
+            ..Default::default()
+        }],
+        total_tasks: Some(1),
+        ..Default::default()
     });
     input.command_bytes = encode_command(&identity, &metadata, &payload).unwrap();
     input
@@ -518,4 +535,33 @@ async fn reasoning_with_tool_calls_is_rejected_without_losing_usage_or_running_t
         .unwrap();
     assert!(!retained.contains("private reasoning"));
     assert_eq!(fixture.count.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn retained_command_without_task_facts_reports_unknown_instead_of_empty_project() {
+    let directory = tempfile::tempdir().unwrap();
+    let state = worker(
+        &directory.path().join("ledger.sqlite"),
+        "http://127.0.0.1:1",
+        None,
+    );
+    let mut input = tool_input(&state);
+    let (identity, metadata, mut payload) = decode_command(&input.command_bytes).unwrap();
+    let snapshot = payload.project_status.as_mut().unwrap();
+    snapshot.tasks.clear();
+    snapshot.total_tasks = None;
+    input.command_bytes = encode_command(&identity, &metadata, &payload).unwrap();
+    let _ = prepare(State(state.clone()), auth(&state), axum::Json(input))
+        .await
+        .unwrap();
+    let connection = state.connection.lock().unwrap();
+    let saved: String = connection
+        .query_row("SELECT state FROM provider_loops", [], |row| row.get(0))
+        .unwrap();
+    drop(connection);
+    let saved: serde_json::Value = serde_json::from_str(&saved).unwrap();
+    let source = &saved["sources"]["read_project_status"];
+    assert_eq!(source["task_facts_available"], false);
+    assert!(source["total_tasks"].is_null());
+    assert_eq!(source["objective"], "frozen objective");
 }

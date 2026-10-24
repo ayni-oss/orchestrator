@@ -23,6 +23,8 @@ struct Evidence {
     recovery: Vec<u8>,
     #[serde(default)]
     continuation: Vec<u8>,
+    #[serde(default)]
+    continuity: Vec<u8>,
 }
 const PACK: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -206,6 +208,7 @@ async fn prepare_inner(
         feedback: Vec::new(),
         recovery: Vec::new(),
         continuation: Vec::new(),
+        continuity: Vec::new(),
     };
     finish_profile(client, &mut evidence, profile).await?;
     if profile != Profile::RecoveryFault {
@@ -344,7 +347,7 @@ async fn verify(client: &mut Client, evidence: &Evidence) -> Result<v1::TaskAtte
             return Err("recovery records changed after restart".into());
         }
     }
-    super::continuation::verify(client, &evidence.continuation).await?;
+    verify_retained_followups(client, evidence).await?;
     Ok(attempt)
 }
 
@@ -676,9 +679,22 @@ async fn retain_completed(client: &mut Client, evidence: &mut Evidence) -> Resul
     evidence.continuation = super::continuation::confirm(client, &request)
         .await
         .map_err(|e| format!("confirmed continuation: {e}"))?;
+    evidence.continuity = super::project_continuity::retain(client, &request).await?;
     if let Some(quality) = attempt.quality {
         evidence.quality_digest =
             ayni_orchestrator_events::task_execution::digest(&quality.encode_to_vec());
     }
+    Ok(())
+}
+
+async fn verify_retained_followups(client: &mut Client, evidence: &Evidence) -> Result {
+    super::continuation::verify(client, &evidence.continuation).await?;
+    super::project_continuity::verify(client, &evidence.continuity).await
+}
+
+pub async fn settle_continuity_stdin(client: &mut Client) -> Result {
+    let evidence = stdin_evidence()?;
+    super::project_continuity::settle(client, &evidence.continuity).await?;
+    println!("project-continuity: scripted-completion=pass exact-command-replay=pass");
     Ok(())
 }

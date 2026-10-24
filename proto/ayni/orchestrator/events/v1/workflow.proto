@@ -138,6 +138,29 @@ message ProjectStatusSnapshot {
   string status = 4;
   uint64 context_revision = 5;
   uint64 project_resource_version = 6;
+  // Latest attempt per admitted task, including terminal or awaiting-execution work.
+  // Facts are ordered by attempt creation time then task ID.
+  // Bounded to 20 facts; omission is explicit and never implies completion.
+  repeated ProjectTaskFact tasks = 7;
+  // Absent on retained commands that predate task continuity; absence means unknown.
+  optional uint64 total_tasks = 8;
+  bool has_more_tasks = 9;
+}
+
+// Factual lifecycle and accepted evidence only; no transcript, plan text or patch.
+message ProjectTaskFact {
+  string task_id = 1;
+  string attempt_id = 2;
+  string parent_attempt_id = 3;
+  string coding_state = 4;
+  string quality_state = 5;
+  string quality_artifact_digest = 6;
+  string publication_state = 7;
+  string publication_id = 8;
+  string pull_request_url = 9;
+  // Terminal coding result retained by the canonical report acceptance path.
+  string accepted_coding_state = 10;
+  string provider_state = 11;
 }
 
 // Safe metadata only. Arguments and output remain in the scoped worker ledger.

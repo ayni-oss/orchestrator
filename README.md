@@ -50,6 +50,15 @@ conversation history links to the continued coding and quality outcomes. Questio
 one canonical answer across pagination and concurrent tabs. Dependency-aware continuation
 still requires M5; structured worker questions remain outside the coding protocol.
 
+Fresh conversations can read bounded task lifecycle facts and accepted outcomes
+through frozen project status. Coding, managed quality and publication remain separate facts; the snapshot
+contains no other conversation's transcript, plan text or reasoning. Later task
+changes do not rewrite an eligible turn's retained inputs. See
+[factual project continuity](docs/technical/architecture/project-continuity.md) and
+the [M7 delivery plan](docs/technical/research/project-workflow-m7-delivery-plan.md).
+Assessment, proactive proposals, MCP integrations and additional providers remain
+later delivery slices.
+
 ## Start locally
 
 ```sh
