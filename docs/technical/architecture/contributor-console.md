@@ -154,8 +154,16 @@ conversation/task for evidence inspection. Reads use bounded pages and discard
 late responses after selection changes; reconnect and reload restore canonical
 feedback rather than trusting a browser copy.
 
-Notices remain open in this slice. The interface exposes no answer, dismiss,
-resolve or continue command, and reading a notice cannot authorize task execution.
+Notices remain open until exact recovery confirmation handles their parent decision.
+The conversation keeps the resolved notice and links to the continued coding and quality
+outcomes; project attention hides resolved decisions. Task refresh, tab focus and reload
+reconcile canonical state. Recovery review exposes operator questions, their retained
+answers, exact proposals and explicit once-only consent. Answering grants no execution
+authority and is not inserted into provider context. Canonical answers accompany the
+question page, and parent confirmation consumes competing proposal controls across
+pages and tabs. Unchanged history reads preserve review drafts and consent. A lost
+response retains the original command key, proposal/digest and origin through navigation
+and reload. Reading a notice cannot authorize task execution.
 Publication reconciliation retains its existing task views. See the
 [task feedback contract](task-feedback.md) for scope, deduplication and retained-state rules.
 

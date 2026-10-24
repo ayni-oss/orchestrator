@@ -31,3 +31,44 @@ test('confirmation requires exact originating attempt, explicit consent and poss
   assert.equal(command.method, 'ConfirmTaskRecovery');
   assert.deepEqual(command.body, { workspaceId: 'w', projectId: 'p', conversationId: 'c', taskId: 't', proposalId: 'proposal', proposalDigest: 'sha256:exact', acknowledgeProviderUncertainty: true });
 });
+
+test('question-only pages include canonical answers and unchanged refresh preserves consent and drafts', async () => {
+  const question = { ...scope, id: 'q', question: { text: 'Keep changes?' } };
+  const answer = { ...scope, id: 'answer', answer: { questionId: 'q', text: 'Keep them.' } };
+  const changes = [];
+  const history = createRecoveryHistory({ api: async () => ({ records: [question], questionAnswers: [answer], nextAfterId: 'q' }), changed: s => changes.push(s) });
+  history.select(scope); await history.load(); await history.load();
+  assert.equal(changes.length, 1);
+  assert.deepEqual(changes[0].answers, [answer]);
+});
+
+test('parent confirmation survives pages without the confirmed proposal', async () => {
+  let result;
+  const receipt = { proposalId: 'earlier-proposal', parentAttemptId: 'a', attemptId: 'child' };
+  const history = createRecoveryHistory({ api: async () => ({ records: [{ ...scope, id: 'other-proposal' }], confirmations: [receipt] }), changed: s => { result = s; } });
+  history.select(scope); await history.load();
+  assert.deepEqual(result.confirmations, [receipt]);
+});
+
+test('foreign answer or confirmation clears stale authorization', async () => {
+  for (const page of [
+    { questionAnswers: [{ ...scope, attemptId: 'foreign', answer: { questionId: 'q' } }] },
+    { confirmations: [{ parentAttemptId: 'foreign' }] },
+  ]) {
+    let result;
+    const history = createRecoveryHistory({ api: async () => page, changed: s => { result = s; } });
+    history.select(scope); await history.load(); assert.equal(result.error, true);
+  }
+});
+
+test('background refresh retains the loaded prefix instead of collapsing paginated review', async () => {
+  const changes = []; const calls = [];
+  const history = createRecoveryHistory({ api: async (_, body) => {
+    calls.push(body.afterId);
+    return body.afterId ? { records: [{ ...scope, id: 'second' }] } : { records: [{ ...scope, id: 'first' }], nextAfterId: 'first' };
+  }, changed: s => changes.push(s) });
+  history.select(scope); await history.load(); await history.load(true); await history.load();
+  assert.equal(changes.length, 2);
+  assert.equal(changes[1].records.length, 2);
+  assert.deepEqual(calls, ['', 'first', '', 'first']);
+});

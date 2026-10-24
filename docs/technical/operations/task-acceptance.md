@@ -86,10 +86,11 @@ Execution and quality problems also retain conversation feedback and project
 attention under the [task feedback contract](../architecture/task-feedback.md).
 The same failure/restart cases must preserve exact notice identities and origin,
 with duplicate reports and stale workers unable to create duplicate feedback.
-The delivery PR owns executed first-slice feedback evidence.
+The delivery PR owns executed feedback evidence. Restart equality compares immutable notice
+facts separately from the live linked-attempt state.
 
-Interrupted coding and failed quality require a new reviewed follow-up plan until
-confirmed recovery is implemented in M6. Dependency scheduling and concurrent
+Interrupted coding and failed quality require an exact reviewed recovery proposal with
+explicit bounded consent, or a new reviewed plan when approved inputs materially change. Dependency scheduling and concurrent
 execution remain M5. Users retain merge authority; successful M4 acceptance ends
 at a reviewable draft.
 
@@ -103,16 +104,11 @@ compared after the existing control-plane and PostgreSQL restart gates. This pro
 review-record durability, not confirmed continuation or live provider recovery.
 See [recovery review](../architecture/task-recovery.md).
 
-Run the real gateway/browser recovery review against the coding profile's task evidence:
-
-```sh
-AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-review \
-  dev/scripts/task-console-acceptance.sh /absolute/coding/task-run.json /absolute/new-browser-evidence --recovery
-```
-
-The browser profile requires an already completed fixture attempt with actionable feedback.
-It checks saved-work review, explicit allowances, accepted response loss, exact retry
-after reload, operator questions/answers, retained attention and unchanged task execution.
+The `--recovery` browser profile requires an already completed fixture attempt with
+actionable feedback and no consumed recovery decision. It checks saved-work review,
+explicit allowances, accepted response loss, exact retry after reload, operator
+questions/answers, retained attention and unchanged task execution. Use the fresh
+fixture profile below for a reproducible complete conversation scenario.
 
 ## Confirmed continuation extension
 
@@ -123,13 +119,32 @@ and exact confirmation replay after the existing control-plane and PostgreSQL re
 The failed-quality fixture proposes one bounded repair pass; it does not establish live
 provider repair. Successful tasks without feedback create no recovery.
 
-For browser confirmation, run the existing gateway wrapper with `--continuation` and the
-coding profile's task evidence. The browser exercises consent, accepted confirmation
-response loss, exact reload retry, and navigation between the parent and continued attempt:
+## Complete conversation recovery extension
+
+The `--quality-only` cumulative profile ends with a fresh real managed-quality failure
+whose recovery decision is left to the browser. The gateway wrapper compiles the local
+acceptance fixture client and console, connects to the deployed authority and records
+a separate selection under its evidence directory. Chromium must be installed.
+
+To run that browser gate separately against a ready acceptance namespace and the
+local managed fixture runtime:
 
 ```sh
 AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-continuation \
-  dev/scripts/task-console-acceptance.sh /absolute/coding/task-run.json /absolute/new-browser-evidence --continuation
+  dev/scripts/task-console-acceptance.sh /absolute/quality/task-quality-failed-run.json /absolute/new-browser-evidence --fresh-continuation
 ```
 
-M5 dependencies, attention resolution and full conversation recovery remain outside these gates.
+The profile covers two-tab answer conflicts and confirmation convergence, canonical
+answer display, explicit consent, accepted proposal/confirmation response loss, exact
+retry after reload and navigation to a different conversation while confirmation is
+pending. The retry preserves the original task/proposal and cannot render that task
+in the newly selected conversation. Parent evidence remains unchanged; conversation
+history links the resolved parent decision to the continued coding and quality outcome.
+The continued fixture intentionally fails quality again and creates its own open notice.
+Screenshots cover desktop and mobile. No live provider or GitHub request is exercised.
+
+PostgreSQL and console source tests additionally prove question-only pages include
+answers from later pages, every page carries parent confirmation, alternate proposals
+lose consent controls, and unchanged refreshes preserve the loaded review prefix.
+M5 dependencies, structured worker questions and cumulative M6 closure remain outside
+these gates.

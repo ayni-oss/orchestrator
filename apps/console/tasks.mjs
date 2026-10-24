@@ -53,7 +53,7 @@ export function publicationCommand(scope, taskId, attempt, preview) {
   return { method: 'StartTaskPublication', body: { ...request } };
 }
 
-export function mountTasks({ getScope, api, submit, showError, saved, store, controls }) {
+export function mountTasks({ getScope, api, submit, showError, saved, store, controls, onRefreshed = () => {} }) {
   const recovery = mountRecovery({ api, submit, showError, controls, openAttempt: id => open(selectedId, id).catch(showError) });
   let selectedAttemptId = '';
   let owner = '';
@@ -184,10 +184,13 @@ export function mountTasks({ getScope, api, submit, showError, saved, store, con
       if (!current()) return;
       attempt = run;
       if (run && !selectedAttemptId) { selectedAttemptId = run.attemptId; store(`task-attempt:${owner}`, selectedAttemptId); }
-      recovery.select(run ? { ...scope, attemptId: run.attemptId } : undefined);
+      const recoveryScope = run ? { ...scope, attemptId: run.attemptId } : undefined;
+      const recoveryChanged = recovery.select(recoveryScope);
+      if (recoveryScope && !recoveryChanged) recovery.refresh();
       if (preview && (!taskActions(run).reviewPublication || preview.request.expectedPatchDigest !== run.patchDigest || preview.request.expectedQualityDigest !== run.qualityDigest)) resetReview();
       render(taskResult.task, preparation, run);
       $('task-updated').textContent = `Last refreshed ${new Date().toLocaleTimeString()}`;
+      onRefreshed();
     } catch (error) {
       if (current()) { attempt = undefined; resetReview(); $('task-detail').replaceChildren(); $('task-status').textContent = 'Task refresh failed. Retry to load current state.'; showError(error); }
     } finally { busy = false; controls(); if (reloadRequested) { reloadRequested = false; loadSelected(); } else schedule(); }
@@ -265,5 +268,5 @@ export function mountTasks({ getScope, api, submit, showError, saved, store, con
   $('task-auto-refresh').onchange = schedule;
   window.addEventListener('pagehide', () => { disposed = true; clearTimeout(timer); });
   window.addEventListener('pageshow', () => { disposed = false; schedule(); });
-  return { select, open, accepted, refreshList: () => list().catch(showError) };
+  return { select, open, accepted, refreshRecovery: () => recovery.refresh(), refreshList: () => list().catch(showError) };
 }

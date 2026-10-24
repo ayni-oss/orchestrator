@@ -2,14 +2,15 @@
 set -euo pipefail
 readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$dev_directory/lib/common.sh"
-[[ ( $# -eq 2 || ( $# -eq 3 && ( "$3" == --recovery || "$3" == --continuation ) ) ) && "$1" == /* && "$2" == /* && ! -e "$2" ]] || {
-  echo 'usage: task-console-acceptance.sh ABSOLUTE_TASK_EVIDENCE_JSON ABSOLUTE_NEW_EVIDENCE_DIRECTORY [--recovery|--continuation]' >&2; exit 2;
+[[ ( $# -eq 2 || ( $# -eq 3 && ( "$3" == --recovery || "$3" == --continuation || "$3" == --fresh-continuation ) ) ) && "$1" == /* && "$2" == /* && ! -e "$2" ]] || {
+  echo 'usage: task-console-acceptance.sh ABSOLUTE_TASK_EVIDENCE_JSON ABSOLUTE_NEW_EVIDENCE_DIRECTORY [--recovery|--continuation|--fresh-continuation]' >&2; exit 2;
 }
-readonly selection="$1" evidence="$2" context="$(dev_context)" namespace="$(dev_namespace)"
+selection="$1"
+readonly evidence="$2" context="$(dev_context)" namespace="$(dev_namespace)"
 [[ "$namespace" == ayni-orchestrator-acceptance-* ]] || { echo 'isolated acceptance namespace required' >&2; exit 2; }
 mkdir -p "$evidence"
 cd "$DEV_REPOSITORY_ROOT"
-cargo build --locked -p ayni-orchestrator-control-plane --bin workflow-console > "$evidence/build.log" 2>&1
+cargo build --locked -p ayni-orchestrator-control-plane --bin workflow-console --bin workflow-acceptance > "$evidence/build.log" 2>&1
 read -r port upstream < <(python3 - <<'PY'
 import socket
 a,b=socket.socket(),socket.socket()
@@ -46,9 +47,15 @@ for attempt in range(100):
         if attempt==99: raise
         time.sleep(.1)
 PY
+if [[ "${3:-}" == --fresh-continuation ]]; then
+  selection="$evidence/selection.json"
+  runtime="${AYNI_ORCHESTRATOR_QUALITY_RUNTIME_IMAGE:-$(python3 -c 'import json; print(json.load(open(".ayni/task-quality-runtime.json"))["runtime_image"])')}"
+  ORCHESTRATOR_TASK_QUALITY_RUNTIME_IMAGE="$runtime" target/debug/workflow-acceptance \
+    --endpoint "http://127.0.0.1:$upstream" --prepare-task-recovery-review > "$selection"
+fi
 profile=task-live-acceptance.mjs
-[[ "${3:-}" != --recovery && "${3:-}" != --continuation ]] || profile=recovery-acceptance.mjs
+[[ "${3:-}" != --recovery && "${3:-}" != --continuation && "${3:-}" != --fresh-continuation ]] || profile=recovery-acceptance.mjs
 export TASK_RECOVERY_CONFIRM=false
-[[ "${3:-}" != --continuation ]] || export TASK_RECOVERY_CONFIRM=true
+[[ "${3:-}" != --continuation && "${3:-}" != --fresh-continuation ]] || export TASK_RECOVERY_CONFIRM=true
 CONSOLE_URL="http://127.0.0.1:$port" TASK_CONSOLE_SELECTION_FILE="$selection" \
   TASK_CONSOLE_EVIDENCE_DIRECTORY="$evidence" node "apps/console/$profile"

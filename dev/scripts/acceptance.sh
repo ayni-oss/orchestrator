@@ -329,6 +329,9 @@ if [[ "$profile" == --coding-only || "$profile" == --quality-only ]]; then
 kubectl --context "$context" --namespace "${namespace}-sessions" get pvc -o json | python3 -c 'import json,sys; print(json.dumps(sorted((p["metadata"]["name"],p["metadata"]["uid"],p["spec"].get("volumeName","")) for p in json.load(sys.stdin)["items"])))' > "$evidence/task-pvc-after.json"
 cmp "$evidence/task-pvc-before.json" "$evidence/task-pvc-after.json"
 fi
+if [[ "$profile" == --quality-only ]]; then
+  "$dev_directory/scripts/task-console-acceptance.sh" "$evidence/task-quality-failed-run.json" "$evidence/recovery-console" --fresh-continuation
+fi
 status=passed
 printf 'acceptance profile=%s passed; evidence=%s\n' "$profile" "$evidence"
 printf '%s\n' 'This command proves the named gates only. The complete M1 fault/capacity matrix also requires the repository integration gates.'

@@ -69,6 +69,7 @@ pub(super) async fn list(
         records: page.records.into_iter().map(projection).collect(),
         next_after_id: page.next_after_id,
         confirmations: page.confirmations.into_iter().map(confirmation).collect(),
+        question_answers: page.question_answers.into_iter().map(projection).collect(),
     }))
 }
 fn projection(r: RecoveryRecord) -> v1::TaskRecoveryRecord {

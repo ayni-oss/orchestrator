@@ -416,6 +416,10 @@ message TaskFeedback {
   string safe_reason = 9;
   string summary = 10;
   google.protobuf.Timestamp created_at = 11;
+  // Resolved means a recovery was authorized, not that continued work succeeded.
+  string recovery_attempt_id = 12;
+  string recovery_state = 13;
+  string recovery_quality_state = 14;
 }
 message ListTaskFeedbackRequest {
   string workspace_id = 1;
@@ -512,6 +516,8 @@ message ListTaskRecoveryResponse {
   string next_after_id = 2;
   // Separate once-only authority; proposal content remains immutable.
   repeated TaskRecoveryConfirmation confirmations = 3;
+  // Canonical answers for questions on this page, even when the answer is on a later page.
+  repeated TaskRecoveryRecord question_answers = 4;
 }
 message ConfirmTaskRecoveryRequest {
   string workspace_id = 1;

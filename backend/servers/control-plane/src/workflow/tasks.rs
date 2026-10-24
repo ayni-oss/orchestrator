@@ -168,7 +168,15 @@ pub(super) async fn feedback(
                 task_id: v.task_id,
                 attempt_id: v.attempt_id,
                 category: v.category,
-                state: "open".into(),
+                state: if v.recovery_attempt_id.is_empty() {
+                    "open"
+                } else {
+                    "resolved"
+                }
+                .into(),
+                recovery_attempt_id: v.recovery_attempt_id,
+                recovery_state: v.recovery_state,
+                recovery_quality_state: v.recovery_quality_state,
                 safe_reason: v.safe_reason,
                 summary: v.summary,
                 created_at: Some(super::timestamp(v.created_at)),

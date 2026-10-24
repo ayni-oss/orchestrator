@@ -221,11 +221,24 @@ impl WorkflowStore {
         } else {
             String::new()
         };
-        let ids: Vec<_> = records.iter().map(|r| r.id.as_str()).collect();
+        let ids: Vec<_> = records
+            .iter()
+            .filter(|r| r.kind == "question")
+            .map(|r| r.id.as_str())
+            .collect();
+        let question_answers = tx
+            .query(
+                &format!("{SELECT} WHERE attempt_id=$1 AND question_id=ANY($2) ORDER BY id"),
+                &[&attempt, &ids],
+            )
+            .await?
+            .iter()
+            .map(projection)
+            .collect::<Result<Vec<_>, _>>()?;
         let confirmations = tx
             .query(
-                "SELECT result FROM workflow_task_recovery_confirmations WHERE proposal_id=ANY($1)",
-                &[&ids],
+                "SELECT result FROM workflow_task_recovery_confirmations WHERE parent_attempt_id=$1",
+                &[&attempt],
             )
             .await?
             .iter()
@@ -237,6 +250,7 @@ impl WorkflowStore {
             records,
             next_after_id,
             confirmations,
+            question_answers,
         })
     }
 }

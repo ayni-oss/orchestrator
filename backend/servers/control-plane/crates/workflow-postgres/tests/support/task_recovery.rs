@@ -98,6 +98,23 @@ async fn retention(
         let page = store
             .list_task_recovery(scope, task, attempt, &after, 1)
             .await?;
+        if page.records.iter().any(|r| r.id == question_id) {
+            assert_eq!(
+                page.question_answers.len(),
+                1,
+                "answer must survive a question-only page"
+            );
+            let C::Answer {
+                question_id: answered,
+                ..
+            } = &page.question_answers[0].content
+            else {
+                return Err("answer projection missing".into());
+            };
+            assert_eq!(answered, question_id);
+        } else {
+            assert!(page.question_answers.is_empty());
+        }
         records.extend(page.records);
         after = page.next_after_id;
         if after.is_empty() {

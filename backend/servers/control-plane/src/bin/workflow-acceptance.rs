@@ -157,6 +157,9 @@ async fn dispatch(
         return dispatch_publication(mode, client, projects).await;
     }
     match mode {
+        "--prepare-task-recovery-review" => {
+            return task_runs::prepare_recovery_review(projects, client).await;
+        }
         "--prepare-task-quality-failed-run" => {
             return task_runs::prepare_quality_failed(projects, client).await;
         }

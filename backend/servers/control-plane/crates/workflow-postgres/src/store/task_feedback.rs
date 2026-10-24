@@ -16,6 +16,9 @@ pub struct TaskFeedback {
     pub safe_reason: String,
     pub summary: String,
     pub created_at: Timestamp,
+    pub recovery_attempt_id: String,
+    pub recovery_state: String,
+    pub recovery_quality_state: String,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FeedbackPage {
@@ -119,6 +122,13 @@ fn projection(row: &Row) -> Result<TaskFeedback, StoreError> {
         summary: summary(&reason)?.to_owned(),
         safe_reason: reason,
         created_at: support::timestamp(row.get(8), row.get(9))?,
+        recovery_attempt_id: row.get(10),
+        recovery_state: row.get(11),
+        recovery_quality_state: row
+            .get::<_, Option<Vec<u8>>>(12)
+            .map(|bytes| decode::<QualityOutcome>(&bytes).map(|outcome| outcome.state))
+            .transpose()?
+            .unwrap_or_default(),
     })
 }
 impl WorkflowStore {
@@ -153,7 +163,7 @@ impl WorkflowStore {
             support::conversation(&tx, workspace, project, conversation).await?;
         }
         let mut feedback = tx.query(
-            "SELECT id,workspace_id,project_id,conversation_id,task_id,attempt_id,category,safe_reason,workflow_ts_seconds(created_at),workflow_ts_nanos(created_at) FROM workflow_task_feedback WHERE workspace_id=$1 AND project_id=$2 AND ($3='' OR conversation_id=$3) AND id>$4 ORDER BY id LIMIT $5",
+            "SELECT f.id,f.workspace_id,f.project_id,f.conversation_id,f.task_id,f.attempt_id,f.category,f.safe_reason,workflow_ts_seconds(f.created_at),workflow_ts_nanos(f.created_at),COALESCE(c.attempt_id,''),COALESCE(r.state,''),q.outcome FROM workflow_task_feedback f LEFT JOIN workflow_task_recovery_confirmations c ON c.parent_attempt_id=f.attempt_id LEFT JOIN workflow_task_runs r ON r.attempt_id=c.attempt_id LEFT JOIN workflow_task_quality q ON q.attempt_id=c.attempt_id WHERE f.workspace_id=$1 AND f.project_id=$2 AND ($3='' OR f.conversation_id=$3) AND f.id>$4 ORDER BY f.id LIMIT $5",
             &[&workspace,&project,&conversation,&after_id,&(i64::from(limit)+1)],
         ).await?.iter().map(projection).collect::<Result<Vec<_>, _>>()?;
         let next_after_id = if feedback.len() > limit as usize {
