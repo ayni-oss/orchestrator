@@ -208,10 +208,17 @@ async fn prepare_inner(
         continuation: Vec::new(),
     };
     finish_profile(client, &mut evidence, profile).await?;
-    println!("{}", serde_json::to_string(&evidence)?);
+    if profile != Profile::RecoveryFault {
+        println!("{}", serde_json::to_string(&evidence)?);
+    }
     Ok(())
 }
 async fn finish_profile(client: &mut Client, evidence: &mut Evidence, profile: Profile) -> Result {
+    if profile == Profile::RecoveryFault {
+        // Preserve the original scope and start receipt even if result collection times out.
+        println!("{}", serde_json::to_string(evidence)?);
+        std::io::Write::flush(&mut std::io::stdout())?;
+    }
     if matches!(profile, Profile::RecoveryReview | Profile::RecoveryFault) {
         // Leave the recovery decision to the actual browser, after real managed quality fails.
         verify(client, evidence).await?;

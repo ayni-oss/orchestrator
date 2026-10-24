@@ -45,6 +45,7 @@ A further recovery still requires a new reviewed proposal and explicit confirmat
 ## Evidence and result
 
 `quality/` retains the inherited source manifest, dirty-source diff, deployed image identities and browser screenshots.
+Preparation writes its originating scope and start receipt before waiting for a result, so a timeout leaves a diagnosable identity.
 Each fault retains the original parent, exact proposal and confirmation, cancellation when applicable, terminal response and feedback bytes.
 Named replay files cover every owner restart and retained redeployment.
 Only Secret names and UIDs enter inventories; Secret values remain unread.

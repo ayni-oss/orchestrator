@@ -2,6 +2,7 @@
 set -euo pipefail
 readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$dev_directory/lib/common.sh"
+export HELM_NO_PLUGINS=1
 readonly context="$(dev_context)" namespace="$(dev_namespace)"
 [[ $# -eq 1 && "$1" == /* && ! -e "$1" && "$namespace" == ayni-orchestrator-acceptance-* ]] || {
   echo 'usage: dev/ctl acceptance ABSOLUTE_NEW_EVIDENCE_DIRECTORY --m6 (owned acceptance namespace required)' >&2; exit 2;
