@@ -26,13 +26,14 @@ function command(program, args, filename, options = {}) {
     throw new Error(`${program} failed${filename ? `; see ${filename}` : ''}`);
   }
 }
-async function rpc(method, body, filename) {
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const response = await fetch(`${base}/api/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-console-request': '1', Origin: base }, body: JSON.stringify(body), signal: AbortSignal.timeout(20_000) });
+async function rpc(method, body, filename, deadline = Date.now() + 45_000) {
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(`${base}/api/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-console-request': '1', Origin: base }, body: JSON.stringify(body), signal: AbortSignal.timeout(Math.max(1, Math.min(20_000, deadline - Date.now()))) });
     const result = await response.json();
-    if (!response.ok && method === 'GetTaskAttempt' && ['Cancelled', 'Unavailable', 'DeadlineExceeded'].includes(result.code) && attempt < 3) {
+    const pause = Math.min(5000, 250 * 2 ** Math.min(attempt, 5));
+    if (!response.ok && method === 'GetTaskAttempt' && ['Cancelled', 'Unavailable', 'DeadlineExceeded'].includes(result.code) && Date.now() + pause < deadline) {
       fs.appendFileSync(path.join(evidence, 'read-only-poll-retries.jsonl'), JSON.stringify({ method, code: result.code, retry: attempt + 1 }) + '\n');
-      await delay(250 * 2 ** attempt);
+      await delay(pause);
       continue;
     }
     if (filename) output(filename, { request: body, response: result });
@@ -51,7 +52,7 @@ async function waitAttempt(selection, stage, check, maxSeconds) {
   const end = Date.now() + maxSeconds * 1000;
   let last;
   while (Date.now() < end) {
-    last = (await rpc('GetTaskAttempt', selection)).attempt;
+    last = (await rpc('GetTaskAttempt', selection, undefined, end)).attempt;
     assert(last, 'attempt missing');
     if (check(last)) { output(`${stage}.json`, last); return last; }
     if (['failed', 'uncertain', 'interrupted', 'cancelled'].includes(last.state)) {

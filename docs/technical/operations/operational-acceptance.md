@@ -174,7 +174,8 @@ GitHub or invokes a paid coding provider. The source, evidence and fixture remot
 remain available for inspection.
 
 Read-only attempt polling retries transient transport cancellation, unavailability
-and deadline errors up to three times with bounded backoff. Each retry is retained
+and deadline errors within the stage's existing deadline, with backoff capped at
+five seconds. Other attempt reads have a 45-second deadline. Each retry is retained
 in `read-only-poll-retries.jsonl`; terminal task and quality failures still fail
 the profile immediately.
 
