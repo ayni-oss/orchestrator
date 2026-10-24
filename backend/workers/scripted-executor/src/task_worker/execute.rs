@@ -67,10 +67,16 @@ async fn execute_inner(
                         }
                     }
                 }
-                None if c.objective == "Task quality failure fixture" => FileChange {
-                    path: "src/lib.rs".into(),
-                    content: "#[test]\nfn fails_quality() { assert_eq!(1, 2); }\n".into(),
-                },
+                None if matches!(
+                    c.objective.as_str(),
+                    "Task quality failure fixture" | "Task recovery fault fixture"
+                ) =>
+                {
+                    FileChange {
+                        path: "src/lib.rs".into(),
+                        content: "#[test]\nfn fails_quality() { assert_eq!(1, 2); }\n".into(),
+                    }
+                }
                 None => FileChange {
                     path: "task-result.txt".into(),
                     content: "Task execution fixture completed.\n".into(),
@@ -78,7 +84,9 @@ async fn execute_inner(
             }],
         )
         .map_err(|_| "source_invalid")?;
-        if c.objective == "Task cancellation fixture" {
+        if c.objective == "Task cancellation fixture"
+            || (c.objective == "Task recovery fault fixture" && c.recovery.is_some())
+        {
             tokio::time::sleep(Duration::from_secs(120)).await;
         }
         return Ok(TaskOutcome {

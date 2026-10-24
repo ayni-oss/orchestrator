@@ -142,6 +142,20 @@ Worker-originated structured questions and model-generated proposals still requi
 protocol extension. M5 dependency integration and cumulative M6 failure closure remain prerequisites
 for full milestone completion; this slice does not invent either boundary.
 
+### Fifth-slice acceptance boundary
+
+The [cumulative recovery profile](../operations/recovery-acceptance.md) runs the supported
+independent-task journey through failed quality, bounded consent, worker interruption,
+cancellation, late-report fencing, owner restarts and retained cleanup/redeployment.
+It verifies the continued attempt's own failure cases while preserving the parent's accepted
+patch and quality evidence. A passing report retains artifact hashes and unmet prerequisites.
+
+The report leaves `milestone_complete` false while M5 integration, worker-originated structured
+questions with answer delivery and model-generated recovery proposals remain unimplemented.
+These are required follow-up work before full M6 closure, rather than inferred coverage from
+scripted independent-task fixtures. Live-provider and live-GitHub recovery remain separate
+validation boundaries.
+
 ## Where the detail lives
 
 - [Roadmap](../../../ROADMAP.md#m6-delivery-scopes) records agreed milestone direction and prerequisites.

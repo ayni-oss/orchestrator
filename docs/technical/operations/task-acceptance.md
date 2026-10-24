@@ -148,3 +148,7 @@ answers from later pages, every page carries parent confirmation, alternate prop
 lose consent controls, and unchanged refreshes preserve the loaded review prefix.
 M5 dependencies, structured worker questions and cumulative M6 closure remain outside
 these gates.
+
+The [cumulative recovery profile](recovery-acceptance.md) extends these gates with faults in
+the continued attempt, all-owner replay and retained cleanup/redeployment. Run it through
+`dev/ctl acceptance /absolute/new/evidence --m6`; its report preserves unmet M6 prerequisites.

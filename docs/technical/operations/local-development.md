@@ -435,6 +435,13 @@ retained cleanup/redeployment. It preserves all authoritative stores and writes
 deployment for ordinary console acceptance to keep retained PVC inventories stable.
 The matrix documents fixture boundaries, required repository checks and recovery.
 
+## Cumulative task recovery acceptance
+
+Use [cumulative recovery acceptance](recovery-acceptance.md) to test the conversation journey
+and faults in continued attempts, including queued/active cancellation, stale-worker output,
+Pod loss and retained cleanup. The `--m6` profile includes the existing managed-quality/browser
+profile and records unmet milestone prerequisites separately from passed independent-task gates.
+
 ## Cleanup
 
 ```sh
