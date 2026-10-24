@@ -5,7 +5,7 @@ conversation-scoped session workers. It does not authorize shared-environment de
 
 ## Startup sequence
 
-1. The migration init container reads only its PostgreSQL URL, takes the transaction-scoped advisory lock, validates retained history/checksums, applies migrations through ordinal 26, installs runtime grants, and validates the catalog manifest.
+1. The migration init container reads only its PostgreSQL URL, takes the transaction-scoped advisory lock, validates retained history/checksums, applies migrations through ordinal 27, installs runtime grants, and validates the catalog manifest.
 2. PostgreSQL, JetStream, and executor-ledger retained volumes are mounted without deleting existing state.
 3. NATS starts with four password identities and no anonymous access. The administrative hook creates or updates the three exact streams and four durable consumers.
 4. The control plane validates the runtime database role, binds HTTP and loopback gRPC, loads only the application broker password, and resumes pending outbox/report acceptance.
@@ -24,7 +24,7 @@ dev/ctl check
 dev/ctl scenario
 ```
 
-`check` verifies all StatefulSets/Deployments, migrations through ordinal 26, exact stream policy/capacity, named consumers, and executor-ledger initialization. `scenario` proves one private-v1 message reaches one accepted scripted response.
+`check` verifies all StatefulSets/Deployments, migrations through ordinal 27, exact stream policy/capacity, named consumers, and executor-ledger initialization. `scenario` proves one private-v1 message reaches one accepted scripted response.
 
 ## Configuration and session recovery
 

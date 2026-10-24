@@ -4,7 +4,7 @@ use super::{
 };
 use ayni_orchestrator_events::{
     task_execution::{SupervisorRequest, WorkerRequest, WorkerResponse},
-    task_quality::{QualityOutcome, snapshot_digest},
+    task_quality::{MAX_QUALITY_OUTCOME_BYTES, QualityOutcome, snapshot_digest},
 };
 impl WorkflowStore {
     /// Poll or reconcile one task using the trusted supervisor identity.
@@ -231,7 +231,7 @@ async fn retain_quality_report(
     attempt: &str,
     outcome: &QualityOutcome,
 ) -> Result<(), StoreError> {
-    if !outcome.validate() || encode(outcome)?.len() > 131_072 {
+    if !outcome.validate() || encode(outcome)?.len() > MAX_QUALITY_OUTCOME_BYTES {
         return Err(StoreError::InvalidInput("task_quality"));
     }
     let coding = run

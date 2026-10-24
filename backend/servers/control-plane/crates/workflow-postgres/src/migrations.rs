@@ -3,7 +3,7 @@ use thiserror::Error;
 use tokio_postgres::{Client, Transaction};
 
 pub const MIGRATION_LOCK_ID: i64 = 4_702_199_126_064_921;
-pub const CURRENT_SCHEMA_VERSION: i64 = 26;
+pub const CURRENT_SCHEMA_VERSION: i64 = 27;
 
 const MIGRATION_1: &str = include_str!("../migrations/0001_durable_foundation.sql");
 const MIGRATION_2: &str = include_str!("../migrations/0002_report_acceptance.sql");
@@ -14,6 +14,7 @@ const MIGRATION_6: &str = include_str!("../migrations/0006_transport_rejections.
 const MIGRATION_7: &str = include_str!("../migrations/0007_broker_capacity.sql");
 const MIGRATION_8: &str = include_str!("../migrations/0008_agent_configuration.sql");
 const MIGRATION_24: &str = include_str!("../migrations/0024_task_source_retention.sql");
+const MIGRATION_27: &str = include_str!("../migrations/0027_task_quality_capacity.sql");
 const MIGRATION_26: &str = include_str!("../migrations/0026_anthropic_provider.sql");
 const MIGRATION_23: &str = include_str!("../migrations/0023_concurrent_tasks.sql");
 const MIGRATION_25: &str = include_str!("../migrations/0025_outcome_assessments.sql");
@@ -194,6 +195,11 @@ async fn apply_pending_migrations(
             "Bounded originating-conversation assessments",
         ),
         (26_i64, MIGRATION_26, "Additional stateless provider"),
+        (
+            27_i64,
+            MIGRATION_27,
+            "Bounded repository quality artifacts and recovery context",
+        ),
     ] {
         if current < version {
             transaction.batch_execute(source).await?;
@@ -273,6 +279,7 @@ async fn validate_inner(client: &Client) -> Result<(), MigrationError> {
         (24_i64, MIGRATION_24),
         (25_i64, MIGRATION_25),
         (26_i64, MIGRATION_26),
+        (27_i64, MIGRATION_27),
     ];
     if rows.len() != migrations.len() {
         return Err(MigrationError::InvalidHistory);
@@ -336,6 +343,7 @@ async fn validate_checksum(transaction: &Transaction<'_>) -> Result<(), Migratio
         (24_i64, MIGRATION_24),
         (25_i64, MIGRATION_25),
         (26_i64, MIGRATION_26),
+        (27_i64, MIGRATION_27),
     ] {
         let checksum: String = transaction
             .query_one(
@@ -442,7 +450,7 @@ fn validate_role_name(runtime_role: &str) -> Result<(), MigrationError> {
 }
 
 const SCHEMA_MANIFEST_CHECKSUM: &str =
-    "sha256:1bd2b52a47811627fe013c56fea4375f0158a67143cd1b12a2dc10c4b23e568c";
+    "sha256:1f32c64b33462a32fe88f150f7cb9209769c2ae07c5d9b852e9617b8006c55ec";
 
 async fn validate_schema(transaction: &Transaction<'_>) -> Result<(), MigrationError> {
     let manifest: String = transaction

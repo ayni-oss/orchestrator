@@ -71,6 +71,40 @@ async function freePort() {
   await new Promise(resolve => server.close(resolve));
   return port;
 }
+const reconnectedProcesses = [];
+process.on('exit', () => { for (const child of reconnectedProcesses) child.kill(); });
+function launch(program, args, log) {
+  const descriptor = fs.openSync(file(log), 'wx');
+  const child = spawn(program, args, { cwd: root, stdio: ['ignore', descriptor, descriptor] });
+  fs.closeSync(descriptor);
+  reconnectedProcesses.push(child);
+  return child;
+}
+async function reconnectGateway() {
+  // Publication authority changes the control-plane configuration checksum.
+  // Rebind both local processes to its new Pod before any subsequent RPC.
+  for (const name of ['SELFDEV_CONSOLE_PID', 'SELFDEV_GRPC_PID']) {
+    const pid = Number(process.env[name]);
+    assert(Number.isSafeInteger(pid) && pid > 1, 'owned gateway process identity missing');
+    try { process.kill(pid); } catch (error) { if (error.code !== 'ESRCH') throw error; }
+  }
+  await delay(300);
+  const pods = JSON.parse(command('kubectl', ['--context', 'docker-desktop', '--namespace', namespace, 'get', 'pods', '-l', 'app.kubernetes.io/name=ayni-orchestrator-control-plane', '--sort-by=.metadata.creationTimestamp', '-o', 'json']));
+  const candidates = pods.items.filter(p => !p.metadata.deletionTimestamp && p.status?.conditions?.some(c => c.type === 'Ready' && c.status === 'True'));
+  const pod = candidates.at(-1);
+  assert(pod, 'replacement control-plane Pod is not ready');
+  output('reconnected-control-plane.json', { name: pod.metadata.name, uid: pod.metadata.uid });
+  const forward = launch('kubectl', ['--context', 'docker-desktop', '--namespace', namespace, 'port-forward', '--address', '127.0.0.1', `pod/${pod.metadata.name}`, `${grpcPort}:50051`], 'grpc-forward-reconnected.txt');
+  let ready = false;
+  for (let n = 0; n < 100; n++) {
+    assert(forward.exitCode === null, 'replacement gRPC forward stopped');
+    if (fs.readFileSync(file('grpc-forward-reconnected.txt'), 'utf8').includes(`Forwarding from 127.0.0.1:${grpcPort}`)) { ready = true; break; }
+    await delay(100);
+  }
+  assert(ready, 'replacement gRPC forward did not become ready');
+  launch(binary('workflow-console'), [`127.0.0.1:${consolePort}`, `127.0.0.1:${grpcPort}`], 'console-reconnected.txt');
+  await waitConsole();
+}
 await waitConsole();
 const sourceCommit = command('git', ['rev-parse', 'HEAD']);
 const checkout = path.join(evidence, 'trusted-source');
@@ -118,6 +152,7 @@ const fixtureImage = `local/ayni-orchestrator-self-development-fixture:${sourceC
 command('docker', ['build', '--tag', fixtureImage, imageContext], 'publication-image-build.txt');
 command('bash', ['-c', 'source "$1"; dev_load_image "$2"', 'self-development', path.join(root, 'dev/lib/images.sh'), fixtureImage], 'publication-image-load.txt');
 command('helm', ['upgrade', '--install', 'ayni-orchestrator', path.join(root, 'dev/charts/ayni-orchestrator-local'), '--reset-then-reuse-values', '--kube-context', 'docker-desktop', '--namespace', namespace, '--set', 'ayni-orchestrator.taskExecution.fixtureEnabled=true', '--set', 'publicationFixture.enabled=true', '--set-string', `publicationFixture.image=${fixtureImage}`, '--set', 'ayni-orchestrator.publication.enabled=true', '--set-string', `ayni-orchestrator.publication.workspaceId=${workspace.id}`, '--set-string', `ayni-orchestrator.publication.repository=${fixtureRepository}`, '--set-string', 'ayni-orchestrator.publication.githubSecretName=publication-fixture-github', '--set', 'ayni-orchestrator.publication.fixtureEnabled=true', '--set-string', `ayni-orchestrator.publication.fixtureApiUrl=http://publication-fixture.${namespace}.svc:8080`, '--set-string', `ayni-orchestrator.publication.fixtureGitUrl=git://publication-fixture.${namespace}.svc:9418/fixture/repo.git`, '--wait', '--timeout=5m'], 'publication-binding.txt', { env: { ...process.env, HELM_NO_PLUGINS: '1' } });
+await reconnectGateway();
 output('publication-selection.json', selection);
 command(binary('workflow-publish-task'), ['prepare', address, file('publication-selection.json'), file('publication-request.json')], 'publication-review.txt');
 command(binary('workflow-publish-task'), ['submit', address, file('publication-request.json')], 'publication-receipt.json');

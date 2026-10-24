@@ -6,6 +6,9 @@ import subprocess
 from pathlib import Path
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from publication_accounting import verify
+
 
 def summarize(root, source):
     files = subprocess.check_output(['git', '-C', str(source), 'ls-files', '--cached', '--others', '--exclude-standard', '-z']).decode().split('\0')
@@ -23,9 +26,10 @@ def summarize(root, source):
     if quality['result'] != 'passed':
         raise ValueError('managed quality acceptance did not pass')
     remote = json.loads((root / 'cleanup-remote.json').read_text())
-    if remote['create_calls'] != 4 or len(remote['pulls']) != 3:
-        raise ValueError('cleanup changed external action accounting')
+    baseline = json.loads((root / 'fixture-baseline.json').read_text())
+    accounting = verify(baseline, remote, 4, 3)
     cases = {
+        'retained-fixture-baseline': ['fixture-baseline.json', 'cleanup-remote.json'],
         'frozen-harness-source': ['quality/source-manifest.json', 'source-manifest-after.json'],
         'approval-and-preparation-restart': ['quality/plans-broker-unavailable.json', 'cleanup-plans.txt', 'cleanup-preparation.txt'],
         'coding-pod-loss': ['quality/task-pod-loss-result.txt'],
@@ -62,7 +66,7 @@ def summarize(root, source):
         'runtime': {'workloads': json.loads((root / 'quality/image-identities.json').read_text()),
                     'managed_quality': (root / 'quality/quality-runtime-image.txt').read_text().strip(),
                     'publication_fixture': (root / 'fixture-image.txt').read_text().strip()},
-        'external_actions': {'create_requests': remote['create_calls'], 'retained_prs': len(remote['pulls'])},
+        'external_actions': accounting,
         'integration': {'coding': 'scripted fixture', 'quality': 'real managed Ayni',
                         'git': 'real Git transport', 'github': 'retained protocol fixture',
                         'live_paid_provider': False, 'live_github_authentication': False},

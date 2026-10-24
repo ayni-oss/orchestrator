@@ -45,6 +45,6 @@ for _ in $(seq 1 100); do
 done
 "$DEV_REPOSITORY_ROOT/target/debug/workflow-console" "127.0.0.1:$console_port" "127.0.0.1:$grpc_port" > "$evidence/console.txt" 2>&1 &
 console_pid=$!
-node "$dev_directory/lib/self-development.mjs" "$DEV_REPOSITORY_ROOT" "$evidence" "$namespace" "$runtime" "$grpc_port" "$console_port" "$fixture_base"
+SELFDEV_GRPC_PID="$grpc_pid" SELFDEV_CONSOLE_PID="$console_pid" node "$dev_directory/lib/self-development.mjs" "$DEV_REPOSITORY_ROOT" "$evidence" "$namespace" "$runtime" "$grpc_port" "$console_port" "$fixture_base"
 status=passed
 printf 'Own-source managed self-development fixture passed; evidence=%s\n' "$evidence"

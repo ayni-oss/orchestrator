@@ -14,7 +14,11 @@ Date: 2026-10-24. Status: staged delivery direction; each pull request owns its 
 
 Task delivery retains coding, quality and publication evidence, but fresh conversations need useful project status without sharing private working context.
 
-## How it works today
+## Planning baseline
+
+These observations describe the starting point for this plan. See
+[the roadmap](../../../ROADMAP.md#m7-delivery-scopes) and the current architecture
+contracts for implemented scope and delivery evidence.
 
 - Eligibility freezes the project's objective and registration status into the retained conversation command.
 - The `read_project_status` tool reads that frozen snapshot.

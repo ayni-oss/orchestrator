@@ -76,7 +76,7 @@ child has UID/GID 10002 and no supplementary groups. The collector reads the
 mode-0644 bounded result JSON and cannot alter the root-owned raw captures.
 Landlock prevents project descendants from reopening these report descriptors
 through procfs; anonymous pipes would not provide this protection. The launcher
-bounds stdout at 64 KiB and diagnostics at 8 KiB, stopping oversized producers. The collector retains the result before reporting it to PostgreSQL.
+bounds stdout at 512 KiB and diagnostics at 8 KiB, stopping oversized producers. The collector retains the result before reporting it to PostgreSQL.
 The serial task slot and bounded attempt deadline cover all stages.
 
 The initial supported runtime profile uses four CPU and 8 GiB memory limits,
@@ -96,7 +96,13 @@ requires the project's configured signing keys.
 | Expected/completed targets | Repository-wide completion accounting |
 | Original JSON artifact and digest | Bounded evidence retained outside project-writable storage |
 
-Artifacts are bounded at 64 KiB. Missing, malformed, oversized or unsupported
+Artifacts are bounded at 512 KiB. The retained encoded outcome and frozen recovery
+command are each bounded at 2 MiB. Task authority accepts at most 2 MiB plus 64 KiB for the worker-request
+envelope. Supervisor replies are bounded at 4 MiB plus 256 KiB to carry both the
+retained recovery context and current quality evidence with their coding outcome
+and JSON envelope. The existing 3-MiB operator gRPC
+response bound carries one complete artifact; recovery lists contain evidence
+digests rather than duplicate artifact bodies. Missing, malformed, oversized or unsupported
 evidence cannot become a pass.
 
 A passing result requires all of:

@@ -239,7 +239,7 @@ async fn admit_proposal(
         quality_artifact: parent.quality.map(|q| q.artifact).unwrap_or_default(),
         answers: inherited_answers,
     });
-    if encode(&command)?.len() > 262_144 {
+    if encode(&command)?.len() > ayni_orchestrator_events::task_execution::MAX_TASK_COMMAND_BYTES {
         return Err(StoreError::InvalidInput("recovery_context_limit"));
     }
     let result = admit(tx, scope, &command, &source, request).await?;

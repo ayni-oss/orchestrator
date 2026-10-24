@@ -4,6 +4,14 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 pub const MAX_SOURCE_PACK: usize = 8 * 1024 * 1024;
 pub const MAX_PATCH: usize = 60 * 1024;
+/// Frozen coding/recovery context, including the complete retained quality artifact.
+pub const MAX_TASK_COMMAND_BYTES: usize = 2 * 1024 * 1024;
+/// Reserve JSON wrapper/coding-result space beyond the two retained contexts.
+pub const MAX_TASK_SUPERVISOR_RESPONSE_BYTES: usize =
+    MAX_TASK_COMMAND_BYTES + crate::task_quality::MAX_QUALITY_OUTCOME_BYTES + 256 * 1024;
+/// The report envelope is separate from its encoded quality outcome.
+pub const MAX_TASK_WORKER_REQUEST_BYTES: usize =
+    crate::task_quality::MAX_QUALITY_OUTCOME_BYTES + 64 * 1024;
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TaskCommand {
@@ -289,5 +297,47 @@ mod source_selection_tests {
         assert!(!valid_source_paths(
             &(0..65).map(|n| format!("file{n}")).collect::<Vec<_>>()
         ));
+    }
+}
+
+#[cfg(test)]
+mod transport_capacity_tests {
+    use super::*;
+    use crate::task_quality::{MAX_QUALITY_OUTCOME_BYTES, QualityOutcome};
+    #[test]
+    fn transport_envelopes_fit_both_maximum_retained_contexts() -> Result<(), serde_json::Error> {
+        // Synthetic maximum-size encoded objects exercise transport capacity,
+        // independently of the narrower semantic artifact validation rules.
+        let mut command = TaskCommand::default();
+        let size = serde_json::to_vec(&command)?.len();
+        command.instructions = "x".repeat(MAX_TASK_COMMAND_BYTES - size);
+        assert_eq!(serde_json::to_vec(&command)?.len(), MAX_TASK_COMMAND_BYTES);
+        let mut quality = QualityOutcome::default();
+        let size = serde_json::to_vec(&quality)?.len();
+        quality.runtime_platform = "x".repeat(MAX_QUALITY_OUTCOME_BYTES - size);
+        assert_eq!(
+            serde_json::to_vec(&quality)?.len(),
+            MAX_QUALITY_OUTCOME_BYTES
+        );
+        let request = WorkerRequest::QualityReport {
+            outcome: quality.clone(),
+        };
+        assert!(serde_json::to_vec(&request)?.len() <= MAX_TASK_WORKER_REQUEST_BYTES);
+        let run = TaskRun {
+            command,
+            state: "reporting".into(),
+            generation: 1,
+            pod_uid: "x".repeat(64),
+            deadline_seconds: i64::MAX,
+            provider_state: "settled".into(),
+            quality: Some(quality),
+            outcome: Some(TaskOutcome {
+                state: "completed".into(),
+                patch: "\\".repeat(MAX_PATCH),
+                ..Default::default()
+            }),
+        };
+        assert!(serde_json::to_vec(&run)?.len() <= MAX_TASK_SUPERVISOR_RESPONSE_BYTES);
+        Ok(())
     }
 }

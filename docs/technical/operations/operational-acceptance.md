@@ -92,8 +92,10 @@ A self-development gate must start from an explicitly reviewed plan against a
 frozen Orchestrator source commit, execute in isolated worktrees, validate with
 the actual managed Ayni runtime, retain complete quality evidence and end at a
 reviewable draft. Capture cancellation and restart behavior and the exact
-source/image/lock identities. A deterministic coding fixture, a passing host
-check, this implementation PR, or manual commits do not satisfy that gate.
+source/image/lock identities. The own-source deterministic coding profile below
+validates the bounded execution, managed-quality and draft-publication topology;
+it does not establish autonomous coding capability. A passing host check, this
+implementation PR, or manual commits alone do not satisfy the deployed gate.
 Users retain merge and deployment authority. Keep `milestone_complete` false
 until every recorded prerequisite and cumulative deployed gate has passing
 execution evidence.
@@ -108,13 +110,17 @@ execution and the managed quality runtime enabled:
 AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-example \
   CONSOLE_URL=http://127.0.0.1:3000 \
   PROVIDER_FIXTURE_URL=http://127.0.0.1:18080 \
+  AYNI_TRUSTED_GRPC_ADDRESS=127.0.0.1:50051 \
   node apps/console/assessment-acceptance.mjs /absolute/new/assessment-evidence
 ```
 
 The script creates its own workspace, two approved tasks and a public fixture-only
-provider Secret. The task commands freeze scripted execution before the workspace
-switches to fixture conversation execution. A real coding worker remains in
-progress across a maintenance sweep; that progress must admit no model call.
+provider Secret. Source preparation and upload use the trusted `workflow-prepare-task`
+CLI over the explicit loopback gRPC forward; the browser gateway remains read-only
+for those source operations. The task commands freeze scripted execution before the workspace
+switches to fixture conversation execution. Dispatch is paused only in the owned test namespace so a durable queued task spans
+a maintenance sweep; that progress must admit no model call. Dispatch then resumes
+and the actual worker reports its result.
 Accepted coding then triggers a bounded assessment. A second worker's accepted
 result changes the snapshot while the first fixture response is delayed, proving
 stale response/proposal rejection. Subsequent current outcomes produce a retained

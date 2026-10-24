@@ -17,7 +17,9 @@ tools. A tool has `alias` (a bounded `mcp_` identifier), remote `name`, HTTPS
 `endpoint`, `description`, `input_schema`, `read_only`, `max_output_bytes`
 (1–32768), `timeout_seconds` (1–30), nullable `bearer_file`, and nullable `consent`.
 HTTP is accepted only for loopback fixtures. Credential paths are restricted to
-one filename below `/var/run/mcp/`. Redirects and credential-bearing URLs fail.
+one filename below `/var/run/mcp/`. Redirects, query strings and credential-bearing URLs fail before configuration
+can enter the retained tool descriptors. Use the directly mounted bearer file
+for authentication.
 
 Preparation freezes the selected complete tool descriptors in the session ledger
 before any provider request. An already retained preparation reuses its original
@@ -72,10 +74,11 @@ owned namespace on completion. Pass `anthropic` as the second argument to exerci
 the selected Messages provider, MCP continuation, transport uncertainty, in-flight
 cancellation and replay of accepted and failed calls after Pod replacement.
 
-Deterministic tests cover scoped schema validation, unsafe endpoints, mutation
+Deterministic unit tests cover scoped schema validation, unsafe endpoints, mutation
 consent, exact replay, consumed-grant rejection, initialization and output limits.
-They do not establish live external-service interoperability or deployed failure
-acceptance. The delivery PR records executed evidence and remaining limitations.
+Unit tests alone do not establish deployed failure acceptance; the separate local
+profile above exercises that topology. Neither establishes live external-service
+interoperability. The delivery PR records executed evidence and remaining limitations.
 
 ## Stage exact mutation consent
 

@@ -110,6 +110,7 @@ fn valid_tool(tool: &Tool) -> bool {
                 && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"))))
             && url.username().is_empty()
             && url.password().is_none()
+            && url.query().is_none()
             && url.fragment().is_none()
     });
     tool.alias.starts_with("mcp_")
@@ -440,6 +441,25 @@ mod tests {
             !valid_tool(&tool),
             "unsupported constraints must not be ignored"
         );
+    }
+
+    #[test]
+    fn endpoint_queries_cannot_enter_retained_tool_descriptors() {
+        let mut tool = tool();
+        for endpoint in [
+            "https://example.invalid/mcp?access_token=public-test-value",
+            "https://example.invalid/mcp?route=project",
+            "https://example.invalid/mcp?",
+            "http://127.0.0.1:8080/mcp?access_token=public-test-value",
+        ] {
+            tool.endpoint = endpoint.into();
+            assert!(
+                !valid_tool(&tool),
+                "MCP query strings must be rejected before retention"
+            );
+        }
+        tool.endpoint = "https://example.invalid/mcp".into();
+        assert!(valid_tool(&tool));
     }
 
     #[tokio::test]

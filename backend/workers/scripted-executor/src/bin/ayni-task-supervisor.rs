@@ -28,7 +28,9 @@ impl Supervisor {
             .error_for_status()?;
         let mut body = Vec::new();
         while let Some(chunk) = response.chunk().await? {
-            if body.len() + chunk.len() > 512 * 1024 {
+            if body.len() + chunk.len()
+                > ayni_orchestrator_events::task_execution::MAX_TASK_SUPERVISOR_RESPONSE_BYTES
+            {
                 return Err(io::Error::other("task response exceeds bound").into());
             }
             body.extend_from_slice(&chunk);

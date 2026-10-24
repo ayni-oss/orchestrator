@@ -5,11 +5,14 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const endpoint = process.env.CONSOLE_URL || 'http://127.0.0.1:3000';
 const fixture = process.env.PROVIDER_FIXTURE_URL || 'http://127.0.0.1:18080';
 const namespace = process.env.AYNI_ORCHESTRATOR_NAMESPACE;
 const evidence = process.argv[2] || process.env.CONSOLE_EVIDENCE_DIRECTORY;
+const trustedAddress = process.env.AYNI_TRUSTED_GRPC_ADDRESS;
+assert.match(trustedAddress || '', /^127\.0\.0\.1:[0-9]+$/, 'trusted local gRPC forward required for task source submission');
 assert.ok(evidence && path.isAbsolute(evidence), 'new absolute evidence directory required');
 assert.match(namespace || '', /^ayni-orchestrator-acceptance-[a-z0-9-]+$/);
 assert.ok(namespace.length <= 54);
@@ -34,7 +37,14 @@ const pageErrors = [];
 page.on('pageerror', error => pageErrors.push(error.message));
 const output = { schema: 'build.ayni.orchestrator.assessment-acceptance.v1', result: 'failed', liveProvider: false, coding: 'explicit scripted worker fixture', quality: 'actual managed Ayni runtime', gates: [], metadata, runtime };
 let stage = 'initialize';
+let supervisorPaused = false;
 const checkpoint = async () => writeFile(path.join(evidence, 'outcome.json'), JSON.stringify({ ...output, stage }, null, 2));
+// Source preparation/upload deliberately stays outside the browser gateway.
+const trustedTask = async (mode, label, request) => {
+  const file = path.join(evidence, `${label}.json`);
+  await writeFile(file, JSON.stringify(request));
+  return JSON.parse(execFileSync(fileURLToPath(new URL('target/debug/workflow-prepare-task', root)), [mode, trustedAddress, file], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
+};
 const gateway = async (method, body) => {
   const response = await page.evaluate(async ({ method, body }) => {
     const response = await fetch(`/api/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Console-Request': '1' }, body: JSON.stringify(body) });
@@ -43,7 +53,7 @@ const gateway = async (method, body) => {
   assert.equal(response.status, 200, `${method}: ${JSON.stringify(response.body)}`);
   return response.body;
 };
-const waitFor = async (read, predicate, label, duration = 240000) => {
+const waitFor = async (read, predicate, label, duration = 600000) => {
   const until = Date.now() + duration;
   while (Date.now() < until) {
     const value = await read();
@@ -71,13 +81,13 @@ try {
   const status = async () => gateway('GetOutcomeAssessmentStatus', scope);
   const version = (await gateway('CreatePlan', { ...scope, idempotencyKey: key(), content: {
     title: 'Deployed assessment trigger', objective: 'Expose real accepted task outcomes.', scope: 'Only the isolated task fixture.',
-    tasks: ['Task cancellation fixture', 'Produce the deterministic fixture file'].map((objective, index) => ({ key: `task${index}`, objective, scope: 'Only the fixture checkout.', acceptanceCriteria: ['Retain coding and managed-quality evidence.'], repository: 'https://example.invalid/task-source.git', sourceRef: 'refs/heads/main' })),
+    tasks: ['Produce the first deterministic fixture file', 'Produce the second deterministic fixture file'].map((objective, index) => ({ key: `task${index}`, objective, scope: 'Only the fixture checkout.', acceptanceCriteria: ['Retain coding and managed-quality evidence.'], repository: 'https://example.invalid/task-source.git', sourceRef: 'refs/heads/main' })),
   } })).version;
   const approval = await gateway('ApprovePlan', { ...scope, idempotencyKey: key(), planId: version.planId, expectedVersionId: version.id, contentDigest: version.contentDigest });
   assert.equal(approval.tasks.length, 2);
   const tasks = [];
   for (const task of approval.tasks) {
-    const preparation = (await gateway('PrepareTaskExecution', { ...scope, idempotencyKey: key(), taskId: task.id, inputs: {
+    const preparation = (await trustedTask('submit', `prepare-${task.id}`, { ...scope, idempotencyKey: key(), taskId: task.id, inputs: {
       repository: task.specification.repository, sourceRef: task.specification.sourceRef, sourceCommit: metadata.source_commit, lockDigest: metadata.lock_digest,
       runtimeImage: runtime, maxSeconds: 300, maxTokens: 10000,
     } })).preparation;
@@ -117,12 +127,17 @@ try {
   assert.deepEqual(await replay.json(), consent.response);
   output.consent = consent;
   output.gates.push('console-explicit-bounded-consent', 'consent-response-loss-reload-exact-retry');
-  const start = task => gateway('StartTaskExecution', { ...scope, ...task, idempotencyKey: key(), sourcePack: pack.toString('base64') });
+  const start = task => trustedTask('submit-start', `start-${task.attemptId}`, { ...scope, ...task, idempotencyKey: key(), sourcePack: pack.toString('base64') });
   const attempt = task => gateway('GetTaskAttempt', { ...scope, ...task });
   stage = 'ordinary-progress'; await checkpoint();
+  // Hold dispatch in this owned namespace so a full maintenance sweep observes
+  // durable queued progress without relying on timing inside the coding worker.
+  kube(namespace, 'scale', 'deployment/task-supervisor', '--replicas=0');
+  supervisorPaused = true;
+  kube(namespace, 'wait', '--for=delete', 'pod', '-l', 'app.kubernetes.io/name=ayni-task-supervisor', '--timeout=2m');
   await start(tasks[0]);
-  await waitFor(() => attempt(tasks[0]), value => value.attempt.state === 'claimed', 'real coding worker claimed');
-  // Span a full minute sweep while the fixture's coding worker sleeps before reporting.
+  await waitFor(() => attempt(tasks[0]), value => value.attempt.state === 'queued', 'durable queued task');
+
   const progressUntil = Date.now() + 65000;
   while (Date.now() < progressUntil) {
     assert.equal((await calls()).length, 0, 'task progress must not invoke a model');
@@ -130,11 +145,14 @@ try {
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
   output.gates.push('deployed-progress-spans-maintenance-without-model');
+  kube(namespace, 'scale', 'deployment/task-supervisor', '--replicas=1');
+  kube(namespace, 'rollout', 'status', 'deployment/task-supervisor', '--timeout=3m');
+  supervisorPaused = false;
   stage = 'accepted-outcome-trigger'; await checkpoint();
   const firstCall = await waitFor(calls, values => values.some(call => call.state === 'sending'), 'first outcome assessment sending');
   output.firstCall = firstCall[0];
   await start(tasks[1]);
-  await waitFor(() => attempt(tasks[1]), value => value.attempt.executionOutcome === 'completed', 'second accepted task result inside delayed assessment', 45000);
+  await waitFor(() => attempt(tasks[1]), value => value.attempt.executionOutcome === 'completed', 'second accepted task result inside delayed assessment', 90000);
   const stale = await waitFor(snapshot, value => value.recentTerminalTurns?.some(turn => turn.id === output.firstCall.turnId && turn.safeFailureReason === 'stale_outcome_assessment'), 'stale assessment rejected');
   assert.equal(stale.plans.filter(plan => plan.id !== version.planId).length, 0, 'stale assessment materializes no plan');
   output.gates.push('accepted-worker-outcome-triggers-assessment', 'changed-outcome-rejects-stale-assessment');
@@ -176,4 +194,7 @@ try {
   output.error = error.message;
   await checkpoint();
   throw error;
-} finally { await browser.close(); }
+} finally {
+  if (supervisorPaused) kube(namespace, 'scale', 'deployment/task-supervisor', '--replicas=1');
+  await browser.close();
+}

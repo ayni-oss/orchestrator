@@ -15,10 +15,13 @@ use uuid::Uuid;
 mod concurrency;
 #[path = "support/task_confirmation.rs"]
 mod confirmation;
+#[path = "support/quality_evidence.rs"]
+mod quality_evidence;
 #[path = "support/task_recovery.rs"]
 mod recovery;
 #[path = "support/worker_recovery.rs"]
 mod worker_recovery;
+use quality_evidence::failed_quality;
 type Result = std::result::Result<(), Box<dyn Error + Send + Sync>>;
 fn key() -> String {
     Uuid::now_v7().to_string()
@@ -388,6 +391,7 @@ async fn verify_quality_receipts(
     let report = W::QualityReport {
         outcome: quality.clone(),
     };
+    quality_evidence::reject_excess(store, task, uid, quality).await?;
     assert!(
         store
             .task_worker(&task.attempt_id, 1, uid, &report)
@@ -529,40 +533,6 @@ async fn prove_quality_rollback(
     );
     driver.abort();
     Ok(())
-}
-
-fn failed_quality(
-    command: &ayni_orchestrator_events::task_execution::TaskCommand,
-    outcome: &TaskOutcome,
-) -> QualityOutcome {
-    let hash = format!("sha256:{}", "e".repeat(64));
-    let artifact = serde_json::json!({
-        "schema_version":"0.5.0", "invocation":{"command":"check","scope":{}}, "execution_mode":"managed",
-        "environment_lock_fingerprint":hash,"source_fingerprint":hash,"contract_digest":hash,
-        "prebuilt_runtime":{"metadata_digest":hash,"certificate":{"certificate":{"platform":"linux/arm64","lock_fingerprint":hash}}},
-        "tool_versions":[{"tool":"rust","version":"1.94.0"}],
-        "completion":{"scope":"repository","state":"complete","expected_targets":1,"completed_targets":1,"detected_targets":1,"skipped_targets":0,"issues":[]},
-        "aggregate":{"status":"fail","total_rows":1,"passing_rows":0,"failing_rows":1},"rows":[{"pass":false}]
-    }).to_string();
-    QualityOutcome {
-        state: "failed".into(),
-        safe_reason: "quality_failed".into(),
-        snapshot_digest: snapshot_digest(command, outcome),
-        lock_digest: command.lock_digest.clone(),
-        runtime_image: command.runtime_image.clone(),
-        runtime_platform: "linux/arm64".into(),
-        runtime_metadata_digest: hash.clone(),
-        executor_digest: hash.clone(),
-        contract_digest: hash.clone(),
-        lock_fingerprint: hash.clone(),
-        source_fingerprint: hash.clone(),
-        validation_input_digest: hash,
-        exit_code: Some(1),
-        artifact_digest: ayni_orchestrator_events::task_execution::digest(artifact.as_bytes()),
-        artifact,
-        expected_targets: 1,
-        completed_targets: 1,
-    }
 }
 
 async fn cancel_queued_task(

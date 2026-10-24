@@ -35,7 +35,9 @@ pub fn router(store: WorkflowStore) -> Result<Router, io::Error> {
     Ok(Router::new()
         .route("/v1/task-supervisor", post(supervisor))
         .route("/v1/task-worker/{attempt}/{generation}", post(worker))
-        .layer(DefaultBodyLimit::max(256 * 1024))
+        .layer(DefaultBodyLimit::max(
+            ayni_orchestrator_events::task_execution::MAX_TASK_WORKER_REQUEST_BYTES,
+        ))
         .with_state(Authority {
             store,
             token: Arc::from(token),
