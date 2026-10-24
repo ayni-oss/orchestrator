@@ -48,6 +48,12 @@ pub async fn prepare_publication_quality(
     )
     .await
 }
+pub async fn prepare_recovery_fault(
+    projects: &mut ProjectServiceClient<Channel>,
+    client: &mut Client,
+) -> Result {
+    prepare_inner(projects, client, Profile::RecoveryFault).await
+}
 pub async fn prepare_recovery_review(
     projects: &mut ProjectServiceClient<Channel>,
     client: &mut Client,
@@ -89,8 +95,20 @@ enum Profile {
     QualityPassed,
     QualityFailed,
     RecoveryReview,
+    RecoveryFault,
     PublicationPassed,
     PublicationFailed,
+}
+impl Profile {
+    const fn fails_quality(self) -> bool {
+        matches!(
+            self,
+            Self::QualityFailed
+                | Self::PublicationFailed
+                | Self::RecoveryReview
+                | Self::RecoveryFault
+        )
+    }
 }
 async fn prepare_inner(
     projects: &mut ProjectServiceClient<Channel>,
@@ -98,10 +116,7 @@ async fn prepare_inner(
     profile: Profile,
 ) -> Result {
     let quality = !matches!(profile, Profile::Coding | Profile::Pending);
-    let quality_failed = matches!(
-        profile,
-        Profile::QualityFailed | Profile::PublicationFailed | Profile::RecoveryReview
-    );
+    let quality_failed = profile.fails_quality();
     let scope = create_scope(projects, client)
         .await
         .map_err(|e| format!("task scope: {e}"))?;
@@ -193,11 +208,18 @@ async fn prepare_inner(
         continuation: Vec::new(),
     };
     finish_profile(client, &mut evidence, profile).await?;
-    println!("{}", serde_json::to_string(&evidence)?);
+    if profile != Profile::RecoveryFault {
+        println!("{}", serde_json::to_string(&evidence)?);
+    }
     Ok(())
 }
 async fn finish_profile(client: &mut Client, evidence: &mut Evidence, profile: Profile) -> Result {
-    if profile == Profile::RecoveryReview {
+    if profile == Profile::RecoveryFault {
+        // Preserve the original scope and start receipt even if result collection times out.
+        println!("{}", serde_json::to_string(evidence)?);
+        std::io::Write::flush(&mut std::io::stdout())?;
+    }
+    if matches!(profile, Profile::RecoveryReview | Profile::RecoveryFault) {
         // Leave the recovery decision to the actual browser, after real managed quality fails.
         verify(client, evidence).await?;
     } else if profile != Profile::Pending {
@@ -573,10 +595,9 @@ fn plan_content(profile: Profile) -> v1::PlanContent {
         scope: "Task execution acceptance".into(),
         tasks: vec![v1::PlanTaskSpecification {
             key: "coding".into(),
-            objective: if matches!(
-                profile,
-                Profile::QualityFailed | Profile::PublicationFailed | Profile::RecoveryReview
-            ) {
+            objective: if profile == Profile::RecoveryFault {
+                "Task recovery fault fixture"
+            } else if profile.fails_quality() {
                 "Task quality failure fixture"
             } else if profile == Profile::Pending {
                 "Task cancellation fixture"

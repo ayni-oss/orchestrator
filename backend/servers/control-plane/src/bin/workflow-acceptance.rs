@@ -25,6 +25,8 @@ mod plans;
 mod publication;
 #[path = "workflow_acceptance/recovery.rs"]
 mod recovery;
+#[path = "workflow_acceptance/recovery_faults.rs"]
+mod recovery_faults;
 #[path = "workflow_acceptance/task_runs.rs"]
 mod task_runs;
 
@@ -153,6 +155,9 @@ async fn dispatch(
     client: &mut Client,
     projects: &mut ProjectServiceClient<Channel>,
 ) -> Result {
+    if mode.contains("recovery-fault") {
+        return recovery_faults::dispatch(mode, client, projects).await;
+    }
     if mode.contains("publication") {
         return dispatch_publication(mode, client, projects).await;
     }

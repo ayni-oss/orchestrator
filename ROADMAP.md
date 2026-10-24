@@ -187,6 +187,12 @@ retain canonical answers, competing proposals expose the same parent confirmatio
 notices link resolved decisions to continued coding/quality outcomes. Project attention hides
 resolved decisions without deleting historical feedback. Structured worker questions and
 model-generated proposals remain outside the current coding protocol.
+The [cumulative recovery profile](docs/technical/operations/recovery-acceptance.md) adds
+continued-attempt cancellation, stale-worker rejection, Pod loss, exact replay across owner
+restarts and retained cleanup/redeployment. Its passing report covers independent tasks and
+explicitly keeps `milestone_complete` false. Full closure still requires M5 dependency
+integration, worker-originated structured questions with answer delivery and model-generated
+recovery proposals; an independent-task acceptance pass cannot waive those prerequisites.
 Each delivery PR owns its executed evidence and status.
 
 Use explicit `docker-desktop` Kubernetes for runtime acceptance. Create owned

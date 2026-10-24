@@ -45,3 +45,5 @@ The [event-platform history](history/event-platform/index.md) is retained as dat
 - [Task quality](architecture/task-quality.md): frozen validation, managed Ayni execution and separate retained evidence.
 
 - [Task draft publication](architecture/task-publication.md): explicit scoped authority, deterministic Git changes and recoverable draft identity.
+
+- [Cumulative recovery acceptance](operations/recovery-acceptance.md): continued-attempt fault matrix, replay, retained cleanup and unmet M6 prerequisites.

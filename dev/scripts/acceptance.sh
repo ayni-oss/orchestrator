@@ -6,6 +6,9 @@ source "$dev_directory/lib/common.sh"
 if [[ $# -eq 2 && "$2" == --publication-only ]]; then
   exec "$dev_directory/scripts/publication-acceptance.sh" "$1"
 fi
+if [[ $# -eq 2 && "$2" == --m6 ]]; then
+  exec "$dev_directory/scripts/recovery-acceptance.sh" "$1"
+fi
 if [[ $# -eq 2 && "$2" == --m4 ]]; then
   exec "$dev_directory/scripts/publication-acceptance.sh" "$1" --m4
 fi
