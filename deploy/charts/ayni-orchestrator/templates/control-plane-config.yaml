@@ -21,6 +21,16 @@
 {{- else if not (hasPrefix "https://" .Values.providers.openai.baseUrl) }}
 {{- fail "provider endpoint must use HTTPS outside the explicit fixture profile" }}
 {{- end }}
+{{- if .Values.providers.anthropic.fixtureEgress }}
+{{- if not .Values.providers.anthropic.enabled }}
+{{- fail "Anthropic fixture egress requires explicit execution enablement" }}
+{{- end }}
+{{- if ne .Values.providers.anthropic.baseUrl (printf "http://provider-fixture.%s.svc:8080/v1" .Release.Namespace) }}
+{{- fail "Anthropic fixture egress requires the scoped local provider-fixture endpoint" }}
+{{- end }}
+{{- else if not (hasPrefix "https://" .Values.providers.anthropic.baseUrl) }}
+{{- fail "Anthropic endpoint must use HTTPS outside the explicit fixture profile" }}
+{{- end }}
 {{- if eq (int .Values.controlPlane.httpPort) (int .Values.controlPlane.trustedGrpcPort) }}
 {{- fail "controlPlane HTTP and trusted gRPC ports must differ" }}
 {{- end }}

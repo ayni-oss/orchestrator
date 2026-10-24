@@ -28,6 +28,9 @@ struct Fixture {
 }
 impl Fixture {
     async fn new() -> Result<Self, Box<dyn Error + Send + Sync>> {
+        Self::for_provider("openai").await
+    }
+    async fn for_provider(provider: &str) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let url = std::env::var("AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL")?;
         ayni_orchestrator_workflow_postgres::migrate_for_runtime(
             &std::env::var("AYNI_POSTGRES_FEASIBILITY_URL")?,
@@ -43,7 +46,7 @@ impl Fixture {
         let current = store.get_agent_configuration(&workspace, "").await?;
         let config = ayni_orchestrator_workflow_postgres::model::AgentConfiguration {
             revision_id: String::new(),
-            provider: "openai".into(),
+            provider: provider.into(),
             model: "explicit-fixture-model".into(),
             ..current.clone()
         };
@@ -95,7 +98,15 @@ impl Fixture {
         let (identity, metadata, command) = decode_command(&bytes)?;
         self.store.mark_outbox_stored(&identity.id, &bytes).await?;
         let mut binding = command.binding.ok_or("binding")?;
-        assert_eq!(binding.execution_binding_revision, "openai-responses-v1");
+        assert_eq!(
+            ayni_orchestrator_events::workflow::binding_provider(
+                &binding.execution_binding_revision
+            ),
+            command
+                .frozen_configuration
+                .as_ref()
+                .map(|c| c.provider.as_str())
+        );
         binding.command_digest = format!("sha256:{:x}", Sha256::digest(&bytes));
         let seed = [91; 32];
         let public = ed25519_dalek::SigningKey::from_bytes(&seed)
@@ -696,5 +707,76 @@ async fn explicit_uncertainty_retirement_preserves_evidence_and_fences_generatio
             .iter()
             .all(|message| message.content != "Retained provider result")
     );
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires disposable migrated PostgreSQL with runtime-role URL"]
+async fn anthropic_uses_the_same_retained_uncertainty_cancellation_and_result_authority()
+-> TestResult {
+    for (cancel, uncertain) in [(false, false), (true, false), (false, true)] {
+        let f = Fixture::for_provider("anthropic").await?;
+        let turn = f.send().await?;
+        let call = f.claim(&turn).await?;
+        assert_eq!(
+            call.binding.execution_binding_revision,
+            "anthropic-messages-v1"
+        );
+        assert_eq!(call.evidence.provider, "anthropic");
+        assert!(
+            f.store
+                .session_authority(&call.request("admit"))
+                .await?
+                .allowed
+        );
+        let replay = f.store.session_authority(&call.request("admit")).await?;
+        assert!(!replay.allowed);
+        assert_eq!(replay.state, "uncertain");
+        if cancel {
+            f.cancel(&turn, &key()).await?;
+        }
+        let terminal = call.terminal(
+            if uncertain { "uncertain" } else { "completed" },
+            if uncertain { None } else { Some(12) },
+        )?;
+        assert!(f.store.accept_terminal_report(&terminal).await?.accepted);
+        assert!(f.store.accept_terminal_report(&terminal).await?.accepted);
+        let reopened = WorkflowStore::new(std::env::var("AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL")?);
+        let calls = reopened
+            .list_provider_calls(&f.workspace, &f.project, &f.conversation)
+            .await?;
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].evidence.provider, "anthropic");
+        assert_eq!(
+            calls[0].evidence.state,
+            if uncertain { "uncertain" } else { "completed" }
+        );
+        assert_eq!(f.settled(&turn).await?, !uncertain);
+        let snapshot = reopened
+            .get_snapshot(&f.workspace, &f.project, &f.conversation)
+            .await?;
+        assert_eq!(
+            snapshot
+                .recent_messages
+                .iter()
+                .filter(|m| m.content == "Retained provider result")
+                .count(),
+            usize::from(!cancel && !uncertain)
+        );
+        if uncertain {
+            assert_eq!(f.state(&turn).await?, "processing");
+            assert!(
+                !reopened
+                    .conversation_sessions(&f.workspace, &f.project, &f.conversation)
+                    .await?[0]
+                    .can_replace
+            );
+        } else {
+            assert_eq!(
+                f.state(&turn).await?,
+                if cancel { "failed" } else { "completed" }
+            );
+        }
+    }
     Ok(())
 }

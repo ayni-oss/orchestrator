@@ -19,7 +19,9 @@ Approval requires at least one task, acceptance criteria for every task and no
 unresolved plan-level scope questions. Unresolved task execution inputs do not
 block admission: they remain frozen and visible as execution blockers. Declared
 repository/source references and execution limits do not establish verification,
-runtime selection or authorized execution budget.
+runtime selection or authorized execution budget. Task dependencies name keys in
+the exact reviewed task set; validation rejects missing, repeated, self and cyclic
+edges. Preparation requires [explicit upstream selections](task-dependencies.md).
 
 Approval and revision serialize on the owning conversation. Approval either
 retains the reviewed current head or returns `PLAN_VERSION_CONFLICT`; it never

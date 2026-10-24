@@ -889,10 +889,10 @@ fn decision_state_matches(
     ) {
         return true;
     }
-    let provider = report
-        .binding
-        .as_ref()
-        .is_some_and(|binding| binding.execution_binding_revision == "openai-responses-v1");
+    let provider = report.binding.as_ref().is_some_and(|binding| {
+        ayni_orchestrator_events::workflow::binding_provider(&binding.execution_binding_revision)
+            .is_some()
+    });
     provider
         && match (report_kind, turn_state) {
             (ConversationTurnReportKind::Failed, "processing") => {

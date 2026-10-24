@@ -67,7 +67,34 @@ Retained provider uncertainty remains visible even when the run is cancelled.
 
 Project status remains `registered`.
 This factual projection invokes no model and does not assess whether the objective is complete.
-Bounded assessments, proactive proposals, MCP integrations and additional providers belong to later [M7 delivery slices](../research/project-workflow-m7-delivery-plan.md).
+Outcome assessments use a separate, explicitly authorized conversation turn.
+They do not rewrite this factual projection or establish project completion.
+The [M7 delivery plan](../research/project-workflow-m7-delivery-plan.md) records the integration acceptance scope.
+
+## Authorized outcome assessment
+
+In the contributor console, select a conversation and open **Task outcome assessments**.
+Review the workspace model and input/output limits, choose an allowance of 1–10 assessments, and confirm consent.
+Each assessment can incur a provider call within that frozen configuration's limits.
+Saving 0 stops future admission; the ordinary conversation controls cancel already admitted turns.
+`AuthorizeOutcomeAssessments` retains exact scope, configuration revision and allowance with idempotent replay.
+`GetOutcomeAssessmentStatus` exposes the retained allowance and admitted count after reload.
+Changing workspace configuration pauses the old authorization until the operator reviews and grants a new one.
+
+The maintenance sweep coalesces accepted outcomes into at most one turn while the originating conversation is idle.
+It freezes a bounded selection of the 16 most recent accepted task outcomes, containing stage states and exact accepted evidence digests.
+The snapshot excludes transcript text, patches and private reasoning.
+Accepted outcome timestamps survive replay pruning, so a new outcome on an older attempt enters the selection.
+Progress without a changed accepted outcome schedules no model call.
+Append-only scan cursors prevent unchanged conversations from starving later work in bounded sweeps.
+One snapshot is admitted once per authorization, including after cancellation or restart.
+The ordinary retained turn owns request identity, token reservation, result replay and provider uncertainty; an ambiguous request is never retried as another assessment.
+
+Assessments can use the existing structured proposal tool to retain a reviewable follow-up plan.
+The originating conversation remains the proposal owner, and the normal exact-version approval boundary owns task admission.
+A changed task evidence snapshot rejects stale assessment proposals before plan materialization.
+The stale interpretation never enters shared project facts.
+Recovered work and model recovery advice retain their separate task-recovery approval boundary.
 
 ## Acceptance boundary
 

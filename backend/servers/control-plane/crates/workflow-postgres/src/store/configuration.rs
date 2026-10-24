@@ -70,7 +70,7 @@ fn validate_configuration(value: &AgentConfiguration) -> Result<(), StoreError> 
     support::validate_id(&value.workspace_id, "workspace_id")?;
     support::validate_text(&value.instructions, 16_384, true, "instructions")?;
     support::validate_name(&value.model, "model")?;
-    if !matches!(value.provider.as_str(), "scripted" | "openai")
+    if !matches!(value.provider.as_str(), "scripted" | "openai" | "anthropic")
         || (value.provider == "scripted" && value.model != "scripted")
     {
         return Err(StoreError::InvalidInput("provider_model"));
@@ -204,6 +204,7 @@ impl WorkflowStore {
             .ok_or(StoreError::NotFound)?;
         let result = TurnInputs {
             turn_id: turn.to_owned(),
+            command_event_id: client.query_one("SELECT command_event_id FROM workflow_dispatch_intents WHERE workspace_id=$1 AND project_id=$2 AND conversation_id=$3 AND turn_id=$4", &[&workspace,&project,&conversation,&turn]).await?.get(0),
             configuration: configuration(&row)?,
         };
         driver.abort();

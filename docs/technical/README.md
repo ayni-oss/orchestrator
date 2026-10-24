@@ -5,6 +5,8 @@ The runtime combines the M1 durable foundation with shared immutable agent confi
 ## Current implementation
 
 - [Agent plan proposals](architecture/agent-proposals.md): bounded terminal provider proposals, authenticated provenance and retained review.
+- [Task dependencies](architecture/task-dependencies.md): reviewed DAGs, exact upstream commits, trusted source integration and four isolated execution slots.
+- [Operational acceptance](operations/operational-acceptance.md): cumulative failure gates, concurrent capacity, cancellation and retained replay evidence.
 - [Task admission](architecture/task-admission.md): exact-version operator approval, atomic receipts and tasks, immutable origin and awaiting-execution blockers.
 - [Durable plan review](architecture/plan-review.md): operator-authored immutable versions, scoped review/history, exact retries and console editing.
 - [Task feedback](architecture/task-feedback.md): immutable execution/quality notices in the originating conversation and project attention; no continuation authority.
@@ -27,6 +29,7 @@ The runtime combines the M1 durable foundation with shared immutable agent confi
 - [M3 delivery plan](research/project-workflow-m3-delivery-plan.md): four cumulative PRs, contract completion gates and failure/recovery acceptance.
 - [Task recovery review](architecture/task-recovery.md): immutable proposals, saved evidence and operator question/answer records without execution authority.
 - [M6 delivery plan](research/project-workflow-m6-delivery-plan.md): five slices from durable attention to confirmed continuation, with preserved work and explicit allowances.
+- [Scoped MCP integrations](architecture/mcp-integrations.md): frozen operator grants, exact external-effect consent, bounded tools and uncertainty.
 - [M7 delivery plan](research/project-workflow-m7-delivery-plan.md): factual continuity, originating-conversation assessment, reviewed proposals, scoped MCP integrations, additional providers and cumulative acceptance.
 - [M1 durable foundation](research/project-workflow-m1-durable-foundation.md): full milestone contract and later-slice handoffs.
 - [M1 acceptance evidence](research/project-workflow-m1-acceptance-evidence.md): executable gates, reproduction, and coverage limits.
@@ -42,7 +45,7 @@ The [event-platform history](history/event-platform/index.md) is retained as dat
 - [Task execution preparation](architecture/task-execution.md): trusted operator evidence and frozen attempts.
 - [M4 delivery plan](research/project-workflow-m4-delivery-plan.md): six staged execution, quality and publication scopes.
 
-- [Isolated task execution](architecture/isolated-task-execution.md): durable serial dispatch, bounded coding and cancellation fencing.
+- [Isolated task execution](architecture/isolated-task-execution.md): durable bounded concurrent dispatch, bounded coding and cancellation fencing.
 
 - [Task quality](architecture/task-quality.md): frozen validation, managed Ayni execution and separate retained evidence.
 

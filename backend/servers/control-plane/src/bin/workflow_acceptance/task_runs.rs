@@ -177,6 +177,7 @@ async fn prepare_inner(
                 },
                 max_seconds: 300,
                 max_tokens: 10000,
+                upstream_selections: vec![],
             }),
         })
         .await

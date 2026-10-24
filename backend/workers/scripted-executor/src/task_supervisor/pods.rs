@@ -180,6 +180,9 @@ fn pod_spec(s: &Supervisor, run: &TaskRun, name: &str) -> Result<Pod> {
         {"name":"ORCHESTRATOR_TASK_SOURCE","value":"/workspace"},
         {"name":"ORCHESTRATOR_TASK_FIXTURE_ENABLED","value":s.fixture.to_string()},
         {"name":"ORCHESTRATOR_OPENAI_ENABLED","value":s.openai.to_string()},
+        {"name":"ORCHESTRATOR_ANTHROPIC_ENABLED","value":s.anthropic.to_string()},
+        {"name":"ORCHESTRATOR_ANTHROPIC_KEY_PATH","value":"/var/run/provider/api-key"},
+        {"name":"ANTHROPIC_BASE_URL","value":s.anthropic_endpoint},
         {"name":"ORCHESTRATOR_OPENAI_KEY_PATH","value":"/var/run/provider/api-key"},
         {"name":"OPENAI_BASE_URL","value":s.endpoint},{"name":"HOME","value":"/tmp/home"}
     ]);
@@ -226,9 +229,12 @@ fn pod_spec(s: &Supervisor, run: &TaskRun, name: &str) -> Result<Pod> {
         {"name":"runtime-temporary","emptyDir":{"sizeLimit":"2Gi"}},
         {"name":"capability","secret":{"secretName":name}}
     ]);
-    if command.provider == "openai" && s.openai {
+    if (command.provider == "openai" && s.openai)
+        || (command.provider == "anthropic" && s.anthropic)
+    {
         let secret = format!(
-            "provider-openai-{}",
+            "provider-{}-{}",
+            command.provider,
             uuid::Uuid::parse_str(&command.workspace_id)?.simple()
         );
         volumes.as_array_mut().ok_or("volumes")?.push(json!({"name":"provider","secret":{"secretName":secret,"items":[{"key":"api-key","path":"api-key"}]}}));
@@ -276,6 +282,8 @@ mod tests {
             image: "bootstrap@sha256:fixture".into(),
             fixture: false,
             openai: true,
+            anthropic: false,
+            anthropic_endpoint: "https://api.anthropic.com/v1".into(),
             endpoint: "https://provider.invalid/v1".into(),
         };
         let run = TaskRun {

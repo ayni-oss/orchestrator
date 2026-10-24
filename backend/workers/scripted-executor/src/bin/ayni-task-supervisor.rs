@@ -1,4 +1,4 @@
-//! One serial desired-state supervisor; `PostgreSQL` owns dispatch and fencing.
+//! Bounded concurrent desired-state supervisor; `PostgreSQL` owns dispatch and fencing.
 #[path = "../task_supervisor/pods.rs"]
 mod pods;
 use ayni_orchestrator_events::task_execution::{SupervisorRequest, TaskRun};
@@ -12,6 +12,8 @@ pub struct Supervisor {
     image: String,
     fixture: bool,
     openai: bool,
+    anthropic: bool,
+    anthropic_endpoint: String,
     endpoint: String,
 }
 impl Supervisor {
@@ -51,6 +53,9 @@ async fn main() -> Result {
         image: required("ORCHESTRATOR_TASK_BOOTSTRAP_IMAGE")?,
         fixture: env::var("ORCHESTRATOR_TASK_FIXTURE_ENABLED").as_deref() == Ok("true"),
         openai: env::var("ORCHESTRATOR_OPENAI_ENABLED").as_deref() == Ok("true"),
+        anthropic: env::var("ORCHESTRATOR_ANTHROPIC_ENABLED").as_deref() == Ok("true"),
+        anthropic_endpoint: env::var("ANTHROPIC_BASE_URL")
+            .unwrap_or_else(|_| "https://api.anthropic.com/v1".into()),
         endpoint: env::var("OPENAI_BASE_URL")
             .unwrap_or_else(|_| "https://api.openai.com/v1".into()),
     };

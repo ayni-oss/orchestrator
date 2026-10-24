@@ -1,10 +1,10 @@
 # Isolated task execution
 
 An operator starts an exact prepared attempt with a bounded Git snapshot pack.
-One task runs at a time, in its own checkout and retained PVC. Accepted changes
+Up to four independent tasks run concurrently, each in its own checkout and retained PVC. Accepted changes
 remain a patch and workspace for review. The separate [quality boundary](task-quality.md)
 validates a frozen reconstruction and retains Ayni evidence. Git push and publication require separate authority. A bounded repair pass requires
-[exact recovery confirmation](task-recovery.md); automatic repair and cross-task scheduling remain unavailable.
+[exact recovery confirmation](task-recovery.md); automatic repair remains unavailable. [Reviewed dependencies](task-dependencies.md) require explicit frozen upstream selections.
 
 ## Durable dispatch and authority
 
@@ -21,11 +21,11 @@ supervisor authority pattern, rather than adapting conversation-turn broker
 messages into coding commands. JetStream continues to carry conversation handoffs;
 its availability neither authorizes nor blocks a task start. The trusted task
 supervisor polls `/v1/task-supervisor` over authenticated HTTP. A lost response
-returns the same retained active command on the next poll. This is a durable
+returns retained active commands during fair reconciliation without assigning a second execution identity. This is a durable
 application handoff, without a second broker ownership decision or a new stream.
 
-A global transaction lock and unique active-slot index allow one claimed,
-reporting or cancelling task. The queue holds at most 32 pending tasks. Claiming
+A global transaction lock serializes allocation of four claimed, reporting or
+cancelling slots. Per-task pending uniqueness fences competing continuations. The queue holds at most 32 pending tasks. Claiming
 freezes a deadline from the prepared time limit. Claims survive process restart;
 reconciliation reuses the same Pod identity, command and source bytes.
 
@@ -57,8 +57,12 @@ uses a checkout-supplied command or shell tool.
 ## Bounded coding and paid-call recovery
 
 The initial coding capability is one OpenAI Responses file-proposal pass. The model
-receives frozen instructions, the reviewed task specification and a complete bounded
-text snapshot: at most 64 files and 128 KiB. Exceeding those limits fails explicitly;
+receives frozen instructions, the reviewed task specification and a bounded
+text snapshot: at most 64 files and 128 KiB. A nonempty reviewed `source_paths`
+selects exact tracked files for context and restricts every coding write to those
+files. Empty selection retains the complete-tree policy and its existing bounds.
+Validation still receives the full frozen repository, including files outside the
+model context. Exceeding those limits fails explicitly;
 no context is silently truncated. It can propose full UTF-8 contents for up to 16
 files and 32 KiB of changed content. Deletion, shell execution, symlink traversal,
 `.git`, `.ayni`, `.ayni.lock` and `.ayni.toml` writes are unavailable. File operations
@@ -82,7 +86,7 @@ nullable when unknown. Calls obey the prepared token budget and retained deadlin
 The worker retains its final outcome before reporting it. The application accepts
 one bounded result under the current generation and registered Pod UID. Identical
 report retries recover acceptance; conflicting bytes are rejected. A reporting
-attempt still occupies the serial slot until the supervisor confirms the Pod is
+attempt still occupies its slot until the supervisor confirms the Pod is
 terminal. Source, ledger and accepted outcome are retained across restarts.
 
 ## Cancellation, loss and cleanup

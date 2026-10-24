@@ -34,7 +34,7 @@ This is a clean replacement, not a compatibility migration. The prior SQLite wor
 
 The cumulative M1 acceptance evidence is recorded in the delivery PR. The local contributor console exposes shared configuration, isolated sessions, provider usage and cancellation. OpenAI execution requires an explicit model, deployment enablement and a workspace-scoped credential mounted directly into its session. Scripted execution remains the default. OpenAI conversations can read frozen workspace instructions, project status and their own bounded history. The final M2 acceptance scope includes deterministic provider/tool recovery fixtures and a separately reported live-provider smoke test. All Orchestrator interfaces stay v1 until alpha merges.
 
-Plan review retains the project and originating conversation for later task feedback. Structured agent proposals retain provider and conversation provenance; explicit approval atomically admits the reviewed task set in an awaiting-execution state. Plan creation and approval dispatch no coding work. Trusted operators can prepare a task with frozen local Git evidence, runtime selection and budgets; preparation retains blockers or one attempt and also dispatches no coding work. Prepared tasks can be explicitly started as isolated, serial coding attempts with retained changes and cancellation fencing. A credential-free quality stage validates a frozen reconstruction with managed Ayni evidence and exposes quality separately from coding completion. See [task quality](docs/technical/architecture/task-quality.md). The console Tasks view shows progress, blockers, accepted patches and quality artifacts separately, with bounded cancellation and reviewed publication controls. Source verification and upload use the trusted local helper. Operators can separately authorize accepted changes for a recoverable GitHub draft under scoped publication authority. See [draft publication](docs/technical/architecture/task-publication.md). See [isolated execution](docs/technical/architecture/isolated-task-execution.md). See [execution preparation](docs/technical/architecture/task-execution.md). See [durable plan review](docs/technical/architecture/plan-review.md).
+Plan review retains the project and originating conversation for later task feedback. Structured agent proposals retain provider and conversation provenance; explicit approval atomically admits the reviewed task set in an awaiting-execution state. Plan creation and approval dispatch no coding work. Trusted operators can prepare a task with frozen local Git evidence, runtime selection and budgets; preparation retains blockers or one attempt and also dispatches no coding work. Prepared tasks can be explicitly started as isolated coding attempts with bounded concurrency with retained changes and cancellation fencing. A credential-free quality stage validates a frozen reconstruction with managed Ayni evidence and exposes quality separately from coding completion. See [task quality](docs/technical/architecture/task-quality.md). The console Tasks view shows progress, blockers, accepted patches and quality artifacts separately, with bounded cancellation and reviewed publication controls. Source verification and upload use the trusted local helper. Operators can separately authorize accepted changes for a recoverable GitHub draft under scoped publication authority. See [draft publication](docs/technical/architecture/task-publication.md). See [isolated execution](docs/technical/architecture/isolated-task-execution.md). See [execution preparation](docs/technical/architecture/task-execution.md). See [durable plan review](docs/technical/architecture/plan-review.md).
 
 Task execution and quality problems also produce retained feedback in their
 originating conversation and project attention. Notices link to task evidence;
@@ -47,8 +47,9 @@ task questions and one answer per question. Recording them authorizes no executi
 Exact confirmation can now authorize one bounded linked attempt with preserved saved
 changes and parent evidence. Confirmed recovery resolves the parent attention decision while
 conversation history links to the continued coding and quality outcomes. Questions retain
-one canonical answer across pagination and concurrent tabs. Dependency-aware continuation
-still requires M5; structured worker questions remain outside the coding protocol.
+one canonical answer across pagination and concurrent tabs. Confirmed continuation preserves frozen upstream selections. Worker-originated questions
+and recovery proposals retain their provenance; an explicit answer and exact confirmation
+are frozen into the next bounded segment.
 
 Fresh conversations can read bounded task lifecycle facts and accepted outcomes
 through frozen project status. Coding, managed quality and publication remain separate facts; the snapshot
@@ -56,8 +57,11 @@ contains no other conversation's transcript, plan text or reasoning. Later task
 changes do not rewrite an eligible turn's retained inputs. See
 [factual project continuity](docs/technical/architecture/project-continuity.md) and
 the [M7 delivery plan](docs/technical/research/project-workflow-m7-delivery-plan.md).
-Assessment, proactive proposals, MCP integrations and additional providers remain
-later delivery slices.
+Explicitly authorized outcome assessments produce reviewable follow-up plans in their
+originating conversation. Scoped MCP tools and Anthropic Messages reuse the retained
+budget, tool, cancellation and uncertainty boundaries. See [MCP integrations](docs/technical/architecture/mcp-integrations.md)
+and [operational acceptance](docs/technical/operations/operational-acceptance.md) for
+configuration, retention and the cumulative deployed evidence requirements.
 
 ## Start locally
 

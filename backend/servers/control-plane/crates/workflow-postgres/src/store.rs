@@ -6,6 +6,7 @@ mod delivery;
 mod delivery_failure;
 mod discovery;
 mod execution;
+pub mod outcome_assessments;
 mod plans;
 mod project_continuity;
 pub mod provider_calls;
@@ -19,6 +20,7 @@ mod quarantine;
 pub use quarantine::{QuarantinedEvent, TransportHealth};
 pub mod observation;
 mod operational;
+mod retention;
 pub mod sessions;
 mod support;
 
@@ -383,97 +385,15 @@ impl WorkflowStore {
         validate_key(idempotency_key)?;
         validate_scope(workspace_id, project_id, conversation_id)?;
         validate_text(content, 16_384, false, "content")?;
-        let parent = format!("{workspace_id}/{project_id}/{conversation_id}");
-        let digest = request_digest(
-            "SendMessage",
-            &[
-                workspace_id.as_bytes(),
-                project_id.as_bytes(),
-                conversation_id.as_bytes(),
-                content.as_bytes(),
-            ],
-        );
         let (mut client, driver) = crate::connect(&self.database_url).await?;
         let transaction = client.transaction().await?;
-        let conversation_row = transaction
-            .query_opt(
-                "SELECT revision, next_turn_sequence, next_history_sequence \
-                 FROM workflow_conversations \
-                 WHERE workspace_id = $1 AND project_id = $2 AND id = $3 FOR UPDATE",
-                &[&workspace_id, &project_id, &conversation_id],
-            )
-            .await?
-            .ok_or(StoreError::NotFound)?;
-        if let Some((receipt, _)) =
-            find_receipt(&transaction, "SendMessage", &parent, idempotency_key).await?
-        {
-            ensure_digest(&receipt.1, &digest)?;
-            transaction.commit().await?;
-            driver.abort();
-            return Ok(receipt.0);
-        }
-        let nonterminal: i64 = transaction
-            .query_one(
-                "SELECT count(*) FROM workflow_turns \
-                 WHERE conversation_id = $1 AND execution_state NOT IN ('completed', 'failed')",
-                &[&conversation_id],
-            )
-            .await?
-            .get(0);
-        if nonterminal >= MAX_NONTERMINAL_TURNS {
-            return Err(StoreError::Capacity("turn_queue"));
-        }
-        context_manifest::reserve_admission(&transaction, conversation_id, nonterminal).await?;
-        capacity::reserve_admission(&transaction).await?;
-        let current_revision: i64 = conversation_row.get(0);
-        let turn_sequence: i64 = conversation_row.get(1);
-        let history_sequence: i64 = conversation_row.get(2);
-        let revision = current_revision
-            .checked_add(1)
-            .ok_or(StoreError::CorruptState)?;
-        let eligible = nonterminal == 0;
-        let command_id = new_id();
-        let message_id = new_id();
-        let turn_id = new_id();
-        let activity_id = new_id();
-        let update_id = new_id();
-        let assignment_id = if eligible { new_id() } else { String::new() };
-        let proposed = ProposedReceipt {
-            command_id: &command_id,
-            kind: ReceiptKind::SendMessage,
-            parent_scope: &parent,
+        let receipt = admit_message(
+            &transaction,
             idempotency_key,
-            request_digest: &digest,
             workspace_id,
             project_id,
             conversation_id,
-            message_id: &message_id,
-            turn_id: &turn_id,
-            resource_id: "",
-            conversation_revision: revision,
-            presentation_state: PresentationState::Accepted,
-        };
-        if !insert_receipt(&transaction, &proposed).await? {
-            return Err(StoreError::CorruptState);
-        }
-        let receipt = record_message_admission(
-            &transaction,
-            MessageAdmission {
-                workspace_id,
-                project_id,
-                conversation_id,
-                content,
-                revision,
-                turn_sequence,
-                history_sequence,
-                command_id: &command_id,
-                message_id: &message_id,
-                turn_id: &turn_id,
-                activity_id: &activity_id,
-                update_id: &update_id,
-                assignment_id: &assignment_id,
-                eligible,
-            },
+            content,
         )
         .await?;
         transaction.commit().await?;
@@ -893,4 +813,105 @@ impl WorkflowStore {
         driver.abort();
         Ok(records)
     }
+}
+
+// Normal admission is shared with explicitly authorized outcome assessments.
+async fn admit_message(
+    transaction: &tokio_postgres::Transaction<'_>,
+    idempotency_key: &str,
+    workspace_id: &str,
+    project_id: &str,
+    conversation_id: &str,
+    content: &str,
+) -> Result<CommandReceipt, StoreError> {
+    let parent = format!("{workspace_id}/{project_id}/{conversation_id}");
+    let digest = request_digest(
+        "SendMessage",
+        &[
+            workspace_id.as_bytes(),
+            project_id.as_bytes(),
+            conversation_id.as_bytes(),
+            content.as_bytes(),
+        ],
+    );
+    let conversation_row = transaction
+        .query_opt(
+            "SELECT revision, next_turn_sequence, next_history_sequence \
+                 FROM workflow_conversations \
+                 WHERE workspace_id = $1 AND project_id = $2 AND id = $3 FOR UPDATE",
+            &[&workspace_id, &project_id, &conversation_id],
+        )
+        .await?
+        .ok_or(StoreError::NotFound)?;
+    if let Some((receipt, _)) =
+        find_receipt(transaction, "SendMessage", &parent, idempotency_key).await?
+    {
+        ensure_digest(&receipt.1, &digest)?;
+        return Ok(receipt.0);
+    }
+    let nonterminal: i64 = transaction
+        .query_one(
+            "SELECT count(*) FROM workflow_turns \
+                 WHERE conversation_id = $1 AND execution_state NOT IN ('completed', 'failed')",
+            &[&conversation_id],
+        )
+        .await?
+        .get(0);
+    if nonterminal >= MAX_NONTERMINAL_TURNS {
+        return Err(StoreError::Capacity("turn_queue"));
+    }
+    context_manifest::reserve_admission(transaction, conversation_id, nonterminal).await?;
+    capacity::reserve_admission(transaction).await?;
+    let current_revision: i64 = conversation_row.get(0);
+    let turn_sequence: i64 = conversation_row.get(1);
+    let history_sequence: i64 = conversation_row.get(2);
+    let revision = current_revision
+        .checked_add(1)
+        .ok_or(StoreError::CorruptState)?;
+    let eligible = nonterminal == 0;
+    let command_id = new_id();
+    let message_id = new_id();
+    let turn_id = new_id();
+    let activity_id = new_id();
+    let update_id = new_id();
+    let assignment_id = if eligible { new_id() } else { String::new() };
+    let proposed = ProposedReceipt {
+        command_id: &command_id,
+        kind: ReceiptKind::SendMessage,
+        parent_scope: &parent,
+        idempotency_key,
+        request_digest: &digest,
+        workspace_id,
+        project_id,
+        conversation_id,
+        message_id: &message_id,
+        turn_id: &turn_id,
+        resource_id: "",
+        conversation_revision: revision,
+        presentation_state: PresentationState::Accepted,
+    };
+    if !insert_receipt(transaction, &proposed).await? {
+        return Err(StoreError::CorruptState);
+    }
+    let receipt = record_message_admission(
+        transaction,
+        MessageAdmission {
+            workspace_id,
+            project_id,
+            conversation_id,
+            content,
+            revision,
+            turn_sequence,
+            history_sequence,
+            command_id: &command_id,
+            message_id: &message_id,
+            turn_id: &turn_id,
+            activity_id: &activity_id,
+            update_id: &update_id,
+            assignment_id: &assignment_id,
+            eligible,
+        },
+    )
+    .await?;
+    Ok(receipt)
 }

@@ -7,6 +7,8 @@ import "ayni/orchestrator/v1/workflow.proto";
 
 // Scoped conversation execution and operator plan review on the trusted listener.
 service ProjectConversationService {
+  rpc AuthorizeOutcomeAssessments(AuthorizeOutcomeAssessmentsRequest) returns (AuthorizeOutcomeAssessmentsResponse);
+  rpc GetOutcomeAssessmentStatus(GetOutcomeAssessmentStatusRequest) returns (GetOutcomeAssessmentStatusResponse);
   rpc StartTaskPublication(StartTaskPublicationRequest) returns (StartTaskPublicationResponse);
   rpc CancelTaskPublication(CancelTaskPublicationRequest) returns (CancelTaskPublicationResponse);
   rpc StartTaskExecution(StartTaskExecutionRequest) returns (StartTaskExecutionResponse);
@@ -220,4 +222,31 @@ message AcknowledgeProviderUncertaintyResponse {
   string turn_id = 2;
   string call_id = 3;
   string state = 4;
+}
+
+// Explicit bounded consent for future outcome-triggered turns. Configuration
+// budgets apply to every assessment; zero allowance pauses new admission.
+message AuthorizeOutcomeAssessmentsRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string idempotency_key = 4;
+  string expected_configuration_revision_id = 5;
+  uint32 max_assessments = 6;
+}
+message AuthorizeOutcomeAssessmentsResponse {
+  string authorization_id = 1;
+  string configuration_revision_id = 2;
+  uint32 max_assessments = 3;
+}
+message GetOutcomeAssessmentStatusRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+}
+message GetOutcomeAssessmentStatusResponse {
+  string authorization_id = 1;
+  string configuration_revision_id = 2;
+  uint32 max_assessments = 3;
+  uint32 admitted_assessments = 4;
 }

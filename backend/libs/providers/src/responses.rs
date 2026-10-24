@@ -117,7 +117,36 @@ pub fn prepare_items(
     max_output: u64,
     max_total: u64,
 ) -> Result<PreparedRequest, ResponseError> {
-    let tools = scoped_tools();
+    prepare_items_with_tools(
+        model,
+        instructions,
+        input,
+        max_input,
+        max_output,
+        max_total,
+        &scoped_tools(),
+    )
+}
+
+/// Prepare a request with the exact retained tool allowlist and cumulative budgets.
+/// # Errors
+/// Rejects non-array tool definitions and requests outside the frozen allowance.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "explicit frozen request limits and tools"
+)]
+pub fn prepare_items_with_tools(
+    model: &str,
+    instructions: &str,
+    input: &[Value],
+    max_input: u64,
+    max_output: u64,
+    max_total: u64,
+    tools: &Value,
+) -> Result<PreparedRequest, ResponseError> {
+    if !tools.is_array() {
+        return Err(ResponseError::Configuration);
+    }
     // Count all serialized tool definitions, call envelopes and outputs, including
     // escaped UTF-8, with conservative framing. Never truncate an authorized read.
     let input_bound = u64::try_from(
@@ -156,6 +185,7 @@ pub struct ResponsesClient {
     http: reqwest::Client,
     endpoint: url::Url,
     api_key: String,
+    provider: String,
 }
 
 impl ResponsesClient {
@@ -164,6 +194,20 @@ impl ResponsesClient {
     /// # Errors
     /// Returns a safe configuration error, never a credential-bearing URL or HTTP error.
     pub fn new(api_key: &str, base_url: &str) -> Result<Self, ResponseError> {
+        Self::for_provider("openai", api_key, base_url)
+    }
+
+    /// Construct a selected provider with the same no-retry transport boundary.
+    /// # Errors
+    /// Rejects unsupported providers, malformed endpoints and invalid credentials.
+    pub fn for_provider(
+        provider: &str,
+        api_key: &str,
+        base_url: &str,
+    ) -> Result<Self, ResponseError> {
+        if !matches!(provider, "openai" | "anthropic") {
+            return Err(ResponseError::Configuration);
+        }
         let endpoint = url::Url::parse(base_url).map_err(|_| ResponseError::Configuration)?;
         if api_key.trim().is_empty()
             || api_key.len() > 4096
@@ -182,7 +226,12 @@ impl ResponsesClient {
         {
             return Err(ResponseError::Configuration);
         }
-        let endpoint = url::Url::parse(&format!("{}/responses", base_url.trim_end_matches('/')))
+        let resource = if provider == "anthropic" {
+            "messages"
+        } else {
+            "responses"
+        };
+        let endpoint = url::Url::parse(&format!("{}/{resource}", base_url.trim_end_matches('/')))
             .map_err(|_| ResponseError::Configuration)?;
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(120))
@@ -195,6 +244,7 @@ impl ResponsesClient {
             http,
             endpoint,
             api_key: api_key.to_owned(),
+            provider: provider.to_owned(),
         })
     }
 
@@ -207,13 +257,25 @@ impl ResponsesClient {
         call_id: &str,
         bytes: &[u8],
     ) -> Result<ResponseEvidence, ResponseError> {
-        let mut response = self
+        let wire = if self.provider == "anthropic" {
+            crate::anthropic::request(bytes)?
+        } else {
+            bytes.to_owned()
+        };
+        let mut request = self
             .http
             .post(self.endpoint.clone())
-            .bearer_auth(&self.api_key)
             .header("content-type", "application/json")
-            .header("X-Client-Request-Id", call_id)
-            .body(bytes.to_owned())
+            .header("X-Client-Request-Id", call_id);
+        if self.provider == "anthropic" {
+            request = request
+                .header("anthropic-version", "2023-06-01")
+                .header("x-api-key", &self.api_key);
+        } else {
+            request = request.bearer_auth(&self.api_key);
+        }
+        let mut response = request
+            .body(wire)
             .send()
             .await
             .map_err(|_| ResponseError::Uncertain)?;
@@ -231,7 +293,11 @@ impl ResponsesClient {
             }
             body.extend_from_slice(&chunk);
         }
-        parse_response(&body)
+        if self.provider == "anthropic" {
+            crate::anthropic::response(&body)
+        } else {
+            parse_response(&body)
+        }
     }
 }
 

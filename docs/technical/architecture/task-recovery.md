@@ -1,7 +1,7 @@
 # Task recovery review
 
 Recovery review lets users inspect a proposed next action without starting it.
-The originating task retains immutable operator proposals, questions and answers.
+The originating task retains immutable operator and worker proposals, questions and answers.
 [Task feedback](task-feedback.md) remains open until exact confirmation handles its recovery decision.
 Exact confirmation now authorizes one linked execution segment for the existing independent-task runtime.
 The [M6 delivery plan](../research/project-workflow-m6-delivery-plan.md) owns the complete recovery journey.
@@ -13,7 +13,7 @@ proposed action (`continue`, `repair_quality`, or `replace_attempt`), additional
 and additional tokens. Both allowances must be positive: at most 86,400 seconds and
 1,000,000 tokens. They describe proposed limits; recording them allocates no budget. Only confirmation authorizes those additional limits.
 The selected attempt must be terminal and the feedback must belong to its exact origin.
-These are operator-authored review records, not model-generated recommendations.
+Operator-authored proposals and accepted worker recommendations use the same explicit confirmation boundary.
 
 The server freezes the safe reason, attempt state and generation, source commit,
 runtime image, configuration revision, accepted patch and outcome digests, and
@@ -39,8 +39,7 @@ answer are separate immutable records, with `local-operator` provenance. Concurr
 answers serialize: only the first is retained. A different answer requires a new
 question. Answering supplies direction and grants no continuation authority.
 
-The coding worker protocol still cannot ask structured questions. Worker-originated
-questions and model-generated proposals remain later work. Operator text is displayed as text and is not inserted into provider context.
+The coding worker can end a segment with a structured blocking question and bounded recovery recommendation. Canonical answers are frozen into an explicitly confirmed continuation, as described below.
 
 ## Canonical private-v1 API
 
@@ -80,7 +79,7 @@ A different proposal for the same parent cannot create a second continuation.
 Confirmation, immutable attempt inputs, queue admission, latest execution projection,
 observation and receipt commit together or all roll back. Migration 22 adds append-only
 confirmation authorities, permits linked attempts and retains one pending run per task.
-The global coding slot and bounded queue remain serial.
+The bounded queue admits isolated independent attempts under the configured concurrency limit.
 
 Each continuation uses a fresh attempt, Pod/PVC and provider ledger. This is a new
 bounded execution segment linked to the existing task; no uncertain request or consumed
@@ -114,12 +113,11 @@ and start receipts still replay their original results.
 
 ## Dependency boundary
 
-M5 scheduling and upstream-commit selection remain unimplemented. The current approved
-task model has no dependency graph or scheduler selections to refresh. This slice operates
-only on the existing independent-task contract, rejects unresolved approved inputs and
-changes no other task. It does not claim M5 integration or dependency-aware continuation.
-Waiting tasks remain untouched, and every existing run keeps its frozen source commit.
-Material source changes require new reviewed work. Full M6 closure still requires M5.
+[Task dependencies](task-dependencies.md) freeze exact upstream task, attempt and
+published commit selections before execution. Confirmed recovery copies those
+selections and the integrated source commit with its retained inputs. A newer
+upstream result cannot silently reselect, rebase or replace approved inputs.
+Material source changes require new reviewed work.
 
 ## Authority and acceptance
 
@@ -130,8 +128,7 @@ with coding and quality shown separately. The console hides competing consent co
 another proposal consumes the parent, reconciles answers after a conflict, and refreshes canonical
 history on task refresh and tab focus. Unchanged reads preserve drafts and consent; navigation
 and changed history require a fresh review. Lost responses retain the exact pending command
-through reload. Browser state grants no execution authority. Structured worker questions remain
-outside the coding protocol; operator answers provide review context only.
+through reload. Browser state grants no execution authority. Worker questions and canonical answers enter provider context only through a confirmed continuation.
 
 The PostgreSQL gate covers exact and conflicting retries, confirmation races, stale
 evidence, missing charge acknowledgement, rollback after dispatch insertion, frozen
@@ -143,3 +140,24 @@ control-plane and PostgreSQL restarts. A separate real browser profile exercises
 accepted-response loss, reload and navigation between linked attempts.
 Each delivery PR records executed evidence and any blocked checks. Deterministic coding
 fixtures do not prove live-provider recovery, GitHub recovery or complete M6 acceptance.
+
+## Worker questions and model recommendations
+
+The coding provider can end its bounded segment with `request_task_recovery` rather
+than file changes. The response carries one blocking question, explanation,
+proposed action and positive additional time/token limits. It grants no execution
+or publication authority. The existing provider sending permit, model identity,
+usage bounds and accepted worker generation bind this output exactly as coding output.
+
+Once the supervisor confirms the worker has stopped, the terminal transition
+atomically retains an originating-conversation question and model-authored recovery
+proposal against the accepted failure evidence. Reserved `worker:` command keys
+supply agent provenance and deduplicate stop/report replay; operator writes cannot
+use that namespace. Historical records remain immutable.
+
+The user records one canonical answer and reviews the exact proposal before
+confirmation. An unanswered worker question blocks continuation. Confirmation
+freezes at most 32 answered questions into the new segment, along with existing
+saved-work, quality evidence and selected upstream inputs. The coding request
+includes those exact question/answer pairs. Answering alone starts no worker or
+provider call; new or changed source inputs still require reviewed work.

@@ -115,7 +115,7 @@ fn projection(r: RecoveryRecord) -> v1::TaskRecoveryRecord {
         kind: r.kind,
         content_digest: r.content_digest,
         created_at: Some(super::timestamp(r.created_at)),
-        author: "local-operator".into(),
+        author: r.author,
         content: Some(content),
     }
 }

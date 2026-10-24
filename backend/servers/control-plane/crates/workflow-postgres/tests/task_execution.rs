@@ -20,6 +20,7 @@ fn inputs() -> ExecutionInputs {
         runtime_image: format!("example.invalid/runtime@sha256:{}", "c".repeat(64)),
         max_seconds: 600,
         max_tokens: 10000,
+        upstream_selections: vec![],
     }
 }
 #[tokio::test]

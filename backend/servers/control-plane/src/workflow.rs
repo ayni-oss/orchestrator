@@ -1,3 +1,4 @@
+mod assessments;
 mod plans;
 mod projections;
 mod publications;
@@ -202,6 +203,7 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
             .map_err(|error| context.store(&error))?;
         Ok(context.response(v1::GetTurnInputsResponse {
             turn_id: result.turn_id,
+            command_event_id: result.command_event_id,
             configuration: Some(agent_configuration(result.configuration)),
         }))
     }
@@ -286,6 +288,20 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
 
 #[tonic::async_trait]
 impl v1::project_conversation_service_server::ProjectConversationService for WorkflowGrpc {
+    async fn get_outcome_assessment_status(
+        &self,
+        request: Request<v1::GetOutcomeAssessmentStatusRequest>,
+    ) -> Result<Response<v1::GetOutcomeAssessmentStatusResponse>, Status> {
+        assessments::status(&self.store, request).await
+    }
+
+    async fn authorize_outcome_assessments(
+        &self,
+        request: Request<v1::AuthorizeOutcomeAssessmentsRequest>,
+    ) -> Result<Response<v1::AuthorizeOutcomeAssessmentsResponse>, Status> {
+        assessments::authorize(&self.store, request).await
+    }
+
     async fn confirm_task_recovery(
         &self,
         request: Request<v1::ConfirmTaskRecoveryRequest>,
@@ -362,6 +378,17 @@ impl v1::project_conversation_service_server::ProjectConversationService for Wor
             runtime_image: i.runtime_image,
             max_seconds: i.max_seconds,
             max_tokens: i.max_tokens,
+            upstream_selections: i
+                .upstream_selections
+                .into_iter()
+                .map(
+                    |s| ayni_orchestrator_workflow_postgres::execution::UpstreamSelection {
+                        task_id: s.task_id,
+                        attempt_id: s.attempt_id,
+                        commit_sha: s.commit_sha,
+                    },
+                )
+                .collect(),
         };
         let result = self
             .store

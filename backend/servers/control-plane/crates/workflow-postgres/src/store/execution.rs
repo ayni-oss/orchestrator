@@ -184,6 +184,9 @@ async fn preparation_result(
         .map(|row| row.get::<_, String>(0))
         .unwrap_or_default();
     let mut blockers = blockers(&specification, inputs)?;
+    blockers.extend(
+        dependency_blockers(tx, scope, &row.get::<_, String>(4), &specification, inputs).await?,
+    );
     if configuration.is_empty() {
         blockers.push("Workspace agent configuration must be selected".into());
     }
@@ -206,4 +209,55 @@ async fn preparation_result(
         resume_cursor: update,
         created_at: support::timestamp(time.get(0), time.get(1))?,
     })
+}
+
+/// Match each reviewed edge to one exact accepted upstream draft. A newer
+/// upstream attempt does not invalidate or silently replace an explicit choice.
+async fn dependency_blockers(
+    tx: &tokio_postgres::Transaction<'_>,
+    scope: PlanScope<'_>,
+    approval: &str,
+    specification: &crate::plans::PlanTaskSpecification,
+    inputs: &ExecutionInputs,
+) -> Result<Vec<String>, StoreError> {
+    use ayni_orchestrator_events::{task_execution::TaskOutcome, task_quality::QualityOutcome};
+    let mut missing = specification
+        .depends_on
+        .iter()
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut blockers = Vec::new();
+    for selection in &inputs.upstream_selections {
+        let row = tx.query_opt(
+            "SELECT t.proposed_task_key,t.specification,r.state,r.outcome,q.outcome,p.state,p.commit_sha FROM workflow_tasks t JOIN workflow_task_runs r ON r.task_id=t.id JOIN workflow_task_quality q ON q.attempt_id=r.attempt_id JOIN workflow_task_publications p ON p.attempt_id=r.attempt_id WHERE t.workspace_id=$1 AND t.project_id=$2 AND t.conversation_id=$3 AND t.approval_id=$4 AND t.id=$5 AND r.attempt_id=$6",
+            &[&scope.workspace, &scope.project, &scope.conversation, &approval, &selection.task_id, &selection.attempt_id],
+        ).await?.ok_or(StoreError::InvalidInput("upstream_selection"))?;
+        let key: String = row.get(0);
+        let upstream: crate::plans::PlanTaskSpecification =
+            serde_json::from_slice(&row.get::<_, Vec<u8>>(1))
+                .map_err(|_| StoreError::CorruptState)?;
+        let coding: Option<TaskOutcome> = row
+            .get::<_, Option<Vec<u8>>>(3)
+            .map(|bytes| serde_json::from_slice(&bytes))
+            .transpose()
+            .map_err(|_| StoreError::CorruptState)?;
+        let quality: QualityOutcome = serde_json::from_slice(&row.get::<_, Vec<u8>>(4))
+            .map_err(|_| StoreError::CorruptState)?;
+        if !missing.remove(&key) || upstream.repository != inputs.repository {
+            return Err(StoreError::InvalidInput("upstream_selection"));
+        }
+        if row.get::<_, String>(2) != "completed"
+            || coding.is_none_or(|value| value.state != "completed")
+            || quality.state != "passed"
+            || row.get::<_, String>(5) != "draft"
+            || row.get::<_, String>(6) != selection.commit_sha
+        {
+            return Err(StoreError::InvalidInput("upstream_selection"));
+        }
+    }
+    for key in missing {
+        blockers.push(format!(
+            "Select an accepted upstream commit for dependency {key}"
+        ));
+    }
+    Ok(blockers)
 }

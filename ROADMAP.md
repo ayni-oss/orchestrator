@@ -151,6 +151,21 @@ bounded authorization before implementation. M4's six delivery slices are implem
 executed cumulative closure evidence; the local profile uses scripted coding, real managed
 quality and Git transport, and an explicit GitHub protocol fixture.
 
+### M5 dependencies and concurrent execution
+
+Reviewed plans retain an acyclic graph of task keys. Preparation freezes an exact
+upstream task, attempt and accepted draft commit for each dependency, together with
+an explicitly selected integrated source commit. The trusted source helper proves
+that every selected upstream commit is an ancestor of that source commit. Missing
+selections remain visible blockers; later upstream attempts never rewrite admitted
+inputs. Four isolated attempts may execute concurrently, while per-task pending
+uniqueness, generations and Pod identities fence competing work and cancellation.
+
+The combined backend completion PR owns the executed dependency, concurrency and
+restart evidence. Recovery inherits its parent's exact selections. Reviewed
+`source_paths` bound the context and writable files of a task on larger repositories;
+an empty selection retains the existing bounded whole-repository context policy.
+
 ### M6 delivery scopes
 
 The [M6 delivery plan](docs/technical/research/project-workflow-m6-delivery-plan.md)
@@ -168,9 +183,9 @@ tasks keep their selected inputs until an explicit decision changes them.
 | 4: Complete conversation recovery | Questions, proposal review, consent, attention resolution and outcomes form one usable conversation journey. |
 | 5: Cumulative M6 acceptance | Deployed pod loss, interruption, cancellation, duplicate confirmation and retained-work recovery close the milestone. |
 
-M5 scheduling and concurrency remain planned. The first M6 slice can build on M4
-independently; dependency-aware recovery and full M6 acceptance require M5
-integration. The [task feedback contract](docs/technical/architecture/task-feedback.md)
+M5 scheduling and frozen upstream selections are implemented in the combined
+backend completion change. Recovery inherits those exact inputs; it cannot refresh
+a dependent task from a mutable upstream branch. The [task feedback contract](docs/technical/architecture/task-feedback.md)
 defines the first-slice scope: immutable execution/quality notices and bounded
 conversation/project reads, with no recovery or resolution authority. Worker
 questions, publication attention resolution and automatic quality repair are not
@@ -180,19 +195,19 @@ and additional allowance, plus operator question/answer records. Recording or an
 authorizes no execution. Worker questions and model-generated recovery proposals remain
 later scope. The third slice confirms an exact proposal once and admits a linked
 independent-task attempt with frozen inputs, saved changes, explicit additional allowance
-and charge acknowledgement. M5 has no implemented dependency graph or scheduler selections;
-this independent-task slice does not establish dependency-aware recovery or full M6 closure.
+and charge acknowledgement. Confirmed continuation preserves the reviewed dependency graph and exact upstream
+selections. Choosing different inputs requires a new reviewed plan and preparation.
 The fourth slice completes the operator conversation recovery journey: paginated questions
 retain canonical answers, competing proposals expose the same parent confirmation, and conversation
 notices link resolved decisions to continued coding/quality outcomes. Project attention hides
-resolved decisions without deleting historical feedback. Structured worker questions and
-model-generated proposals remain outside the current coding protocol.
+resolved decisions without deleting historical feedback. The coding protocol also accepts a bounded worker question with a proposed recovery
+action and allowance. The accepted result retains both in the originating conversation;
+confirmation requires the canonical answer and freezes it into the next segment.
 The [cumulative recovery profile](docs/technical/operations/recovery-acceptance.md) adds
 continued-attempt cancellation, stale-worker rejection, Pod loss, exact replay across owner
-restarts and retained cleanup/redeployment. Its passing report covers independent tasks and
-explicitly keeps `milestone_complete` false. Full closure still requires M5 dependency
-integration, worker-originated structured questions with answer delivery and model-generated
-recovery proposals; an independent-task acceptance pass cannot waive those prerequisites.
+restarts and retained cleanup/redeployment. Its existing report covers independent tasks and explicitly keeps `milestone_complete`
+false. The combined operational profile extends concurrency and retained-state checks;
+its report identifies any deployed dependency and worker-question cases still unmeasured.
 Each delivery PR owns its executed evidence and status.
 
 Use explicit `docker-desktop` Kubernetes for runtime acceptance. Create owned
@@ -222,12 +237,33 @@ defines the first slice. The existing private-v1 project snapshot retains at mos
 `read_project_status` tool reads those exact eligibility-time inputs; it does not
 invoke a model or infer project completion. Later outcomes affect later snapshots.
 
-This independent-task slice can proceed before M5 scheduling. Dependency-aware
-assessment and recovery still require frozen upstream selections. M6's recorded
-closure gaps remain: M5 integration, worker-originated structured questions with
-answer delivery, and model-generated recovery proposals. Passing a factual
-continuity gate cannot waive those prerequisites. Each PR owns its acceptance
-evidence and starts from current `origin/alpha` after its prerequisite merges.
+The combined backend change adds explicitly authorized, configuration-pinned
+outcome assessments, coalesced factual inputs, once-only retained turn admission,
+and stale-proposal rejection. Existing proposal review retains approval authority.
+Scoped MCP manifests freeze tool schemas, endpoints and limits; mutations require
+exact one-use consent and uncertain effects remain visible without automatic retry.
+Anthropic Messages joins OpenAI behind the same retained context, exchange, usage,
+tool and cancellation authorities. Provider execution remains explicitly enabled.
+See [MCP integrations](docs/technical/architecture/mcp-integrations.md) and
+[operational acceptance](docs/technical/operations/operational-acceptance.md).
+
+Implemented paths and executed acceptance are separate. The combined PR records
+actual deployed evidence and remaining unmeasured cases; fixture results alone do
+not establish live provider behavior or production capacity.
+
+### M8 operational acceptance
+
+The combined change adds delayed source-archive reclamation, lifecycle/storage
+metrics, bounded concurrent dispatch acceptance, restart/replay evidence and a
+cumulative `--m8` operational profile. Eligible archives receive a retained 30-day
+grace period; unresolved work, provider uncertainty and recovery decisions protect
+their inputs. Commands, patches, quality evidence and authorization receipts remain.
+
+The [operational acceptance contract](docs/technical/operations/operational-acceptance.md)
+defines retention, diagnostics, clean-slate cutover, self-development and evidence
+boundaries. Each runnable report distinguishes passed gates from unmeasured ones.
+The final milestone remains open until its required cumulative deployed scenarios
+have executed successfully; implementation does not waive acceptance.
 
 ### Validation at every milestone
 

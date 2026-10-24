@@ -14,6 +14,9 @@ use ayni_orchestrator_events::{
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+#[path = "provider_session/anthropic_tests.rs"]
+mod anthropic_tests;
+
 struct Fixture {
     url: String,
     count: Arc<AtomicUsize>,

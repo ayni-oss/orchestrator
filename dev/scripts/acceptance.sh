@@ -3,6 +3,9 @@ set -euo pipefail
 
 readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$dev_directory/lib/common.sh"
+if [[ $# -eq 2 && "$2" == --m8 ]]; then
+  exec "$dev_directory/scripts/operational-acceptance.sh" "$1"
+fi
 if [[ $# -eq 2 && "$2" == --publication-only ]]; then
   exec "$dev_directory/scripts/publication-acceptance.sh" "$1"
 fi

@@ -29,6 +29,14 @@ providers:
     baseUrl: https://api.openai.com/v1
     # Local deterministic fixture access is a separate explicit network capability.
     fixtureEgress: false
+  anthropic:
+    enabled: false
+    baseUrl: https://api.anthropic.com/v1
+    fixtureEgress: false
+  mcp:
+    enabled: false
+    # Explicit NetworkPolicy peers and ports for configured MCP servers.
+    egress: []
   sessionAuthoritySecretName: workflow-session-authority
 
 scriptedExecutor:

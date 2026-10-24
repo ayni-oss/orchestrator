@@ -14,6 +14,10 @@ message PlanTaskSpecification {
   string source_ref = 7;
   string execution_limits = 8;
   repeated string unresolved_inputs = 9;
+  // Keys in this exact reviewed task set; the graph must be acyclic.
+  repeated string depends_on = 10;
+  // Exact reviewed read/write files; empty retains bounded full-tree execution.
+  repeated string source_paths = 11;
 }
 message PlanContent {
   string title = 1;
@@ -226,6 +230,11 @@ message GetTaskResponse {
 
 // Operator-attested Git object evidence, produced by workflow-prepare-task.
 // Runtime selection does not assert Ayni runtime compatibility; PR 3 verifies it.
+message TaskUpstreamSelection {
+  string task_id = 1;
+  string attempt_id = 2;
+  string commit_sha = 3;
+}
 message TaskExecutionInputs {
   string repository = 1;
   string source_ref = 2;
@@ -234,6 +243,8 @@ message TaskExecutionInputs {
   string runtime_image = 5;
   uint32 max_seconds = 6;
   uint32 max_tokens = 7;
+  // Exact accepted upstream drafts integrated into source_commit by the trusted helper.
+  repeated TaskUpstreamSelection upstream_selections = 8;
 }
 message TaskExecutionPreparation {
   string command_id = 1;

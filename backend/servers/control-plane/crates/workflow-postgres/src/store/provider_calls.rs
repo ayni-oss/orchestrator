@@ -310,8 +310,10 @@ async fn admit_call(
         .context_manifest
         .as_ref()
         .ok_or(StoreError::InvalidInput("context_manifest"))?;
-    if binding.execution_binding_revision != "openai-responses-v1"
-        || config.provider != "openai"
+    if ayni_orchestrator_events::workflow::binding_provider(&binding.execution_binding_revision)
+        .is_none()
+        || ayni_orchestrator_events::workflow::binding_provider(&binding.execution_binding_revision)
+            != Some(config.provider.as_str())
         || request.call_id != binding.command_event_id
         || !valid_digest(&request.request_digest)
         || request.context_digest != manifest.digest

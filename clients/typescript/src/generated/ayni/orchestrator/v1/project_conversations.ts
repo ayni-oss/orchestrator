@@ -266,6 +266,38 @@ export interface AcknowledgeProviderUncertaintyResponse {
   state: string;
 }
 
+/**
+ * Explicit bounded consent for future outcome-triggered turns. Configuration
+ * budgets apply to every assessment; zero allowance pauses new admission.
+ */
+export interface AuthorizeOutcomeAssessmentsRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  idempotencyKey: string;
+  expectedConfigurationRevisionId: string;
+  maxAssessments: number;
+}
+
+export interface AuthorizeOutcomeAssessmentsResponse {
+  authorizationId: string;
+  configurationRevisionId: string;
+  maxAssessments: number;
+}
+
+export interface GetOutcomeAssessmentStatusRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+}
+
+export interface GetOutcomeAssessmentStatusResponse {
+  authorizationId: string;
+  configurationRevisionId: string;
+  maxAssessments: number;
+  admittedAssessments: number;
+}
+
 function createBaseCreateConversationRequest(): CreateConversationRequest {
   return { idempotencyKey: "", workspaceId: "", projectId: "", title: "" };
 }
@@ -3703,9 +3735,574 @@ export const AcknowledgeProviderUncertaintyResponse: MessageFns<AcknowledgeProvi
   },
 };
 
+function createBaseAuthorizeOutcomeAssessmentsRequest(): AuthorizeOutcomeAssessmentsRequest {
+  return {
+    workspaceId: "",
+    projectId: "",
+    conversationId: "",
+    idempotencyKey: "",
+    expectedConfigurationRevisionId: "",
+    maxAssessments: 0,
+  };
+}
+
+export const AuthorizeOutcomeAssessmentsRequest: MessageFns<AuthorizeOutcomeAssessmentsRequest> = {
+  encode(message: AuthorizeOutcomeAssessmentsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(34).string(message.idempotencyKey);
+    }
+    if (message.expectedConfigurationRevisionId !== "") {
+      writer.uint32(42).string(message.expectedConfigurationRevisionId);
+    }
+    if (message.maxAssessments !== 0) {
+      writer.uint32(48).uint32(message.maxAssessments);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AuthorizeOutcomeAssessmentsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAuthorizeOutcomeAssessmentsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.expectedConfigurationRevisionId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.maxAssessments = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): AuthorizeOutcomeAssessmentsRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      expectedConfigurationRevisionId: isSet(object.expectedConfigurationRevisionId)
+        ? globalThis.String(object.expectedConfigurationRevisionId)
+        : isSet(object.expected_configuration_revision_id)
+        ? globalThis.String(object.expected_configuration_revision_id)
+        : "",
+      maxAssessments: isSet(object.maxAssessments)
+        ? globalThis.Number(object.maxAssessments)
+        : isSet(object.max_assessments)
+        ? globalThis.Number(object.max_assessments)
+        : 0,
+    };
+  },
+
+  toJSON(message: AuthorizeOutcomeAssessmentsRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.expectedConfigurationRevisionId !== "") {
+      obj.expectedConfigurationRevisionId = message.expectedConfigurationRevisionId;
+    }
+    if (message.maxAssessments !== 0) {
+      obj.maxAssessments = Math.round(message.maxAssessments);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<AuthorizeOutcomeAssessmentsRequest>): AuthorizeOutcomeAssessmentsRequest {
+    return AuthorizeOutcomeAssessmentsRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<AuthorizeOutcomeAssessmentsRequest>): AuthorizeOutcomeAssessmentsRequest {
+    const message = createBaseAuthorizeOutcomeAssessmentsRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.expectedConfigurationRevisionId = object.expectedConfigurationRevisionId ?? "";
+    message.maxAssessments = object.maxAssessments ?? 0;
+    return message;
+  },
+};
+
+function createBaseAuthorizeOutcomeAssessmentsResponse(): AuthorizeOutcomeAssessmentsResponse {
+  return { authorizationId: "", configurationRevisionId: "", maxAssessments: 0 };
+}
+
+export const AuthorizeOutcomeAssessmentsResponse: MessageFns<AuthorizeOutcomeAssessmentsResponse> = {
+  encode(message: AuthorizeOutcomeAssessmentsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.authorizationId !== "") {
+      writer.uint32(10).string(message.authorizationId);
+    }
+    if (message.configurationRevisionId !== "") {
+      writer.uint32(18).string(message.configurationRevisionId);
+    }
+    if (message.maxAssessments !== 0) {
+      writer.uint32(24).uint32(message.maxAssessments);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AuthorizeOutcomeAssessmentsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAuthorizeOutcomeAssessmentsResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.authorizationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.configurationRevisionId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.maxAssessments = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): AuthorizeOutcomeAssessmentsResponse {
+    return {
+      authorizationId: isSet(object.authorizationId)
+        ? globalThis.String(object.authorizationId)
+        : isSet(object.authorization_id)
+        ? globalThis.String(object.authorization_id)
+        : "",
+      configurationRevisionId: isSet(object.configurationRevisionId)
+        ? globalThis.String(object.configurationRevisionId)
+        : isSet(object.configuration_revision_id)
+        ? globalThis.String(object.configuration_revision_id)
+        : "",
+      maxAssessments: isSet(object.maxAssessments)
+        ? globalThis.Number(object.maxAssessments)
+        : isSet(object.max_assessments)
+        ? globalThis.Number(object.max_assessments)
+        : 0,
+    };
+  },
+
+  toJSON(message: AuthorizeOutcomeAssessmentsResponse): unknown {
+    const obj: any = {};
+    if (message.authorizationId !== "") {
+      obj.authorizationId = message.authorizationId;
+    }
+    if (message.configurationRevisionId !== "") {
+      obj.configurationRevisionId = message.configurationRevisionId;
+    }
+    if (message.maxAssessments !== 0) {
+      obj.maxAssessments = Math.round(message.maxAssessments);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<AuthorizeOutcomeAssessmentsResponse>): AuthorizeOutcomeAssessmentsResponse {
+    return AuthorizeOutcomeAssessmentsResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<AuthorizeOutcomeAssessmentsResponse>): AuthorizeOutcomeAssessmentsResponse {
+    const message = createBaseAuthorizeOutcomeAssessmentsResponse();
+    message.authorizationId = object.authorizationId ?? "";
+    message.configurationRevisionId = object.configurationRevisionId ?? "";
+    message.maxAssessments = object.maxAssessments ?? 0;
+    return message;
+  },
+};
+
+function createBaseGetOutcomeAssessmentStatusRequest(): GetOutcomeAssessmentStatusRequest {
+  return { workspaceId: "", projectId: "", conversationId: "" };
+}
+
+export const GetOutcomeAssessmentStatusRequest: MessageFns<GetOutcomeAssessmentStatusRequest> = {
+  encode(message: GetOutcomeAssessmentStatusRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetOutcomeAssessmentStatusRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetOutcomeAssessmentStatusRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetOutcomeAssessmentStatusRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetOutcomeAssessmentStatusRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetOutcomeAssessmentStatusRequest>): GetOutcomeAssessmentStatusRequest {
+    return GetOutcomeAssessmentStatusRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetOutcomeAssessmentStatusRequest>): GetOutcomeAssessmentStatusRequest {
+    const message = createBaseGetOutcomeAssessmentStatusRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetOutcomeAssessmentStatusResponse(): GetOutcomeAssessmentStatusResponse {
+  return { authorizationId: "", configurationRevisionId: "", maxAssessments: 0, admittedAssessments: 0 };
+}
+
+export const GetOutcomeAssessmentStatusResponse: MessageFns<GetOutcomeAssessmentStatusResponse> = {
+  encode(message: GetOutcomeAssessmentStatusResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.authorizationId !== "") {
+      writer.uint32(10).string(message.authorizationId);
+    }
+    if (message.configurationRevisionId !== "") {
+      writer.uint32(18).string(message.configurationRevisionId);
+    }
+    if (message.maxAssessments !== 0) {
+      writer.uint32(24).uint32(message.maxAssessments);
+    }
+    if (message.admittedAssessments !== 0) {
+      writer.uint32(32).uint32(message.admittedAssessments);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetOutcomeAssessmentStatusResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetOutcomeAssessmentStatusResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.authorizationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.configurationRevisionId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.maxAssessments = reader.uint32();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.admittedAssessments = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetOutcomeAssessmentStatusResponse {
+    return {
+      authorizationId: isSet(object.authorizationId)
+        ? globalThis.String(object.authorizationId)
+        : isSet(object.authorization_id)
+        ? globalThis.String(object.authorization_id)
+        : "",
+      configurationRevisionId: isSet(object.configurationRevisionId)
+        ? globalThis.String(object.configurationRevisionId)
+        : isSet(object.configuration_revision_id)
+        ? globalThis.String(object.configuration_revision_id)
+        : "",
+      maxAssessments: isSet(object.maxAssessments)
+        ? globalThis.Number(object.maxAssessments)
+        : isSet(object.max_assessments)
+        ? globalThis.Number(object.max_assessments)
+        : 0,
+      admittedAssessments: isSet(object.admittedAssessments)
+        ? globalThis.Number(object.admittedAssessments)
+        : isSet(object.admitted_assessments)
+        ? globalThis.Number(object.admitted_assessments)
+        : 0,
+    };
+  },
+
+  toJSON(message: GetOutcomeAssessmentStatusResponse): unknown {
+    const obj: any = {};
+    if (message.authorizationId !== "") {
+      obj.authorizationId = message.authorizationId;
+    }
+    if (message.configurationRevisionId !== "") {
+      obj.configurationRevisionId = message.configurationRevisionId;
+    }
+    if (message.maxAssessments !== 0) {
+      obj.maxAssessments = Math.round(message.maxAssessments);
+    }
+    if (message.admittedAssessments !== 0) {
+      obj.admittedAssessments = Math.round(message.admittedAssessments);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetOutcomeAssessmentStatusResponse>): GetOutcomeAssessmentStatusResponse {
+    return GetOutcomeAssessmentStatusResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetOutcomeAssessmentStatusResponse>): GetOutcomeAssessmentStatusResponse {
+    const message = createBaseGetOutcomeAssessmentStatusResponse();
+    message.authorizationId = object.authorizationId ?? "";
+    message.configurationRevisionId = object.configurationRevisionId ?? "";
+    message.maxAssessments = object.maxAssessments ?? 0;
+    message.admittedAssessments = object.admittedAssessments ?? 0;
+    return message;
+  },
+};
+
 /** Scoped conversation execution and operator plan review on the trusted listener. */
 export type ProjectConversationServiceService = typeof ProjectConversationServiceService;
 export const ProjectConversationServiceService = {
+  authorizeOutcomeAssessments: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/AuthorizeOutcomeAssessments" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: AuthorizeOutcomeAssessmentsRequest): Buffer =>
+      Buffer.from(AuthorizeOutcomeAssessmentsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): AuthorizeOutcomeAssessmentsRequest =>
+      AuthorizeOutcomeAssessmentsRequest.decode(value),
+    responseSerialize: (value: AuthorizeOutcomeAssessmentsResponse): Buffer =>
+      Buffer.from(AuthorizeOutcomeAssessmentsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): AuthorizeOutcomeAssessmentsResponse =>
+      AuthorizeOutcomeAssessmentsResponse.decode(value),
+  },
+  getOutcomeAssessmentStatus: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/GetOutcomeAssessmentStatus" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetOutcomeAssessmentStatusRequest): Buffer =>
+      Buffer.from(GetOutcomeAssessmentStatusRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetOutcomeAssessmentStatusRequest =>
+      GetOutcomeAssessmentStatusRequest.decode(value),
+    responseSerialize: (value: GetOutcomeAssessmentStatusResponse): Buffer =>
+      Buffer.from(GetOutcomeAssessmentStatusResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetOutcomeAssessmentStatusResponse =>
+      GetOutcomeAssessmentStatusResponse.decode(value),
+  },
   startTaskPublication: {
     path: "/ayni.orchestrator.v1.ProjectConversationService/StartTaskPublication" as const,
     requestStream: false as const,
@@ -4042,6 +4639,8 @@ export const ProjectConversationServiceService = {
 } as const;
 
 export interface ProjectConversationServiceServer extends UntypedServiceImplementation {
+  authorizeOutcomeAssessments: handleUnaryCall<AuthorizeOutcomeAssessmentsRequest, AuthorizeOutcomeAssessmentsResponse>;
+  getOutcomeAssessmentStatus: handleUnaryCall<GetOutcomeAssessmentStatusRequest, GetOutcomeAssessmentStatusResponse>;
   startTaskPublication: handleUnaryCall<StartTaskPublicationRequest, StartTaskPublicationResponse>;
   cancelTaskPublication: handleUnaryCall<CancelTaskPublicationRequest, CancelTaskPublicationResponse>;
   startTaskExecution: handleUnaryCall<StartTaskExecutionRequest, StartTaskExecutionResponse>;
@@ -4079,6 +4678,36 @@ export interface ProjectConversationServiceServer extends UntypedServiceImplemen
 }
 
 export interface ProjectConversationServiceClient extends Client {
+  authorizeOutcomeAssessments(
+    request: AuthorizeOutcomeAssessmentsRequest,
+    callback: (error: ServiceError | null, response: AuthorizeOutcomeAssessmentsResponse) => void,
+  ): ClientUnaryCall;
+  authorizeOutcomeAssessments(
+    request: AuthorizeOutcomeAssessmentsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: AuthorizeOutcomeAssessmentsResponse) => void,
+  ): ClientUnaryCall;
+  authorizeOutcomeAssessments(
+    request: AuthorizeOutcomeAssessmentsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: AuthorizeOutcomeAssessmentsResponse) => void,
+  ): ClientUnaryCall;
+  getOutcomeAssessmentStatus(
+    request: GetOutcomeAssessmentStatusRequest,
+    callback: (error: ServiceError | null, response: GetOutcomeAssessmentStatusResponse) => void,
+  ): ClientUnaryCall;
+  getOutcomeAssessmentStatus(
+    request: GetOutcomeAssessmentStatusRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetOutcomeAssessmentStatusResponse) => void,
+  ): ClientUnaryCall;
+  getOutcomeAssessmentStatus(
+    request: GetOutcomeAssessmentStatusRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetOutcomeAssessmentStatusResponse) => void,
+  ): ClientUnaryCall;
   startTaskPublication(
     request: StartTaskPublicationRequest,
     callback: (error: ServiceError | null, response: StartTaskPublicationResponse) => void,

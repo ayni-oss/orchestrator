@@ -73,7 +73,9 @@ pub async fn execute(
     let http = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()?;
-    if binding.execution_binding_revision == "openai-responses-v1" {
+    if ayni_orchestrator_events::workflow::binding_provider(&binding.execution_binding_revision)
+        .is_some()
+    {
         return execute_provider(&http, &address, &token, command_bytes).await;
     }
     let mut response = http
@@ -265,11 +267,22 @@ async fn ensure_pod(
     binding: &ayni_orchestrator_events::v1::ConversationTurnBinding,
     image: &str,
 ) -> RuntimeResult {
-    let endpoint = if env::var("ORCHESTRATOR_OPENAI_ENABLED").as_deref() == Ok("true") {
-        Some(env::var("OPENAI_BASE_URL").unwrap_or_else(|_| "https://api.openai.com/v1".into()))
+    let anthropic = binding.execution_binding_revision == "anthropic-messages-v1";
+    let (enable, endpoint_name, default_endpoint) = if anthropic {
+        (
+            "ORCHESTRATOR_ANTHROPIC_ENABLED",
+            "ANTHROPIC_BASE_URL",
+            "https://api.anthropic.com/v1",
+        )
     } else {
-        None
+        (
+            "ORCHESTRATOR_OPENAI_ENABLED",
+            "OPENAI_BASE_URL",
+            "https://api.openai.com/v1",
+        )
     };
+    let endpoint = (env::var(enable).as_deref() == Ok("true"))
+        .then(|| env::var(endpoint_name).unwrap_or_else(|_| default_endpoint.into()));
     let pod = desired_pod(name, scope, binding, image, endpoint.as_deref())?;
     if let Some(existing) = api.get_opt(name).await? {
         verify_labels(existing.metadata.labels.as_ref(), scope)?;
@@ -307,6 +320,18 @@ fn desired_pod(
     )?;
     if let Some(endpoint) = provider_endpoint {
         let workspace = uuid::Uuid::parse_str(&binding.workspace_id)?;
+        let anthropic = binding.execution_binding_revision == "anthropic-messages-v1";
+        let provider = if anthropic { "anthropic" } else { "openai" };
+        let key_path_name = if anthropic {
+            "ORCHESTRATOR_ANTHROPIC_API_KEY_PATH"
+        } else {
+            "ORCHESTRATOR_OPENAI_API_KEY_PATH"
+        };
+        let endpoint_name = if anthropic {
+            "ANTHROPIC_BASE_URL"
+        } else {
+            "OPENAI_BASE_URL"
+        };
         let spec = pod
             .spec
             .as_mut()
@@ -321,8 +346,9 @@ fn desired_pod(
             .extend(serde_json::from_value::<
                 Vec<k8s_openapi::api::core::v1::EnvVar>,
             >(json!([
-                {"name":"ORCHESTRATOR_OPENAI_API_KEY_PATH","value":"/var/run/provider/api-key"},
-                {"name":"OPENAI_BASE_URL","value":endpoint}
+                {"name":key_path_name,"value":"/var/run/provider/api-key"},
+                {"name":endpoint_name,"value":endpoint},
+                {"name":"ORCHESTRATOR_SESSION_PROVIDER","value":provider}
             ]))?);
         container
             .volume_mounts
@@ -330,7 +356,32 @@ fn desired_pod(
             .push(serde_json::from_value(
                 json!({"name":"provider","mountPath":"/var/run/provider","readOnly":true}),
             )?);
-        spec.volumes.get_or_insert_default().push(serde_json::from_value(json!({"name":"provider","secret":{"secretName":format!("provider-openai-{}",workspace.simple()),"items":[{"key":"api-key","path":"api-key"}],"optional":true}}))?);
+        spec.volumes.get_or_insert_default().push(serde_json::from_value(json!({"name":"provider","secret":{"secretName":format!("provider-{provider}-{}",workspace.simple()),"items":[{"key":"api-key","path":"api-key"}],"optional":true}}))?);
+    }
+    if env::var("ORCHESTRATOR_MCP_ENABLED").as_deref() == Ok("true") {
+        let workspace = uuid::Uuid::parse_str(&binding.workspace_id)?;
+        let spec = pod
+            .spec
+            .as_mut()
+            .ok_or_else(|| io::Error::other("session Pod invalid"))?;
+        let container = spec
+            .containers
+            .first_mut()
+            .ok_or_else(|| io::Error::other("session Pod invalid"))?;
+        container.env.get_or_insert_default().push(serde_json::from_value(json!({"name":"ORCHESTRATOR_MCP_CONFIG_PATH","value":"/var/run/mcp-config/grants.json"}))?);
+        container
+            .volume_mounts
+            .get_or_insert_default()
+            .extend(serde_json::from_value::<
+                Vec<k8s_openapi::api::core::v1::VolumeMount>,
+            >(json!([
+                {"name":"mcp-config","mountPath":"/var/run/mcp-config","readOnly":true},
+                {"name":"mcp-credentials","mountPath":"/var/run/mcp","readOnly":true}
+            ]))?);
+        spec.volumes.get_or_insert_default().extend(serde_json::from_value::<Vec<k8s_openapi::api::core::v1::Volume>>(json!([
+            {"name":"mcp-config","configMap":{"name":format!("mcp-config-{}",workspace.simple()),"items":[{"key":"grants.json","path":"grants.json"}]}},
+            {"name":"mcp-credentials","secret":{"secretName":format!("mcp-credentials-{}",workspace.simple()),"optional":true}}
+        ]))?);
     }
     let mut recipe_spec = pod.spec.clone();
     if let Some(spec) = recipe_spec.as_mut() {
@@ -653,7 +704,7 @@ struct ProviderRuntime {
 }
 
 impl ProviderRuntime {
-    fn from_environment() -> RuntimeResult<Self> {
+    fn from_environment(provider: &str) -> RuntimeResult<Self> {
         let path = env::var("ORCHESTRATOR_SESSION_AUTHORITY_TOKEN_PATH")
             .map_err(|_| io::Error::other("session authority unavailable"))?;
         let authority_token = std::fs::read_to_string(path)
@@ -661,7 +712,13 @@ impl ProviderRuntime {
         let authority_url = env::var("ORCHESTRATOR_SESSION_AUTHORITY_URL")
             .map_err(|_| io::Error::other("session authority unavailable"))?;
         Ok(Self {
-            enabled: env::var("ORCHESTRATOR_OPENAI_ENABLED").as_deref() == Ok("true"),
+            enabled: env::var(if provider == "anthropic" {
+                "ORCHESTRATOR_ANTHROPIC_ENABLED"
+            } else {
+                "ORCHESTRATOR_OPENAI_ENABLED"
+            })
+            .as_deref()
+                == Ok("true"),
             authority_url,
             authority_token,
         })
@@ -703,7 +760,12 @@ async fn execute_provider(
     token: &str,
     command_bytes: &[u8],
 ) -> RuntimeResult<ExecutionResult> {
-    let runtime = ProviderRuntime::from_environment()?;
+    let (_, _, command) = decode_command(command_bytes)?;
+    let provider = command
+        .frozen_configuration
+        .as_ref()
+        .map_or("", |c| c.provider.as_str());
+    let runtime = ProviderRuntime::from_environment(provider)?;
     execute_provider_with_runtime(
         http,
         &format!("http://{address}:8081"),

@@ -19,6 +19,8 @@ use uuid::Uuid;
 mod continuation;
 #[path = "workflow_acceptance/execution.rs"]
 mod execution;
+#[path = "workflow_acceptance/operational.rs"]
+mod operational;
 #[path = "workflow_acceptance/plans.rs"]
 mod plans;
 #[path = "workflow_acceptance/project_continuity.rs"]
@@ -162,6 +164,9 @@ async fn dispatch(
     }
     if mode.contains("publication") {
         return dispatch_publication(mode, client, projects).await;
+    }
+    if mode.contains("operational-concurrency") {
+        return operational::dispatch(mode, client, projects).await;
     }
     match mode {
         "--prepare-task-recovery-review" => {

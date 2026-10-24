@@ -12,6 +12,16 @@ pub struct ExecutionInputs {
     pub runtime_image: String,
     pub max_seconds: u32,
     pub max_tokens: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub upstream_selections: Vec<UpstreamSelection>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpstreamSelection {
+    pub task_id: String,
+    pub attempt_id: String,
+    pub commit_sha: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -58,6 +68,22 @@ pub fn validate_inputs(inputs: &ExecutionInputs) -> Result<(), StoreError> {
         || inputs.max_tokens > 200_000
     {
         return Err(StoreError::InvalidInput("execution_inputs"));
+    }
+    if inputs.upstream_selections.len() > 31 {
+        return Err(StoreError::Capacity("upstream_selections"));
+    }
+    let mut tasks = std::collections::BTreeSet::new();
+    for selection in &inputs.upstream_selections {
+        for value in [&selection.task_id, &selection.attempt_id] {
+            if !uuid::Uuid::parse_str(value)
+                .is_ok_and(|id| id.get_version_num() == 7 && id.to_string() == *value)
+            {
+                return Err(StoreError::InvalidInput("upstream_identity"));
+            }
+        }
+        if !hex(&selection.commit_sha, 40) || !tasks.insert(&selection.task_id) {
+            return Err(StoreError::InvalidInput("upstream_selection"));
+        }
     }
     Ok(())
 }

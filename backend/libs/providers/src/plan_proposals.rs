@@ -9,9 +9,9 @@ pub fn tool() -> Value {
             "key":text(64),"objective":text(4096),"scope":text(4096),
             "out_of_scope":text(4096),"acceptance_criteria":items,
             "repository":text(1024),"source_ref":text(256),"execution_limits":text(2048),
-            "unresolved_inputs":items
+            "unresolved_inputs":items, "depends_on":{"type":"array","maxItems":31,"items":text(64)}, "source_paths":{"type":"array","maxItems":64,"items":text(256)}
         },
-        "required":["key","objective","scope","out_of_scope","acceptance_criteria","repository","source_ref","execution_limits","unresolved_inputs"]});
+        "required":["key","objective","scope","out_of_scope","acceptance_criteria","repository","source_ref","execution_limits","unresolved_inputs","depends_on","source_paths"]});
     json!({"type":"function","name":"propose_plan","strict":true,
         "description":"Propose one new plan in this conversation for human review after discussing scope and constraints. This terminal draft capability cannot approve or execute work. Submit alone, without other tool calls. Keep canonical content within 32768 UTF-8 bytes and all arguments within 40960 bytes. Evidence strings are unverified declarations; identify their source and uncertainty. Put assumptions and unresolved questions explicitly in the draft.",
         "parameters":{"type":"object","additionalProperties":false,

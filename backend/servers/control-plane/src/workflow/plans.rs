@@ -39,6 +39,8 @@ pub(super) fn content(
                 source_ref: t.source_ref,
                 execution_limits: t.execution_limits,
                 unresolved_inputs: t.unresolved_inputs,
+                depends_on: t.depends_on,
+                source_paths: t.source_paths,
             })
             .collect(),
     })
@@ -92,6 +94,8 @@ pub(super) fn version(value: model::PlanVersion) -> v1::PlanVersion {
                     source_ref: t.source_ref,
                     execution_limits: t.execution_limits,
                     unresolved_inputs: t.unresolved_inputs,
+                    depends_on: t.depends_on,
+                    source_paths: t.source_paths,
                 })
                 .collect(),
         }),
@@ -192,6 +196,8 @@ pub(super) fn task(v: model::AdmittedTask) -> v1::AdmittedTask {
             source_ref: t.source_ref,
             execution_limits: t.execution_limits,
             unresolved_inputs: t.unresolved_inputs,
+            depends_on: t.depends_on,
+            source_paths: t.source_paths,
         }),
         state: v.state,
         execution_blockers: v.execution_blockers,
@@ -222,6 +228,15 @@ pub(super) fn preparation(
             runtime_image: i.runtime_image,
             max_seconds: i.max_seconds,
             max_tokens: i.max_tokens,
+            upstream_selections: i
+                .upstream_selections
+                .into_iter()
+                .map(|s| v1::TaskUpstreamSelection {
+                    task_id: s.task_id,
+                    attempt_id: s.attempt_id,
+                    commit_sha: s.commit_sha,
+                })
+                .collect(),
         }),
         blockers: v.blockers,
         configuration_revision_id: v.configuration_revision_id,

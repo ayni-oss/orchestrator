@@ -111,7 +111,7 @@ export function mountTasks({ getScope, api, submit, showError, saved, store, con
       ['Status', !preparation ? 'Not prepared' : preparation.attemptId ? 'Prepared' : 'Blocked'],
       ['Preparation blockers', preparation ? preparation.blockers || [] : task.executionBlockers],
       ['Repository', source?.repository || task.specification.repository],
-      ['Source reference', source?.sourceRef || task.specification.sourceRef], ['Source commit', source?.sourceCommit],
+      ['Frozen upstream selections', source?.upstreamSelections?.map(s => `${s.taskId} / ${s.attemptId} / ${s.commitSha}`).join('\n')], ['Source reference', source?.sourceRef || task.specification.sourceRef], ['Source commit', source?.sourceCommit],
       ['Runtime image', source?.runtimeImage], ['Time budget (seconds)', source?.maxSeconds], ['Token budget', source?.maxTokens],
     ]);
     disclosure(setup, 'Task origin and current execution selection', JSON.stringify({ origin: task, preparation }, null, 2), 'origin');

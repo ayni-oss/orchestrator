@@ -22,8 +22,14 @@ pub async fn run(store: WorkflowStore, mut shutdown: watch::Receiver<bool>) {
                 if store.cleanup_transport_quarantine().await.is_err() {
                     metrics::increment("workflow_quarantine_cleanup_errors_total");
                 }
+                if store.cleanup_retained_task_sources().await.is_err() {
+                    metrics::increment("workflow_task_source_cleanup_errors_total");
+                }
                 if store.expire_idle_sessions().await.is_err() {
                     metrics::increment("workflow_session_expiry_errors_total");
+                }
+                if store.admit_outcome_assessments(16).await.is_err() {
+                    metrics::increment("workflow_assessment_admission_errors_total");
                 }
                 metrics::observe("workflow_cleanup_seconds", began.elapsed());
             },

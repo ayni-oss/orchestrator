@@ -37,6 +37,10 @@ pub struct PlanTaskSpecification {
     pub source_ref: String,
     pub execution_limits: String,
     pub unresolved_inputs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub depends_on: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_paths: Vec<String>,
 }
 
 fn text(value: &str, max: usize, required: bool) -> Result<(), &'static str> {
@@ -70,11 +74,20 @@ pub fn canonical_content(content: &PlanContent) -> Result<Vec<u8>, &'static str>
     text(&content.out_of_scope, 4096, false)?;
     items(&content.constraints)?;
     items(&content.unresolved_questions)?;
-    if content.tasks.len() > 32 {
+    validate_tasks(&content.tasks)?;
+    let bytes = serde_json::to_vec(content).map_err(|_| "plan_encoding")?;
+    if bytes.len() > MAX_PLAN_BYTES {
+        return Err("plan_bytes");
+    }
+    Ok(bytes)
+}
+
+fn validate_tasks(tasks: &[PlanTaskSpecification]) -> Result<(), &'static str> {
+    if tasks.len() > 32 {
         return Err("plan_tasks");
     }
     let mut keys = BTreeSet::new();
-    for task in &content.tasks {
+    for task in tasks {
         if task.key.is_empty()
             || task.key.len() > 64
             || !task
@@ -93,12 +106,45 @@ pub fn canonical_content(content: &PlanContent) -> Result<Vec<u8>, &'static str>
         text(&task.execution_limits, 2048, false)?;
         items(&task.acceptance_criteria)?;
         items(&task.unresolved_inputs)?;
+        if !crate::task_execution::valid_source_paths(&task.source_paths) {
+            return Err("task_source_paths");
+        }
     }
-    let bytes = serde_json::to_vec(content).map_err(|_| "plan_encoding")?;
-    if bytes.len() > MAX_PLAN_BYTES {
-        return Err("plan_bytes");
+    validate_graph(tasks, &keys)
+}
+
+fn validate_graph(
+    tasks: &[PlanTaskSpecification],
+    keys: &BTreeSet<&String>,
+) -> Result<(), &'static str> {
+    // Reject missing edges, duplicate edges, self-dependencies and cycles before review.
+    let mut resolved = BTreeSet::new();
+    for task in tasks {
+        let mut dependencies = BTreeSet::new();
+        if task.depends_on.len() > 31
+            || task
+                .depends_on
+                .iter()
+                .any(|key| key == &task.key || !keys.contains(key) || !dependencies.insert(key))
+        {
+            return Err("plan_task_dependency");
+        }
     }
-    Ok(bytes)
+    loop {
+        let before = resolved.len();
+        for task in tasks {
+            if task.depends_on.iter().all(|key| resolved.contains(key)) {
+                resolved.insert(&task.key);
+            }
+        }
+        if resolved.len() == tasks.len() {
+            break;
+        }
+        if resolved.len() == before {
+            return Err("plan_task_dependency");
+        }
+    }
+    Ok(())
 }
 
 /// Validate a complete provider draft without truncation or extracting prose.

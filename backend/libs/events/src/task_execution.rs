@@ -20,6 +20,8 @@ pub struct TaskCommand {
     pub generation: u64,
     pub repository: String,
     pub source_commit: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_paths: Vec<String>,
     pub source_pack_digest: String,
     pub lock_digest: String,
     pub runtime_image: String,
@@ -50,6 +52,45 @@ pub struct TaskRecoveryCommand {
     pub seed_patch_digest: String,
     pub quality_reason: String,
     pub quality_artifact: String,
+    #[serde(default)]
+    pub answers: Vec<TaskAnswer>,
+}
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskAnswer {
+    pub question_id: String,
+    pub question: String,
+    pub answer: String,
+}
+/// A model may request review, but cannot grant itself another execution allowance.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskRecoveryAdvice {
+    pub question: String,
+    pub explanation: String,
+    pub action: String,
+    pub additional_seconds: u32,
+    pub additional_tokens: u32,
+}
+impl TaskRecoveryAdvice {
+    #[must_use]
+    pub fn validate(&self) -> bool {
+        let text = |value: &str| {
+            !value.trim().is_empty()
+                && value.len() <= 4096
+                && value
+                    .chars()
+                    .all(|c| !c.is_control() || matches!(c, '\n' | '\r' | '\t'))
+        };
+        text(&self.question)
+            && text(&self.explanation)
+            && matches!(
+                self.action.as_str(),
+                "continue" | "repair_quality" | "replace_attempt"
+            )
+            && (1..=86_400).contains(&self.additional_seconds)
+            && (1..=1_000_000).contains(&self.additional_tokens)
+    }
 }
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -62,6 +103,8 @@ pub struct TaskOutcome {
     pub input_tokens: Option<u64>,
     pub output_tokens: Option<u64>,
     pub total_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_advice: Option<TaskRecoveryAdvice>,
 }
 /// Prefer accepted coding output; otherwise retain the approved input patch across failed continuations.
 #[must_use]
@@ -91,7 +134,12 @@ impl TaskOutcome {
                     | "execution_interrupted"
                     | "execution_limit"
                     | "cancelled"
+                    | "worker_question"
             )
+            && self.recovery_advice.as_ref().is_none_or(|advice| {
+                self.state == "failed" && self.safe_reason == "worker_question" && advice.validate()
+            })
+            && (self.safe_reason != "worker_question" || self.recovery_advice.is_some())
             && self.patch.len() <= MAX_PATCH
             && self
                 .patch
@@ -160,4 +208,86 @@ pub fn worker_token(authority: &[u8], attempt: &str, generation: u64) -> String 
         .unwrap_or_else(|_| unreachable!("HMAC accepts every key length"));
     mac.update(format!("ayni-task-worker-v1:{attempt}:{generation}").as_bytes());
     format!("{:x}", mac.finalize().into_bytes())
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    use super::*;
+    #[test]
+    fn worker_questions_require_bounded_advice_and_cannot_claim_completion() {
+        let advice = TaskRecoveryAdvice {
+            question: "Which source?".into(),
+            explanation: "Clarify the exact reviewed source.".into(),
+            action: "continue".into(),
+            additional_seconds: 300,
+            additional_tokens: 4096,
+        };
+        let mut outcome = TaskOutcome {
+            state: "failed".into(),
+            safe_reason: "worker_question".into(),
+            recovery_advice: Some(advice),
+            ..Default::default()
+        };
+        assert!(outcome.validate());
+        outcome.state = "completed".into();
+        assert!(!outcome.validate());
+        outcome.state = "failed".into();
+        if let Some(advice) = &mut outcome.recovery_advice {
+            advice.additional_tokens = 0;
+        }
+        assert!(!outcome.validate());
+        outcome.recovery_advice = None;
+        assert!(!outcome.validate());
+    }
+}
+
+/// Exact reviewed read/write file selection. Empty retains the bounded full-tree policy.
+#[must_use]
+pub fn valid_source_paths(paths: &[String]) -> bool {
+    let mut seen = std::collections::BTreeSet::new();
+    paths.len() <= 64
+        && paths.iter().all(|path| {
+            !path.is_empty()
+                && path.len() <= 256
+                && !path.chars().any(char::is_control)
+                && !matches!(path.as_str(), ".ayni.lock" | ".ayni.toml")
+                && !path.contains('\\')
+                && path
+                    .split('/')
+                    .all(|part| !matches!(part, "" | "." | ".." | ".git" | ".ayni"))
+                && seen.insert(path)
+        })
+}
+
+#[cfg(test)]
+mod source_selection_tests {
+    use super::valid_source_paths;
+    #[test]
+    fn source_paths_are_exact_bounded_and_exclude_protected_inputs() {
+        assert!(valid_source_paths(&[]));
+        assert!(valid_source_paths(&[
+            "README.md".into(),
+            "src/lib.rs".into()
+        ]));
+        for value in [
+            "",
+            "/root",
+            "../file",
+            "a/../file",
+            "a//file",
+            "./file",
+            ".git/config",
+            "a/.ayni/ledger",
+            ".ayni.lock",
+            ".ayni.toml",
+            "a\\file",
+            "a\nfile",
+        ] {
+            assert!(!valid_source_paths(&[value.into()]), "{value:?}");
+        }
+        assert!(!valid_source_paths(&["file".into(), "file".into()]));
+        assert!(!valid_source_paths(
+            &(0..65).map(|n| format!("file{n}")).collect::<Vec<_>>()
+        ));
+    }
 }

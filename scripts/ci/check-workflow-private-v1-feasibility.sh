@@ -40,6 +40,7 @@ expected = {
     },
     "project_conversations.proto": {
         "ProjectConversationService": [
+            "AuthorizeOutcomeAssessments", "GetOutcomeAssessmentStatus",
             "StartTaskPublication", "CancelTaskPublication", "StartTaskExecution", "CancelTaskExecution", "GetTaskAttempt", "PrepareTaskExecution", "GetTaskExecution", "ApprovePlan", "GetPlanApproval", "ListTasks", "ConfirmTaskRecovery", "RecordTaskRecovery", "ListTaskRecovery", "ListTaskFeedback", "GetTask",
             "CreatePlan", "RevisePlan", "GetPlanVersion", "ListPlans", "ListPlanVersions",
             "ListProviderCalls", "AcknowledgeProviderUncertainty", "CancelTurn",
