@@ -172,15 +172,63 @@ async fn prove_child(
         .list_task_recovery(scope, &task.task_id, &task.attempt_id, "", 32)
         .await?;
     assert_eq!(after.confirmations, vec![receipt.clone()]);
+    prove_resolution(store, scope, task, receipt, &after).await?;
     store
         .cancel_task_execution(scope, &task.task_id, &receipt.attempt_id, &key())
         .await?;
+    let feedback = store
+        .list_task_feedback(scope.workspace, scope.project, scope.conversation, "", 32)
+        .await?;
+    assert_eq!(
+        feedback
+            .feedback
+            .iter()
+            .find(|f| f.attempt_id == task.attempt_id)
+            .ok_or("feedback missing")?
+            .recovery_state,
+        "cancelled"
+    );
     assert!(
         store
             .task_supervisor(&SupervisorRequest::Poll)
             .await?
             .is_none()
     );
+    Ok(())
+}
+async fn prove_resolution(
+    store: &WorkflowStore,
+    scope: PlanScope<'_>,
+    task: &TaskExecutionPreparation,
+    receipt: &ayni_orchestrator_workflow_postgres::store::task_recovery::RecoveryConfirmation,
+    after: &ayni_orchestrator_workflow_postgres::store::task_recovery::RecoveryPage,
+) -> Result {
+    let last_page = store
+        .list_task_recovery(
+            scope,
+            &task.task_id,
+            &task.attempt_id,
+            &after.records.last().ok_or("record missing")?.id,
+            1,
+        )
+        .await?;
+    assert!(last_page.records.is_empty());
+    assert_eq!(
+        last_page.confirmations,
+        vec![receipt.clone()],
+        "parent consent must be visible on every page"
+    );
+    let feedback = store
+        .list_task_feedback(scope.workspace, scope.project, scope.conversation, "", 32)
+        .await?;
+    let resolved = feedback
+        .feedback
+        .iter()
+        .find(|f| f.attempt_id == task.attempt_id)
+        .ok_or("feedback missing")?;
+    assert_eq!(resolved.recovery_attempt_id, receipt.attempt_id);
+    assert_eq!(resolved.recovery_state, "queued");
+    assert!(resolved.recovery_quality_state.is_empty());
     Ok(())
 }
 async fn alternate(

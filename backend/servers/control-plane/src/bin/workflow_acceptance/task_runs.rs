@@ -48,6 +48,12 @@ pub async fn prepare_publication_quality(
     )
     .await
 }
+pub async fn prepare_recovery_review(
+    projects: &mut ProjectServiceClient<Channel>,
+    client: &mut Client,
+) -> Result {
+    prepare_inner(projects, client, Profile::RecoveryReview).await
+}
 pub async fn prepare_quality(
     projects: &mut ProjectServiceClient<Channel>,
     client: &mut Client,
@@ -82,6 +88,7 @@ enum Profile {
     Pending,
     QualityPassed,
     QualityFailed,
+    RecoveryReview,
     PublicationPassed,
     PublicationFailed,
 }
@@ -90,9 +97,11 @@ async fn prepare_inner(
     client: &mut Client,
     profile: Profile,
 ) -> Result {
-    let pending = profile == Profile::Pending;
     let quality = !matches!(profile, Profile::Coding | Profile::Pending);
-    let quality_failed = matches!(profile, Profile::QualityFailed | Profile::PublicationFailed);
+    let quality_failed = matches!(
+        profile,
+        Profile::QualityFailed | Profile::PublicationFailed | Profile::RecoveryReview
+    );
     let scope = create_scope(projects, client)
         .await
         .map_err(|e| format!("task scope: {e}"))?;
@@ -183,10 +192,17 @@ async fn prepare_inner(
         recovery: Vec::new(),
         continuation: Vec::new(),
     };
-    if !pending {
-        retain_completed(client, &mut evidence).await?;
-    }
+    finish_profile(client, &mut evidence, profile).await?;
     println!("{}", serde_json::to_string(&evidence)?);
+    Ok(())
+}
+async fn finish_profile(client: &mut Client, evidence: &mut Evidence, profile: Profile) -> Result {
+    if profile == Profile::RecoveryReview {
+        // Leave the recovery decision to the actual browser, after real managed quality fails.
+        verify(client, evidence).await?;
+    } else if profile != Profile::Pending {
+        retain_completed(client, evidence).await?;
+    }
     Ok(())
 }
 pub async fn verify_quality_stdin(client: &mut Client) -> Result {
@@ -428,10 +444,12 @@ async fn feedback(
         limit: 32,
         ..Default::default()
     };
-    let page = client
-        .list_task_feedback(request.clone())
-        .await?
-        .into_inner();
+    let page = feedback_facts(
+        client
+            .list_task_feedback(request.clone())
+            .await?
+            .into_inner(),
+    )?;
     let mut selected = page.clone();
     selected
         .feedback
@@ -457,13 +475,31 @@ async fn feedback(
         })
         .await?
         .into_inner();
-    if project != page {
+    if feedback_facts(project)? != page {
         return Err("project attention differs from originating conversation".into());
     }
-    if client.list_task_feedback(request).await?.into_inner() != page {
+    if feedback_facts(client.list_task_feedback(request).await?.into_inner())? != page {
         return Err("repeated feedback read changed".into());
     }
     Ok(selected.encode_to_vec())
+}
+// Restart equality protects retained facts. Linked run state is a live projection.
+fn feedback_facts(mut page: v1::ListTaskFeedbackResponse) -> Result<v1::ListTaskFeedbackResponse> {
+    for f in &mut page.feedback {
+        let expected = if f.recovery_attempt_id.is_empty() {
+            "open"
+        } else {
+            "resolved"
+        };
+        if f.state != expected {
+            return Err("feedback resolution disagrees with recovery authority".into());
+        }
+        f.state = "open".into();
+        f.recovery_attempt_id.clear();
+        f.recovery_state.clear();
+        f.recovery_quality_state.clear();
+    }
+    Ok(page)
 }
 async fn terminal(
     client: &mut Client,
@@ -537,7 +573,10 @@ fn plan_content(profile: Profile) -> v1::PlanContent {
         scope: "Task execution acceptance".into(),
         tasks: vec![v1::PlanTaskSpecification {
             key: "coding".into(),
-            objective: if matches!(profile, Profile::QualityFailed | Profile::PublicationFailed) {
+            objective: if matches!(
+                profile,
+                Profile::QualityFailed | Profile::PublicationFailed | Profile::RecoveryReview
+            ) {
                 "Task quality failure fixture"
             } else if profile == Profile::Pending {
                 "Task cancellation fixture"

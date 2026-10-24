@@ -2,7 +2,7 @@
 
 Recovery review lets users inspect a proposed next action without starting it.
 The originating task retains immutable operator proposals, questions and answers.
-[Task feedback](task-feedback.md) remains open throughout this slice.
+[Task feedback](task-feedback.md) remains open until exact confirmation handles its recovery decision.
 Exact confirmation now authorizes one linked execution segment for the existing independent-task runtime.
 The [M6 delivery plan](../research/project-workflow-m6-delivery-plan.md) owns the complete recovery journey.
 
@@ -40,8 +40,7 @@ answers serialize: only the first is retained. A different answer requires a new
 question. Answering supplies direction and grants no continuation authority.
 
 The coding worker protocol still cannot ask structured questions. Worker-originated
-questions, model-generated proposals and the complete conversation journey remain
-later M6 work. Operator text is displayed as text and is not inserted into provider context.
+questions and model-generated proposals remain later work. Operator text is displayed as text and is not inserted into provider context.
 
 ## Canonical private-v1 API
 
@@ -51,7 +50,7 @@ later M6 work. Operator text is displayed as text and is not inserted into provi
 | --- | --- |
 | `RecordTaskRecovery` | Requires workspace, project, conversation, task, attempt and command key, plus exactly one proposal, question or answer. Returns the original immutable record on an exact retry. Changed content under that key conflicts. |
 | `ConfirmTaskRecovery` | Requires exact task origin, proposal ID/digest, command key and explicit acknowledgement when the proposal reports provider uncertainty. Returns one durable confirmation and linked attempt. |
-| `ListTaskRecovery` | Requires the same exact origin. Returns ascending ID-keyset pages with `after_id`, default limit 20, maximum 32 and `next_after_id`. Missing and foreign attempts fail even for empty history. |
+| `ListTaskRecovery` | Requires the same exact origin. Returns ascending ID-keyset pages with `after_id`, default limit 20, maximum 32 and `next_after_id`. Includes canonical answers for questions on the page, even when answers occur later, and the parent confirmation on every page. Missing and foreign attempts fail even for empty history. |
 
 Each record retains its full origin, ID, author, content digest and timestamp.
 The content digest hashes the server's stored JSON bytes, not a caller serialization.
@@ -125,8 +124,14 @@ Material source changes require new reviewed work. Full M6 closure still require
 ## Authority and acceptance
 
 Recording, listing and answering grant no execution or publication authority. Confirmation
-alone admits a linked attempt under the additional allowance. Attention resolution,
-worker questions and the complete conversation recovery interaction remain later M6 work.
+alone admits a linked attempt under the additional allowance and resolves the parent attention
+decision. Conversation notices retain the original problem and link to the continued outcome,
+with coding and quality shown separately. The console hides competing consent controls after
+another proposal consumes the parent, reconciles answers after a conflict, and refreshes canonical
+history on task refresh and tab focus. Unchanged reads preserve drafts and consent; navigation
+and changed history require a fresh review. Lost responses retain the exact pending command
+through reload. Browser state grants no execution authority. Structured worker questions remain
+outside the coding protocol; operator answers provide review context only.
 
 The PostgreSQL gate covers exact and conflicting retries, confirmation races, stale
 evidence, missing charge acknowledgement, rollback after dispatch insertion, frozen

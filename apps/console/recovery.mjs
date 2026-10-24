@@ -3,21 +3,36 @@ export const key = scope => scope ? `${scopeKey(scope)}/${scope.taskId}/${scope.
 
 // Reads discard late results after navigation; mutations use the shared retained command key.
 export function createRecoveryHistory({ api, changed = () => {}, failed = () => {} }) {
-  let selected; let version = 0; let records = []; let next = ''; let confirmations = new Map();
-  function select(scope) { selected = scope && { ...scope }; version++; records = []; next = ''; confirmations = new Map(); }
+  let selected; let version = 0; let records = []; let next = ''; let confirmations = new Map(); let answers = new Map(); let rendered = '';
+  function select(scope) { selected = scope && { ...scope }; version++; records = []; next = ''; confirmations = new Map(); answers = new Map(); rendered = ''; }
   async function load(more = false) {
     if (!selected || (more && !next)) return;
     const scope = { ...selected }; const query = ++version;
     const current = () => query === version && key(scope) === key(selected);
     try {
-      const page = await api('ListTaskRecovery', { ...scope, afterId: more ? next : '', limit: 20 });
+      let page = await api('ListTaskRecovery', { ...scope, afterId: more ? next : '', limit: 20 });
       if (!current()) return;
-      if ((page.records || []).some(r => key(r) !== key(scope))) throw new Error('Recovery history did not match the selected attempt.');
+      // Refresh the already reviewed prefix so background reads preserve pagination and drafts.
+      const cursors = new Set();
+      while (!more && page.nextAfterId && (page.records || []).length < records.length) {
+        if (cursors.has(page.nextAfterId)) throw new Error('Recovery pagination did not advance.');
+        cursors.add(page.nextAfterId);
+        const following = await api('ListTaskRecovery', { ...scope, afterId: page.nextAfterId, limit: 20 });
+        if (!current()) return;
+        page = { ...following, records: [...(page.records || []), ...(following.records || [])], questionAnswers: [...(page.questionAnswers || []), ...(following.questionAnswers || [])] };
+      }
+      if ([...(page.records || []), ...(page.questionAnswers || [])].some(r => key(r) !== key(scope))) throw new Error('Recovery history did not match the selected attempt.');
       const unique = new Map((more ? records : []).map(r => [r.id, r]));
       for (const r of page.records || []) unique.set(r.id, r);
-      if (!more) confirmations = new Map(); for (const c of page.confirmations || []) confirmations.set(c.proposalId, c);
-      records = [...unique.values()]; next = page.nextAfterId || ''; changed({ records, next, confirmations: [...confirmations.values()] });
-    } catch (error) { if (current()) { records = []; next = ''; changed({ records, next, error: true }); failed(error); } }
+      if ((page.confirmations || []).some(c => c.parentAttemptId !== scope.attemptId)) throw new Error('Confirmation did not match the selected attempt.');
+      if (!more) { confirmations = new Map(); answers = new Map(); }
+      for (const c of page.confirmations || []) confirmations.set(c.proposalId, c);
+      for (const a of page.questionAnswers || []) answers.set(a.answer.questionId, a);
+      records = [...unique.values()]; next = page.nextAfterId || '';
+      const result = { records, next, confirmations: [...confirmations.values()], answers: [...answers.values()] };
+      const signature = JSON.stringify(result);
+      if (signature !== rendered) { rendered = signature; changed(result); }
+    } catch (error) { if (current()) { records = []; next = ''; rendered = ''; changed({ records, next, error: true }); failed(error); } }
   }
   return { select, load };
 }
@@ -28,7 +43,7 @@ export function confirmationCommand(scope, record, consent, uncertainty) {
 }
 export function mountRecovery({ api, submit, showError, controls, openAttempt }) {
   const panel = document.getElementById('task-recovery');
-  let selected; let version = 0; let list; let more; let composer;
+  let selected; let version = 0; let list; let more; let composer; let consumed = false;
   function node(tag, text, parent = panel) { const n = document.createElement(tag); n.textContent = text; parent.append(n); return n; }
   function form(parent, label, send) {
     const form = node('form', '', parent); const title = node('label', label, form);
@@ -38,10 +53,11 @@ export function mountRecovery({ api, submit, showError, controls, openAttempt })
     form.onsubmit = event => { event.preventDefault(); if (key(origin) === key(selected) && form.reportValidity()) send(input.value, origin); };
     return form;
   }
-  const history = createRecoveryHistory({ api, failed: showError, changed({ records, next, confirmations = [], error }) {
-    list.replaceChildren(); more.hidden = !next;
+  const history = createRecoveryHistory({ api, failed: showError, changed({ records, next, confirmations = [], answers = [], error }) {
+    list.replaceChildren(); more.hidden = !next; consumed = confirmations.length > 0;
+    for (const form of composer.querySelectorAll('[data-recovery-proposal-form]')) form.hidden = consumed;
     if (error) node('p', 'Recovery history could not be loaded. Refresh to try again.', list);
-    const answered = new Set(records.filter(r => r.answer).map(r => r.answer.questionId));
+    const answered = new Map([...records, ...answers].filter(r => r.answer).map(r => [r.answer.questionId, r]));
     for (const r of records) {
       const article = node('article', '', list); article.dataset.recoveryId = r.id;
       node('h4', r.proposal ? 'Recovery proposal' : r.question ? 'Operator question' : 'Operator answer', article);
@@ -52,9 +68,9 @@ export function mountRecovery({ api, submit, showError, controls, openAttempt })
         node('p', e.patchAvailable ? 'Accepted changes are available in the task evidence above.' : 'No accepted changes are available. Unreported worker files cannot be assumed reusable.', article);
         node('p', `Quality: ${e.qualityState || 'no retained evidence'}. ${e.limitations || ''}`, article);
         if (e.providerUncertain) node('p', 'An earlier AI request may have been sent and charged. This proposal does not retry or clear that uncertainty.', article);
-        const receipt = confirmations.find(c => c.proposalId === r.id);
+        const receipt = confirmations.find(c => c.parentAttemptId === r.attemptId);
         if (receipt) {
-          node('p', `Confirmed once · linked attempt ${receipt.attemptId}.`, article);
+          node('p', receipt.proposalId === r.id ? `Confirmed once · linked attempt ${receipt.attemptId}.` : `Another proposal was confirmed for this attempt. Linked attempt ${receipt.attemptId}.`, article);
           const open = node('button', 'Inspect continued attempt', article); open.type = 'button'; open.onclick = () => openAttempt(receipt.attemptId);
         } else {
           const origin = { ...selected };
@@ -72,7 +88,8 @@ export function mountRecovery({ api, submit, showError, controls, openAttempt })
         node('pre', JSON.stringify({ id: r.id, digest: r.contentDigest, ...p }, null, 2), details);
       } else if (r.question) {
         node('p', r.question.text, article);
-        if (!answered.has(r.id)) form(article, 'Record answer', (text, origin) => submit('RecordTaskRecovery', { ...origin, answer: { questionId: r.id, text } }));
+        if (answered.has(r.id)) { node('p', `Answer: ${answered.get(r.id).answer.text}`, article); node('small', 'Direction retained. This answer does not authorize execution or enter provider context.', article); }
+        else form(article, 'Record answer', (text, origin) => submit('RecordTaskRecovery', { ...origin, answer: { questionId: r.id, text } }));
       } else if (r.answer) { node('p', r.answer.text, article); node('small', `Answer to question ${r.answer.questionId}`, article); }
       node('small', `Retained ${r.id} · ${r.author || 'local-operator'}`, article);
     }
@@ -91,6 +108,7 @@ export function mountRecovery({ api, submit, showError, controls, openAttempt })
       feedbackId: reasons.value, explanation, action: actions.value,
       additionalSeconds: Number(seconds.value), additionalTokens: Number(tokens.value),
     } }));
+    formElement.dataset.recoveryProposalForm = ''; formElement.hidden = consumed;
     const reasonLabel = node('label', 'Reason for recovery', formElement); const reasons = node('select', '', reasonLabel);
     for (const f of items) { const o = node('option', f.summary, reasons); o.value = f.id; }
     const actionLabel = node('label', 'Proposed action', formElement); const actions = node('select', '', actionLabel);
@@ -100,16 +118,16 @@ export function mountRecovery({ api, submit, showError, controls, openAttempt })
     controls();
   }
   function select(scope) {
-    if (key(scope) === key(selected)) return;
-    selected = scope && { ...scope }; const query = ++version; history.select(scope); panel.replaceChildren(); panel.hidden = !scope;
+    if (key(scope) === key(selected)) return false;
+    selected = scope && { ...scope }; consumed = false; const query = ++version; history.select(scope); panel.replaceChildren(); panel.hidden = !scope;
     if (!scope) return;
-    node('h3', 'Recovery review'); node('p', 'Review saved work and record an exact proposal. Recording proposals and answers does not start work. Only confirming an exact proposal authorizes one linked attempt with the additional allowance shown. Attention remains open.');
+    node('h3', 'Recovery review'); node('p', 'Review saved work and record an exact proposal. Recording proposals and answers does not start work. Only confirming an exact proposal authorizes one linked attempt with the additional allowance shown. Confirmation resolves the parent attention decision; continued work has its own outcome. Operator answers are retained for review and are not supplied to the coding worker.');
     const refresh = node('button', 'Refresh recovery records'); refresh.type = 'button'; refresh.onclick = () => history.load();
     list = node('div', 'Loading recovery records…'); more = node('button', 'Load more recovery records'); more.type = 'button'; more.hidden = true; more.onclick = () => history.load(true);
     composer = node('div', '');
     form(composer, 'Record operator question', (text, origin) => submit('RecordTaskRecovery', { ...origin, question: { text } }));
-    history.load(); feedback({ ...scope }, query).catch(error => { if (version === query) showError(error); }); controls();
+    history.load(); feedback({ ...scope }, query).catch(error => { if (version === query) showError(error); }); controls(); return true;
   }
   function accepted(command) { if (key(command.body) === key(selected) || (command.method === 'ConfirmTaskRecovery' && selected && scopeKey(command.body) === scopeKey(selected) && command.body.taskId === selected.taskId)) history.load(); }
-  return { select, accepted };
+  return { select, accepted, refresh: () => history.load() };
 }

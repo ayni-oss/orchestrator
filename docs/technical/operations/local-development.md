@@ -138,8 +138,8 @@ Coding shows the retained outcome and provider state, with expandable accepted
 patch and worker identities. Quality shows target completion, exit code and
 expandable identities and artifacts. Failed quality preserves coding completion
 and blocks publication. Provider uncertainty remains explicit and never enables
-a fresh coding retry. Recovery or repair requires a new reviewed plan until
-confirmed recovery is implemented.
+a fresh coding retry. Recovery or repair requires an exact reviewed proposal with explicit consent and a bounded
+additional allowance, or a new reviewed plan for materially changed inputs.
 
 **Download task selection** supplies the full originating scope and task ID for
 the trusted [preparation helper](../architecture/task-execution.md#operator-workflow).
@@ -177,8 +177,9 @@ Project attention exposes the same notices across its conversations. Open a noti
 to inspect its originating task and saved patch or quality evidence.
 
 Feedback is factual system activity, separate from assistant messages. Notices
-remain open until later M6 recovery introduces a resolution lifecycle; reading
-them grants no permission to retry or continue. See [task feedback](../architecture/task-feedback.md).
+remain in conversation history after recovery is authorized. Project attention hides those
+resolved decisions; the original notice links to the continued attempt and its separate coding
+and quality outcomes. Reading them grants no permission to retry or continue. See [task feedback](../architecture/task-feedback.md).
 
 For M6 acceptance, use owned test namespaces on explicit `docker-desktop`.
 Preserve stores within restart tests, then purge the owned test deployment and
@@ -359,6 +360,11 @@ AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-quality \
 AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-quality \
   dev/ctl acceptance /absolute/new/evidence-directory --quality-only
 ```
+
+The quality profile also runs real browser recovery acceptance; install Chromium once with
+`pnpm exec playwright install chromium`. It prepares a separate failed-quality task whose
+recovery decision is left to the browser, then exercises two-tab answers and consent,
+lost-response replay across reload and conversation navigation, and continued outcomes.
 
 The runtime command records its local manifest digest in
 `.ayni/task-quality-runtime.json`; acceptance freezes that exact image. Set

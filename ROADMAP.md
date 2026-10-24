@@ -182,6 +182,11 @@ later scope. The third slice confirms an exact proposal once and admits a linked
 independent-task attempt with frozen inputs, saved changes, explicit additional allowance
 and charge acknowledgement. M5 has no implemented dependency graph or scheduler selections;
 this independent-task slice does not establish dependency-aware recovery or full M6 closure.
+The fourth slice completes the operator conversation recovery journey: paginated questions
+retain canonical answers, competing proposals expose the same parent confirmation, and conversation
+notices link resolved decisions to continued coding/quality outcomes. Project attention hides
+resolved decisions without deleting historical feedback. Structured worker questions and
+model-generated proposals remain outside the current coding protocol.
 Each delivery PR owns its executed evidence and status.
 
 Use explicit `docker-desktop` Kubernetes for runtime acceptance. Create owned

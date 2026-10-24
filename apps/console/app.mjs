@@ -29,7 +29,7 @@ let queuedFrames = 0;
 let configuration;
 let currentSession;
 let providerQuery = 0;
-const tasks = mountTasks({ getScope: scopeBody, api, submit, showError, saved, store, controls });
+const tasks = mountTasks({ getScope: scopeBody, api, submit, showError, saved, store, controls, onRefreshed: () => feedback.refresh() });
 const plans = mountPlans({ getScope: scopeBody, api, submit, showError, saved, store, controls, tasks });
 const feedback = mountFeedback({ getScope: scopeBody, api, showError, openTask: async (origin, taskId, fromProject, attemptId) => {
   if (fromProject || scope.conversationId !== origin.conversationId) await selectConversation(origin.conversationId);
@@ -37,6 +37,8 @@ const feedback = mountFeedback({ getScope: scopeBody, api, showError, openTask: 
   await tasks.open(taskId, attemptId);
   $(fromProject ? 'conversation-feedback' : 'task-detail').scrollIntoView({ block: 'start', behavior: 'smooth' });
 } });
+
+window.addEventListener('focus', () => { feedback.refresh(); tasks.refreshRecovery(); });
 
 function showError(error) { $('error').textContent = error.message || String(error); $('error').hidden = false; }
 function clearError() { $('error').hidden = true; }
@@ -82,7 +84,7 @@ async function retry() {
     pending = null; store('pending', null);
     $('receipt').textContent = result.receipt?.commandId || result.approval?.commandId || result.record?.id || result.confirmation?.commandId || 'Accepted';
     if (tasks.accepted(command, result)) {
-      // Task receipts share the exact pending-command recovery path.
+      if (['RecordTaskRecovery', 'ConfirmTaskRecovery'].includes(command.method)) await feedback.refresh();
     } else if (['CreatePlan', 'RevisePlan', 'ApprovePlan'].includes(command.method)) {
       plans.accepted(command, result);
     } else if (command.method === 'SendMessage') {
@@ -112,6 +114,7 @@ async function retry() {
   } catch (error) {
     // Canonical validation/scope/conflict rejections did not admit this command.
     if (['InvalidArgument', 'NotFound', 'AlreadyExists', 'Aborted', 'FailedPrecondition'].includes(error.code) || (error.code === 'ResourceExhausted' && error.reason === 'ERROR_REASON_BOUND_EXCEEDED')) { pending = null; store('pending', null); }
+    tasks.refreshRecovery();
     showError(error);
   }
   finally { sending = false; controls(); }

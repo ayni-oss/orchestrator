@@ -48,9 +48,20 @@ Opening an attention item selects its originating conversation and task for evid
 Reload and reconnect reconstruct notices from canonical retained reads rather than browser storage.
 The gateway owns no attention state or new execution authority.
 
-Every record is `open` in this slice.
-Feedback has no dismiss, resolve, retry or continue mutation, and notices are not inserted into provider context automatically.
-[Recovery review](task-recovery.md) adds separate immutable proposals and operator question/answer records; those records leave attention open and dispatch no work. Structured worker questions and attention resolution belong to later [M6 slices](../research/project-workflow-m6-delivery-plan.md).
+Feedback projects `open` until an exact recovery confirmation exists for its parent attempt,
+then `resolved`. The confirmation is the authority; reads never change the immutable notice.
+Resolved means that the recovery decision was handled, not that coding or quality succeeded.
+The projection includes the directly linked recovery attempt and its current coding and quality
+states. A failed continuation produces its own notice; cancellation does not reopen the parent's
+authorization or erase possible charges. Further recoveries preserve each parent/child link.
+
+The project attention panel filters resolved decisions from each bounded page; users can
+load more pages even when a page contains only resolved items. Conversation history keeps
+both open and resolved notices, links to previous evidence, and an **Inspect continued outcome**
+action. Refresh, focus and reload read canonical state. [Recovery review](task-recovery.md)
+records proposals and operator question/answer records without resolving attention or dispatching
+work. Notices and operator answers are not inserted into provider context automatically.
+Structured worker questions remain outside the current coding protocol.
 
 ## Acceptance boundary
 

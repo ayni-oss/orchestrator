@@ -473,7 +473,13 @@ export interface TaskFeedback {
   state: string;
   safeReason: string;
   summary: string;
-  createdAt?: Date | undefined;
+  createdAt?:
+    | Date
+    | undefined;
+  /** Resolved means a recovery was authorized, not that continued work succeeded. */
+  recoveryAttemptId: string;
+  recoveryState: string;
+  recoveryQualityState: string;
 }
 
 export interface ListTaskFeedbackRequest {
@@ -580,6 +586,8 @@ export interface ListTaskRecoveryResponse {
   nextAfterId: string;
   /** Separate once-only authority; proposal content remains immutable. */
   confirmations: TaskRecoveryConfirmation[];
+  /** Canonical answers for questions on this page, even when the answer is on a later page. */
+  questionAnswers: TaskRecoveryRecord[];
 }
 
 export interface ConfirmTaskRecoveryRequest {
@@ -8659,6 +8667,9 @@ function createBaseTaskFeedback(): TaskFeedback {
     safeReason: "",
     summary: "",
     createdAt: undefined,
+    recoveryAttemptId: "",
+    recoveryState: "",
+    recoveryQualityState: "",
   };
 }
 
@@ -8696,6 +8707,15 @@ export const TaskFeedback: MessageFns<TaskFeedback> = {
     }
     if (message.createdAt !== undefined) {
       Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(90).fork()).join();
+    }
+    if (message.recoveryAttemptId !== "") {
+      writer.uint32(98).string(message.recoveryAttemptId);
+    }
+    if (message.recoveryState !== "") {
+      writer.uint32(106).string(message.recoveryState);
+    }
+    if (message.recoveryQualityState !== "") {
+      writer.uint32(114).string(message.recoveryQualityState);
     }
     return writer;
   },
@@ -8801,6 +8821,30 @@ export const TaskFeedback: MessageFns<TaskFeedback> = {
             message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
             continue;
           }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.recoveryAttemptId = reader.string();
+            continue;
+          }
+          case 13: {
+            if (tag !== 106) {
+              break;
+            }
+
+            message.recoveryState = reader.string();
+            continue;
+          }
+          case 14: {
+            if (tag !== 114) {
+              break;
+            }
+
+            message.recoveryQualityState = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -8854,6 +8898,21 @@ export const TaskFeedback: MessageFns<TaskFeedback> = {
         : isSet(object.created_at)
         ? fromJsonTimestamp(object.created_at)
         : undefined,
+      recoveryAttemptId: isSet(object.recoveryAttemptId)
+        ? globalThis.String(object.recoveryAttemptId)
+        : isSet(object.recovery_attempt_id)
+        ? globalThis.String(object.recovery_attempt_id)
+        : "",
+      recoveryState: isSet(object.recoveryState)
+        ? globalThis.String(object.recoveryState)
+        : isSet(object.recovery_state)
+        ? globalThis.String(object.recovery_state)
+        : "",
+      recoveryQualityState: isSet(object.recoveryQualityState)
+        ? globalThis.String(object.recoveryQualityState)
+        : isSet(object.recovery_quality_state)
+        ? globalThis.String(object.recovery_quality_state)
+        : "",
     };
   },
 
@@ -8892,6 +8951,15 @@ export const TaskFeedback: MessageFns<TaskFeedback> = {
     if (message.createdAt !== undefined) {
       obj.createdAt = message.createdAt.toISOString();
     }
+    if (message.recoveryAttemptId !== "") {
+      obj.recoveryAttemptId = message.recoveryAttemptId;
+    }
+    if (message.recoveryState !== "") {
+      obj.recoveryState = message.recoveryState;
+    }
+    if (message.recoveryQualityState !== "") {
+      obj.recoveryQualityState = message.recoveryQualityState;
+    }
     return obj;
   },
 
@@ -8911,6 +8979,9 @@ export const TaskFeedback: MessageFns<TaskFeedback> = {
     message.safeReason = object.safeReason ?? "";
     message.summary = object.summary ?? "";
     message.createdAt = object.createdAt ?? undefined;
+    message.recoveryAttemptId = object.recoveryAttemptId ?? "";
+    message.recoveryState = object.recoveryState ?? "";
+    message.recoveryQualityState = object.recoveryQualityState ?? "";
     return message;
   },
 };
@@ -10627,7 +10698,7 @@ export const ListTaskRecoveryRequest: MessageFns<ListTaskRecoveryRequest> = {
 };
 
 function createBaseListTaskRecoveryResponse(): ListTaskRecoveryResponse {
-  return { records: [], nextAfterId: "", confirmations: [] };
+  return { records: [], nextAfterId: "", confirmations: [], questionAnswers: [] };
 }
 
 export const ListTaskRecoveryResponse: MessageFns<ListTaskRecoveryResponse> = {
@@ -10640,6 +10711,9 @@ export const ListTaskRecoveryResponse: MessageFns<ListTaskRecoveryResponse> = {
     }
     for (const v of message.confirmations) {
       TaskRecoveryConfirmation.encode(v!, writer.uint32(26).fork()).join();
+    }
+    for (const v of message.questionAnswers) {
+      TaskRecoveryRecord.encode(v!, writer.uint32(34).fork()).join();
     }
     return writer;
   },
@@ -10681,6 +10755,14 @@ export const ListTaskRecoveryResponse: MessageFns<ListTaskRecoveryResponse> = {
             message.confirmations.push(TaskRecoveryConfirmation.decode(reader, reader.uint32()));
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.questionAnswers.push(TaskRecoveryRecord.decode(reader, reader.uint32()));
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -10706,6 +10788,11 @@ export const ListTaskRecoveryResponse: MessageFns<ListTaskRecoveryResponse> = {
       confirmations: globalThis.Array.isArray(object?.confirmations)
         ? object.confirmations.map((e: any) => TaskRecoveryConfirmation.fromJSON(e))
         : [],
+      questionAnswers: globalThis.Array.isArray(object?.questionAnswers)
+        ? object.questionAnswers.map((e: any) => TaskRecoveryRecord.fromJSON(e))
+        : globalThis.Array.isArray(object?.question_answers)
+        ? object.question_answers.map((e: any) => TaskRecoveryRecord.fromJSON(e))
+        : [],
     };
   },
 
@@ -10720,6 +10807,9 @@ export const ListTaskRecoveryResponse: MessageFns<ListTaskRecoveryResponse> = {
     if (message.confirmations?.length) {
       obj.confirmations = message.confirmations.map((e) => TaskRecoveryConfirmation.toJSON(e));
     }
+    if (message.questionAnswers?.length) {
+      obj.questionAnswers = message.questionAnswers.map((e) => TaskRecoveryRecord.toJSON(e));
+    }
     return obj;
   },
 
@@ -10731,6 +10821,7 @@ export const ListTaskRecoveryResponse: MessageFns<ListTaskRecoveryResponse> = {
     message.records = object.records?.map((e) => TaskRecoveryRecord.fromPartial(e)) || [];
     message.nextAfterId = object.nextAfterId ?? "";
     message.confirmations = object.confirmations?.map((e) => TaskRecoveryConfirmation.fromPartial(e)) || [];
+    message.questionAnswers = object.questionAnswers?.map((e) => TaskRecoveryRecord.fromPartial(e)) || [];
     return message;
   },
 };

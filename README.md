@@ -45,7 +45,10 @@ for the boundary between attention and later confirmed recovery.
 immutable proposals with frozen saved-work evidence and additional allowances, plus
 task questions and one answer per question. Recording them authorizes no execution.
 Exact confirmation can now authorize one bounded linked attempt with preserved saved
-changes and parent evidence. Dependency-aware continuation still requires M5.
+changes and parent evidence. Confirmed recovery resolves the parent attention decision while
+conversation history links to the continued coding and quality outcomes. Questions retain
+one canonical answer across pagination and concurrent tabs. Dependency-aware continuation
+still requires M5; structured worker questions remain outside the coding protocol.
 
 ## Start locally
 

@@ -128,6 +128,20 @@ integration and complete M6 closure remain prerequisites for dependent-task reco
 The [recovery contract](../architecture/task-recovery.md) defines exact once-only consent,
 linked attempts, saved-work reconstruction, charge acknowledgement and retained history.
 
+### Fourth-slice conversation boundary
+
+Operator question/answer review, exact proposal consent and linked outcomes form the current
+conversation journey. Canonical answers accompany their question page; parent confirmation is
+visible on every recovery page and consumes competing proposal controls. Confirmation resolves
+the parent's attention decision while preserving the original notice and possible-charge history.
+The conversation links directly to continued coding/quality outcomes; failed continuation creates
+new attention under its own attempt. Reload, response loss, navigation and two-tab decisions use
+canonical records and the existing retained pending-command path.
+
+Worker-originated structured questions and model-generated proposals still require a coding
+protocol extension. M5 dependency integration and cumulative M6 failure closure remain prerequisites
+for full milestone completion; this slice does not invent either boundary.
+
 ## Where the detail lives
 
 - [Roadmap](../../../ROADMAP.md#m6-delivery-scopes) records agreed milestone direction and prerequisites.
