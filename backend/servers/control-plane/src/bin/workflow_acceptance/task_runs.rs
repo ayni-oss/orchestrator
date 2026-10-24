@@ -159,25 +159,7 @@ async fn prepare_inner(
             conversation_id: scope.conversation.clone(),
             task_id: task.id.clone(),
             idempotency_key: Uuid::now_v7().to_string(),
-            inputs: Some(v1::TaskExecutionInputs {
-                repository: fixture_repository(profile).into(),
-                source_ref: "refs/heads/main".into(),
-                source_commit: metadata["source_commit"]
-                    .as_str()
-                    .ok_or("commit missing")?
-                    .into(),
-                lock_digest: metadata["lock_digest"]
-                    .as_str()
-                    .ok_or("lock missing")?
-                    .into(),
-                runtime_image: if quality {
-                    std::env::var("ORCHESTRATOR_TASK_QUALITY_RUNTIME_IMAGE")?
-                } else {
-                    format!("example.invalid/fixture@sha256:{}", "c".repeat(64))
-                },
-                max_seconds: 300,
-                max_tokens: 10000,
-            }),
+            inputs: Some(execution_inputs(profile, quality, &metadata)?),
         })
         .await
         .map_err(|e| format!("task preparation: {e}"))?
@@ -216,6 +198,33 @@ async fn prepare_inner(
     }
     Ok(())
 }
+fn execution_inputs(
+    profile: Profile,
+    quality: bool,
+    metadata: &serde_json::Value,
+) -> Result<v1::TaskExecutionInputs> {
+    Ok(v1::TaskExecutionInputs {
+        repository: fixture_repository(profile).into(),
+        source_ref: "refs/heads/main".into(),
+        source_commit: metadata["source_commit"]
+            .as_str()
+            .ok_or("commit missing")?
+            .into(),
+        lock_digest: metadata["lock_digest"]
+            .as_str()
+            .ok_or("lock missing")?
+            .into(),
+        runtime_image: if quality {
+            std::env::var("ORCHESTRATOR_TASK_QUALITY_RUNTIME_IMAGE")?
+        } else {
+            format!("example.invalid/fixture@sha256:{}", "c".repeat(64))
+        },
+        max_seconds: 300,
+        max_tokens: 10000,
+        upstream_selections: vec![],
+    })
+}
+
 async fn finish_profile(client: &mut Client, evidence: &mut Evidence, profile: Profile) -> Result {
     if profile == Profile::RecoveryFault {
         // Preserve the original scope and start receipt even if result collection times out.

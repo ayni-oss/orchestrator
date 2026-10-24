@@ -246,6 +246,18 @@ async fn rpc(
             cancel_turn,
             v1::CancelTurnRequest
         ),
+        "GetOutcomeAssessmentStatus" => forward!(
+            body,
+            console.conversations(),
+            get_outcome_assessment_status,
+            v1::GetOutcomeAssessmentStatusRequest
+        ),
+        "AuthorizeOutcomeAssessments" => forward!(
+            body,
+            console.conversations(),
+            authorize_outcome_assessments,
+            v1::AuthorizeOutcomeAssessmentsRequest
+        ),
         "SendMessage" => forward!(
             body,
             console.conversations(),

@@ -19,6 +19,10 @@ export interface PlanTaskSpecification {
   sourceRef: string;
   executionLimits: string;
   unresolvedInputs: string[];
+  /** Keys in this exact reviewed task set; the graph must be acyclic. */
+  dependsOn: string[];
+  /** Exact reviewed read/write files; empty retains bounded full-tree execution. */
+  sourcePaths: string[];
 }
 
 export interface PlanContent {
@@ -265,6 +269,12 @@ export interface GetTaskResponse {
  * Operator-attested Git object evidence, produced by workflow-prepare-task.
  * Runtime selection does not assert Ayni runtime compatibility; PR 3 verifies it.
  */
+export interface TaskUpstreamSelection {
+  taskId: string;
+  attemptId: string;
+  commitSha: string;
+}
+
 export interface TaskExecutionInputs {
   repository: string;
   sourceRef: string;
@@ -273,6 +283,8 @@ export interface TaskExecutionInputs {
   runtimeImage: string;
   maxSeconds: number;
   maxTokens: number;
+  /** Exact accepted upstream drafts integrated into source_commit by the trusted helper. */
+  upstreamSelections: TaskUpstreamSelection[];
 }
 
 export interface TaskExecutionPreparation {
@@ -627,6 +639,8 @@ function createBasePlanTaskSpecification(): PlanTaskSpecification {
     sourceRef: "",
     executionLimits: "",
     unresolvedInputs: [],
+    dependsOn: [],
+    sourcePaths: [],
   };
 }
 
@@ -658,6 +672,12 @@ export const PlanTaskSpecification: MessageFns<PlanTaskSpecification> = {
     }
     for (const v of message.unresolvedInputs) {
       writer.uint32(74).string(v!);
+    }
+    for (const v of message.dependsOn) {
+      writer.uint32(82).string(v!);
+    }
+    for (const v of message.sourcePaths) {
+      writer.uint32(90).string(v!);
     }
     return writer;
   },
@@ -747,6 +767,22 @@ export const PlanTaskSpecification: MessageFns<PlanTaskSpecification> = {
             message.unresolvedInputs.push(reader.string());
             continue;
           }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.dependsOn.push(reader.string());
+            continue;
+          }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.sourcePaths.push(reader.string());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -790,6 +826,16 @@ export const PlanTaskSpecification: MessageFns<PlanTaskSpecification> = {
         : globalThis.Array.isArray(object?.unresolved_inputs)
         ? object.unresolved_inputs.map((e: any) => globalThis.String(e))
         : [],
+      dependsOn: globalThis.Array.isArray(object?.dependsOn)
+        ? object.dependsOn.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.depends_on)
+        ? object.depends_on.map((e: any) => globalThis.String(e))
+        : [],
+      sourcePaths: globalThis.Array.isArray(object?.sourcePaths)
+        ? object.sourcePaths.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.source_paths)
+        ? object.source_paths.map((e: any) => globalThis.String(e))
+        : [],
     };
   },
 
@@ -822,6 +868,12 @@ export const PlanTaskSpecification: MessageFns<PlanTaskSpecification> = {
     if (message.unresolvedInputs?.length) {
       obj.unresolvedInputs = message.unresolvedInputs;
     }
+    if (message.dependsOn?.length) {
+      obj.dependsOn = message.dependsOn;
+    }
+    if (message.sourcePaths?.length) {
+      obj.sourcePaths = message.sourcePaths;
+    }
     return obj;
   },
 
@@ -839,6 +891,8 @@ export const PlanTaskSpecification: MessageFns<PlanTaskSpecification> = {
     message.sourceRef = object.sourceRef ?? "";
     message.executionLimits = object.executionLimits ?? "";
     message.unresolvedInputs = object.unresolvedInputs?.map((e) => e) || [];
+    message.dependsOn = object.dependsOn?.map((e) => e) || [];
+    message.sourcePaths = object.sourcePaths?.map((e) => e) || [];
     return message;
   },
 };
@@ -4986,6 +5040,119 @@ export const GetTaskResponse: MessageFns<GetTaskResponse> = {
   },
 };
 
+function createBaseTaskUpstreamSelection(): TaskUpstreamSelection {
+  return { taskId: "", attemptId: "", commitSha: "" };
+}
+
+export const TaskUpstreamSelection: MessageFns<TaskUpstreamSelection> = {
+  encode(message: TaskUpstreamSelection, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.taskId !== "") {
+      writer.uint32(10).string(message.taskId);
+    }
+    if (message.attemptId !== "") {
+      writer.uint32(18).string(message.attemptId);
+    }
+    if (message.commitSha !== "") {
+      writer.uint32(26).string(message.commitSha);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TaskUpstreamSelection {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTaskUpstreamSelection();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.taskId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.attemptId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.commitSha = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): TaskUpstreamSelection {
+    return {
+      taskId: isSet(object.taskId)
+        ? globalThis.String(object.taskId)
+        : isSet(object.task_id)
+        ? globalThis.String(object.task_id)
+        : "",
+      attemptId: isSet(object.attemptId)
+        ? globalThis.String(object.attemptId)
+        : isSet(object.attempt_id)
+        ? globalThis.String(object.attempt_id)
+        : "",
+      commitSha: isSet(object.commitSha)
+        ? globalThis.String(object.commitSha)
+        : isSet(object.commit_sha)
+        ? globalThis.String(object.commit_sha)
+        : "",
+    };
+  },
+
+  toJSON(message: TaskUpstreamSelection): unknown {
+    const obj: any = {};
+    if (message.taskId !== "") {
+      obj.taskId = message.taskId;
+    }
+    if (message.attemptId !== "") {
+      obj.attemptId = message.attemptId;
+    }
+    if (message.commitSha !== "") {
+      obj.commitSha = message.commitSha;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<TaskUpstreamSelection>): TaskUpstreamSelection {
+    return TaskUpstreamSelection.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<TaskUpstreamSelection>): TaskUpstreamSelection {
+    const message = createBaseTaskUpstreamSelection();
+    message.taskId = object.taskId ?? "";
+    message.attemptId = object.attemptId ?? "";
+    message.commitSha = object.commitSha ?? "";
+    return message;
+  },
+};
+
 function createBaseTaskExecutionInputs(): TaskExecutionInputs {
   return {
     repository: "",
@@ -4995,6 +5162,7 @@ function createBaseTaskExecutionInputs(): TaskExecutionInputs {
     runtimeImage: "",
     maxSeconds: 0,
     maxTokens: 0,
+    upstreamSelections: [],
   };
 }
 
@@ -5020,6 +5188,9 @@ export const TaskExecutionInputs: MessageFns<TaskExecutionInputs> = {
     }
     if (message.maxTokens !== 0) {
       writer.uint32(56).uint32(message.maxTokens);
+    }
+    for (const v of message.upstreamSelections) {
+      TaskUpstreamSelection.encode(v!, writer.uint32(66).fork()).join();
     }
     return writer;
   },
@@ -5093,6 +5264,14 @@ export const TaskExecutionInputs: MessageFns<TaskExecutionInputs> = {
             message.maxTokens = reader.uint32();
             continue;
           }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.upstreamSelections.push(TaskUpstreamSelection.decode(reader, reader.uint32()));
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -5138,6 +5317,11 @@ export const TaskExecutionInputs: MessageFns<TaskExecutionInputs> = {
         : isSet(object.max_tokens)
         ? globalThis.Number(object.max_tokens)
         : 0,
+      upstreamSelections: globalThis.Array.isArray(object?.upstreamSelections)
+        ? object.upstreamSelections.map((e: any) => TaskUpstreamSelection.fromJSON(e))
+        : globalThis.Array.isArray(object?.upstream_selections)
+        ? object.upstream_selections.map((e: any) => TaskUpstreamSelection.fromJSON(e))
+        : [],
     };
   },
 
@@ -5164,6 +5348,9 @@ export const TaskExecutionInputs: MessageFns<TaskExecutionInputs> = {
     if (message.maxTokens !== 0) {
       obj.maxTokens = Math.round(message.maxTokens);
     }
+    if (message.upstreamSelections?.length) {
+      obj.upstreamSelections = message.upstreamSelections.map((e) => TaskUpstreamSelection.toJSON(e));
+    }
     return obj;
   },
 
@@ -5179,6 +5366,7 @@ export const TaskExecutionInputs: MessageFns<TaskExecutionInputs> = {
     message.runtimeImage = object.runtimeImage ?? "";
     message.maxSeconds = object.maxSeconds ?? 0;
     message.maxTokens = object.maxTokens ?? 0;
+    message.upstreamSelections = object.upstreamSelections?.map((e) => TaskUpstreamSelection.fromPartial(e)) || [];
     return message;
   },
 };

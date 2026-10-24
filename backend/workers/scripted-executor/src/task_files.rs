@@ -122,7 +122,10 @@ pub fn checkout_for_coding(root: &Path, pack: &[u8], command: &TaskCommand) -> i
     for name in names.split(|b| *b == 0).filter(|p| !p.is_empty()) {
         let path = std::str::from_utf8(name).map_err(|_| io::Error::other("saved path invalid"))?;
         parts(path)?;
-        if matches!(path, ".ayni.lock" | ".ayni.toml") {
+        if matches!(path, ".ayni.lock" | ".ayni.toml")
+            || (!command.source_paths.is_empty()
+                && !command.source_paths.iter().any(|allowed| allowed == path))
+        {
             return Err(io::Error::other("saved protected input"));
         }
         // No deletions, symlinks, binary content or unavailable file content may reach coding.
@@ -210,15 +213,39 @@ pub fn read_file(root: &Path, path: &str, maximum: usize) -> io::Result<String> 
 /// # Errors
 /// Rejects invalid paths, unavailable objects, symlinks or exceeded bounds.
 pub fn context(root: &Path, commit: &str) -> io::Result<Vec<FileChange>> {
+    selected_context(root, commit, &[])
+}
+/// Read exact reviewed tracked files while retaining the full snapshot for validation.
+/// # Errors
+/// Rejects unknown/untracked paths, symlinks, changed source identity or exceeded bounds.
+pub fn selected_context(
+    root: &Path,
+    commit: &str,
+    selected: &[String],
+) -> io::Result<Vec<FileChange>> {
+    if !ayni_orchestrator_events::task_execution::valid_source_paths(selected) {
+        return Err(io::Error::other("task source selection invalid"));
+    }
     let head = git(root, &["rev-parse", "HEAD"], None)?;
     if String::from_utf8_lossy(&head).trim() != commit {
         return Err(io::Error::other("source commit changed"));
     }
     let names = git(root, &["ls-files", "--cached", "-z"], None)?;
-    let names = names
+    let tracked = names
         .split(|b| *b == 0)
         .filter(|p| !p.is_empty())
         .collect::<Vec<_>>();
+    let names = if selected.is_empty() {
+        tracked
+    } else {
+        if selected
+            .iter()
+            .any(|path| !tracked.contains(&path.as_bytes()))
+        {
+            return Err(io::Error::other("selected task file is not tracked"));
+        }
+        selected.iter().map(String::as_bytes).collect()
+    };
     if names.len() > 64 {
         return Err(io::Error::other("source context limit"));
     }
@@ -237,6 +264,19 @@ pub fn context(root: &Path, commit: &str) -> io::Result<Vec<FileChange>> {
         });
     }
     Ok(result)
+}
+/// Enforce the exact reviewed write boundary before applying any changes.
+/// # Errors
+/// Rejects writes outside a nonempty selection and every ordinary apply failure.
+pub fn apply_scoped(root: &Path, changes: &[FileChange], allowed: &[String]) -> io::Result<String> {
+    if !ayni_orchestrator_events::task_execution::valid_source_paths(allowed)
+        || (!allowed.is_empty() && changes.iter().any(|change| !allowed.contains(&change.path)))
+    {
+        return Err(io::Error::other(
+            "task write outside reviewed source selection",
+        ));
+    }
+    apply(root, changes)
 }
 /// Operate on a bounded task-owned source snapshot.
 /// # Errors
@@ -296,6 +336,65 @@ pub fn apply(root: &Path, changes: &[FileChange]) -> io::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn reviewed_selection_bounds_large_repositories_and_rejects_unapproved_writes() -> io::Result<()>
+    {
+        let directory = tempfile::tempdir()?;
+        let root = directory.path();
+        git(root, &["init", "--initial-branch=main"], None)?;
+        for n in 0..70 {
+            fs::write(root.join(format!("file{n}.txt")), "original\n")?;
+        }
+        std::os::unix::fs::symlink("file0.txt", root.join("link.txt"))?;
+        git(root, &["add", "."], None)?;
+        git(
+            root,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-m",
+                "fixture",
+            ],
+            None,
+        )?;
+        let commit = String::from_utf8(git(root, &["rev-parse", "HEAD"], None)?)
+            .map_err(io::Error::other)?
+            .trim()
+            .to_owned();
+        assert!(
+            context(root, &commit).is_err(),
+            "full-tree bounds remain unchanged"
+        );
+        let selected = vec!["file0.txt".into()];
+        let files = selected_context(root, &commit, &selected)?;
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, "file0.txt");
+        for invalid in [
+            vec!["../file0.txt".into()],
+            vec!["missing.txt".into()],
+            vec!["link.txt".into()],
+            vec!["file0.txt".into(), "file0.txt".into()],
+        ] {
+            assert!(selected_context(root, &commit, &invalid).is_err());
+        }
+        let denied = [FileChange {
+            path: "file1.txt".into(),
+            content: "denied\n".into(),
+        }];
+        assert!(apply_scoped(root, &denied, &selected).is_err());
+        assert_eq!(fs::read_to_string(root.join("file1.txt"))?, "original\n");
+        let permitted = [FileChange {
+            path: "file0.txt".into(),
+            content: "accepted\n".into(),
+        }];
+        assert!(apply_scoped(root, &permitted, &selected)?.contains("+accepted"));
+        Ok(())
+    }
     #[test]
     fn file_tools_refuse_escape_and_symlink_parents() -> io::Result<()> {
         let source = tempfile::tempdir()?;

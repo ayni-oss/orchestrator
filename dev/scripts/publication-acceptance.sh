@@ -109,18 +109,14 @@ PY
 }
 bind_scope "$evidence/publication-task.json"
 forward_fixture
+fixture /fixture/state > "$evidence/fixture-baseline.json"
 fixture /fixture/control '{"drop_create_response":1}' > "$evidence/response-loss-control.json"
 command_stdin --start-publication-stdin "$evidence/publication-task.json" > "$evidence/publication.json"
 command_stdin --inspect-publication-stdin "$evidence/publication.json" > "$evidence/publication-identity.json"
 fixture /fixture/state > "$evidence/fixture-after-publication.json"
-python3 - "$evidence" <<'PY'
-import json,pathlib,sys
-root=pathlib.Path(sys.argv[1]); p=json.loads((root/'publication-identity.json').read_text()); f=json.loads((root/'fixture-after-publication.json').read_text())
-assert f['create_calls']==1 and len(f['pulls'])==1
-assert f['pulls'][0]['number']==p['pr_number'] and f['pulls'][0]['head']['sha']==p['commit_sha']
-assert f['pulls'][0]['draft'] and f['pulls'][0]['state']=='open'
-assert f"refs/heads/{p['branch']} {p['commit_sha']}" in f['references']
-PY
+python3 "$dev_directory/lib/publication_accounting.py" \
+  "$evidence/fixture-baseline.json" "$evidence/fixture-after-publication.json" \
+  "$expected_creates" "$expected_pulls" "$evidence/publication-identity.json"
 # Closing an existing external draft never authorizes another publication intent.
 pr_number="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["pr_number"])' "$evidence/publication-identity.json")"
 fixture "/fixture/pulls/$pr_number" '{"state":"closed","merged":true}' > "$evidence/closed-existing-pr.json"
@@ -169,18 +165,16 @@ for workload in deployment/control-plane deployment/task-publisher deployment/pu
   if [[ "$name" == publication-fixture ]]; then forward_fixture; fi
   if [[ "$complete_m4" == --m4 ]]; then m4_verify_publications "$name"; fi
   fixture /fixture/state > "$evidence/fixture-after-$name.json"
-  python3 - "$evidence/fixture-after-$name.json" "$expected_creates" "$expected_pulls" <<'PY'
-import json,sys
-value=json.load(open(sys.argv[1]));assert value['create_calls']==int(sys.argv[2]) and len(value['pulls'])==int(sys.argv[3])
-PY
+  python3 "$dev_directory/lib/publication_accounting.py" \
+    "$evidence/fixture-baseline.json" "$evidence/fixture-after-$name.json" \
+    "$expected_creates" "$expected_pulls"
 done
 if [[ "$complete_m4" == --m4 ]]; then
   m4_retained_cleanup
   python3 "$dev_directory/scripts/summarize-m4.py" "$evidence" "$DEV_REPOSITORY_ROOT"
-  python3 - "$evidence/cleanup-remote.json" "$expected_creates" "$expected_pulls" <<'PYVERIFY'
-import json,sys
-value=json.load(open(sys.argv[1]));assert value['create_calls']==int(sys.argv[2]) and len(value['pulls'])==int(sys.argv[3])
-PYVERIFY
+  python3 "$dev_directory/lib/publication_accounting.py" \
+    "$evidence/fixture-baseline.json" "$evidence/cleanup-remote.json" \
+    "$expected_creates" "$expected_pulls"
 fi
 status=passed
 printf 'publication acceptance passed; real Git transport and GitHub protocol fixture; live GitHub authentication untested; evidence=%s\n' "$evidence"

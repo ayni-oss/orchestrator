@@ -4,7 +4,7 @@ use super::{
 };
 use ayni_orchestrator_events::{
     task_execution::{SupervisorRequest, WorkerRequest, WorkerResponse},
-    task_quality::{QualityOutcome, snapshot_digest},
+    task_quality::{MAX_QUALITY_OUTCOME_BYTES, QualityOutcome, snapshot_digest},
 };
 impl WorkflowStore {
     /// Poll or reconcile one task using the trusted supervisor identity.
@@ -105,26 +105,61 @@ fn require_current(run: &TaskRun, generation: u64) -> Result<(), StoreError> {
     }
 }
 async fn poll(tx: &Transaction<'_>) -> Result<Option<TaskRun>, StoreError> {
-    if let Some(row)=tx.query_opt(&format!("{SELECT_RUN} WHERE state IN ('claimed','reporting','cancelling') LIMIT 1 FOR UPDATE"),&[]).await?{
-  let run=run_row(&row)?;
-  if matches!(run.state.as_str(), "claimed" | "reporting") {
-   let expired:bool=tx.query_one("SELECT deadline_at<=clock_timestamp() FROM workflow_task_runs WHERE attempt_id=$1",&[&run.command.attempt_id]).await?.get(0);
-   if expired{tx.execute("UPDATE workflow_task_runs SET state='cancelling',generation=generation+1,provider_state=CASE WHEN provider_state='sending' THEN 'uncertain' ELSE provider_state END WHERE attempt_id=$1",&[&run.command.attempt_id]).await?;update(tx,origin(&run.command),&run.command.task_id,&run.command.attempt_id,"task_deadline_exceeded").await?;return Ok(Some(by_id(tx,&run.command.attempt_id).await?));}
-  }
-  return Ok(Some(run));
- }
-    let Some(row)=tx.query_opt(&format!("{SELECT_RUN} WHERE state='queued' ORDER BY created_at,attempt_id LIMIT 1 FOR UPDATE"),&[]).await? else{return Ok(None);};
+    // Cancellation/deadline reconciliation precedes admission so occupied slots are
+    // never reused while an old workload may still run. PostgreSQL's advisory lock
+    // serializes allocation across supervisor replicas, not the task execution itself.
+    let urgent = tx.query_opt(
+        &format!("{SELECT_RUN} WHERE state IN ('claimed','reporting','cancelling') AND ((state='cancelling' AND reconciled_at<clock_timestamp()-interval '2 seconds') OR (state<>'cancelling' AND deadline_at<=clock_timestamp())) ORDER BY reconciled_at,attempt_id LIMIT 1 FOR UPDATE"), &[],
+    ).await?;
+    if let Some(row) = urgent {
+        let run = run_row(&row)?;
+        if run.state != "cancelling" {
+            tx.execute("UPDATE workflow_task_runs SET state='cancelling',generation=generation+1,provider_state=CASE WHEN provider_state='sending' THEN 'uncertain' ELSE provider_state END WHERE attempt_id=$1", &[&run.command.attempt_id]).await?;
+            update(
+                tx,
+                origin(&run.command),
+                &run.command.task_id,
+                &run.command.attempt_id,
+                "task_deadline_exceeded",
+            )
+            .await?;
+        }
+        return reconcile_selected(tx, &run.command.attempt_id).await;
+    }
+    let active: i64 = tx.query_one(
+        "SELECT count(*) FROM workflow_task_runs WHERE state IN ('claimed','reporting','cancelling')", &[],
+    ).await?.get(0);
+    // Four is an explicit initial capacity bound, shared by all replicas. Each
+    // task has its own retained source and Pod/worktree; no repository checkout
+    // or provider request identity is shared between these slots.
+    if active < 4
+        && let Some(row) = tx.query_opt(
+            &format!("{SELECT_RUN} WHERE state='queued' ORDER BY created_at,attempt_id LIMIT 1 FOR UPDATE"), &[],
+        ).await? {
+            let run = run_row(&row)?;
+            tx.execute("UPDATE workflow_task_runs SET state='claimed',deadline_at=clock_timestamp()+make_interval(secs=>$2) WHERE attempt_id=$1", &[&run.command.attempt_id,&f64::from(run.command.max_seconds)]).await?;
+            update(tx, origin(&run.command), &run.command.task_id, &run.command.attempt_id, "task_claimed").await?;
+            return reconcile_selected(tx, &run.command.attempt_id).await;
+    }
+    // Fair rotation ensures a long-running or unreachable Pod cannot prevent
+    // observation and cleanup of another active attempt.
+    let Some(row) = tx.query_opt(
+        &format!("{SELECT_RUN} WHERE state IN ('claimed','reporting','cancelling') ORDER BY reconciled_at,attempt_id LIMIT 1 FOR UPDATE"), &[],
+    ).await? else { return Ok(None); };
     let run = run_row(&row)?;
-    tx.execute("UPDATE workflow_task_runs SET state='claimed',deadline_at=clock_timestamp()+make_interval(secs=>$2) WHERE attempt_id=$1",&[&run.command.attempt_id,&f64::from(run.command.max_seconds)]).await?;
-    update(
-        tx,
-        origin(&run.command),
-        &run.command.task_id,
-        &run.command.attempt_id,
-        "task_claimed",
+    reconcile_selected(tx, &run.command.attempt_id).await
+}
+
+async fn reconcile_selected(
+    tx: &Transaction<'_>,
+    attempt: &str,
+) -> Result<Option<TaskRun>, StoreError> {
+    tx.execute(
+        "UPDATE workflow_task_runs SET reconciled_at=clock_timestamp() WHERE attempt_id=$1",
+        &[&attempt],
     )
     .await?;
-    Ok(Some(by_id(tx, &run.command.attempt_id).await?))
+    Ok(Some(by_id(tx, attempt).await?))
 }
 
 async fn within_deadline(tx: &Transaction<'_>, attempt: &str) -> Result<(), StoreError> {
@@ -158,8 +193,8 @@ async fn retain_worker_report(
     } else {
         require_current(run, run.generation)?;
         within_deadline(tx, attempt).await?;
-        if run.command.provider == "openai"
-            && outcome.state == "completed"
+        if matches!(run.command.provider.as_str(), "openai" | "anthropic")
+            && (outcome.state == "completed" || outcome.recovery_advice.is_some())
             && (run.provider_state != "sending"
                 || outcome.request_digest
                     != tx
@@ -196,7 +231,7 @@ async fn retain_quality_report(
     attempt: &str,
     outcome: &QualityOutcome,
 ) -> Result<(), StoreError> {
-    if !outcome.validate() || encode(outcome)?.len() > 131_072 {
+    if !outcome.validate() || encode(outcome)?.len() > MAX_QUALITY_OUTCOME_BYTES {
         return Err(StoreError::InvalidInput("task_quality"));
     }
     let coding = run

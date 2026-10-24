@@ -15,7 +15,7 @@ pub struct PublicationReceipt {
     pub resume_cursor: String,
 }
 const SELECT: &str = "SELECT command,state,generation,pod_uid,COALESCE(workflow_ts_seconds(lease_until),0),commit_sha,tree_sha,outcome FROM workflow_task_publications";
-async fn lock(tx: &Transaction<'_>) -> Result<(), StoreError> {
+pub(super) async fn lock(tx: &Transaction<'_>) -> Result<(), StoreError> {
     tx.query_one(
         "SELECT pg_advisory_xact_lock($1)",
         &[&(crate::migration_lock_id() + 5)],
@@ -89,6 +89,14 @@ async fn update(
         command.publication_id.as_str(),
     ];
     let cursor=tx.query_one("INSERT INTO workflow_updates(id,activity_id,workspace_id,project_id,conversation_id,conversation_revision,kind,affected_resource_ids,presentation_state,safe_reason) VALUES($1,$2,$3,$4,$5,$6,'task_execution_changed',$7,'accepted',$8) RETURNING cursor",&[&support::new_id(),&activity,&s.workspace,&s.project,&s.conversation,&rev,&ids,&reason]).await?.get(0);
+    if matches!(
+        reason,
+        "publication_result_retained"
+            | "publication_expired"
+            | "publication_cancelled_branch_may_exist"
+    ) {
+        tx.execute("UPDATE workflow_task_runs SET assessment_outcome_at=clock_timestamp() WHERE attempt_id=$1", &[&command.attempt_id]).await?;
+    }
     observation::notify(tx, s.conversation).await?;
     Ok((
         support::unsigned(rev)?,

@@ -70,7 +70,7 @@ impl WorkflowStore {
         driver.abort();
         Ok(result)
     }
-    /// Fence reports immediately; release the serial slot only after workload stop confirmation.
+    /// Fence reports immediately; release its occupied slot only after workload stop confirmation.
     /// # Errors
     /// Rejects wrong origin, conflicting retry bytes and terminal attempts.
     pub async fn cancel_task_execution(
@@ -100,7 +100,7 @@ impl WorkflowStore {
             "claimed" | "reporting" => "cancelling",
             _ => return Err(StoreError::TaskExecutionConflict),
         };
-        tx.execute("UPDATE workflow_task_runs SET state=$2,generation=generation+1,provider_state=CASE WHEN provider_state='sending' THEN 'uncertain' ELSE provider_state END WHERE attempt_id=$1",&[&attempt,&state]).await?;
+        tx.execute("UPDATE workflow_task_runs SET state=$2,generation=generation+1,reconciled_at='-infinity',provider_state=CASE WHEN provider_state='sending' THEN 'uncertain' ELSE provider_state END WHERE attempt_id=$1",&[&attempt,&state]).await?;
         let result = retain(
             &tx,
             scope,
@@ -186,6 +186,7 @@ async fn build_command(
         generation: 1,
         repository: i.repository,
         source_commit: i.source_commit,
+        source_paths: t.source_paths,
         source_pack_digest: digest(pack),
         lock_digest: i.lock_digest,
         runtime_image: i.runtime_image,

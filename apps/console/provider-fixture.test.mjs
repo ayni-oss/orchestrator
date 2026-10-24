@@ -89,3 +89,49 @@ test('Responses fixture emits bounded plan proposals and deterministic malformed
   assert.equal(foreign.conversation_id, 'another-conversation');
   assert.equal((await (await send('proposal-mixed')).json()).output.length, 2);
 });
+
+test('Anthropic fixture validates selected headers, tools, cancellation delay and ambiguous transport', async t => {
+  const fixtureProcess = spawn(globalThis.process.execPath, [new URL('../../dev/fixtures/provider/server.mjs', import.meta.url).pathname], { env: { ...globalThis.process.env, PORT:'0', PROVIDER_FIXTURE_DELAY_MS:'5' }, stdio:['ignore','pipe','pipe'] });
+  t.after(()=>fixtureProcess.kill('SIGTERM'));
+  const [ready]=await Promise.race([once(fixtureProcess.stdout,'data'),once(fixtureProcess,'exit').then(([code])=>{throw new Error(`fixture exited: ${code}`);})]);
+  const endpoint=`http://127.0.0.1:${JSON.parse(ready).port}`;
+  const headers={'content-type':'application/json','x-api-key':'provider-fixture-key','anthropic-version':'2023-06-01'};
+  const tools=['mcp_fixture_read','mcp_fixture_write'].map(name=>({name,input_schema:{type:'object',properties:{},required:[],additionalProperties:false}}));
+  const body={model:'fixture-model',system:'frozen',messages:[{role:'user',content:[{type:'text',text:'fixture:mcp'}]}],tools,max_tokens:512,stream:false,thinking:{type:'disabled'}};
+  const send=(body,selectedHeaders=headers)=>fetch(`${endpoint}/v1/messages`,{method:'POST',headers:selectedHeaders,body:JSON.stringify(body)});
+  assert.equal((await send(body,{...headers,'anthropic-version':'incorrect'})).status,401);
+  assert.equal((await send({...body,stream:true})).status,400);
+  const first=await(await send(body)).json();
+  assert.equal(first.type,'message');
+  assert.equal(first.stop_reason,'tool_use');
+  assert.deepEqual(first.content.map(block=>block.name),tools.map(tool=>tool.name));
+  const continuation={...body,messages:[...body.messages,{role:'assistant',content:first.content},{role:'user',content:first.content.map(block=>({type:'tool_result',tool_use_id:block.id,content:'Accepted scoped fixture output.'}))}]};
+  const final=await(await send(continuation)).json();
+  assert.equal(final.stop_reason,'end_turn');
+  assert.match(final.content[0].text,/Anthropic fixture/);
+  assert.equal(final.usage.input_tokens+final.usage.output_tokens,20);
+  await assert.rejects(send({...body,messages:[{role:'user',content:[{type:'text',text:'fixture:disconnect'}]}]}));
+  const delayed=await(await send({...body,messages:[{role:'user',content:[{type:'text',text:'fixture:delay'}]}]})).json();
+  assert.equal(delayed.stop_reason,'end_turn');
+  const stats=await(await fetch(`${endpoint}/stats`)).json();
+  assert.equal(stats.anthropicCalls,4);
+  assert.equal(stats.toolContinuations,1);
+  assert.equal(JSON.stringify(stats).includes('provider-fixture-key'),false);
+});
+
+test('generated outcome assessment prompts yield reviewable proposals through the deterministic fixture', async t => {
+  const fixtureProcess = spawn(globalThis.process.execPath, [new URL('../../dev/fixtures/provider/server.mjs', import.meta.url).pathname], { env: { ...globalThis.process.env, PORT: '0' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(() => fixtureProcess.kill('SIGTERM'));
+  const [ready] = await Promise.race([once(fixtureProcess.stdout, 'data'), once(fixtureProcess, 'exit').then(([code]) => { throw new Error(`fixture exited: ${code}`); })]);
+  const endpoint = `http://127.0.0.1:${JSON.parse(ready).port}`;
+  const tools = ['read_workspace_instructions', 'read_project_status', 'read_conversation_history'].map(name => ({ type: 'function', name, strict: true, parameters: { type: 'object', properties: {}, required: [], additionalProperties: false } }));
+  tools.push({ type: 'function', name: 'propose_plan', strict: true, parameters: { type: 'object', properties: { content: {}, assumptions: {}, evidence: {} }, required: ['content', 'assumptions', 'evidence'], additionalProperties: false } });
+  const response = await fetch(`${endpoint}/v1/responses`, { method: 'POST', headers: { authorization: 'Bearer provider-fixture-key', 'content-type': 'application/json', 'x-client-request-id': 'assessment-fixture' }, body: JSON.stringify({ model: 'fixture-model', input: [{ role: 'user', content: 'Authorized task outcome assessment. Retained accepted outcomes follow.' }], tools, max_output_tokens: 512, store: false, background: false, stream: false, truncation: 'disabled' }) });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.output[0].name, 'propose_plan');
+  assert.equal(JSON.parse(body.output[0].arguments).content.tasks.length, 1);
+  const stats = await (await fetch(`${endpoint}/stats`)).json();
+  assert.equal(stats.modes.assessment, 1);
+  assert.equal(stats.calls, 1);
+});

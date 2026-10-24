@@ -17,6 +17,8 @@ use ayni_orchestrator_workflow_postgres::{
 };
 use std::error::Error;
 use uuid::Uuid;
+#[path = "support/source_retention.rs"]
+mod source_retention;
 type Result<T = ()> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 const REPOSITORY: &str = "https://github.com/example/publication-fixture.git";
 fn key() -> String {
@@ -44,8 +46,12 @@ impl Fixture {
 #[tokio::test]
 #[ignore = "requires disposable PostgreSQL with separate runtime role"]
 async fn publication_freezes_reviewed_evidence_and_never_reissues_create_authority() -> Result {
-    let f = fixture().await?;
-    deny_ineligible_and_rollback(&f).await?;
+    let f = fixture()
+        .await
+        .map_err(|e| format!("publication fixture: {e}"))?;
+    deny_ineligible_and_rollback(&f)
+        .await
+        .map_err(|e| format!("publication rollback: {e}"))?;
     let a = &f.attempts[0];
     let patch = digest(b"diff --git a/a b/a\n");
     let quality = digest(&serde_json::to_vec(&f.quality)?);
@@ -102,8 +108,14 @@ async fn publication_freezes_reviewed_evidence_and_never_reissues_create_authori
             .is_err()
     );
     let (uid, commit) = claim_and_consume(&f, &receipt.publication_id, &patch, &quality).await?;
-    recover_ambiguous_create(&f, &receipt.publication_id, &uid, &commit).await?;
-    cancel_and_expire(&f).await?;
+    recover_ambiguous_create(&f, &receipt.publication_id, &uid, &commit)
+        .await
+        .map_err(|e| format!("publication recovery: {e}"))?;
+    source_retention::prove(&f, &receipt.publication_id, &request_key, &patch, &quality).await?;
+    cancel_and_expire(&f)
+        .await
+        .map_err(|e| format!("publication cancellation/expiry: {e}"))?;
+    accepted_multi_dependency_selections_are_exact_and_survive_restart(&fixture().await?).await?;
     println!(
         "publication-authority: reviewed-quality=pass immutable-inputs=pass receipt-retry=pass rollback=pass consumed-create-permit=pass lease-fence=pass uncertain-recovery=pass cancellation=pass expiry=pass"
     );
@@ -142,7 +154,7 @@ async fn fixture() -> Result<Fixture> {
         title: "Reviewable changes".into(),
         objective: "Publish reviewed changes".into(),
         scope: "Only selected repository".into(),
-        tasks: (0..4)
+        tasks: (0..6)
             .map(|n| PlanTaskSpecification {
                 key: format!("task{n}"),
                 objective: "Improve the fixture".into(),
@@ -150,6 +162,11 @@ async fn fixture() -> Result<Fixture> {
                 acceptance_criteria: vec!["Managed quality passes".into()],
                 repository: REPOSITORY.into(),
                 source_ref: "refs/heads/alpha".into(),
+                depends_on: if n >= 4 {
+                    vec!["task0".into(), "task2".into()]
+                } else {
+                    vec![]
+                },
                 ..Default::default()
             })
             .collect(),
@@ -176,14 +193,17 @@ async fn fixture() -> Result<Fixture> {
         runtime_image: format!("example/runtime@{}", digest(b"image")),
         max_seconds: 600,
         max_tokens: 10000,
+        upstream_selections: vec![],
     };
     let mut attempts = Vec::new();
     let mut quality = QualityOutcome::default();
-    for (n, task) in approved.tasks.iter().enumerate() {
+    for (n, task) in approved.tasks.iter().take(4).enumerate() {
         let a = store
             .prepare_task_execution(scope, &key(), &task.id, &inputs)
             .await?;
-        let q = complete(&store, scope, &a, n != 1).await?;
+        let q = complete(&store, scope, &a, n != 1)
+            .await
+            .map_err(|e| format!("fixture coding {n}: {e}"))?;
         if n == 0 {
             quality = q;
         }
@@ -687,5 +707,170 @@ async fn verify_retained_outcome(
             .is_err()
     );
     runtime_driver.abort();
+    Ok(())
+}
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "one integration scenario binds exact reviewed edges, accepted commits and replay"
+)]
+async fn accepted_multi_dependency_selections_are_exact_and_survive_restart(f: &Fixture) -> Result {
+    use ayni_orchestrator_workflow_postgres::execution::UpstreamSelection;
+    let tasks = f.store.list_tasks(f.scope(), "", 32).await?.tasks;
+    let dependent = tasks
+        .iter()
+        .find(|task| task.proposed_task_key == "task4")
+        .ok_or("dependent")?;
+    let second = tasks
+        .iter()
+        .find(|task| task.proposed_task_key == "task5")
+        .ok_or("second dependent")?;
+    let mut inputs = f.attempts[0].inputs.clone();
+    let blocked = f
+        .store
+        .prepare_task_execution(f.scope(), &key(), &dependent.id, &inputs)
+        .await?;
+    assert!(blocked.attempt_id.is_empty());
+    assert_eq!(blocked.blockers.len(), 2);
+    for (index, commit) in [(0, "c".repeat(40)), (2, "d".repeat(40))] {
+        let a = &f.attempts[index];
+        let run = f
+            .store
+            .get_task_run(f.scope(), &a.task_id, &a.attempt_id)
+            .await?;
+        let patch = digest(run.outcome.as_ref().ok_or("coding")?.patch.as_bytes());
+        let quality = digest(&serde_json::to_vec(&run.quality.ok_or("quality")?)?);
+        let receipt = f
+            .store
+            .start_task_publication(
+                f.scope(),
+                &a.task_id,
+                &a.attempt_id,
+                &key(),
+                &patch,
+                &quality,
+            )
+            .await?;
+        let uid = key();
+        let claimed = f
+            .store
+            .publication_supervisor(
+                &f.workspace,
+                REPOSITORY,
+                &Supervisor::Poll {
+                    workspace_id: f.workspace.clone(),
+                    repository: REPOSITORY.into(),
+                    pod_uid: uid.clone(),
+                },
+            )
+            .await?
+            .ok_or("publication")?;
+        assert_eq!(claimed.command.publication_id, receipt.publication_id);
+        f.store
+            .publication_worker(
+                (&f.workspace, REPOSITORY),
+                &receipt.publication_id,
+                1,
+                &uid,
+                &Worker::Prepared {
+                    commit_sha: commit.clone(),
+                    tree_sha: "e".repeat(40),
+                },
+            )
+            .await?;
+        assert!(
+            f.store
+                .publication_worker(
+                    (&f.workspace, REPOSITORY),
+                    &receipt.publication_id,
+                    1,
+                    &uid,
+                    &Worker::BeginCreate
+                )
+                .await?
+                .authorized
+        );
+        f.store
+            .publication_worker(
+                (&f.workspace, REPOSITORY),
+                &receipt.publication_id,
+                1,
+                &uid,
+                &Worker::Report {
+                    outcome: PublicationOutcome {
+                        state: "draft".into(),
+                        commit_sha: commit.clone(),
+                        pr_number: index as u64 + 1,
+                        pr_url: format!(
+                            "https://github.com/example/publication-fixture/pull/{}",
+                            index + 1
+                        ),
+                        pr_state: "draft".into(),
+                        ..Default::default()
+                    },
+                },
+            )
+            .await?;
+        inputs.upstream_selections.push(UpstreamSelection {
+            task_id: a.task_id.clone(),
+            attempt_id: a.attempt_id.clone(),
+            commit_sha: commit,
+        });
+    }
+    let mut partial = inputs.clone();
+    partial.upstream_selections.pop();
+    let partial = f
+        .store
+        .prepare_task_execution(f.scope(), &key(), &dependent.id, &partial)
+        .await?;
+    assert!(partial.attempt_id.is_empty());
+    assert_eq!(partial.blockers.len(), 1);
+    let mut wrong = inputs.clone();
+    wrong.upstream_selections[0].commit_sha = "f".repeat(40);
+    assert!(matches!(
+        f.store
+            .prepare_task_execution(f.scope(), &key(), &dependent.id, &wrong)
+            .await,
+        Err(StoreError::InvalidInput("upstream_selection"))
+    ));
+    wrong = inputs.clone();
+    wrong.upstream_selections[0].task_id.clone_from(&second.id);
+    assert!(
+        f.store
+            .prepare_task_execution(f.scope(), &key(), &dependent.id, &wrong)
+            .await
+            .is_err()
+    );
+    // The helper separately proves ancestry; here an explicit integrated source
+    // commit is retained together with both accepted upstream identities.
+    inputs.source_commit = "f".repeat(40);
+    let receipt_key = key();
+    let prepared = f
+        .store
+        .prepare_task_execution(f.scope(), &receipt_key, &dependent.id, &inputs)
+        .await?;
+    assert!(!prepared.attempt_id.is_empty());
+    assert_eq!(prepared.inputs, inputs);
+    let reopened = WorkflowStore::new(f.runtime.clone());
+    assert_eq!(
+        reopened
+            .prepare_task_execution(f.scope(), &receipt_key, &dependent.id, &inputs)
+            .await?,
+        prepared
+    );
+    assert_eq!(
+        reopened
+            .get_task_execution(f.scope(), &dependent.id)
+            .await?,
+        Some(prepared)
+    );
+    let mut changed = inputs;
+    changed.upstream_selections[0].commit_sha = "0".repeat(40);
+    assert!(matches!(
+        reopened
+            .prepare_task_execution(f.scope(), &receipt_key, &dependent.id, &changed)
+            .await,
+        Err(StoreError::IdempotencyConflict)
+    ));
     Ok(())
 }

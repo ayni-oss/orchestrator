@@ -26,8 +26,10 @@ Durable-workflow local Docker Desktop development:
   publish-task submit FROZEN_JSON
   publish-task cancel CANCEL_JSON
                                 Review and authorize exact draft publication
+  self-development ABSOLUTE_DIRECTORY DIGEST_PINNED_RUNTIME_IMAGE
+                                Exercise own source with managed quality and local draft fixture
   quality-runtime               Build/load the local managed task-quality fixture
-  acceptance ABSOLUTE_DIRECTORY [--plans-only|--tasks-only|--coding-only|--quality-only|--publication-only|--m4|--m6]
+  acceptance ABSOLUTE_DIRECTORY [--plans-only|--tasks-only|--coding-only|--quality-only|--publication-only|--m4|--m6|--m8]
                                 Run cumulative gates or scoped plan/task recovery
   status                        Show the release, pods, and retained claims
   cleanup | down                Uninstall while preserving authoritative stores
@@ -89,6 +91,9 @@ case "$command" in
       exit 2
     fi
     "$scripts/check.sh" "$@"
+    ;;
+  self-development)
+    "$scripts/self-development-acceptance.sh" "$@"
     ;;
   quality-runtime)
     "$scripts/quality-runtime.sh" "$@"

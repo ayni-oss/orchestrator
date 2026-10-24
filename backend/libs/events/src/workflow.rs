@@ -1,3 +1,13 @@
+/// Return the selected real provider for a canonical retained execution binding.
+#[must_use]
+pub fn binding_provider(binding: &str) -> Option<&'static str> {
+    match binding {
+        "openai-responses-v1" => Some("openai"),
+        "anthropic-messages-v1" => Some("anthropic"),
+        _ => None,
+    }
+}
+
 use super::v1::{
     ConversationReportDecision, ConversationReportDecisionKind, ConversationTurnBinding,
     ConversationTurnReport, ConversationTurnReportKind, ConversationTurnRequested,
@@ -591,7 +601,7 @@ fn validate_binding(binding: &ConversationTurnBinding, report: bool) -> Result<(
         || binding.executor_generation == 0
         || !matches!(
             binding.execution_binding_revision.as_str(),
-            "scripted-v1" | "openai-responses-v1"
+            "scripted-v1" | "openai-responses-v1" | "anthropic-messages-v1"
         )
         || binding.context_revision == 0
         || binding.command_event_id.parse::<uuid::Uuid>().is_err()
@@ -718,7 +728,7 @@ fn validate_proposal_envelope(
 ) -> Result<(), ContractError> {
     if let Some(proposal) = &payload.plan_proposal
         && (kind != ConversationTurnReportKind::Completed
-            || binding.execution_binding_revision != "openai-responses-v1"
+            || binding_provider(&binding.execution_binding_revision).is_none()
             || payload.provider_call.is_none()
             || !simple_identifier(&proposal.invocation_id)
             || proposal.proposal_json.is_empty()
@@ -735,7 +745,7 @@ fn validate_provider_evidence(
     kind: ConversationTurnReportKind,
 ) -> Result<(), ContractError> {
     let Some(call) = payload.provider_call.as_ref() else {
-        if binding.execution_binding_revision == "openai-responses-v1"
+        if binding_provider(&binding.execution_binding_revision).is_some()
             && kind != ConversationTurnReportKind::Started
             && !(kind == ConversationTurnReportKind::Failed
                 && matches!(
@@ -747,10 +757,10 @@ fn validate_provider_evidence(
         }
         return Ok(());
     };
-    if binding.execution_binding_revision != "openai-responses-v1"
+    if binding_provider(&binding.execution_binding_revision).is_none()
         || kind == ConversationTurnReportKind::Started
         || call.call_id != binding.command_event_id
-        || call.provider != "openai"
+        || binding_provider(&binding.execution_binding_revision) != Some(call.provider.as_str())
         || call.model.is_empty()
         || call.model.len() > 256
         || !resource_identifier(&call.configuration_revision_id)
@@ -787,15 +797,18 @@ fn tool_invocations_valid(tools: &[super::v1::ToolInvocationEvidence]) -> bool {
         && tools.iter().all(|tool| {
             simple_identifier(&tool.invocation_id)
                 && ids.insert(&tool.invocation_id)
-                && matches!(
+                && (matches!(
                     tool.name.as_str(),
                     "read_workspace_instructions"
                         | "read_project_status"
                         | "read_conversation_history"
-                )
+                ) || (tool.name.starts_with("mcp_") && simple_identifier(&tool.name)))
                 && digest(&tool.input_digest)
                 && digest(&tool.output_digest)
-                && matches!(tool.state.as_str(), "completed" | "rejected")
+                && matches!(
+                    tool.state.as_str(),
+                    "completed" | "rejected" | "sending" | "uncertain"
+                )
         })
 }
 
@@ -863,9 +876,11 @@ fn report_failure_reason(value: &str) -> bool {
             | "provider_tool_rejected"
             | "provider_tool_limit"
             | "provider_tool_output_limit"
+            | "provider_tool_uncertain"
             | "provider_budget_exhausted"
             | "provider_usage_unknown"
             | "provider_credentials_unavailable"
+            | "stale_outcome_assessment"
             | "invalid_plan_proposal"
             | "plan_capacity"
             | "cancelled"
@@ -882,6 +897,7 @@ fn decision_rejection_reason(value: &str) -> bool {
             | "invalid_signature"
             | "event_conflict"
             | "terminal_conflict"
+            | "stale_outcome_assessment"
             | "invalid_plan_proposal"
             | "plan_capacity"
     )
@@ -907,7 +923,10 @@ fn validate_execution_configuration(
             .instructions
             .chars()
             .any(|c| c.is_control() && !matches!(c, '\n' | '\t'))
-        || !matches!(config.provider.as_str(), "scripted" | "openai")
+        || !matches!(
+            config.provider.as_str(),
+            "scripted" | "openai" | "anthropic"
+        )
         || config.model.is_empty()
         || config.model.len() > 256
         || config.model.trim() != config.model

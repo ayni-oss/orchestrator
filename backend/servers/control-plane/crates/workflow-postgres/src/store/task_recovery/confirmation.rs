@@ -94,7 +94,8 @@ async fn eligible(
         )
         .await?;
     let specification: crate::plans::PlanTaskSpecification = decode(&row.get::<_, Vec<u8>>(0))?;
-    // M5 has no scheduler or upstream selections yet. Never invent or refresh them here.
+    // Continuation preserves the parent's frozen source and upstream selections;
+    // it never substitutes newer dependency work.
     if !specification.unresolved_inputs.is_empty() || specification.repository != parent.repository
     {
         return Err(StoreError::TaskExecutionConflict);
@@ -196,6 +197,9 @@ async fn admit_proposal(
         )
         .await?
         .get::<_, Vec<u8>>(0);
+    if source.is_empty() {
+        return Err(StoreError::TaskExecutionConflict);
+    }
     if digest(&source) != parent.command.source_pack_digest {
         return Err(StoreError::CorruptState);
     }
@@ -208,11 +212,21 @@ async fn admit_proposal(
         )
         .to_owned()
     };
+    let mut inherited_answers = parent
+        .command
+        .recovery
+        .as_ref()
+        .map_or_else(Vec::new, |recovery| recovery.answers.clone());
+    inherited_answers.extend(super::worker::answers(tx, &record.attempt_id).await?);
+    if inherited_answers.len() > 32 {
+        return Err(StoreError::InvalidInput("question_context_limit"));
+    }
     let mut command = parent.command;
     command.attempt_id = support::new_id();
     command.generation = 1;
     command.max_seconds = proposal.request.additional_seconds;
     command.max_tokens = proposal.request.additional_tokens;
+
     command.recovery = Some(TaskRecoveryCommand {
         parent_attempt_id: record.attempt_id.clone(),
         proposal_id: record.id.clone(),
@@ -223,8 +237,9 @@ async fn admit_proposal(
         seed_patch: patch,
         quality_reason: proposal.safe_reason,
         quality_artifact: parent.quality.map(|q| q.artifact).unwrap_or_default(),
+        answers: inherited_answers,
     });
-    if encode(&command)?.len() > 262_144 {
+    if encode(&command)?.len() > ayni_orchestrator_events::task_execution::MAX_TASK_COMMAND_BYTES {
         return Err(StoreError::InvalidInput("recovery_context_limit"));
     }
     let result = admit(tx, scope, &command, &source, request).await?;

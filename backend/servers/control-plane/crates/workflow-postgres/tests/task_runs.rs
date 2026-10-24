@@ -1,4 +1,4 @@
-//! Serial task ownership, fencing, exact command receipts and retained result acceptance.
+//! Concurrent task ownership, fencing, exact command receipts and retained result acceptance.
 use ayni_orchestrator_events::task_execution::{
     SupervisorRequest as S, TaskOutcome, WorkerRequest as W,
 };
@@ -11,10 +11,17 @@ use ayni_orchestrator_workflow_postgres::{
 };
 use std::error::Error;
 use uuid::Uuid;
+#[path = "support/concurrency.rs"]
+mod concurrency;
 #[path = "support/task_confirmation.rs"]
 mod confirmation;
+#[path = "support/quality_evidence.rs"]
+mod quality_evidence;
 #[path = "support/task_recovery.rs"]
 mod recovery;
+#[path = "support/worker_recovery.rs"]
+mod worker_recovery;
+use quality_evidence::failed_quality;
 type Result = std::result::Result<(), Box<dyn Error + Send + Sync>>;
 fn key() -> String {
     Uuid::now_v7().to_string()
@@ -23,9 +30,9 @@ fn key() -> String {
 #[ignore = "requires disposable PostgreSQL and distinct runtime role"]
 #[allow(
     clippy::too_many_lines,
-    reason = "one ownership scenario keeps fencing and serial-slot ordering explicit"
+    reason = "one ownership scenario keeps fencing and concurrent slot ordering explicit"
 )]
-async fn serial_dispatch_fences_cancellation_and_recovers_exact_retained_results() -> Result {
+async fn concurrent_dispatch_fences_cancellation_and_recovers_exact_retained_results() -> Result {
     let (admin, runtime, store) = store_fixture().await?;
     let workspace = store.create_workspace(&key(), "Task runs").await?.resource;
     let project = store
@@ -87,6 +94,7 @@ async fn serial_dispatch_fences_cancellation_and_recovers_exact_retained_results
         runtime_image: format!("example.invalid/runtime@sha256:{}", "c".repeat(64)),
         max_seconds: 600,
         max_tokens: 10000,
+        upstream_selections: vec![],
     };
     let mut preparations = Vec::new();
     for task in &approved.tasks {
@@ -152,20 +160,7 @@ async fn serial_dispatch_fences_cancellation_and_recovers_exact_retained_results
             .await?;
     }
     cancel_queued_task(&store, scope, queued_cancel).await?;
-    let (one_claim, other_claim) = tokio::join!(
-        store.task_supervisor(&S::Poll),
-        store.task_supervisor(&S::Poll)
-    );
-    let owned = one_claim?.ok_or("claim missing")?;
-    assert_eq!(Some(owned.clone()), other_claim?);
-    assert_eq!(owned.command.attempt_id, first.attempt_id);
-    assert_eq!(
-        store
-            .get_task_run(scope, &second.task_id, &second.attempt_id)
-            .await?
-            .state,
-        "queued"
-    );
+    let owned = concurrency::claim(&store, scope, first, second).await?;
     // Kubernetes Pod identity is independent of our UUIDv7 resource IDs.
     let uid = "3c828c6e-53ed-4e39-bd68-c1198e69467c".to_owned();
     let observe = S::Observe {
@@ -290,6 +285,7 @@ async fn serial_dispatch_fences_cancellation_and_recovers_exact_retained_results
         .await?;
     prove_retained_review(&store, scope, wrong, &preparations, &runtime).await
 }
+
 async fn prove_rollback_deadline_and_immutable_inputs(
     store: &WorkflowStore,
     scope: PlanScope<'_>,
@@ -395,6 +391,7 @@ async fn verify_quality_receipts(
     let report = W::QualityReport {
         outcome: quality.clone(),
     };
+    quality_evidence::reject_excess(store, task, uid, quality).await?;
     assert!(
         store
             .task_worker(&task.attempt_id, 1, uid, &report)
@@ -536,40 +533,6 @@ async fn prove_quality_rollback(
     );
     driver.abort();
     Ok(())
-}
-
-fn failed_quality(
-    command: &ayni_orchestrator_events::task_execution::TaskCommand,
-    outcome: &TaskOutcome,
-) -> QualityOutcome {
-    let hash = format!("sha256:{}", "e".repeat(64));
-    let artifact = serde_json::json!({
-        "schema_version":"0.5.0", "invocation":{"command":"check","scope":{}}, "execution_mode":"managed",
-        "environment_lock_fingerprint":hash,"source_fingerprint":hash,"contract_digest":hash,
-        "prebuilt_runtime":{"metadata_digest":hash,"certificate":{"certificate":{"platform":"linux/arm64","lock_fingerprint":hash}}},
-        "tool_versions":[{"tool":"rust","version":"1.94.0"}],
-        "completion":{"scope":"repository","state":"complete","expected_targets":1,"completed_targets":1,"detected_targets":1,"skipped_targets":0,"issues":[]},
-        "aggregate":{"status":"fail","total_rows":1,"passing_rows":0,"failing_rows":1},"rows":[{"pass":false}]
-    }).to_string();
-    QualityOutcome {
-        state: "failed".into(),
-        safe_reason: "quality_failed".into(),
-        snapshot_digest: snapshot_digest(command, outcome),
-        lock_digest: command.lock_digest.clone(),
-        runtime_image: command.runtime_image.clone(),
-        runtime_platform: "linux/arm64".into(),
-        runtime_metadata_digest: hash.clone(),
-        executor_digest: hash.clone(),
-        contract_digest: hash.clone(),
-        lock_fingerprint: hash.clone(),
-        source_fingerprint: hash.clone(),
-        validation_input_digest: hash,
-        exit_code: Some(1),
-        artifact_digest: ayni_orchestrator_events::task_execution::digest(artifact.as_bytes()),
-        artifact,
-        expected_targets: 1,
-        completed_targets: 1,
-    }
 }
 
 async fn cancel_queued_task(
@@ -756,7 +719,18 @@ async fn prove_failed_and_interrupted_feedback(
             let report = W::Report {
                 outcome: TaskOutcome {
                     state: "failed".into(),
-                    safe_reason: "source_context_limit".into(),
+                    safe_reason: "worker_question".into(),
+                    recovery_advice: Some(
+                        ayni_orchestrator_events::task_execution::TaskRecoveryAdvice {
+                            question: "Which fixture should be retained?".into(),
+                            explanation:
+                                "Resolve the blocking question before a bounded continuation."
+                                    .into(),
+                            action: "continue".into(),
+                            additional_seconds: 300,
+                            additional_tokens: 4096,
+                        },
+                    ),
                     ..Default::default()
                 },
             };
@@ -971,5 +945,6 @@ async fn prove_retained_review(
     )
     .await?;
     prove_feedback_scope_pagination_and_retention(store, scope, wrong, runtime).await?;
-    confirmation::prove(store, scope, wrong, preparations, runtime).await
+    confirmation::prove(store, scope, wrong, preparations, runtime).await?;
+    worker_recovery::prove(store, scope, &preparations[4]).await
 }

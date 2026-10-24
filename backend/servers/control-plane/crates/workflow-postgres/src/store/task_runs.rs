@@ -1,4 +1,4 @@
-//! Durable serial dispatch queue consumed by the authenticated task supervisor.
+//! Durable bounded concurrent dispatch queue consumed by the authenticated task supervisor.
 //! Queue, ownership and report receipts are `PostgreSQL` authority, not Pod existence.
 mod authority;
 mod operator;
@@ -84,7 +84,18 @@ pub(super) async fn update(
     tx.execute("INSERT INTO workflow_activities (id,workspace_id,project_id,conversation_id,conversation_revision,stage,presentation_state,safe_reason) VALUES ($1,$2,$3,$4,$5,'execution','accepted',$6)", &[&activity,&scope.workspace,&scope.project,&scope.conversation,&revision,&reason]).await?;
     let ids = vec![task, attempt];
     let row=tx.query_one("INSERT INTO workflow_updates (id,activity_id,workspace_id,project_id,conversation_id,conversation_revision,kind,affected_resource_ids,presentation_state,safe_reason) VALUES ($1,$2,$3,$4,$5,$6,'task_execution_changed',$7,'accepted',$8) RETURNING cursor", &[&support::new_id(),&activity,&scope.workspace,&scope.project,&scope.conversation,&revision,&ids,&reason]).await?;
+    if matches!(
+        reason,
+        "task_result_retained"
+            | "task_quality_retained"
+            | "task_execution_stopped"
+            | "task_deadline_exceeded"
+            | "task_cancellation_requested"
+    ) {
+        tx.execute("UPDATE workflow_task_runs SET assessment_outcome_at=clock_timestamp() WHERE attempt_id=$1", &[&attempt]).await?;
+    }
     super::task_feedback::retain(tx, scope, task, attempt, reason).await?;
+    super::task_recovery::retain_worker_review(tx, scope, task, attempt).await?;
     observation::notify(tx, scope.conversation).await?;
     Ok((
         support::unsigned(revision)?,

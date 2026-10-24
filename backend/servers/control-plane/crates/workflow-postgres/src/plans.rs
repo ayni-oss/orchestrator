@@ -32,6 +32,10 @@ pub struct PlanTaskSpecification {
     pub source_ref: String,
     pub execution_limits: String,
     pub unresolved_inputs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub depends_on: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_paths: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -150,11 +154,20 @@ pub fn canonical_content(content: &PlanContent) -> Result<Vec<u8>, StoreError> {
     text(&content.out_of_scope, 4096, false)?;
     items(&content.constraints)?;
     items(&content.unresolved_questions)?;
-    if content.tasks.len() > 32 {
+    validate_tasks(&content.tasks)?;
+    let bytes = serde_json::to_vec(content).map_err(|_| StoreError::CorruptState)?;
+    if bytes.len() > MAX_PLAN_BYTES {
+        return Err(StoreError::Capacity("plan_bytes"));
+    }
+    Ok(bytes)
+}
+
+fn validate_tasks(tasks: &[PlanTaskSpecification]) -> Result<(), StoreError> {
+    if tasks.len() > 32 {
         return Err(StoreError::Capacity("plan_tasks"));
     }
     let mut keys = BTreeSet::new();
-    for task in &content.tasks {
+    for task in tasks {
         if task.key.is_empty()
             || task.key.len() > 64
             || !task
@@ -173,12 +186,45 @@ pub fn canonical_content(content: &PlanContent) -> Result<Vec<u8>, StoreError> {
         text(&task.execution_limits, 2048, false)?;
         items(&task.acceptance_criteria)?;
         items(&task.unresolved_inputs)?;
+        if !ayni_orchestrator_events::task_execution::valid_source_paths(&task.source_paths) {
+            return Err(StoreError::InvalidInput("task_source_paths"));
+        }
     }
-    let bytes = serde_json::to_vec(content).map_err(|_| StoreError::CorruptState)?;
-    if bytes.len() > MAX_PLAN_BYTES {
-        return Err(StoreError::Capacity("plan_bytes"));
+    validate_graph(tasks, &keys)
+}
+
+fn validate_graph(
+    tasks: &[PlanTaskSpecification],
+    keys: &BTreeSet<&String>,
+) -> Result<(), StoreError> {
+    // Reject missing edges, duplicate edges, self-dependencies and cycles before review.
+    let mut resolved = BTreeSet::new();
+    for task in tasks {
+        let mut dependencies = BTreeSet::new();
+        if task.depends_on.len() > 31
+            || task
+                .depends_on
+                .iter()
+                .any(|key| key == &task.key || !keys.contains(key) || !dependencies.insert(key))
+        {
+            return Err(StoreError::InvalidInput("plan_task_dependency"));
+        }
     }
-    Ok(bytes)
+    loop {
+        let before = resolved.len();
+        for task in tasks {
+            if task.depends_on.iter().all(|key| resolved.contains(key)) {
+                resolved.insert(&task.key);
+            }
+        }
+        if resolved.len() == tasks.len() {
+            break;
+        }
+        if resolved.len() == before {
+            return Err(StoreError::InvalidInput("plan_task_dependency"));
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn content_digest(bytes: &[u8]) -> String {
@@ -188,6 +234,50 @@ pub(crate) fn content_digest(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn task_dependencies_reject_missing_duplicate_self_and_cyclic_edges() -> Result<(), StoreError>
+    {
+        let task = |key: &str, dependencies: &[&str]| PlanTaskSpecification {
+            key: key.into(),
+            objective: "Goal".into(),
+            scope: "Scope".into(),
+            depends_on: dependencies.iter().map(|key| (*key).into()).collect(),
+            ..Default::default()
+        };
+        let mut content = PlanContent {
+            title: "Dependencies".into(),
+            objective: "Goal".into(),
+            scope: "Scope".into(),
+            tasks: vec![
+                task("final", &["left", "right"]),
+                task("left", &["base"]),
+                task("right", &["base"]),
+                task("base", &[]),
+            ],
+            ..Default::default()
+        };
+        assert!(
+            canonical_content(&content).is_ok(),
+            "forward references and diamonds are valid"
+        );
+        for edges in [vec!["missing"], vec!["final"], vec!["left", "left"]] {
+            content.tasks[0] = task("final", &edges);
+            assert!(matches!(
+                canonical_content(&content),
+                Err(StoreError::InvalidInput("plan_task_dependency"))
+            ));
+        }
+        content.tasks = vec![task("a", &["b"]), task("b", &["a"])];
+        assert!(canonical_content(&content).is_err());
+        content.tasks = vec![task("a", &[])];
+        let encoded = String::from_utf8(canonical_content(&content)?)
+            .map_err(|_| StoreError::CorruptState)?;
+        assert!(
+            !encoded.contains("depends_on"),
+            "empty edges preserve retained canonical content"
+        );
+        Ok(())
+    }
     #[test]
     fn exact_bytes_and_task_keys_are_bounded() -> Result<(), StoreError> {
         let mut value = PlanContent {

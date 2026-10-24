@@ -618,6 +618,28 @@ pub async fn collect(worker: &Worker) -> Result {
 mod tests {
     use super::*;
     #[test]
+    fn capture_retains_complete_repository_reports_and_rejects_excess_output() -> Result {
+        let directory = tempfile::tempdir()?;
+        let stdout = directory.path().join("stdout");
+        let stderr = directory.path().join("stderr");
+        let report = format!("{{\"details\":\"{}\"}}", "x".repeat(256 * 1024));
+        fs::write(&stdout, &report)?;
+        fs::write(&stderr, "")?;
+        let mut result = RuntimeResult {
+            exit_code: Some(0),
+            ..Default::default()
+        };
+        finish_capture(&stdout, &stderr, &mut result)?;
+        assert_eq!(result.stdout, report);
+        assert_eq!(result.exit_code, Some(0));
+        fs::write(&stdout, "x".repeat(MAX_ARTIFACT + 1))?;
+        finish_capture(&stdout, &stderr, &mut result)?;
+        assert_eq!(result.exit_code, None);
+        assert!(result.stdout.is_empty());
+        assert_eq!(fs::metadata(&stdout)?.len(), u64::try_from(MAX_ARTIFACT)?);
+        Ok(())
+    }
+    #[test]
     fn exited_producer_cannot_bypass_output_limit() -> Result {
         const CHILD: &str = "AYNI_CAPTURE_LIMIT_TEST_CHILD";
         if env::var_os(CHILD).is_some() {

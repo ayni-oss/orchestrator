@@ -93,6 +93,15 @@ async fn stage_start(client: &mut Client, args: &[String]) -> Result<(), Box<dyn
     if commit != inputs.source_commit || lock != inputs.lock_digest {
         return Err(io::Error::other("frozen source differs").into());
     }
+    git::verify_upstreams(
+        Path::new(&args[2]),
+        &inputs.source_commit,
+        &inputs
+            .upstream_selections
+            .iter()
+            .map(|s| s.commit_sha.clone())
+            .collect::<Vec<_>>(),
+    )?;
     let pack = git::snapshot_pack(Path::new(&args[2]), &inputs.source_commit)?;
     let request = v1::StartTaskExecutionRequest {
         workspace_id: original.workspace_id,
@@ -148,7 +157,20 @@ async fn verify_preparation(client: &mut Client, args: &[String]) -> Result<(), 
     let (commit, lock) = git::verify(
         Path::new(&args[2]),
         &specification.repository,
-        &specification.source_ref,
+        if inputs.source_commit.is_empty() {
+            &specification.source_ref
+        } else {
+            &inputs.source_commit
+        },
+    )?;
+    git::verify_upstreams(
+        Path::new(&args[2]),
+        &commit,
+        &inputs
+            .upstream_selections
+            .iter()
+            .map(|s| s.commit_sha.clone())
+            .collect::<Vec<_>>(),
     )?;
     inputs.repository = specification.repository;
     inputs.source_ref = specification.source_ref;

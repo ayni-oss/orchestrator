@@ -68,6 +68,19 @@ A process-level seccomp filter allows only Unix sockets. It also blocks io_uring
 and cross-process descriptor acquisition. Preparation, checks and their
 descendants inherit this filter regardless of cluster NetworkPolicy enforcement.
 
+### Test capability prerequisites
+
+Orchestrator's managed checks compile every workspace test target under the
+strict socket filter. Pure tests and network-denial assertions run there. Tests
+that require a real loopback HTTP, gRPC or Git fixture declare that prerequisite
+and remain ignored in this environment, following the existing disposable
+PostgreSQL and JetStream fixture pattern. The required host gate
+`scripts/ci/check-workflow-loopback.sh` verifies socket capability and the complete
+declared test inventory before running all loopback fixtures. CI requires this
+gate in addition to workspace tests and the database/broker integration gates.
+A passing managed artifact alone does not claim those host integration proofs.
+The jail and managed Ayni configuration and lock stay unchanged.
+
 ### Retention and resources
 
 The launcher captures output in root-owned mode-0600 regular files. The trusted
@@ -76,11 +89,15 @@ child has UID/GID 10002 and no supplementary groups. The collector reads the
 mode-0644 bounded result JSON and cannot alter the root-owned raw captures.
 Landlock prevents project descendants from reopening these report descriptors
 through procfs; anonymous pipes would not provide this protection. The launcher
-bounds stdout at 64 KiB and diagnostics at 8 KiB, stopping oversized producers. The collector retains the result before reporting it to PostgreSQL.
+bounds stdout at 512 KiB and diagnostics at 8 KiB, stopping oversized producers. The collector retains the result before reporting it to PostgreSQL.
 The serial task slot and bounded attempt deadline cover all stages.
 
 The initial supported runtime profile uses four CPU and 8 GiB memory limits,
-matching Ayni 0.16.2's generated lock defaults. The unsigned local fixture
+matching Ayni 0.16.2's generated lock defaults. Managed preparation and quality
+share a 16-GiB bounded scratch volume for dependency caches and complete repository
+build output. Cargo incremental caching is disabled with `CARGO_INCREMENTAL=0`:
+a single isolated validation does not reuse that cache. The full repository test
+scope and runtime CPU, memory and isolation limits remain enforced. The unsigned local fixture
 certificate establishes runtime consistency. Trusted builder certification also
 requires the project's configured signing keys.
 
@@ -96,7 +113,13 @@ requires the project's configured signing keys.
 | Expected/completed targets | Repository-wide completion accounting |
 | Original JSON artifact and digest | Bounded evidence retained outside project-writable storage |
 
-Artifacts are bounded at 64 KiB. Missing, malformed, oversized or unsupported
+Artifacts are bounded at 512 KiB. The retained encoded outcome and frozen recovery
+command are each bounded at 2 MiB. Task authority accepts at most 2 MiB plus 64 KiB for the worker-request
+envelope. Supervisor replies are bounded at 4 MiB plus 256 KiB to carry both the
+retained recovery context and current quality evidence with their coding outcome
+and JSON envelope. The existing 3-MiB operator gRPC
+response bound carries one complete artifact; recovery lists contain evidence
+digests rather than duplicate artifact bodies. Missing, malformed, oversized or unsupported
 evidence cannot become a pass.
 
 A passing result requires all of:

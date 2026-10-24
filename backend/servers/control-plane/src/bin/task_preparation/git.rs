@@ -62,6 +62,33 @@ fn git(checkout: &Path, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8(output.stdout)?)
 }
 
+/// Verify frozen upstream commits are ancestors of the explicitly selected
+/// integrated source. Reads local objects only; it never merges, fetches or
+/// changes a branch. The operator resolves merge conflicts before preparation.
+pub fn verify_upstreams(checkout: &Path, source: &str, commits: &[String]) -> Result<()> {
+    let oid = |value: &str| {
+        value.len() == 40
+            && value
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    };
+    if !oid(source) || commits.len() > 31 || commits.iter().any(|value| !oid(value)) {
+        return Err(io::Error::other("frozen upstream commit invalid").into());
+    }
+    for commit in commits {
+        let status = command(checkout)
+            .args(["merge-base", "--is-ancestor", commit, source])
+            .output()?;
+        if !status.status.success() {
+            return Err(io::Error::other(
+                "selected source does not contain every frozen upstream commit",
+            )
+            .into());
+        }
+    }
+    Ok(())
+}
+
 /// Export only the frozen commit and its reachable snapshot objects, excluding history.
 pub fn snapshot_pack(checkout: &Path, commit: &str) -> Result<Vec<u8>> {
     use std::{
@@ -125,6 +152,48 @@ pub fn snapshot_pack(checkout: &Path, commit: &str) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn integrated_source_requires_every_selected_upstream_commit() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path();
+        git(path, &["init", "--initial-branch=main"])?;
+        git(
+            path,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "base",
+            ],
+        )?;
+        let base = git(path, &["rev-parse", "HEAD"])?.trim().to_owned();
+        git(
+            path,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "upstream",
+            ],
+        )?;
+        let upstream = git(path, &["rev-parse", "HEAD"])?.trim().to_owned();
+        verify_upstreams(path, &upstream, &[base.clone(), upstream.clone()])?;
+        assert!(verify_upstreams(path, &base, &[upstream]).is_err());
+        assert!(verify_upstreams(path, &base, &["--help".into()]).is_err());
+        Ok(())
+    }
     #[test]
     fn freezes_committed_lock_and_rejects_wrong_repository() -> Result<()> {
         let directory = tempfile::tempdir()?;

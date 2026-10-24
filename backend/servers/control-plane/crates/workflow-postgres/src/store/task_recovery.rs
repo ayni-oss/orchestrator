@@ -1,6 +1,7 @@
 //! Immutable review records; exact confirmation alone admits a linked execution segment.
 mod confirmation;
 mod records;
+mod worker;
 use super::{StoreError, WorkflowStore, support};
 use crate::plans::PlanScope;
 use ayni_orchestrator_events::task_execution::{TaskCommand, TaskOutcome, digest};
@@ -8,6 +9,7 @@ use ayni_orchestrator_events::task_quality::QualityOutcome;
 pub use confirmation::{ConfirmRecovery, RecoveryConfirmation};
 pub use records::*;
 use tokio_postgres::{Row, Transaction};
+pub(super) use worker::retain_worker_review;
 
 fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, StoreError> {
     serde_json::from_slice(bytes).map_err(|_| StoreError::CorruptState)
@@ -27,9 +29,15 @@ fn projection(row: &Row) -> Result<RecoveryRecord, StoreError> {
         content: decode(&row.get::<_, Vec<u8>>(7))?,
         content_digest: digest(&row.get::<_, Vec<u8>>(7)),
         created_at: support::timestamp(row.get(8), row.get(9))?,
+        author: if row.get::<_, String>(10).starts_with("worker:") {
+            "agent"
+        } else {
+            "local-operator"
+        }
+        .into(),
     })
 }
-const SELECT: &str = "SELECT id,workspace_id,project_id,conversation_id,task_id,attempt_id,kind,content,workflow_ts_seconds(created_at),workflow_ts_nanos(created_at) FROM workflow_task_recovery";
+const SELECT: &str = "SELECT id,workspace_id,project_id,conversation_id,task_id,attempt_id,kind,content,workflow_ts_seconds(created_at),workflow_ts_nanos(created_at),idempotency_key FROM workflow_task_recovery";
 
 async fn frozen_evidence(
     tx: &Transaction<'_>,
@@ -107,6 +115,9 @@ impl WorkflowStore {
     ) -> Result<RecoveryRecord, StoreError> {
         validate(scope, task, attempt)?;
         support::validate_key(key)?;
+        if key.starts_with("worker:") {
+            return Err(StoreError::InvalidInput("reserved_command_key"));
+        }
         input.validate()?;
         let request_digest = digest(&encode(input)?);
         let (mut client, driver) = crate::connect(&self.database_url).await?;
@@ -176,7 +187,7 @@ impl WorkflowStore {
             }
         };
         let bytes = encode(&content)?;
-        let row=tx.query_one("WITH inserted AS (INSERT INTO workflow_task_recovery(id,workspace_id,project_id,conversation_id,task_id,attempt_id,idempotency_key,request_digest,kind,question_id,content) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *) SELECT id,workspace_id,project_id,conversation_id,task_id,attempt_id,kind,content,workflow_ts_seconds(created_at),workflow_ts_nanos(created_at) FROM inserted", &[&support::new_id(),&scope.workspace,&scope.project,&scope.conversation,&task,&attempt,&key,&request_digest.as_bytes(),&kind,&question_id,&bytes]).await?;
+        let row=tx.query_one("WITH inserted AS (INSERT INTO workflow_task_recovery(id,workspace_id,project_id,conversation_id,task_id,attempt_id,idempotency_key,request_digest,kind,question_id,content) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *) SELECT id,workspace_id,project_id,conversation_id,task_id,attempt_id,kind,content,workflow_ts_seconds(created_at),workflow_ts_nanos(created_at),idempotency_key FROM inserted", &[&support::new_id(),&scope.workspace,&scope.project,&scope.conversation,&task,&attempt,&key,&request_digest.as_bytes(),&kind,&question_id,&bytes]).await?;
         let result = projection(&row)?;
         tx.commit().await?;
         driver.abort();

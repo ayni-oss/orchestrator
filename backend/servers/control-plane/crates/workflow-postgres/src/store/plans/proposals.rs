@@ -27,14 +27,30 @@ pub(in crate::store) async fn prepare(
     identity: &EventIdentity,
     report_digest: &str,
 ) -> Result<Result<Option<PreparedProposal>, &'static str>, StoreError> {
+    if report.kind == 2
+        && !crate::store::outcome_assessments::proposal_is_current(
+            tx,
+            &binding.turn_id,
+            PlanScope {
+                workspace: &binding.workspace_id,
+                project: &binding.project_id,
+                conversation: &binding.conversation_id,
+            },
+        )
+        .await?
+    {
+        return Ok(Err("stale_outcome_assessment"));
+    }
     let Some(proposal) = &report.plan_proposal else {
         return Ok(Ok(None));
     };
     let Some(evidence) = &report.provider_call else {
         return Ok(Err("invalid_plan_proposal"));
     };
-    if binding.execution_binding_revision != "openai-responses-v1"
-        || evidence.provider != "openai"
+    if ayni_orchestrator_events::workflow::binding_provider(&binding.execution_binding_revision)
+        .is_none()
+        || ayni_orchestrator_events::workflow::binding_provider(&binding.execution_binding_revision)
+            != Some(evidence.provider.as_str())
         || evidence.state != "completed"
         || evidence.response_id.is_empty()
         || report.kind != 2

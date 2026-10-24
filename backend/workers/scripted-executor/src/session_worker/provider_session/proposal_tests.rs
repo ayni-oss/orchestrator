@@ -33,7 +33,9 @@ async fn proposal_fixture(args: Value, mixed: bool) -> Fixture {
 }
 
 #[tokio::test]
-async fn retained_proposal_recovers_exact_invocation_and_bytes_without_paid_replay() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn retained_proposal_recovers_exact_invocation_and_bytes_without_paid_replay_requires_loopback()
+ {
     let mut args = arguments();
     // Near the content limit, exercising JSON escaping and the session HTTP/result bounds.
     args["content"]["constraints"] = json!(vec!["\\\"".repeat(500); 16]);
@@ -83,7 +85,9 @@ async fn retained_proposal_recovers_exact_invocation_and_bytes_without_paid_repl
 }
 
 #[tokio::test]
-async fn malformed_mixed_and_scope_selecting_proposals_fail_without_plan_output() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn malformed_mixed_and_scope_selecting_proposals_fail_without_plan_output_requires_loopback()
+{
     let mut foreign = arguments();
     foreign["conversation_id"] = json!("foreign");
     for (args, mixed) in [(json!({}), false), (foreign, false), (arguments(), true)] {
@@ -113,7 +117,8 @@ async fn malformed_mixed_and_scope_selecting_proposals_fail_without_plan_output(
 }
 
 #[tokio::test]
-async fn cancellation_before_checkpoint_recovery_cannot_emit_retained_proposal() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn cancellation_before_checkpoint_recovery_cannot_emit_retained_proposal_requires_loopback() {
     let fixture = proposal_fixture(arguments(), false).await;
     let directory = tempfile::tempdir().unwrap();
     let state = worker(&directory.path().join("ledger.sqlite"), &fixture.url, None);

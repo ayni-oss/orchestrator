@@ -2,7 +2,9 @@
 use crate::task_execution::{TaskCommand, TaskOutcome, digest};
 use serde::{Deserialize, Serialize};
 
-pub const MAX_ARTIFACT: usize = 64 * 1024;
+pub const MAX_ARTIFACT: usize = 512 * 1024;
+/// Canonical JSON outcome, including escaped artifact contents and metadata.
+pub const MAX_QUALITY_OUTCOME_BYTES: usize = 2 * 1024 * 1024;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -195,6 +197,29 @@ mod tests {
             completed_targets: 1,
             ..Default::default()
         }
+    }
+    #[test]
+    fn complete_large_artifacts_preserve_exact_bytes_and_reject_the_upper_bound() {
+        let mut outcome = evidence();
+        let padding = MAX_ARTIFACT - outcome.artifact.len();
+        outcome.artifact.push_str(&" ".repeat(padding));
+        outcome.artifact_digest = digest(outcome.artifact.as_bytes());
+        assert_eq!(outcome.artifact.len(), MAX_ARTIFACT);
+        assert!(
+            outcome.validate(),
+            "a complete 512-KiB original JSON report is supported"
+        );
+        let retained = serde_json::to_vec(&outcome).unwrap_or_else(|_| panic!("fixture"));
+        assert!(retained.len() > 131_072 && retained.len() < MAX_QUALITY_OUTCOME_BYTES);
+        let replay: QualityOutcome =
+            serde_json::from_slice(&retained).unwrap_or_else(|_| panic!("fixture"));
+        assert_eq!(replay, outcome);
+        outcome.artifact.push(' ');
+        outcome.artifact_digest = digest(outcome.artifact.as_bytes());
+        assert!(
+            !outcome.validate(),
+            "oversized reports cannot pass by truncation"
+        );
     }
     #[test]
     fn host_focused_incomplete_and_forged_aggregate_cannot_pass()

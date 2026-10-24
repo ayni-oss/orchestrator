@@ -4,6 +4,14 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 pub const MAX_SOURCE_PACK: usize = 8 * 1024 * 1024;
 pub const MAX_PATCH: usize = 60 * 1024;
+/// Frozen coding/recovery context, including the complete retained quality artifact.
+pub const MAX_TASK_COMMAND_BYTES: usize = 2 * 1024 * 1024;
+/// Reserve JSON wrapper/coding-result space beyond the two retained contexts.
+pub const MAX_TASK_SUPERVISOR_RESPONSE_BYTES: usize =
+    MAX_TASK_COMMAND_BYTES + crate::task_quality::MAX_QUALITY_OUTCOME_BYTES + 256 * 1024;
+/// The report envelope is separate from its encoded quality outcome.
+pub const MAX_TASK_WORKER_REQUEST_BYTES: usize =
+    crate::task_quality::MAX_QUALITY_OUTCOME_BYTES + 64 * 1024;
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TaskCommand {
@@ -20,6 +28,8 @@ pub struct TaskCommand {
     pub generation: u64,
     pub repository: String,
     pub source_commit: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_paths: Vec<String>,
     pub source_pack_digest: String,
     pub lock_digest: String,
     pub runtime_image: String,
@@ -50,6 +60,45 @@ pub struct TaskRecoveryCommand {
     pub seed_patch_digest: String,
     pub quality_reason: String,
     pub quality_artifact: String,
+    #[serde(default)]
+    pub answers: Vec<TaskAnswer>,
+}
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskAnswer {
+    pub question_id: String,
+    pub question: String,
+    pub answer: String,
+}
+/// A model may request review, but cannot grant itself another execution allowance.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskRecoveryAdvice {
+    pub question: String,
+    pub explanation: String,
+    pub action: String,
+    pub additional_seconds: u32,
+    pub additional_tokens: u32,
+}
+impl TaskRecoveryAdvice {
+    #[must_use]
+    pub fn validate(&self) -> bool {
+        let text = |value: &str| {
+            !value.trim().is_empty()
+                && value.len() <= 4096
+                && value
+                    .chars()
+                    .all(|c| !c.is_control() || matches!(c, '\n' | '\r' | '\t'))
+        };
+        text(&self.question)
+            && text(&self.explanation)
+            && matches!(
+                self.action.as_str(),
+                "continue" | "repair_quality" | "replace_attempt"
+            )
+            && (1..=86_400).contains(&self.additional_seconds)
+            && (1..=1_000_000).contains(&self.additional_tokens)
+    }
 }
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -62,6 +111,8 @@ pub struct TaskOutcome {
     pub input_tokens: Option<u64>,
     pub output_tokens: Option<u64>,
     pub total_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_advice: Option<TaskRecoveryAdvice>,
 }
 /// Prefer accepted coding output; otherwise retain the approved input patch across failed continuations.
 #[must_use]
@@ -91,7 +142,12 @@ impl TaskOutcome {
                     | "execution_interrupted"
                     | "execution_limit"
                     | "cancelled"
+                    | "worker_question"
             )
+            && self.recovery_advice.as_ref().is_none_or(|advice| {
+                self.state == "failed" && self.safe_reason == "worker_question" && advice.validate()
+            })
+            && (self.safe_reason != "worker_question" || self.recovery_advice.is_some())
             && self.patch.len() <= MAX_PATCH
             && self
                 .patch
@@ -160,4 +216,128 @@ pub fn worker_token(authority: &[u8], attempt: &str, generation: u64) -> String 
         .unwrap_or_else(|_| unreachable!("HMAC accepts every key length"));
     mac.update(format!("ayni-task-worker-v1:{attempt}:{generation}").as_bytes());
     format!("{:x}", mac.finalize().into_bytes())
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    use super::*;
+    #[test]
+    fn worker_questions_require_bounded_advice_and_cannot_claim_completion() {
+        let advice = TaskRecoveryAdvice {
+            question: "Which source?".into(),
+            explanation: "Clarify the exact reviewed source.".into(),
+            action: "continue".into(),
+            additional_seconds: 300,
+            additional_tokens: 4096,
+        };
+        let mut outcome = TaskOutcome {
+            state: "failed".into(),
+            safe_reason: "worker_question".into(),
+            recovery_advice: Some(advice),
+            ..Default::default()
+        };
+        assert!(outcome.validate());
+        outcome.state = "completed".into();
+        assert!(!outcome.validate());
+        outcome.state = "failed".into();
+        if let Some(advice) = &mut outcome.recovery_advice {
+            advice.additional_tokens = 0;
+        }
+        assert!(!outcome.validate());
+        outcome.recovery_advice = None;
+        assert!(!outcome.validate());
+    }
+}
+
+/// Exact reviewed read/write file selection. Empty retains the bounded full-tree policy.
+#[must_use]
+pub fn valid_source_paths(paths: &[String]) -> bool {
+    let mut seen = std::collections::BTreeSet::new();
+    paths.len() <= 64
+        && paths.iter().all(|path| {
+            !path.is_empty()
+                && path.len() <= 256
+                && !path.chars().any(char::is_control)
+                && !matches!(path.as_str(), ".ayni.lock" | ".ayni.toml")
+                && !path.contains('\\')
+                && path
+                    .split('/')
+                    .all(|part| !matches!(part, "" | "." | ".." | ".git" | ".ayni"))
+                && seen.insert(path)
+        })
+}
+
+#[cfg(test)]
+mod source_selection_tests {
+    use super::valid_source_paths;
+    #[test]
+    fn source_paths_are_exact_bounded_and_exclude_protected_inputs() {
+        assert!(valid_source_paths(&[]));
+        assert!(valid_source_paths(&[
+            "README.md".into(),
+            "src/lib.rs".into()
+        ]));
+        for value in [
+            "",
+            "/root",
+            "../file",
+            "a/../file",
+            "a//file",
+            "./file",
+            ".git/config",
+            "a/.ayni/ledger",
+            ".ayni.lock",
+            ".ayni.toml",
+            "a\\file",
+            "a\nfile",
+        ] {
+            assert!(!valid_source_paths(&[value.into()]), "{value:?}");
+        }
+        assert!(!valid_source_paths(&["file".into(), "file".into()]));
+        assert!(!valid_source_paths(
+            &(0..65).map(|n| format!("file{n}")).collect::<Vec<_>>()
+        ));
+    }
+}
+
+#[cfg(test)]
+mod transport_capacity_tests {
+    use super::*;
+    use crate::task_quality::{MAX_QUALITY_OUTCOME_BYTES, QualityOutcome};
+    #[test]
+    fn transport_envelopes_fit_both_maximum_retained_contexts() -> Result<(), serde_json::Error> {
+        // Synthetic maximum-size encoded objects exercise transport capacity,
+        // independently of the narrower semantic artifact validation rules.
+        let mut command = TaskCommand::default();
+        let size = serde_json::to_vec(&command)?.len();
+        command.instructions = "x".repeat(MAX_TASK_COMMAND_BYTES - size);
+        assert_eq!(serde_json::to_vec(&command)?.len(), MAX_TASK_COMMAND_BYTES);
+        let mut quality = QualityOutcome::default();
+        let size = serde_json::to_vec(&quality)?.len();
+        quality.runtime_platform = "x".repeat(MAX_QUALITY_OUTCOME_BYTES - size);
+        assert_eq!(
+            serde_json::to_vec(&quality)?.len(),
+            MAX_QUALITY_OUTCOME_BYTES
+        );
+        let request = WorkerRequest::QualityReport {
+            outcome: quality.clone(),
+        };
+        assert!(serde_json::to_vec(&request)?.len() <= MAX_TASK_WORKER_REQUEST_BYTES);
+        let run = TaskRun {
+            command,
+            state: "reporting".into(),
+            generation: 1,
+            pod_uid: "x".repeat(64),
+            deadline_seconds: i64::MAX,
+            provider_state: "settled".into(),
+            quality: Some(quality),
+            outcome: Some(TaskOutcome {
+                state: "completed".into(),
+                patch: "\\".repeat(MAX_PATCH),
+                ..Default::default()
+            }),
+        };
+        assert!(serde_json::to_vec(&run)?.len() <= MAX_TASK_SUPERVISOR_RESPONSE_BYTES);
+        Ok(())
+    }
 }

@@ -3,6 +3,9 @@ set -euo pipefail
 
 readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$dev_directory/lib/common.sh"
+if [[ $# -eq 2 && "$2" == --m8 ]]; then
+  exec "$dev_directory/scripts/operational-acceptance.sh" "$1"
+fi
 if [[ $# -eq 2 && "$2" == --publication-only ]]; then
   exec "$dev_directory/scripts/publication-acceptance.sh" "$1"
 fi
@@ -42,8 +45,13 @@ mkdir -p "$evidence"
 status=failed
 scaled_down=
 fence_supervisor_stopped=false
+fence_paused_container=
+fence_node_id=
 metrics_forward_pid=
 cleanup() {
+  if [[ -n "$fence_paused_container" ]]; then
+    docker exec "$fence_node_id" ctr --namespace k8s.io tasks resume "$fence_paused_container" >/dev/null 2>&1 || true
+  fi
   if [[ "$fence_supervisor_stopped" == true ]]; then
     kubectl --context "$context" --namespace "$namespace" scale deployment/task-supervisor --replicas=1 >/dev/null 2>&1 || true
   fi
@@ -210,6 +218,32 @@ for scenario in cancellation pod-loss; do
   kubectl --context "$context" --namespace "${namespace}-sessions" exec "$worker" --container coding -- \
     cat /workspace/task-result.txt > "$evidence/task-$scenario-retained-source.txt"
   if [[ "$scenario" == cancellation ]]; then
+    if [[ "${AYNI_ORCHESTRATOR_TASK_FENCE_ACCEPTANCE:-false}" == true ]]; then
+      # Hold the real coding process before the supervisor restart. The fixed
+      # fixture delay must not race slow rollout or node scheduling.
+      [[ "$context" == docker-desktop ]] || { echo 'worker pause requires local Docker Desktop' >&2; exit 1; }
+      kubectl --context "$context" --namespace "${namespace}-sessions" get pod "$worker" -o json > "$evidence/task-fence-worker-identity.json"
+      fence_paused_container="$(python3 - "$evidence/task-fence-worker-identity.json" "$worker" "${namespace}-sessions" <<'PYIDENTITY'
+import json,re,sys
+pod=json.load(open(sys.argv[1]))
+assert pod['metadata']['name']==sys.argv[2] and pod['metadata']['namespace']==sys.argv[3]
+assert pod['spec']['nodeName']=='desktop-control-plane'
+assert re.fullmatch(r'[a-f0-9-]{36}',pod['metadata']['uid'])
+coding=[c for c in pod['status']['initContainerStatuses'] if c['name']=='coding']
+assert len(coding)==1 and 'running' in coding[0]['state']
+identity=coding[0]['containerID']
+assert re.fullmatch(r'containerd://[a-f0-9]{64}',identity)
+print(identity.removeprefix('containerd://'))
+PYIDENTITY
+)"
+      fence_node_id="$(docker inspect desktop-control-plane --format '{{.Id}}')"
+      [[ "$fence_node_id" =~ ^[a-f0-9]{64}$ ]] || exit 1
+      [[ "$(docker inspect "$fence_node_id" --format '{{index .Config.Labels "io.x-k8s.kind.cluster"}}/{{index .Config.Labels "io.x-k8s.kind.role"}}')" == desktop/control-plane ]] || exit 1
+      docker exec "$fence_node_id" ctr --namespace k8s.io tasks pause "$fence_paused_container"
+      docker exec "$fence_node_id" ctr --namespace k8s.io tasks list | \
+        awk -v id="$fence_paused_container" '$1==id {print $3}' > "$evidence/task-fence-worker-paused.txt"
+      [[ "$(cat "$evidence/task-fence-worker-paused.txt")" == PAUSED ]] || exit 1
+    fi
     before_uid="$(kubectl --context "$context" --namespace "${namespace}-sessions" get pod "$worker" -o jsonpath='{.metadata.uid}')"
     kubectl --context "$context" --namespace "$namespace" rollout restart deployment/task-supervisor > "$evidence/task-supervisor-active-restart.txt"
     kubectl --context "$context" --namespace "$namespace" rollout status deployment/task-supervisor --timeout=2m >> "$evidence/task-supervisor-active-restart.txt"
@@ -225,8 +259,13 @@ for scenario in cancellation pod-loss; do
       kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
         /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --cancel-task-run-pending-stdin \
         < "$evidence/task-$scenario.json" > "$evidence/task-fence-cancel.txt"
-      # Keep the actual old worker alive after the fence so its delayed fixture
-      # result attempts acceptance. Its bounded report retries must fail.
+      # Resume the old worker only after the cancellation fence is retained.
+      docker exec "$fence_node_id" ctr --namespace k8s.io tasks resume "$fence_paused_container"
+      docker exec "$fence_node_id" ctr --namespace k8s.io tasks list | \
+        awk -v id="$fence_paused_container" '$1==id {print $3}' > "$evidence/task-fence-worker-resumed.txt"
+      [[ "$(cat "$evidence/task-fence-worker-resumed.txt")" == RUNNING ]] || exit 1
+      fence_paused_container=
+      # Its delayed result and bounded report retries must now be rejected.
       for _ in $(seq 1 360); do
         exit_code="$(kubectl --context "$context" --namespace "${namespace}-sessions" get pod "$worker" -o jsonpath='{.status.initContainerStatuses[?(@.name=="coding")].lastState.terminated.exitCode}')"
         [[ -z "$exit_code" ]] || break

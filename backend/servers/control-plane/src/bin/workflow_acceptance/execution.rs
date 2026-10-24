@@ -94,6 +94,7 @@ pub async fn prepare(projects: &mut ProjectServiceClient<Channel>, client: &mut 
         runtime_image: format!("example.invalid/fixture@sha256:{}", "c".repeat(64)),
         max_seconds: 600,
         max_tokens: 10000,
+        upstream_selections: vec![],
     });
     let prepared = client
         .prepare_task_execution(request.clone())

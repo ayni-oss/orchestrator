@@ -132,7 +132,14 @@ export interface GetTurnInputsRequest {
 
 export interface GetTurnInputsResponse {
   turnId: string;
-  configuration?: AgentConfiguration | undefined;
+  configuration?:
+    | AgentConfiguration
+    | undefined;
+  /**
+   * Exact retained event identity, available once the turn is eligible. This is
+   * distinct from the admission receipt command_id and grants no execution.
+   */
+  commandEventId: string;
 }
 
 export interface GetTurnContextInputsRequest {
@@ -1990,7 +1997,7 @@ export const GetTurnInputsRequest: MessageFns<GetTurnInputsRequest> = {
 };
 
 function createBaseGetTurnInputsResponse(): GetTurnInputsResponse {
-  return { turnId: "", configuration: undefined };
+  return { turnId: "", configuration: undefined, commandEventId: "" };
 }
 
 export const GetTurnInputsResponse: MessageFns<GetTurnInputsResponse> = {
@@ -2000,6 +2007,9 @@ export const GetTurnInputsResponse: MessageFns<GetTurnInputsResponse> = {
     }
     if (message.configuration !== undefined) {
       AgentConfiguration.encode(message.configuration, writer.uint32(18).fork()).join();
+    }
+    if (message.commandEventId !== "") {
+      writer.uint32(26).string(message.commandEventId);
     }
     return writer;
   },
@@ -2033,6 +2043,14 @@ export const GetTurnInputsResponse: MessageFns<GetTurnInputsResponse> = {
             message.configuration = AgentConfiguration.decode(reader, reader.uint32());
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.commandEventId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2053,6 +2071,11 @@ export const GetTurnInputsResponse: MessageFns<GetTurnInputsResponse> = {
         ? globalThis.String(object.turn_id)
         : "",
       configuration: isSet(object.configuration) ? AgentConfiguration.fromJSON(object.configuration) : undefined,
+      commandEventId: isSet(object.commandEventId)
+        ? globalThis.String(object.commandEventId)
+        : isSet(object.command_event_id)
+        ? globalThis.String(object.command_event_id)
+        : "",
     };
   },
 
@@ -2063,6 +2086,9 @@ export const GetTurnInputsResponse: MessageFns<GetTurnInputsResponse> = {
     }
     if (message.configuration !== undefined) {
       obj.configuration = AgentConfiguration.toJSON(message.configuration);
+    }
+    if (message.commandEventId !== "") {
+      obj.commandEventId = message.commandEventId;
     }
     return obj;
   },
@@ -2076,6 +2102,7 @@ export const GetTurnInputsResponse: MessageFns<GetTurnInputsResponse> = {
     message.configuration = (object.configuration !== undefined && object.configuration !== null)
       ? AgentConfiguration.fromPartial(object.configuration)
       : undefined;
+    message.commandEventId = object.commandEventId ?? "";
     return message;
   },
 };

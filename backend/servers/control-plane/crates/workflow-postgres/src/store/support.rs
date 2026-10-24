@@ -391,7 +391,7 @@ pub(super) async fn record_message_admission(
     let context_revision = record_message_and_turn(transaction, &message).await?;
     super::configuration::freeze_turn_inputs(transaction, message.workspace_id, message.turn_id)
         .await?;
-    transaction.execute("UPDATE workflow_turns t SET execution_binding_revision=CASE c.provider WHEN 'openai' THEN 'openai-responses-v1' ELSE 'scripted-v1' END FROM workflow_turn_inputs i JOIN workflow_agent_configurations c ON c.workspace_id=i.workspace_id AND c.revision_id=i.configuration_revision_id WHERE t.id=$1 AND i.turn_id=t.id", &[&message.turn_id]).await?;
+    transaction.execute("UPDATE workflow_turns t SET execution_binding_revision=CASE c.provider WHEN 'openai' THEN 'openai-responses-v1' WHEN 'anthropic' THEN 'anthropic-messages-v1' ELSE 'scripted-v1' END FROM workflow_turn_inputs i JOIN workflow_agent_configurations c ON c.workspace_id=i.workspace_id AND c.revision_id=i.configuration_revision_id WHERE t.id=$1 AND i.turn_id=t.id", &[&message.turn_id]).await?;
     let waiting_on = if message.eligible {
         "delivery"
     } else {

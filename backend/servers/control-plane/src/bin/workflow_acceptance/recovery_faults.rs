@@ -28,10 +28,13 @@ struct Evidence {
     #[serde(default)]
     feedback: Vec<u8>,
 }
+const MAX_RECOVERY_EVIDENCE_BYTES: usize = 8 * 1024 * 1024;
 fn read<T: DeserializeOwned>() -> Result<T> {
     let mut bytes = Vec::new();
-    std::io::stdin().take(1_048_577).read_to_end(&mut bytes)?;
-    if bytes.len() > 1_048_576 {
+    std::io::stdin()
+        .take(u64::try_from(MAX_RECOVERY_EVIDENCE_BYTES)? + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > MAX_RECOVERY_EVIDENCE_BYTES {
         return Err("recovery fault evidence bound exceeded".into());
     }
     Ok(serde_json::from_slice(&bytes)?)

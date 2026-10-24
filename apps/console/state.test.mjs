@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newerOrEqual, makeCommand, appendActivity, scopeKey, tokenCount, providerCallView } from './state.mjs';
+import { outcomeAssessmentCommand, newerOrEqual, makeCommand, appendActivity, scopeKey, tokenCount, providerCallView } from './state.mjs';
 
 test('revisions remain exact above the JavaScript integer limit', () => {
   assert.equal(newerOrEqual('9007199254740993', '9007199254740992'), true);
@@ -69,4 +69,24 @@ test('tool activity projects allowlisted names and state without arguments or ou
   assert.deepEqual(view.tools, ['read_project_status · completed']);
   assert.equal(JSON.stringify(view).includes('private'), false);
   assert.equal(JSON.stringify(view).includes('shell'), false);
+});
+
+test('assessment consent freezes origin and configuration while revocation needs no paid-call consent', () => {
+  const scope = {workspaceId:'w',projectId:'p',conversationId:'c'};
+  const configuration = {workspaceId:'w',revisionId:'revision'};
+  const command = outcomeAssessmentCommand(scope,configuration,'2',true);
+  scope.conversationId='other'; configuration.revisionId='later';
+  assert.deepEqual(command,{workspaceId:'w',projectId:'p',conversationId:'c',expectedConfigurationRevisionId:'revision',maxAssessments:2});
+  assert.throws(()=>outcomeAssessmentCommand(scope,configuration,'1',false),/Confirm/);
+  assert.equal(outcomeAssessmentCommand(scope,configuration,'0',false).maxAssessments,0);
+  assert.throws(()=>outcomeAssessmentCommand(scope,{workspaceId:'foreign',revisionId:'r'},'1',true),/Choose a conversation/);
+  for(const value of ['-1','11','1.5','no']) assert.throws(()=>outcomeAssessmentCommand(scope,configuration,value,true),/allowance/);
+});
+
+test('external tool uncertainty preserves settled provider usage and identifies reconciliation evidence', () => {
+  const view = providerCallView({ state:'failed', totalTokens:'20', toolInvocations:[{name:'mcp_create',state:'uncertain',invocationId:'effect_1'}] });
+  assert.equal(view.usage, 'Input Unknown · output Unknown · total 20');
+  assert.match(view.toolNotice,/result of an external tool action is unknown/);
+  assert.match(view.toolNotice,/mcp_create · invocation effect_1/);
+  assert.equal(view.notice,'');
 });

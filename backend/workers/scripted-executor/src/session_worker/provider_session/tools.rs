@@ -1,9 +1,7 @@
 //! The model can request reads; only frozen session inputs grant their authority.
 use super::*;
 use ayni_orchestrator_events::v1::ToolInvocationEvidence;
-use ayni_orchestrator_providers::responses::{
-    FunctionCall, ResponseEvidence, TokenUsage, prepare_items,
-};
+use ayni_orchestrator_providers::responses::{FunctionCall, ResponseEvidence, TokenUsage};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
@@ -13,6 +11,8 @@ struct RetainedTool {
     input_digest: String,
     output: String,
     state: String,
+    #[serde(default)]
+    consent_id: Option<String>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -34,10 +34,16 @@ pub(super) struct ProviderLoop {
     sources: BTreeMap<String, Value>,
     tools: BTreeMap<String, RetainedTool>,
     exchanges: Vec<Exchange>,
+    #[serde(default)]
+    mcp_tools: BTreeMap<String, super::mcp::Tool>,
 }
 
 impl ProviderLoop {
-    pub(super) fn new(input: &PrepareInput, bytes: &[u8]) -> Result<Self, StatusCode> {
+    pub(super) fn new(
+        input: &PrepareInput,
+        bytes: &[u8],
+        mcp_tools: BTreeMap<String, super::mcp::Tool>,
+    ) -> Result<Self, StatusCode> {
         let (_, _, command) =
             decode_command(&input.command_bytes).map_err(|_| StatusCode::BAD_REQUEST)?;
         let config = command
@@ -65,6 +71,7 @@ impl ProviderLoop {
             sources,
             tools: BTreeMap::new(),
             exchanges: Vec::new(),
+            mcp_tools,
         })
     }
 
@@ -249,7 +256,12 @@ pub(super) async fn execute(
                 evidence.state = "cancelled".into();
                 return Ok((String::new(), "cancelled".into()));
             }
-            match invoke(&mut execution, call) {
+            let invoked = if execution.mcp_tools.contains_key(&call.name) {
+                invoke_mcp(state, input, &mut execution, call).await
+            } else {
+                invoke(&mut execution, call)
+            };
+            match invoked {
                 Ok(output) => outputs.push((call.clone(), output)),
                 Err(reason) => {
                     checkpoint(state, &input.command_id, &execution)?;
@@ -392,13 +404,14 @@ fn prepare_continuation(
         .get("input")
         .and_then(Value::as_array)
         .ok_or(())?;
-    let Ok(prepared) = prepare_items(
+    let Ok(prepared) = ayni_orchestrator_providers::responses::prepare_items_with_tools(
         model,
         instructions,
         items,
         remaining_input,
         remaining_output,
         remaining_total,
+        execution.request.get("tools").ok_or(())?,
     ) else {
         return Ok(false);
     };
@@ -406,6 +419,129 @@ fn prepare_continuation(
     execution.round += 1;
     execution.phase = "ready".into();
     Ok(true)
+}
+
+fn consume_consent(
+    input: &SendInput,
+    execution: &ProviderLoop,
+    tool: &super::mcp::Tool,
+    arguments: &Value,
+) -> Result<Option<String>, &'static str> {
+    Ok(if tool.read_only {
+        None
+    } else {
+        let consent = tool.consent.as_ref().ok_or("provider_tool_rejected")?;
+        let argument_bytes = serde_json::to_vec(arguments).map_err(|_| "provider_tool_rejected")?;
+        if consent.command_id != input.command_id
+            || !consent.acknowledge_external_effect
+            || consent.arguments_digest != digest(&argument_bytes)
+        {
+            return Err("provider_tool_rejected");
+        }
+        let id = digest(
+            &serde_json::to_vec(&(
+                input.command_id.as_str(),
+                tool.alias.as_str(),
+                &consent.arguments_digest,
+            ))
+            .map_err(|_| "provider_tool_rejected")?,
+        );
+        if execution
+            .tools
+            .values()
+            .any(|prior| prior.consent_id.as_ref() == Some(&id))
+        {
+            return Err("provider_tool_rejected");
+        }
+        Some(id)
+    })
+}
+
+async fn invoke_mcp(
+    state: &WorkerState,
+    input: &SendInput,
+    execution: &mut ProviderLoop,
+    call: &FunctionCall,
+) -> Result<String, &'static str> {
+    if call.arguments.len() > 4096
+        || call.call_id.is_empty()
+        || call.call_id.len() > 128
+        || !call
+            .call_id
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b"_-".contains(&c))
+    {
+        return Err("provider_tool_rejected");
+    }
+    if let Some(prior) = execution.tools.get(&call.call_id) {
+        if prior.call != *call {
+            return Err("provider_tool_rejected");
+        }
+        return if prior.state == "completed" {
+            Ok(prior.output.clone())
+        } else if matches!(prior.state.as_str(), "sending" | "uncertain") {
+            Err("provider_tool_uncertain")
+        } else {
+            Err("provider_tool_rejected")
+        };
+    }
+    if execution.tools.len() >= 8 {
+        return Err("provider_tool_limit");
+    }
+    let tool = execution
+        .mcp_tools
+        .get(&call.name)
+        .ok_or("provider_tool_rejected")?
+        .clone();
+    let arguments: Value =
+        serde_json::from_str(&call.arguments).map_err(|_| "provider_tool_rejected")?;
+    if !super::mcp::accepts(&tool, &arguments) {
+        return Err("provider_tool_rejected");
+    }
+    let consent_id = consume_consent(input, execution, &tool, &arguments)?;
+    execution.tools.insert(
+        call.call_id.clone(),
+        RetainedTool {
+            call: call.clone(),
+            input_digest: digest(call.arguments.as_bytes()),
+            output: String::new(),
+            state: "sending".into(),
+            consent_id,
+        },
+    );
+    checkpoint(state, &input.command_id, execution).map_err(|()| "provider_tool_uncertain")?;
+    let invocation = tokio::time::timeout(
+        Duration::from_secs(tool.timeout_seconds),
+        super::mcp::invoke(&tool, &call.call_id, arguments),
+    );
+    tokio::pin!(invocation);
+    let mut interval = tokio::time::interval(Duration::from_millis(100));
+    let result = loop {
+        tokio::select! {
+            result = &mut invocation => break result.unwrap_or(Err("provider_tool_uncertain")),
+            _ = interval.tick() => if cancelled(state, &input.command_id) { break Err("provider_tool_uncertain"); },
+        }
+    };
+    // A mutation can commit before any error response. Every unretained result is uncertain.
+    let result = if tool.read_only {
+        result
+    } else {
+        result.map_err(|_| "provider_tool_uncertain")
+    };
+    let retained = execution
+        .tools
+        .get_mut(&call.call_id)
+        .ok_or("provider_tool_rejected")?;
+    match &result {
+        Ok(output) => {
+            retained.output.clone_from(output);
+            retained.state = "completed".into();
+        }
+        Err("provider_tool_uncertain") => retained.state = "uncertain".into(),
+        Err(_) => retained.state = "rejected".into(),
+    }
+    checkpoint(state, &input.command_id, execution).map_err(|()| "provider_tool_uncertain")?;
+    result
 }
 
 fn invoke(execution: &mut ProviderLoop, call: &FunctionCall) -> Result<String, &'static str> {
@@ -467,6 +603,7 @@ fn invoke(execution: &mut ProviderLoop, call: &FunctionCall) -> Result<String, &
                 "rejected"
             }
             .into(),
+            consent_id: None,
         },
     );
     reason.map_or(Ok(output), Err)
@@ -492,6 +629,7 @@ mod tests {
             )]),
             tools: BTreeMap::new(),
             exchanges: Vec::new(),
+            mcp_tools: BTreeMap::new(),
         }
     }
     fn call(id: &str, args: &str) -> FunctionCall {
@@ -556,6 +694,190 @@ mod tests {
             invoke(&mut execution, &unknown),
             Err("provider_tool_rejected")
         );
+    }
+    #[tokio::test]
+    async fn ambiguous_mcp_invocation_replay_cannot_send_again() {
+        let mut execution = execution();
+        let call = FunctionCall {
+            call_id: "mcp_same".into(),
+            name: "mcp_lookup".into(),
+            arguments: "{}".into(),
+        };
+        execution.tools.insert(
+            call.call_id.clone(),
+            RetainedTool {
+                call: call.clone(),
+                input_digest: digest(b"{}"),
+                output: String::new(),
+                state: "sending".into(),
+                consent_id: None,
+            },
+        );
+        let state = WorkerState {
+            active: Mutex::new(std::collections::HashSet::new()),
+            provider: Mutex::new(None),
+            session_id: "session".into(),
+            generation: 1,
+            conversation_id: "conversation".into(),
+            workspace_id: "workspace".into(),
+            project_id: "project".into(),
+            token: "token".into(),
+            connection: Mutex::new(Connection::open_in_memory().unwrap()),
+            last_request: Mutex::new(Instant::now()),
+            idle_timeout: Mutex::new(Duration::from_secs(30)),
+        };
+        let input = SendInput {
+            command_id: "command".into(),
+            request_digest: "digest".into(),
+            allowed: true,
+            state: "sending".into(),
+        };
+        assert_eq!(
+            invoke_mcp(&state, &input, &mut execution, &call).await,
+            Err("provider_tool_uncertain")
+        );
+        let mut changed = call.clone();
+        changed.arguments = "{\"changed\":true}".into();
+        assert_eq!(
+            invoke_mcp(&state, &input, &mut execution, &changed).await,
+            Err("provider_tool_rejected")
+        );
+    }
+    #[tokio::test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one retained-ledger external-effect scenario"
+    )]
+    #[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+    async fn exact_external_effect_consent_is_consumed_once_and_survives_ledger_reopen_requires_loopback()
+     {
+        use axum::{Json, Router, response::IntoResponse, routing::post};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let count = Arc::new(AtomicUsize::new(0));
+        let observed = count.clone();
+        let app = Router::new().route("/mcp", post(move |Json(body): Json<Value>| {
+            let count = observed.clone();
+            async move { match body["method"].as_str() {
+                Some("initialize") => Json(json!({"jsonrpc":"2.0","id":"initialize","result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{}}}})).into_response(),
+                Some("notifications/initialized") => StatusCode::ACCEPTED.into_response(),
+                Some("tools/list") => Json(json!({"jsonrpc":"2.0","id":"tools","result":{"tools":(["create","create500","large"].iter().map(|name|json!({"name":name,"inputSchema":{"type":"object","properties":{},"required":[],"additionalProperties":false}})).collect::<Vec<_>>())}})).into_response(),
+                Some("tools/call") => { count.fetch_add(1, Ordering::SeqCst); if body["params"]["name"] == "create500" {return StatusCode::INTERNAL_SERVER_ERROR.into_response();} else if body["params"]["name"] == "large" {return Json(json!({"jsonrpc":"2.0","id":body["id"],"result":{"content":"x".repeat(5000)}})).into_response();} Json(json!({"jsonrpc":"2.0","id":body["id"],"result":{"content":[{"type":"text","text":"created"}]}})).into_response() },
+                _ => StatusCode::BAD_REQUEST.into_response(),
+            }}
+        }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}/mcp", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let command_id = uuid::Uuid::now_v7().to_string();
+        let state = WorkerState {
+            active: Mutex::new(std::collections::HashSet::new()),
+            provider: Mutex::new(None),
+            session_id: "session".into(),
+            generation: 1,
+            conversation_id: "conversation".into(),
+            workspace_id: "workspace".into(),
+            project_id: "project".into(),
+            token: "token".into(),
+            connection: Mutex::new(Connection::open_in_memory().unwrap()),
+            last_request: Mutex::new(Instant::now()),
+            idle_timeout: Mutex::new(Duration::from_secs(30)),
+        };
+        state
+            .connection
+            .lock()
+            .unwrap()
+            .execute_batch(super::super::super::SCHEMA)
+            .unwrap();
+        state
+            .connection
+            .lock()
+            .unwrap()
+            .execute_batch(super::super::SCHEMA)
+            .unwrap();
+        state.connection.lock().unwrap().execute("INSERT INTO provider_calls(command_id,command_digest,request_digest,evidence,state) VALUES(?1,'digest','digest','{}','sending')",[&command_id]).unwrap();
+        let mut execution = execution();
+        execution.mcp_tools.insert("mcp_create".into(), super::super::mcp::Tool {
+            alias:"mcp_create".into(),name:"create".into(),endpoint,description:"Create exact reviewed item".into(),input_schema:json!({"type":"object","properties":{},"required":[],"additionalProperties":false}),read_only:false,max_output_bytes:4096,timeout_seconds:5,bearer_file:None,
+            consent:Some(super::super::mcp::Consent {command_id:command_id.clone(),arguments_digest:digest(b"{}"),acknowledge_external_effect:true}),
+        });
+        state
+            .connection
+            .lock()
+            .unwrap()
+            .execute(
+                "INSERT INTO provider_loops(command_id,state) VALUES(?1,?2)",
+                params![command_id, serde_json::to_string(&execution).unwrap()],
+            )
+            .unwrap();
+        let input = SendInput {
+            command_id: command_id.clone(),
+            request_digest: "digest".into(),
+            allowed: true,
+            state: "sending".into(),
+        };
+        let call = FunctionCall {
+            call_id: "effect_1".into(),
+            name: "mcp_create".into(),
+            arguments: "{}".into(),
+        };
+        let result = invoke_mcp(&state, &input, &mut execution, &call)
+            .await
+            .unwrap();
+        assert!(result.contains("created"));
+        let json: String = state
+            .connection
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT state FROM provider_loops WHERE command_id=?1",
+                [&command_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let mut reopened: ProviderLoop = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            invoke_mcp(&state, &input, &mut reopened, &call)
+                .await
+                .unwrap(),
+            result
+        );
+        let second = FunctionCall {
+            call_id: "effect_2".into(),
+            ..call.clone()
+        };
+        assert_eq!(
+            invoke_mcp(&state, &input, &mut reopened, &second).await,
+            Err("provider_tool_rejected")
+        );
+        assert_eq!(count.load(Ordering::SeqCst), 1);
+        for (index, name) in ["create500", "large"].iter().enumerate() {
+            let mut tool = reopened.mcp_tools["mcp_create"].clone();
+            tool.alias = format!("mcp_failure_{index}");
+            tool.name = (*name).into();
+            let failed = FunctionCall {
+                call_id: format!("failed_{index}"),
+                name: tool.alias.clone(),
+                arguments: "{}".into(),
+            };
+            reopened.mcp_tools.insert(tool.alias.clone(), tool);
+            assert_eq!(
+                invoke_mcp(&state, &input, &mut reopened, &failed).await,
+                Err("provider_tool_uncertain")
+            );
+            assert_eq!(reopened.tools[&failed.call_id].state, "uncertain");
+            assert_eq!(
+                invoke_mcp(&state, &input, &mut reopened, &failed).await,
+                Err("provider_tool_uncertain")
+            );
+        }
+        assert_eq!(
+            count.load(Ordering::SeqCst),
+            3,
+            "post-commit errors cannot repeat effects"
+        );
+        server.abort();
     }
     #[test]
     fn retained_quota_counts_utf8_bytes_for_loop_results_and_provider_evidence() {

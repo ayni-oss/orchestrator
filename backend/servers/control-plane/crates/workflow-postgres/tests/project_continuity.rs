@@ -11,6 +11,10 @@ use ayni_orchestrator_workflow_postgres::{
     plans::{PlanContent, PlanScope, PlanTaskSpecification},
 };
 use uuid::Uuid;
+// Supervisor polling and assessment sweeps intentionally exercise global authority.
+// Each scenario owns that fixture authority until all its task runs are stopped.
+static FIXTURE_AUTHORITY: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 fn key() -> String {
     Uuid::now_v7().to_string()
@@ -127,6 +131,7 @@ async fn prepare(store: &WorkflowStore, scope: PlanScope<'_>) -> Result<TaskExec
                 runtime_image: format!("example.invalid/runtime@sha256:{}", "c".repeat(64)),
                 max_seconds: 600,
                 max_tokens: 10000,
+                upstream_selections: vec![],
             },
         )
         .await?;
@@ -156,7 +161,7 @@ async fn accept_coding(f: &Fixture) -> Result {
         .ok_or("claim missing")?;
     assert_eq!(
         claimed.command.attempt_id, prepared.attempt_id,
-        "fixture must own the serial claim"
+        "fixture must own the selected claim"
     );
     store
         .task_supervisor(&S::Observe {
@@ -186,6 +191,7 @@ async fn accept_coding(f: &Fixture) -> Result {
 #[tokio::test]
 #[ignore = "requires disposable PostgreSQL with separate runtime role"]
 async fn continuity_is_scoped_bounded_and_frozen_with_separate_accepted_outcomes() -> Result {
+    let _authority = FIXTURE_AUTHORITY.lock().await;
     let f = fixture().await?;
     accept_coding(&f).await?;
     let Fixture {
@@ -242,6 +248,7 @@ async fn continuity_is_scoped_bounded_and_frozen_with_separate_accepted_outcomes
     cancel_after_coding(&f).await?;
     replay_and_current(&f, &client, &fresh, &replay_key, &receipt, &before).await?;
     foreign_scope(&f, &client).await?;
+    cleanup_origin(&f).await?;
     driver.abort();
     Ok(())
 }
@@ -363,4 +370,221 @@ async fn command_bytes(client: &tokio_postgres::Client, turn: &str) -> Result<Ve
         )
         .await?
         .get(0))
+}
+
+#[tokio::test]
+#[ignore = "requires disposable PostgreSQL with separate runtime role"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one retained consent, coalescing and revocation lifecycle scenario"
+)]
+async fn assessments_require_bounded_consent_coalesce_and_replay_without_extra_turns() -> Result {
+    let _authority = FIXTURE_AUTHORITY.lock().await;
+    let f = fixture().await?;
+    let configuration = f.store.get_agent_configuration(&f.workspace.id, "").await?;
+    let consent_key = key();
+    let consent = f
+        .store
+        .authorize_outcome_assessments(f.scope(), &consent_key, &configuration.revision_id, 2)
+        .await?;
+    assert_eq!(
+        f.store
+            .authorize_outcome_assessments(f.scope(), &consent_key, &configuration.revision_id, 2)
+            .await?,
+        consent
+    );
+    assert!(
+        f.store
+            .authorize_outcome_assessments(f.scope(), &consent_key, &configuration.revision_id, 3)
+            .await
+            .is_err()
+    );
+    assert_eq!(f.store.admit_outcome_assessments(32).await?, 0);
+    let initial = f
+        .store
+        .get_snapshot(&f.workspace.id, &f.project.id, &f.origin.id)
+        .await?;
+    for turn in initial.nonterminal_turns {
+        f.store
+            .cancel_turn(
+                &f.workspace.id,
+                &f.project.id,
+                &f.origin.id,
+                &turn.id,
+                &key(),
+            )
+            .await?;
+    }
+    assert_eq!(
+        f.store.admit_outcome_assessments(32).await?,
+        0,
+        "progress and missing results invoke no model"
+    );
+    accept_coding(&f).await?;
+    assert_eq!(f.store.admit_outcome_assessments(32).await?, 1);
+    assert_eq!(f.store.admit_outcome_assessments(32).await?, 0);
+    let (db, driver) = connect(&f.runtime).await?;
+    let rows = db
+        .query(
+            "SELECT turn_id,snapshot FROM workflow_outcome_assessments WHERE conversation_id=$1",
+            &[&f.origin.id],
+        )
+        .await?;
+    assert_eq!(rows.len(), 1);
+    let turn: String = rows[0].get(0);
+    let snapshot: Vec<u8> = rows[0].get(1);
+    assert!(!String::from_utf8_lossy(&snapshot).contains("PRIVATE_"));
+    let bytes = command_bytes(&db, &turn).await?;
+    let reopened = WorkflowStore::new(f.runtime.clone());
+    assert_eq!(reopened.admit_outcome_assessments(32).await?, 0);
+    assert_eq!(command_bytes(&db, &turn).await?, bytes);
+    reopened
+        .cancel_turn(&f.workspace.id, &f.project.id, &f.origin.id, &turn, &key())
+        .await?;
+    assert_eq!(
+        reopened.admit_outcome_assessments(32).await?,
+        0,
+        "accepted outcome snapshot is deduplicated even after cancellation"
+    );
+    reopened
+        .authorize_outcome_assessments(f.scope(), &key(), &configuration.revision_id, 0)
+        .await?;
+    cancel_after_coding(&f).await?;
+    assert_eq!(
+        reopened.admit_outcome_assessments(32).await?,
+        0,
+        "revocation prevents new assessments after changed outcomes"
+    );
+    reopened
+        .authorize_outcome_assessments(f.scope(), &key(), &configuration.revision_id, 1)
+        .await?;
+    let changed = ayni_orchestrator_workflow_postgres::model::AgentConfiguration {
+        revision_id: String::new(),
+        instructions: "Changed workspace instructions".into(),
+        ..configuration.clone()
+    };
+    let current = reopened
+        .update_agent_configuration(&key(), &configuration.revision_id, &changed)
+        .await?;
+    assert_eq!(
+        reopened.admit_outcome_assessments(32).await?,
+        0,
+        "configuration changes pause old automatic consent"
+    );
+    let status = reopened.outcome_assessment_status(f.scope()).await?;
+    assert_eq!(
+        status.authorization.configuration_revision_id,
+        configuration.revision_id
+    );
+    assert_ne!(
+        status.authorization.configuration_revision_id,
+        current.revision_id
+    );
+    assert_eq!(status.admitted_assessments, 0);
+    assert!(
+        reopened
+            .authorize_outcome_assessments(f.scope(), &key(), &configuration.revision_id, 1)
+            .await
+            .is_err()
+    );
+    cleanup_origin(&f).await?;
+    driver.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires disposable PostgreSQL with separate runtime role"]
+async fn an_old_attempts_new_outcome_enters_the_bounded_assessment_selection() -> Result {
+    let _authority = FIXTURE_AUTHORITY.lock().await;
+    let f = fixture().await?;
+    let siblings = f.store.list_tasks(f.scope(), "", 32).await?.tasks;
+    for task in siblings
+        .iter()
+        .filter(|task| task.id != f.prepared.task_id)
+        .take(17)
+    {
+        let prepared = f
+            .store
+            .prepare_task_execution(f.scope(), &key(), &task.id, &f.prepared.inputs)
+            .await?;
+        let sibling = Fixture {
+            store: f.store.clone(),
+            runtime: f.runtime.clone(),
+            workspace: f.workspace.clone(),
+            project: f.project.clone(),
+            origin: f.origin.clone(),
+            prepared,
+            pod_uid: key(),
+        };
+        accept_coding(&sibling).await?;
+        cancel_after_coding(&sibling).await?;
+    }
+    // This attempt was prepared first, but its accepted outcome is now newest.
+    accept_coding(&f).await?;
+    let initial = f
+        .store
+        .get_snapshot(&f.workspace.id, &f.project.id, &f.origin.id)
+        .await?;
+    for turn in initial.nonterminal_turns {
+        f.store
+            .cancel_turn(
+                &f.workspace.id,
+                &f.project.id,
+                &f.origin.id,
+                &turn.id,
+                &key(),
+            )
+            .await?;
+    }
+    let configuration = f.store.get_agent_configuration(&f.workspace.id, "").await?;
+    f.store
+        .authorize_outcome_assessments(f.scope(), &key(), &configuration.revision_id, 1)
+        .await?;
+    assert_eq!(f.store.admit_outcome_assessments(32).await?, 1);
+    let (db, driver) = connect(&f.runtime).await?;
+    let row = db
+        .query_one(
+            "SELECT snapshot FROM workflow_outcome_assessments WHERE conversation_id=$1",
+            &[&f.origin.id],
+        )
+        .await?;
+    let bytes: Vec<u8> = row.get(0);
+    let facts: serde_json::Value = serde_json::from_slice(&bytes)?;
+    assert_eq!(facts.as_array().map(Vec::len), Some(16));
+    assert!(facts.as_array().is_some_and(|facts| {
+        facts
+            .iter()
+            .any(|fact| fact["attempt_id"] == f.prepared.attempt_id)
+    }));
+    cancel_after_coding(&f).await?;
+    cleanup_origin(&f).await?;
+    driver.abort();
+    Ok(())
+}
+
+async fn cleanup_origin(f: &Fixture) -> Result {
+    let configuration = f.store.get_agent_configuration(&f.workspace.id, "").await?;
+    f.store
+        .authorize_outcome_assessments(f.scope(), &key(), &configuration.revision_id, 0)
+        .await?;
+    let snapshot = f
+        .store
+        .get_snapshot(&f.workspace.id, &f.project.id, &f.origin.id)
+        .await?;
+    for turn in snapshot.nonterminal_turns {
+        f.store
+            .cancel_turn(
+                &f.workspace.id,
+                &f.project.id,
+                &f.origin.id,
+                &turn.id,
+                &key(),
+            )
+            .await?;
+    }
+    let (db, driver) = connect(&f.runtime).await?;
+    let pending:i64=db.query_one("SELECT count(*) FROM workflow_task_runs WHERE conversation_id=$1 AND state IN ('queued','claimed','reporting','cancelling')", &[&f.origin.id]).await?.get(0);
+    assert_eq!(pending, 0, "scenario must stop every admitted task run");
+    driver.abort();
+    Ok(())
 }

@@ -36,18 +36,54 @@ fn read_request(start: &v1::StartTaskExecutionRequest) -> v1::GetTaskAttemptRequ
     }
 }
 async fn attempt(
-    client: &mut Client,
+    client: &Client,
     start: &v1::StartTaskExecutionRequest,
 ) -> Result<v1::TaskAttempt> {
-    client
-        .get_task_attempt(read_request(start))
-        .await?
-        .into_inner()
-        .attempt
-        .ok_or_else(|| "publication attempt missing".into())
+    let scoped_request = read_request(start);
+    read_with_retry(
+        || {
+            let mut observer = client.clone();
+            let request = scoped_request.clone();
+            async move { observer.get_task_attempt(request).await }
+        },
+        Duration::from_secs(30),
+    )
+    .await?
+    .into_inner()
+    .attempt
+    .ok_or_else(|| "publication attempt missing".into())
+}
+// This observer may outlive a local rollout. Retry only the exact read, never
+// publication admission, permits, cancellation, or a changed scope.
+async fn read_with_retry<T, F, Fut>(
+    mut read: F,
+    budget: Duration,
+) -> std::result::Result<T, tonic::Status>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = std::result::Result<T, tonic::Status>>,
+{
+    let deadline = tokio::time::Instant::now() + budget;
+    loop {
+        let result = tokio::time::timeout_at(deadline, read())
+            .await
+            .map_err(|_| {
+                tonic::Status::unavailable("publication observer read deadline exceeded")
+            })?;
+        match result {
+            Err(error) if error.code() == Code::Unavailable => {
+                let retry_at = tokio::time::Instant::now() + Duration::from_millis(500);
+                if retry_at >= deadline {
+                    return Err(error);
+                }
+                tokio::time::sleep_until(retry_at).await;
+            }
+            result => return result,
+        }
+    }
 }
 async fn request(
-    client: &mut Client,
+    client: &Client,
     start: &v1::StartTaskExecutionRequest,
 ) -> Result<v1::StartTaskPublicationRequest> {
     let retained = attempt(client, start).await?;
@@ -148,7 +184,7 @@ pub async fn reject_cancel_stdin(client: &mut Client) -> Result {
     println!("consumed-publication-cancel: rejected=pass retained-identity=pass");
     Ok(())
 }
-pub async fn inspect_stdin(client: &mut Client) -> Result {
+pub async fn inspect_stdin(client: &Client) -> Result {
     let evidence: Evidence = input()?;
     let start = v1::StartTaskExecutionRequest::decode(evidence.execution_request.as_slice())?;
     let publication = attempt(client, &start)
@@ -249,4 +285,73 @@ fn validate_draft(result: &v1::TaskPublication) -> Result {
         return Err("publication did not retain the exact fixture draft identity".into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::read_with_retry;
+    use std::{future::ready, time::Duration};
+    use tonic::{Code, Status};
+
+    #[tokio::test]
+    async fn unavailable_read_recovers() -> std::result::Result<(), Status> {
+        let mut calls = 0;
+        let value = read_with_retry(
+            || {
+                calls += 1;
+                ready(if calls == 1 {
+                    Err(Status::unavailable("restart"))
+                } else {
+                    Ok(42)
+                })
+            },
+            Duration::from_secs(2),
+        )
+        .await?;
+        assert_eq!(value, 42);
+        assert_eq!(calls, 2);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn other_status_is_not_retried() {
+        let mut calls = 0;
+        let error = read_with_retry(
+            || {
+                calls += 1;
+                ready(Err::<(), _>(Status::failed_precondition(
+                    "authority changed",
+                )))
+            },
+            Duration::from_secs(2),
+        )
+        .await;
+        assert!(matches!(error, Err(status) if status.code() == Code::FailedPrecondition));
+        assert_eq!(calls, 1);
+    }
+
+    #[tokio::test]
+    async fn unavailable_does_not_exceed_budget() {
+        let mut calls = 0;
+        let error = read_with_retry(
+            || {
+                calls += 1;
+                ready(Err::<(), _>(Status::unavailable("restart")))
+            },
+            Duration::from_millis(5),
+        )
+        .await;
+        assert!(matches!(error, Err(status) if status.code() == Code::Unavailable));
+        assert_eq!(calls, 1);
+    }
+
+    #[tokio::test]
+    async fn stalled_read_is_bounded() {
+        let error = read_with_retry(
+            std::future::pending::<std::result::Result<(), Status>>,
+            Duration::from_millis(5),
+        )
+        .await;
+        assert!(matches!(error, Err(status) if status.code() == Code::Unavailable));
+    }
 }

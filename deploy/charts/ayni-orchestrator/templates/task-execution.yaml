@@ -40,6 +40,10 @@ spec:
               value: {{ .Values.images.scriptedExecutor | quote }}
             - name: ORCHESTRATOR_TASK_FIXTURE_ENABLED
               value: {{ .Values.taskExecution.fixtureEnabled | quote }}
+            - name: ORCHESTRATOR_ANTHROPIC_ENABLED
+              value: {{ .Values.providers.anthropic.enabled | quote }}
+            - name: ANTHROPIC_BASE_URL
+              value: {{ .Values.providers.anthropic.baseUrl | quote }}
             - name: ORCHESTRATOR_OPENAI_ENABLED
               value: {{ .Values.providers.openai.enabled | quote }}
             - name: OPENAI_BASE_URL
@@ -96,8 +100,8 @@ spec:
               app.kubernetes.io/name: ayni-orchestrator-control-plane
       ports:
         - { protocol: TCP, port: {{ .Values.controlPlane.httpPort }} }
-    {{- if .Values.providers.openai.enabled }}
-    {{- if .Values.providers.openai.fixtureEgress }}
+    {{- if or .Values.providers.openai.enabled .Values.providers.anthropic.enabled }}
+    {{- if or .Values.providers.openai.fixtureEgress .Values.providers.anthropic.fixtureEgress }}
     - to:
         - namespaceSelector:
             matchLabels:
@@ -107,7 +111,8 @@ spec:
               app: provider-fixture
       ports:
         - { protocol: TCP, port: 8080 }
-    {{- else }}
+    {{- end }}
+    {{- if or (and .Values.providers.openai.enabled (not .Values.providers.openai.fixtureEgress)) (and .Values.providers.anthropic.enabled (not .Values.providers.anthropic.fixtureEgress)) }}
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0

@@ -35,8 +35,8 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
   let historyBefore = '0';
   let historyPlan = '';
   const fields = ['title', 'objective', 'scope', 'outOfScope', 'constraints', 'unresolvedQuestions'];
-  const taskFields = ['key', 'objective', 'scope', 'outOfScope', 'acceptanceCriteria', 'repository', 'sourceRef', 'executionLimits', 'unresolvedInputs'];
-  const arrays = ['constraints', 'unresolvedQuestions', 'acceptanceCriteria', 'unresolvedInputs'];
+  const taskFields = ['key', 'objective', 'scope', 'outOfScope', 'acceptanceCriteria', 'repository', 'sourceRef', 'executionLimits', 'unresolvedInputs', 'dependsOn', 'sourcePaths'];
+  const arrays = ['constraints', 'unresolvedQuestions', 'acceptanceCriteria', 'unresolvedInputs', 'dependsOn', 'sourcePaths'];
   const inputValue = (name, value) => arrays.includes(name) ? lines(value) : value;
   const displayValue = value => Array.isArray(value) ? value.join('\n') : value || '';
   function persist() { store(planDraftKey(getScope()), draft); }
@@ -48,7 +48,7 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
   function taskEditor(value) {
     const card = document.createElement('fieldset');
     const legend = document.createElement('legend'); legend.textContent = 'Proposed task'; card.append(legend);
-    const labels = { key: 'Task key', objective: 'Task objective', scope: 'Included scope', outOfScope: 'Excluded scope', acceptanceCriteria: 'Acceptance criteria · one per line', repository: 'Declared repository', sourceRef: 'Declared source reference', executionLimits: 'Execution limits', unresolvedInputs: 'Unresolved inputs · one per line' };
+    const labels = { key: 'Task key', objective: 'Task objective', scope: 'Included scope', outOfScope: 'Excluded scope', acceptanceCriteria: 'Acceptance criteria · one per line', repository: 'Declared repository', sourceRef: 'Declared source reference', executionLimits: 'Execution limits', unresolvedInputs: 'Unresolved inputs · one per line', dependsOn: 'Dependency task keys · one per line', sourcePaths: 'Read and write file paths · one per line' };
     for (const name of taskFields) {
       const label = document.createElement('label'); label.textContent = labels[name];
       const input = document.createElement(['key', 'repository', 'sourceRef'].includes(name) ? 'input' : 'textarea');
@@ -96,7 +96,7 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
     for (const task of value.content.tasks || []) {
       const article = document.createElement('article'); article.className = 'plan-task';
       paragraph(article, `Proposed task ${task.key}`, task.objective);
-      for (const [name,label] of [['scope','Included scope'],['outOfScope','Excluded scope'],['acceptanceCriteria','Acceptance criteria'],['repository','Declared repository · unverified'],['sourceRef','Declared source · unverified'],['executionLimits','Execution limits'],['unresolvedInputs','Unresolved inputs']]) paragraph(article,label,task[name]);
+      for (const [name,label] of [['scope','Included scope'],['outOfScope','Excluded scope'],['acceptanceCriteria','Acceptance criteria'],['repository','Declared repository · unverified'],['sourceRef','Declared source · unverified'],['executionLimits','Execution limits'],['unresolvedInputs','Unresolved inputs'],['dependsOn','Dependency task keys'],['sourcePaths','Read and write file paths']]) paragraph(article,label,task[name]);
       $('plan-review').append(article);
     }
     reviewStatus();
@@ -135,7 +135,7 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
     paragraph(parent, 'Immutable origin', `Workspace ${task.workspaceId}\nProject ${task.projectId}\nOriginating conversation ${task.conversationId}\nPlan ${task.planId}\nVersion ${task.versionId}\n${task.contentDigest}\nApproval ${task.approvalId}`);
     paragraph(parent, 'Prerequisites recorded at admission', task.executionBlockers);
     paragraph(parent, 'Frozen task objective', task.specification.objective);
-    for (const [name, label] of [['scope', 'Included scope'], ['outOfScope', 'Excluded scope'], ['acceptanceCriteria', 'Acceptance criteria'], ['repository', 'Declared repository · unverified'], ['sourceRef', 'Declared source · unverified'], ['executionLimits', 'Declared execution limits'], ['unresolvedInputs', 'Unresolved execution inputs']]) paragraph(parent, label, task.specification[name]);
+    for (const [name, label] of [['scope', 'Included scope'], ['outOfScope', 'Excluded scope'], ['acceptanceCriteria', 'Acceptance criteria'], ['repository', 'Declared repository · unverified'], ['sourceRef', 'Declared source · unverified'], ['executionLimits', 'Declared execution limits'], ['unresolvedInputs', 'Unresolved execution inputs'], ['dependsOn', 'Dependency task keys'], ['sourcePaths', 'Read and write file paths']]) paragraph(parent, label, task.specification[name]);
   }
   function showApproval(result) {
     approval = result.approval;

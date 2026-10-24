@@ -78,6 +78,7 @@ pub struct RecoveryRecord {
     pub task_id: String,
     pub attempt_id: String,
     pub kind: String,
+    pub author: String,
     pub content: RecoveryContent,
     pub content_digest: String,
     pub created_at: Timestamp,

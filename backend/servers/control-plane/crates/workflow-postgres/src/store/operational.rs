@@ -92,6 +92,7 @@ impl WorkflowStore {
             pending.get::<_, i64>(1)
         );
         append_queue_metrics(&client, &mut output).await?;
+        append_task_metrics(&client, &mut output).await?;
         let row = client
             .query_one("SELECT max(version) FROM workflow_schema_migrations", &[])
             .await?;
@@ -141,5 +142,47 @@ async fn append_queue_metrics(
         "workflow_queue_series_omitted {}",
         row.get::<_, i64>(0)
     );
+    Ok(())
+}
+
+async fn append_task_metrics(
+    client: &tokio_postgres::Client,
+    output: &mut String,
+) -> Result<(), StoreError> {
+    for row in client.query("SELECT state,count(*),COALESCE(sum(octet_length(source_pack)),0)::bigint FROM workflow_task_runs GROUP BY state", &[]).await? {
+        let state: String = row.get(0);
+        let _ = writeln!(output, "workflow_task_runs{{state=\"{state}\"}} {}",row.get::<_,i64>(1));
+        let _ = writeln!(output, "workflow_task_source_bytes{{state=\"{state}\"}} {}",row.get::<_,i64>(2));
+    }
+    let row=client.query_one("SELECT count(*) FILTER(WHERE source_retired_at IS NOT NULL),COALESCE(sum(source_retired_bytes),0)::bigint,count(*) FILTER(WHERE source_reclaim_after IS NOT NULL AND source_retired_at IS NULL) FROM workflow_task_runs",&[]).await?;
+    let _ = writeln!(
+        output,
+        "workflow_task_sources_retired {}",
+        row.get::<_, i64>(0)
+    );
+    let _ = writeln!(
+        output,
+        "workflow_task_source_bytes_reclaimed {}",
+        row.get::<_, i64>(1)
+    );
+    let _ = writeln!(
+        output,
+        "workflow_task_sources_grace_period {}",
+        row.get::<_, i64>(2)
+    );
+    for row in client
+        .query(
+            "SELECT state,count(*) FROM workflow_task_publications GROUP BY state",
+            &[],
+        )
+        .await?
+    {
+        let state: String = row.get(0);
+        let _ = writeln!(
+            output,
+            "workflow_task_publications{{state=\"{state}\"}} {}",
+            row.get::<_, i64>(1)
+        );
+    }
     Ok(())
 }

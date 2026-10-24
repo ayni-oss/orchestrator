@@ -13,8 +13,11 @@ It is deliberately absent from the browser mutation allowlist and model tools.
 The operator attests source evidence; a digest supplied by an untrusted agent is
 not verification. The `workflow-prepare-task` utility verifies trusted local Git
 objects without network access, hooks, checkout filters or reading dirty source.
-It compares origin to the approved repository, resolves the approved source ref
-and reads the exact `.ayni.lock` blob at that commit. The source commit is the
+It compares origin to the approved repository, resolves the approved source ref or
+explicit integrated source commit, and reads the exact `.ayni.lock` blob at that commit.
+[Reviewed dependencies](task-dependencies.md) require explicit task/attempt/commit
+selections; the helper verifies every selected upstream commit is an ancestor of
+the integrated source. The source commit is the
 frozen identity even if the ref later moves. Only SHA-1 Git repositories are
 supported initially; lock blobs are bounded at 4 MiB. Local checkout access does
 not establish remote fetch/push permissions.
@@ -26,6 +29,12 @@ or Ayni lock validity. Later workers must verify those using supported Ayni CLI
 contracts before claiming execution readiness and accepted quality. Do not treat
 `prepared` as worker authorization or bypass later checks.
 
+A plan may review up to 64 exact `source_paths` for model context and coding
+writes. Paths are relative, unique and bounded; traversal, symlinks and protected
+inputs are rejected. This allows a small reviewed change in a repository whose
+full source exceeds model context limits while preserving the full snapshot for
+managed validation. An empty selection retains the existing full-tree bounds.
+
 The complete approved task specification, including natural-language limits,
 remains authoritative. Repository and source declarations cannot be substituted.
 Unresolved approved inputs remain blockers; no free-text answer silently changes
@@ -36,7 +45,7 @@ can link another execution segment using the same frozen inputs and a newly appr
 
 The command carries full workspace/project/conversation/task scope, idempotency
 key and bounded inputs: exact repository/ref, resolved 40-character commit,
-SHA-256 lock digest, digest-pinned runtime and execution budgets. Parent origin
+SHA-256 lock digest, digest-pinned runtime, execution budgets and exact upstream selections. Parent origin
 comes from the retained task. The server freezes the current immutable workspace
 agent configuration revision. All APIs stay v1.
 

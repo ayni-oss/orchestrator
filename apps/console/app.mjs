@@ -1,7 +1,7 @@
 import { mountTasks } from './tasks.mjs';
 import { mountFeedback } from './feedback.mjs';
 import { mountPlans } from './plans.mjs';
-import { newerOrEqual, describe, scopeKey, makeCommand, appendActivity, providerCallView } from './state.mjs';
+import { outcomeAssessmentCommand, newerOrEqual, describe, scopeKey, makeCommand, appendActivity, providerCallView } from './state.mjs';
 
 const $ = id => document.getElementById(id);
 const saved = key => { try { return JSON.parse(sessionStorage.getItem(key)); } catch { return null; } };
@@ -51,7 +51,7 @@ async function api(method, body) {
 function scopeBody() { return { workspaceId: scope.workspaceId, projectId: scope.projectId, conversationId: scope.conversationId }; }
 function controls() {
   for (const form of document.querySelectorAll('form')) {
-    const unavailable = !!pending || sending || discoveryBusy || (form.id === 'agent-configuration' && (!configuration || configuration.workspaceId !== scope.workspaceId)) || (form.id === 'create-project' && !scope.workspaceId) || (form.id === 'create-conversation' && !scope.projectId) || (form.id === 'send' && !scope.conversationId) || (form.id === 'plan-editor' && !scope.conversationId);
+    const unavailable = !!pending || sending || discoveryBusy || (form.id === 'agent-configuration' && (!configuration || configuration.workspaceId !== scope.workspaceId)) || (form.id === 'create-project' && !scope.workspaceId) || (form.id === 'create-conversation' && !scope.projectId) || (form.id === 'assessment-authorization' && (!scope.conversationId || configuration?.workspaceId !== scope.workspaceId)) || (form.id === 'send' && !scope.conversationId) || (form.id === 'plan-editor' && !scope.conversationId);
     for (const input of form.elements) input.disabled = unavailable;
   }
   $('plan-approve').disabled = !plans.canApprove() || !!pending || sending || discoveryBusy;
@@ -89,6 +89,8 @@ async function retry() {
       plans.accepted(command, result);
     } else if (command.method === 'SendMessage') {
       if (scopeKey(command.body) === scopeKey(scope)) $('content').value = '';
+    } else if (command.method === 'AuthorizeOutcomeAssessments') {
+      if (scopeKey(command.body) === scopeKey(scope)) { $('assessment-consent').checked = false; await loadAssessmentStatus(); }
     } else if (command.method === 'UpdateAgentConfiguration') {
       if (command.body.configuration.workspaceId === scope.workspaceId) await loadConfiguration();
     } else if (command.method === 'CancelTurn') {
@@ -179,6 +181,16 @@ async function loadConfiguration() {
   for (const key of ['instructions', 'provider', 'model', 'maxInputTokens', 'maxOutputTokens', 'maxTotalTokens', 'idleTimeoutSeconds']) $('agent-configuration').elements.namedItem(key).value = configuration[key] || '';
   $('configuration-status').textContent = `Revision ${configuration.revisionId} · interface v1`;
   controls();
+  if (scope.conversationId) await loadAssessmentStatus();
+}
+async function loadAssessmentStatus() {
+  const selected=scopeBody();
+  if (!selected.conversationId) return;
+  const status=await api('GetOutcomeAssessmentStatus',selected);
+  if (scopeKey(selected)!==scopeKey(scope)) return;
+  const count=Number(status.maxAssessments || 0); const used=Number(status.admittedAssessments || 0);
+  const paused=count>used && status.configurationRevisionId!==configuration?.revisionId;
+  $('assessment-status').textContent = count===0 ? 'Future assessments are stopped.' : `${used} of ${count} assessments admitted.${paused?' Paused because the workspace configuration changed. Review the current model and save a new allowance.':''} Current limits: ${configuration?.model || 'loading model'}, ${configuration?.maxInputTokens || '—'} input tokens and ${configuration?.maxOutputTokens || '—'} output tokens per assessment.`;
 }
 async function loadSession() {
   const selected = scopeBody();
@@ -207,8 +219,9 @@ async function loadProviderCalls() {
     const reservation = document.createElement('p'); reservation.textContent = `Reserved allowance: ${view.reservation}`;
     const identity = document.createElement('p'); identity.className = 'call-identity'; identity.textContent = `Call ${call.callId} · turn ${call.turnId}`;
     article.append(heading, state, usage, reservation, identity);
-    if (view.tools.length) { const tools = document.createElement('p'); tools.textContent = `Scoped reads: ${view.tools.join(' · ')}`; article.append(tools); }
+    if (view.tools.length) { const tools = document.createElement('p'); tools.textContent = `Tools: ${view.tools.join(' · ')}`; article.append(tools); }
     if (call.reportedModel) { const model = document.createElement('p'); model.textContent = `Reported model: ${call.reportedModel}`; article.append(model); }
+    if (view.toolNotice) { const notice = document.createElement('p'); notice.className = 'provider-notice'; notice.textContent = view.toolNotice; article.append(notice); }
     if (view.notice) { const notice = document.createElement('p'); notice.className = 'provider-notice'; notice.textContent = view.notice; article.append(notice); }
     if (call.state === 'uncertain' && !call.uncertaintyAcknowledged) {
       const label = document.createElement('label');
@@ -281,7 +294,7 @@ function openWatch(version) {
       if (version !== generation || current !== source) return;
       const frame = JSON.parse(event.data);
       if (frame.snapshot) {
-        renderSnapshot(frame.snapshot); await Promise.all([loadProviderCalls(), feedback.refresh()]);
+        renderSnapshot(frame.snapshot); await Promise.all([loadProviderCalls(), loadAssessmentStatus(), feedback.refresh()]);
         if (version !== generation || current !== source) return;
         cursor = frame.snapshot.resumeCursor;
       }
@@ -290,7 +303,7 @@ function openWatch(version) {
         const result = await api('GetConversationSnapshot', scopeBody());
         if (version !== generation || current !== source) return;
         renderSnapshot(result.snapshot);
-        await Promise.all([loadProviderCalls(), feedback.refresh()]);
+        await Promise.all([loadProviderCalls(), loadAssessmentStatus(), feedback.refresh()]);
         if (version !== generation || current !== source) return;
         activities = appendActivity(activities, frame.update);
         $('activity').replaceChildren(...activities.map(update => { const li = document.createElement('li'); li.textContent = `${describe(update.presentationState)} · ${update.safeReason || 'workflow update'}`; return li; }));
@@ -312,13 +325,18 @@ async function selectConversation(id) {
   scope.conversationId = id || ''; store('selection', scope);
   plans.select(); tasks.select(); feedback.select();
   currentSession = undefined; $('session-state').textContent = 'No session.';
+  $('assessment-status').textContent = 'Choose a conversation.'; $('assessment-consent').checked = false;
   $('provider-call-status').textContent = 'No conversation selected.'; $('provider-calls').replaceChildren(); $('turn-controls').replaceChildren();
   $('messages').replaceChildren(); $('history').replaceChildren(); $('activity').replaceChildren(); historyBefore = '0'; historySnapshotId = ''; historyHasMore = true; historyIds = new Set();
   $('title').textContent = id ? 'Opening conversation…' : 'A place to work things through.';
   $('turn-state').textContent = 'No conversation selected.'; $('older').hidden = true; $('connection').textContent = id ? 'Connecting…' : 'Choose a conversation'; $('toggle-watch').textContent = 'Disconnect';
   for (const button of $('conversations').children) button.setAttribute('aria-current', String(button.dataset.id === id));
-  showEmpty(); controls(); openWatch(generation); if (id) await loadSession();
+  showEmpty(); controls(); openWatch(generation); if (id) { await loadSession(); await loadAssessmentStatus(); }
 }
+$('assessment-authorization').onsubmit = event => {
+  event.preventDefault();
+  try { submit('AuthorizeOutcomeAssessments', outcomeAssessmentCommand(scopeBody(),configuration,$('assessment-count').value,$('assessment-consent').checked)); } catch(error) { showError(error); }
+};
 $('agent-configuration').onsubmit = event => {
   event.preventDefault();
   const proposed = Object.fromEntries(new FormData(event.target));

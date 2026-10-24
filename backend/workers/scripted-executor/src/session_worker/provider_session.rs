@@ -52,7 +52,10 @@ fn scope_valid(
             && binding.project_id == state.project_id
             && binding.conversation_id == state.conversation_id
             && binding.executor_generation == state.generation
-            && binding.execution_binding_revision == "openai-responses-v1"
+            && ayni_orchestrator_events::workflow::binding_provider(
+                &binding.execution_binding_revision,
+            )
+            .is_some()
     }) && command.session.as_ref().is_some_and(|scope| {
         scope.session_id == state.session_id && scope.generation == state.generation
     })
@@ -73,6 +76,7 @@ pub(super) async fn prepare(
         context_digest,
         prepared,
         evidence,
+        mcp_tools,
     } = build_preparation(&state, &input)?;
     let mut connection = state
         .connection
@@ -99,8 +103,9 @@ pub(super) async fn prepare(
         tx.execute("DELETE FROM provider_calls WHERE state IN ('completed','failed','cancelled') AND settled=1 AND command_id IN (SELECT command_id FROM results WHERE acknowledged=1 AND acknowledged_at < unixepoch()-691200)", []).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
         tx.execute("DELETE FROM provider_loops WHERE command_id NOT IN (SELECT command_id FROM provider_calls)", []).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
         tx.execute("DELETE FROM results WHERE acknowledged=1 AND acknowledged_at < unixepoch()-691200 AND command_id NOT IN (SELECT command_id FROM provider_calls)", []).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
-        let loop_json = serde_json::to_string(&ProviderLoop::new(&input, &prepared.bytes)?)
-            .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+        let loop_json =
+            serde_json::to_string(&ProviderLoop::new(&input, &prepared.bytes, mcp_tools)?)
+                .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
         let json = serde_json::to_string(&evidence).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
         let count: i64 = tx
             .query_row("SELECT count(*) FROM provider_calls", [], |row| row.get(0))
@@ -168,6 +173,7 @@ struct PreparedCall {
     context_digest: String,
     prepared: ayni_orchestrator_providers::responses::PreparedRequest,
     evidence: ProviderCallEvidence,
+    mcp_tools: std::collections::BTreeMap<String, mcp::Tool>,
 }
 
 fn build_preparation(
@@ -187,7 +193,15 @@ fn build_preparation(
         .context_manifest
         .as_ref()
         .ok_or(StatusCode::BAD_REQUEST)?;
-    if config.provider != "openai" || input.context.len() as u64 != manifest.record_count {
+    if ayni_orchestrator_events::workflow::binding_provider(
+        &command
+            .binding
+            .as_ref()
+            .ok_or(StatusCode::BAD_REQUEST)?
+            .execution_binding_revision,
+    ) != Some(config.provider.as_str())
+        || input.context.len() as u64 != manifest.record_count
+    {
         return Err(StatusCode::BAD_REQUEST);
     }
     // The application supplies records only from the immutable eligibility manifest.
@@ -219,10 +233,11 @@ fn build_preparation(
         config.max_total_tokens,
     )
     .map_err(|_| StatusCode::UNPROCESSABLE_ENTITY)?;
+    let (prepared, mcp_tools) = mcp::prepare(state, config, &identity.id, prepared)?;
     let request_digest = digest(&prepared.bytes);
     let evidence = ProviderCallEvidence {
         call_id: identity.id.clone(),
-        provider: "openai".into(),
+        provider: config.provider.clone(),
         model: config.model.clone(),
         configuration_revision_id: config.revision_id.clone(),
         context_digest: context_digest.clone(),
@@ -240,6 +255,7 @@ fn build_preparation(
         context_digest,
         prepared,
         evidence,
+        mcp_tools,
     })
 }
 
@@ -273,6 +289,7 @@ fn retained_preparation(
             reserved_output_tokens: evidence.reserved_output_tokens,
         },
         evidence,
+        mcp_tools: std::collections::BTreeMap::new(),
     }))
 }
 
@@ -446,6 +463,7 @@ async fn perform_request(
     }
 }
 
+mod mcp;
 mod tools;
 use tools::ProviderLoop;
 
@@ -548,14 +566,24 @@ fn ensure_provider(
 }
 
 pub(super) fn credential_client() -> Result<ResponsesClient, ()> {
-    let path = env::var("ORCHESTRATOR_OPENAI_API_KEY_PATH").map_err(|_| ())?;
+    let provider = env::var("ORCHESTRATOR_SESSION_PROVIDER").unwrap_or_else(|_| "openai".into());
+    let path_name = if provider == "anthropic" {
+        "ORCHESTRATOR_ANTHROPIC_API_KEY_PATH"
+    } else {
+        "ORCHESTRATOR_OPENAI_API_KEY_PATH"
+    };
+    let path = env::var(path_name).map_err(|_| ())?;
     if !std::path::Path::new(&path).is_absolute() {
         return Err(());
     }
     let key = fs::read_to_string(path).map_err(|_| ())?;
-    let endpoint =
-        env::var("OPENAI_BASE_URL").unwrap_or_else(|_| "https://api.openai.com/v1".into());
-    ResponsesClient::new(key.trim_end_matches(['\n', '\r']), &endpoint).map_err(|_| ())
+    let endpoint = if provider == "anthropic" {
+        env::var("ANTHROPIC_BASE_URL").unwrap_or_else(|_| "https://api.anthropic.com/v1".into())
+    } else {
+        env::var("OPENAI_BASE_URL").unwrap_or_else(|_| "https://api.openai.com/v1".into())
+    };
+    ResponsesClient::for_provider(&provider, key.trim_end_matches(['\n', '\r']), &endpoint)
+        .map_err(|_| ())
 }
 
 pub(super) async fn cancel(

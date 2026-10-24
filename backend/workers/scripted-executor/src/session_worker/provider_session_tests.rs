@@ -14,6 +14,9 @@ use ayni_orchestrator_events::{
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+#[path = "provider_session/anthropic_tests.rs"]
+mod anthropic_tests;
+
 struct Fixture {
     url: String,
     count: Arc<AtomicUsize>,
@@ -180,7 +183,9 @@ fn sending(prepared: &Preparation, allowed: bool, state: &str) -> SendInput {
 }
 
 #[tokio::test]
-async fn retained_response_replays_across_worker_restart_without_another_paid_call() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn retained_response_replays_across_worker_restart_without_another_paid_call_requires_loopback()
+ {
     let fixture = fixture(SUCCESS, Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("ledger.sqlite");
@@ -240,7 +245,8 @@ async fn retained_response_replays_across_worker_restart_without_another_paid_ca
 }
 
 #[tokio::test]
-async fn sending_intent_after_restart_is_uncertain_and_never_resent() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn sending_intent_after_restart_is_uncertain_and_never_resent_requires_loopback() {
     let fixture = fixture(SUCCESS, Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("ledger.sqlite");
@@ -279,7 +285,8 @@ async fn sending_intent_after_restart_is_uncertain_and_never_resent() {
 }
 
 #[tokio::test]
-async fn ambiguous_body_is_retained_once_without_a_second_request() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn ambiguous_body_is_retained_once_without_a_second_request_requires_loopback() {
     let fixture = fixture("{truncated", Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
     let worker = worker(&directory.path().join("ledger.sqlite"), &fixture.url, None);
@@ -306,7 +313,8 @@ async fn ambiguous_body_is_retained_once_without_a_second_request() {
 }
 
 #[tokio::test]
-async fn cancelled_prepared_request_cannot_send() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn cancelled_prepared_request_cannot_send_requires_loopback() {
     let fixture = fixture(SUCCESS, Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
     let worker = worker(&directory.path().join("ledger.sqlite"), &fixture.url, None);
@@ -331,7 +339,8 @@ async fn cancelled_prepared_request_cannot_send() {
 }
 
 #[tokio::test]
-async fn cancellation_interrupts_locally_and_keeps_external_outcome_unknown() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn cancellation_interrupts_locally_and_keeps_external_outcome_unknown_requires_loopback() {
     let fixture = fixture(SUCCESS, Duration::from_secs(60)).await;
     let directory = tempfile::tempdir().unwrap();
     let worker = worker(&directory.path().join("ledger.sqlite"), &fixture.url, None);
@@ -381,7 +390,9 @@ async fn cancellation_interrupts_locally_and_keeps_external_outcome_unknown() {
     assert_eq!(fixture.count.load(Ordering::SeqCst), 1);
 }
 #[tokio::test]
-async fn unknown_usage_retains_request_and_reservation_after_application_decision() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn unknown_usage_retains_request_and_reservation_after_application_decision_requires_loopback()
+ {
     let fixture=fixture(r#"{"id":"resp_unknown","model":"fixture-model","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"answer"}]}]}"#,Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
     let state = worker(&directory.path().join("ledger.sqlite"), &fixture.url, None);
@@ -425,7 +436,8 @@ async fn unknown_usage_retains_request_and_reservation_after_application_decisio
 }
 
 #[tokio::test]
-async fn output_limit_retains_terminal_usage_and_never_retries() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn output_limit_retains_terminal_usage_and_never_retries_requires_loopback() {
     let fixture=fixture(r#"{"id":"resp_incomplete","model":"fixture-model","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[],"usage":{"input_tokens":4,"output_tokens":16,"total_tokens":20}}"#,Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
     let state = worker(&directory.path().join("ledger.sqlite"), &fixture.url, None);
@@ -457,7 +469,9 @@ async fn output_limit_retains_terminal_usage_and_never_retries() {
 }
 
 #[tokio::test]
-async fn credentials_appearing_after_worker_start_are_loaded_before_preparation() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn credentials_appearing_after_worker_start_are_loaded_before_preparation_requires_loopback()
+{
     let fixture = fixture(SUCCESS, Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
     let state = worker(&directory.path().join("ledger.sqlite"), &fixture.url, None);

@@ -333,5 +333,6 @@ pub struct AgentConfiguration {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TurnInputs {
     pub turn_id: String,
+    pub command_event_id: String,
     pub configuration: AgentConfiguration,
 }

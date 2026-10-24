@@ -114,6 +114,7 @@ async fn prove_child(
         .await?;
     prove_project_fact(store, scope, task, receipt, runtime).await?;
     assert_eq!(child.state, "queued");
+    prove_quality_context(before, &child)?;
     assert_eq!(child.provider_state, "not_started");
     assert_eq!(child.command.max_seconds, 300);
     assert_eq!(child.command.max_tokens, 4096);
@@ -406,5 +407,36 @@ async fn prove_project_fact(
         1
     );
     driver.abort();
+    Ok(())
+}
+
+fn prove_quality_context(
+    before: &ayni_orchestrator_events::task_execution::TaskRun,
+    child: &ayni_orchestrator_events::task_execution::TaskRun,
+) -> Result {
+    if let Some(quality) = &before.quality {
+        let retained = &child
+            .command
+            .recovery
+            .as_ref()
+            .ok_or("quality context missing")?
+            .quality_artifact;
+        assert_eq!(
+            retained, &quality.artifact,
+            "confirmed recovery preserves the complete original report"
+        );
+        assert!(
+            retained.len() > 262_144,
+            "large reports must survive recovery command storage"
+        );
+        assert!(
+            serde_json::to_vec(&child.command)?.len()
+                <= ayni_orchestrator_events::task_execution::MAX_TASK_COMMAND_BYTES
+        );
+        assert!(
+            serde_json::to_vec(&child)?.len()
+                < ayni_orchestrator_events::task_execution::MAX_TASK_SUPERVISOR_RESPONSE_BYTES
+        );
+    }
     Ok(())
 }

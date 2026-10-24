@@ -24,11 +24,13 @@ export function tokenCount(value) {
 }
 export function providerCallView(call) {
   const unresolved = ['prepared', 'sending', 'uncertain'].includes(call.state);
+  const uncertainTools = (call.toolInvocations || []).filter(tool => /^mcp_[a-z0-9_]{1,60}$/.test(tool.name) && ['sending', 'uncertain'].includes(tool.state));
   return {
     binding: `${call.provider || 'Unknown provider'} / ${call.model || 'Unknown model'}`,
     state: describe(call.state),
     usage: `Input ${tokenCount(call.inputTokens)} · output ${tokenCount(call.outputTokens)} · total ${tokenCount(call.totalTokens)}`,
-    tools: (call.toolInvocations || []).filter(tool => ['read_workspace_instructions', 'read_project_status', 'read_conversation_history'].includes(tool.name)).map(tool => `${tool.name} · ${tool.state || 'retained'}`),
+    tools: (call.toolInvocations || []).filter(tool => (['read_workspace_instructions', 'read_project_status', 'read_conversation_history'].includes(tool.name) || /^mcp_[a-z0-9_]{1,60}$/.test(tool.name))).map(tool => `${tool.name} · ${tool.state || 'retained'}`),
+    toolNotice: uncertainTools.length ? `The result of an external tool action is unknown. Check the external system before repeating it. ${uncertainTools.map(tool => `${tool.name} · invocation ${/^[a-zA-Z0-9_-]{1,128}$/.test(tool.invocationId || '') ? tool.invocationId : 'unavailable'}`).join('; ')}` : '',
     reservation: `Input ${tokenCount(call.reservedInputTokens)} · output ${tokenCount(call.reservedOutputTokens)} · total ${tokenCount(call.reservedTotalTokens)}`,
     notice: call.uncertaintyAcknowledged
       ? 'Uncertain outcome acknowledged. The call may have incurred a charge. Its evidence remains retained and this call will not be retried.'
@@ -40,4 +42,13 @@ export function providerCallView(call) {
           ? 'Cancellation requested. Retained provider result and usage remain part of the record.'
           : '',
   };
+}
+
+// Freeze the exact origin and reviewed configuration before a retryable command.
+export function outcomeAssessmentCommand(scope, configuration, count, consent) {
+  const maxAssessments = Number(count);
+  if (!scope?.conversationId || !scope.projectId || !scope.workspaceId || configuration?.workspaceId !== scope.workspaceId || !configuration.revisionId) throw new Error('Choose a conversation and load its workspace configuration.');
+  if (!Number.isInteger(maxAssessments) || maxAssessments < 0 || maxAssessments > 10) throw new Error('Choose an assessment allowance from 0 to 10.');
+  if (maxAssessments > 0 && !consent) throw new Error('Confirm the assessment allowance and model limits before saving.');
+  return { workspaceId:scope.workspaceId, projectId:scope.projectId, conversationId:scope.conversationId, expectedConfigurationRevisionId:configuration.revisionId, maxAssessments };
 }

@@ -178,7 +178,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn streaming_body_rejects_oversized_chunked_responses()
+    #[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+    async fn streaming_body_rejects_oversized_chunked_responses_requires_loopback()
     -> Result<(), Box<dyn std::error::Error>> {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;

@@ -35,6 +35,12 @@ spec:
           image: {{ required "images.scriptedExecutor is required" .Values.images.scriptedExecutor | quote }}
           imagePullPolicy: {{ .Values.images.pullPolicy }}
           env:
+            - name: ORCHESTRATOR_MCP_ENABLED
+              value: {{ .Values.providers.mcp.enabled | quote }}
+            - name: ORCHESTRATOR_ANTHROPIC_ENABLED
+              value: {{ .Values.providers.anthropic.enabled | quote }}
+            - name: ANTHROPIC_BASE_URL
+              value: {{ .Values.providers.anthropic.baseUrl | quote }}
             - name: ORCHESTRATOR_OPENAI_ENABLED
               value: {{ .Values.providers.openai.enabled | quote }}
             {{- if .Values.providers.openai.enabled }}

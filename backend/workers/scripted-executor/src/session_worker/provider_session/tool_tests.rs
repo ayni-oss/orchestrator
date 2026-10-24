@@ -77,7 +77,8 @@ fn tool_input(state: &WorkerState) -> PrepareInput {
 }
 
 #[tokio::test]
-async fn three_scoped_reads_are_retained_and_usage_is_cumulative() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn three_scoped_reads_are_retained_and_usage_is_cumulative_requires_loopback() {
     let fixture = tool_fixture().await;
     let directory = tempfile::tempdir().unwrap();
     let state = worker(&directory.path().join("ledger.sqlite"), &fixture.url, None);
@@ -135,7 +136,8 @@ async fn three_scoped_reads_are_retained_and_usage_is_cumulative() {
 }
 
 #[tokio::test]
-async fn retained_final_exchange_recovers_without_resending_after_restart() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn retained_final_exchange_recovers_without_resending_after_restart_requires_loopback() {
     let fixture = tool_fixture().await;
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("ledger.sqlite");
@@ -177,7 +179,8 @@ async fn retained_final_exchange_recovers_without_resending_after_restart() {
 }
 
 #[tokio::test]
-async fn unresolved_continuation_keeps_the_entire_turn_usage_unknown() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn unresolved_continuation_keeps_the_entire_turn_usage_unknown_requires_loopback() {
     let fixture = tool_fixture().await;
     let directory = tempfile::tempdir().unwrap();
     let state = worker(&directory.path().join("ledger.sqlite"), &fixture.url, None);
@@ -232,7 +235,8 @@ async fn unresolved_continuation_keeps_the_entire_turn_usage_unknown() {
 }
 
 #[tokio::test]
-async fn ledger_cleanup_requires_matching_decision_and_known_usage() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn ledger_cleanup_requires_matching_decision_and_known_usage_requires_loopback() {
     let fixture = fixture(SUCCESS, Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
     let state = worker(&directory.path().join("ledger.sqlite"), &fixture.url, None);
@@ -325,7 +329,8 @@ async fn ledger_cleanup_requires_matching_decision_and_known_usage() {
 }
 
 #[tokio::test]
-async fn retained_tool_result_does_not_authorize_another_read_after_restart() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn retained_tool_result_does_not_authorize_another_read_after_restart_requires_loopback() {
     let fixture = tool_fixture().await;
     let directory = tempfile::tempdir().unwrap();
     let state = worker(&directory.path().join("ledger.sqlite"), &fixture.url, None);
@@ -397,7 +402,8 @@ fn retains(state: &WorkerState, table: &str, command_id: &str) -> bool {
 }
 
 #[tokio::test]
-async fn unknown_usage_blocks_tools_and_paid_continuations() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn unknown_usage_blocks_tools_and_paid_continuations_requires_loopback() {
     let fixture=fixture(r#"{"id":"resp_unknown_tools","model":"fixture-model","status":"completed","output":[{"type":"function_call","call_id":"call_instructions","name":"read_workspace_instructions","arguments":"{}"}]}"#,Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
     let state = worker(&directory.path().join("ledger.sqlite"), &fixture.url, None);
@@ -429,7 +435,9 @@ async fn unknown_usage_blocks_tools_and_paid_continuations() {
 }
 
 #[tokio::test]
-async fn a_failed_result_checkpoint_preserves_sending_uncertainty_without_retry() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn a_failed_result_checkpoint_preserves_sending_uncertainty_without_retry_requires_loopback()
+{
     let fixture = fixture(SUCCESS, Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
     let state = worker(&directory.path().join("ledger.sqlite"), &fixture.url, None);
@@ -469,7 +477,9 @@ async fn a_failed_result_checkpoint_preserves_sending_uncertainty_without_retry(
 }
 
 #[tokio::test]
-async fn preparation_replays_exact_retained_request_even_when_new_catalog_exceeds_its_budget() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn preparation_replays_exact_retained_request_even_when_new_catalog_exceeds_its_budget_requires_loopback()
+ {
     let fixture = fixture(SUCCESS, Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
     let state = worker(&directory.path().join("ledger.sqlite"), &fixture.url, None);
@@ -503,7 +513,9 @@ async fn preparation_replays_exact_retained_request_even_when_new_catalog_exceed
 }
 
 #[tokio::test]
-async fn reasoning_with_tool_calls_is_rejected_without_losing_usage_or_running_tools() {
+#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+async fn reasoning_with_tool_calls_is_rejected_without_losing_usage_or_running_tools_requires_loopback()
+ {
     let fixture=fixture(r#"{"id":"resp_reasoning_tools","model":"fixture-model","status":"completed","output":[{"type":"reasoning","summary":[{"text":"private reasoning"}]},{"type":"function_call","call_id":"call_instructions","name":"read_workspace_instructions","arguments":"{}"}],"usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}"#,Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
     let state = worker(&directory.path().join("ledger.sqlite"), &fixture.url, None);
