@@ -38,6 +38,7 @@ class OperationalReportTests(unittest.TestCase):
             self.assertFalse(report["milestone_complete"])
             self.assertIn("orchestrator-self-development-through-managed-quality-and-draft-publication", report["unmeasured_gates"])
             self.assertIn("concurrency-terminal.json", report["artifacts_sha256"])
+            self.assertIn("m4/acceptance.json", report["artifacts_sha256"])
 
     def test_self_development_requires_its_own_passing_managed_evidence(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -9,6 +9,7 @@ namespace="ayni-mcp-acceptance-$(date +%s)"
 root=$(cd "$(dirname "$0")/../../.." && pwd)
 manifest=$(mktemp)
 forward_log=$(mktemp)
+command_cache=$(mktemp -d)
 worker_port=${MCP_WORKER_PORT:-18081}
 fixture_port=${MCP_FIXTURE_PORT:-18080}
 [[ "$worker_port" =~ ^[0-9]+$ && "$fixture_port" =~ ^[0-9]+$ ]] || { echo "fixture ports must be numeric" >&2; exit 1; }
@@ -17,6 +18,7 @@ cleanup() {
   if [[ -n "$forward_pid" ]]; then kill "$forward_pid" 2>/dev/null || true; fi
   kubectl --context docker-desktop delete namespace "$namespace" --wait=false >/dev/null || true
   rm -f "$manifest" "$forward_log"
+  rm -rf "$command_cache"
 }
 trap cleanup EXIT
 python3 - "$root" "$namespace" "$image" "$provider" > "$manifest" <<'PY'
@@ -50,7 +52,7 @@ run_driver() {
   for _ in {1..60}; do if curl --fail --silent "http://127.0.0.1:$worker_port/health" >/dev/null; then break; fi; sleep 1; done
   local provider_flags=()
   if [[ "$provider" == anthropic ]]; then provider_flags+=(--anthropic); fi
-  MCP_WORKER_URL="http://127.0.0.1:$worker_port" MCP_FIXTURE_URL="http://127.0.0.1:$fixture_port" cargo run --quiet --manifest-path "$root/Cargo.toml" -p ayni-orchestrator-scripted-executor --bin ayni-mcp-acceptance -- "${provider_flags[@]}" "$@"
+  MCP_COMMAND_CACHE="$command_cache" MCP_WORKER_URL="http://127.0.0.1:$worker_port" MCP_FIXTURE_URL="http://127.0.0.1:$fixture_port" cargo run --quiet --manifest-path "$root/Cargo.toml" -p ayni-orchestrator-scripted-executor --bin ayni-mcp-acceptance -- "${provider_flags[@]}" "$@"
   kill "$forward_pid"; wait "$forward_pid" 2>/dev/null || true; forward_pid=''
 }
 run_driver

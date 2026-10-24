@@ -57,7 +57,7 @@ def build_report(root):
         "fixture_boundaries": {"coding": "explicit deterministic fixture", "quality": "actual managed Ayni runtime",
                                "publication": "real Git transport and GitHub protocol fixture", "live_provider": False},
         "artifacts_sha256": {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
-                             for p in sorted(root.rglob("*")) if p.is_file() and p.name not in ("acceptance.json", "outcome.json")},
+                             for p in sorted(root.rglob("*")) if p.is_file() and p.relative_to(root) not in (Path("acceptance.json"), Path("outcome.json"))},
     }
     if own_source_passed:
         gate = "orchestrator-self-development-through-managed-quality-and-draft-publication"

@@ -192,6 +192,15 @@ fn fixture_command(
         },
         &command,
     )?;
+    // Production replays retained bytes. Re-serializing a CloudEvent can reorder extensions.
+    let directory = std::path::PathBuf::from(std::env::var("MCP_COMMAND_CACHE")?);
+    let path = directory.join(format!("{provider}-{seed}.json"));
+    let bytes = if path.exists() {
+        std::fs::read(&path)?
+    } else {
+        std::fs::write(&path, &bytes)?;
+        bytes
+    };
     Ok((bytes, context))
 }
 
