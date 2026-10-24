@@ -50,7 +50,7 @@ impl ProviderLoop {
         );
         sources.insert("read_conversation_history".into(),json!({"records":input.context.iter().map(|record|json!({"message_id":record.message_id,"sequence":record.sequence,"role":record.role,"content":record.content})).collect::<Vec<_>>()}));
         if let Some(snapshot) = command.project_status {
-            sources.insert("read_project_status".into(),json!({"snapshot_id":snapshot.snapshot_id,"project_id":snapshot.project_id,"objective":snapshot.objective,"status":snapshot.status,"context_revision":snapshot.context_revision,"project_resource_version":snapshot.project_resource_version}));
+            sources.insert("read_project_status".into(),json!({"snapshot_id":snapshot.snapshot_id,"project_id":snapshot.project_id,"objective":snapshot.objective,"status":snapshot.status,"context_revision":snapshot.context_revision,"project_resource_version":snapshot.project_resource_version,"tasks":snapshot.tasks.iter().map(|fact|json!({"task_id":fact.task_id,"attempt_id":fact.attempt_id,"parent_attempt_id":fact.parent_attempt_id,"coding_state":fact.coding_state,"provider_state":fact.provider_state,"accepted_coding_state":fact.accepted_coding_state,"quality_state":fact.quality_state,"quality_artifact_digest":fact.quality_artifact_digest,"publication_state":fact.publication_state,"publication_id":fact.publication_id,"pull_request_url":fact.pull_request_url})).collect::<Vec<_>>(),"task_facts_available":snapshot.total_tasks.is_some(),"total_tasks":snapshot.total_tasks,"has_more_tasks":snapshot.has_more_tasks}));
         }
         Ok(Self {
             request: serde_json::from_slice(bytes).map_err(|_| StatusCode::BAD_REQUEST)?,

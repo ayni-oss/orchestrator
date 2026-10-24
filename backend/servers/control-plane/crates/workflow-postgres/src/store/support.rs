@@ -585,15 +585,16 @@ pub(super) async fn materialize_command(
         )
         .await?
         .get(0);
-    let project = project(transaction, command.workspace_id, command.project_id).await?;
-    let project_status = Some(ayni_orchestrator_events::v1::ProjectStatusSnapshot {
-        snapshot_id: event_id.clone(),
-        project_id: project.id,
-        objective: project.goal,
-        status: "registered".to_owned(),
-        context_revision: unsigned(command.context_revision)?,
-        project_resource_version: project.resource_version,
-    });
+    let project_status = Some(
+        super::project_continuity::freeze(
+            transaction,
+            command.workspace_id,
+            command.project_id,
+            &event_id,
+            unsigned(command.context_revision)?,
+        )
+        .await?,
+    );
     let mut payload = ConversationTurnRequested {
         binding: Some(ConversationTurnBinding {
             workspace_id: command.workspace_id.to_owned(),

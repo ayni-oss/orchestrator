@@ -63,6 +63,7 @@ cargo test --locked -p ayni-orchestrator-workflow-postgres --test publications -
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test task_execution -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test plan_approval -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test plan_proposals -- --ignored --nocapture
+cargo test --locked -p ayni-orchestrator-workflow-postgres --test project_continuity -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test configuration -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test sessions -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test provider_calls -- --ignored --nocapture

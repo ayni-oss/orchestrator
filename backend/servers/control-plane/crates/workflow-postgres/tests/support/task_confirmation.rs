@@ -98,7 +98,7 @@ async fn confirm(
             .await,
         Err(StoreError::IdempotencyConflict)
     ));
-    prove_child(store, scope, task, &before, &receipt, uncertain).await
+    prove_child(store, scope, task, &before, &receipt, uncertain, runtime).await
 }
 async fn prove_child(
     store: &WorkflowStore,
@@ -107,10 +107,12 @@ async fn prove_child(
     before: &ayni_orchestrator_events::task_execution::TaskRun,
     receipt: &ayni_orchestrator_workflow_postgres::store::task_recovery::RecoveryConfirmation,
     uncertain: bool,
+    runtime: &str,
 ) -> Result {
     let child = store
         .get_task_run(scope, &task.task_id, &receipt.attempt_id)
         .await?;
+    prove_project_fact(store, scope, task, receipt, runtime).await?;
     assert_eq!(child.state, "queued");
     assert_eq!(child.provider_state, "not_started");
     assert_eq!(child.command.max_seconds, 300);
@@ -351,5 +353,58 @@ async fn reject_invalid(
             Err(StoreError::InvalidInput(_))
         ));
     }
+    Ok(())
+}
+
+async fn prove_project_fact(
+    store: &WorkflowStore,
+    scope: PlanScope<'_>,
+    task: &TaskExecutionPreparation,
+    receipt: &ayni_orchestrator_workflow_postgres::store::task_recovery::RecoveryConfirmation,
+    runtime: &str,
+) -> Result {
+    let fresh = store
+        .create_conversation(&key(), scope.workspace, scope.project, "Recovery facts")
+        .await?
+        .resource;
+    let turn = store
+        .send_message(
+            &key(),
+            scope.workspace,
+            scope.project,
+            &fresh.id,
+            "Inspect recovery facts",
+        )
+        .await?;
+    let (client, driver) = ayni_orchestrator_workflow_postgres::connect(runtime).await?;
+    let bytes: Vec<u8> = client
+        .query_one(
+            "SELECT exact_command_bytes FROM workflow_dispatch_intents WHERE turn_id=$1",
+            &[&turn.turn_id],
+        )
+        .await?
+        .get(0);
+    let (_, _, payload) = ayni_orchestrator_events::workflow::decode_command(&bytes)?;
+    let facts = payload.project_status.ok_or("recovery project facts")?;
+    let fact = facts
+        .tasks
+        .iter()
+        .find(|fact| fact.task_id == task.task_id)
+        .ok_or("recovery task fact")?;
+    assert_eq!(fact.attempt_id, receipt.attempt_id);
+    assert_eq!(fact.parent_attempt_id, task.attempt_id);
+    assert_eq!(fact.coding_state, "queued");
+    assert_eq!(fact.provider_state, "not_started");
+    assert!(fact.accepted_coding_state.is_empty());
+    assert!(fact.quality_state.is_empty());
+    assert_eq!(
+        facts
+            .tasks
+            .iter()
+            .filter(|fact| fact.task_id == task.task_id)
+            .count(),
+        1
+    );
+    driver.abort();
     Ok(())
 }

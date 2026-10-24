@@ -21,6 +21,8 @@ mod continuation;
 mod execution;
 #[path = "workflow_acceptance/plans.rs"]
 mod plans;
+#[path = "workflow_acceptance/project_continuity.rs"]
+mod project_continuity;
 #[path = "workflow_acceptance/publication.rs"]
 mod publication;
 #[path = "workflow_acceptance/recovery.rs"]
@@ -176,6 +178,9 @@ async fn dispatch(
         }
         "--verify-task-quality-run-stdin" => {
             return task_runs::verify_quality_stdin(client).await;
+        }
+        "--settle-project-continuity-stdin" => {
+            return task_runs::settle_continuity_stdin(client).await;
         }
         "--task-name-stdin" => return task_runs::name_stdin(),
         "--prepare-task-run-pending" => {
