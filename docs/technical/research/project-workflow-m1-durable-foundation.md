@@ -5,7 +5,7 @@ Current-system source audit: Orchestrator `e128a51088d5879108119783a0d3adf7774dd
 
 This document applies the [project workflow runbook](project-workflow-refactor-runbook.md)
 and its [design worksheets](project-workflow-design-worksheets.md) to
-[M1 in the roadmap](../../../ROADMAP.md#m1-executable-slice). It defines the first
+[M1 in the roadmap](../history/backend-foundation-roadmap.md#m1-runtime-slices). It defines the first
 replacement slice, not current deployed behavior. If a feasibility experiment
 invalidates a contract, update this document and the roadmap before widening the
 implementation.

@@ -4,6 +4,8 @@ The runtime combines the M1 durable foundation with shared immutable agent confi
 
 ## Current implementation
 
+- [Project workspace](architecture/project-workspace.md): Svelte project navigation, chat, retained activity, exact retries and scoped console handoff.
+
 - [Agent plan proposals](architecture/agent-proposals.md): bounded terminal provider proposals, authenticated provenance and retained review.
 - [Task dependencies](architecture/task-dependencies.md): reviewed DAGs, exact upstream commits, trusted source integration and four isolated execution slots.
 - [Operational acceptance](operations/operational-acceptance.md): cumulative failure gates, concurrent capacity, cancellation and retained replay evidence.
@@ -23,7 +25,7 @@ The runtime combines the M1 durable foundation with shared immutable agent confi
 - [Operations](operations/operations.md): startup, probes, schema changes, credentials, backup, and failure handling.
 - [Protocol tooling](../../proto/README.md): canonical protobuf generation and compatibility policy.
 
-## Binding research
+## Foundation contracts and research
 
 - [Plans and approval](architecture/plans-and-approval.md): M3 implementation contract for immutable versions, explicit approval, task admission and retained project/conversation origin; review, agent proposals and approval/admission are implemented; cumulative M3 gates are defined with deployed evidence required in the final delivery PR.
 - [M3 delivery plan](research/project-workflow-m3-delivery-plan.md): four cumulative PRs, contract completion gates and failure/recovery acceptance.
@@ -38,7 +40,9 @@ The runtime combines the M1 durable foundation with shared immutable agent confi
 
 The [event-platform history](history/event-platform/index.md) is retained as dated evidence, not as current runtime documentation. Superseded browser, SQLite workflow, runtime-worker, provider, compatibility-drain, and custom-client instructions were removed during the clean cutover.
 
-[Documentation authoring](contributing/documentation.md) defines the audience boundary. The [roadmap](../../ROADMAP.md) tracks later slices.
+[Documentation authoring](contributing/documentation.md) defines the audience boundary. The [roadmap](../../ROADMAP.md) tracks active product refinement. The
+[backend foundation roadmap archive](history/backend-foundation-roadmap.md) retains
+M1–M8 delivery scope and acceptance limits.
 
 - [Contributor console](architecture/contributor-console.md): local browser transport, discovery, and retry boundaries.
 

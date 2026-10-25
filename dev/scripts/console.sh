@@ -31,4 +31,6 @@ for _ in $(seq 1 100); do
 done
 if [[ -z "$upstream" ]]; then echo 'local gRPC port-forward did not become ready' >&2; exit 1; fi
 cd "$DEV_REPOSITORY_ROOT"
-cargo run --locked -p ayni-orchestrator-control-plane --bin workflow-console -- "127.0.0.1:$port" "127.0.0.1:$upstream"
+web_arguments=()
+if [[ -n "${2:-}" ]]; then web_arguments+=("$2"); fi
+cargo run --locked -p ayni-orchestrator-control-plane --bin workflow-console -- "127.0.0.1:$port" "127.0.0.1:$upstream" "${web_arguments[@]}"

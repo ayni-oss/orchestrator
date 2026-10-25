@@ -5,7 +5,7 @@ Date: 2026-10-22. Status: agreed six-slice direction; individual PRs own deliver
 M3 admits approved work without dispatching it. M4 takes an independently executable
 task through isolated coding, Ayni quality evidence and reviewable draft publication.
 Use the [execution preparation contract](../architecture/task-execution.md) for the
-first slice and the [roadmap](../../../ROADMAP.md#m4-delivery-scopes) for milestone scope.
+first slice and the [roadmap](../history/backend-foundation-roadmap.md#m4-delivery-scopes) for milestone scope.
 
 ## Sequential delivery slices
 

@@ -90,3 +90,11 @@ test('external tool uncertainty preserves settled provider usage and identifies 
   assert.match(view.toolNotice,/mcp_create · invocation effect_1/);
   assert.equal(view.notice,'');
 });
+
+test('workspace handoff preserves parent scope and rejects incomplete identifiers', async () => {
+  const { linkedSelection } = await import('./state.mjs');
+  assert.deepEqual(linkedSelection('?workspaceId=w-1&projectId=p-1&conversationId=c-1'), { workspaceId: 'w-1', projectId: 'p-1', conversationId: 'c-1' });
+  assert.equal(linkedSelection('?projectId=orphan'), null);
+  assert.deepEqual(linkedSelection('?workspaceId=w-1&conversationId=orphan'), { workspaceId: 'w-1' });
+  assert.equal(linkedSelection('?workspaceId=%3Cscript%3E'), null);
+});

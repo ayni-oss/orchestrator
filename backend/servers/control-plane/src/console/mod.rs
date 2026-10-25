@@ -1,5 +1,6 @@
 //! Local contributor gateway. It owns no workflow state or execution authority.
 mod security;
+mod web;
 
 use axum::{
     Json, Router,
@@ -28,6 +29,7 @@ use tonic::{
 
 #[derive(Clone)]
 pub struct Console {
+    web_assets: Option<Arc<web::WebAssets>>,
     channel: Channel,
     authority: String,
     watches: Arc<Semaphore>,
@@ -48,11 +50,21 @@ impl Console {
             .connect_timeout(Duration::from_secs(3))
             .connect_lazy();
         Ok(Self {
+            web_assets: None,
             channel,
             authority: address.to_string(),
             watches: Arc::new(Semaphore::new(8)),
             requests: Arc::new(Semaphore::new(32)),
         })
+    }
+
+    /// Load an explicitly selected local web build without changing API authority.
+    ///
+    /// # Errors
+    /// Rejects missing, oversized or unsafe build assets.
+    pub fn with_web_assets(mut self, directory: &std::path::Path) -> io::Result<Self> {
+        self.web_assets = Some(Arc::new(web::WebAssets::load(directory)?));
+        Ok(self)
     }
 
     fn projects(&self) -> ProjectServiceClient<Channel> {
@@ -68,6 +80,9 @@ impl Console {
 /// Serve embedded assets and the explicitly allowlisted canonical API adapter.
 pub fn router(console: Console) -> Router {
     Router::new()
+        .route("/workspace", get(web::redirect))
+        .route("/workspace/", get(web::index))
+        .route("/workspace/{*asset}", get(web::asset))
         .route(
             "/",
             get(|| async { Html(include_str!("../../../../../apps/console/index.html")) }),

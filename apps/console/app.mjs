@@ -1,12 +1,12 @@
 import { mountTasks } from './tasks.mjs';
 import { mountFeedback } from './feedback.mjs';
 import { mountPlans } from './plans.mjs';
-import { outcomeAssessmentCommand, newerOrEqual, describe, scopeKey, makeCommand, appendActivity, providerCallView } from './state.mjs';
+import { linkedSelection, outcomeAssessmentCommand, newerOrEqual, describe, scopeKey, makeCommand, appendActivity, providerCallView } from './state.mjs';
 
 const $ = id => document.getElementById(id);
 const saved = key => { try { return JSON.parse(sessionStorage.getItem(key)); } catch { return null; } };
 const store = (key, value) => { try { if (value == null) sessionStorage.removeItem(key); else sessionStorage.setItem(key, JSON.stringify(value)); } catch { /* In-memory retries remain available when storage is disabled. */ } };
-let scope = saved('selection') || {};
+let scope = linkedSelection(location.search) || saved('selection') || {};
 let pending = saved('pending');
 let sending = false;
 let snapshot;
@@ -323,6 +323,8 @@ function openWatch(version) {
 async function selectConversation(id) {
   closeWatch(); generation++; providerQuery++; paused = false; cursor = ''; snapshot = null; activities = []; chain = Promise.resolve();
   scope.conversationId = id || ''; store('selection', scope);
+  const selection = new URLSearchParams(Object.entries(scope).filter(([, value]) => value));
+  history.replaceState(null, '', `/${selection.size ? `?${selection}` : ''}`);
   plans.select(); tasks.select(); feedback.select();
   currentSession = undefined; $('session-state').textContent = 'No session.';
   $('assessment-status').textContent = 'Choose a conversation.'; $('assessment-consent').checked = false;

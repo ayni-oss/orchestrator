@@ -17,7 +17,7 @@ Task delivery retains coding, quality and publication evidence, but fresh conver
 ## Planning baseline
 
 These observations describe the starting point for this plan. See
-[the roadmap](../../../ROADMAP.md#m7-delivery-scopes) and the current architecture
+[the roadmap](../history/backend-foundation-roadmap.md#m7-delivery-scopes) and the current architecture
 contracts for implemented scope and delivery evidence.
 
 - Eligibility freezes the project's objective and registration status into the retained conversation command.
@@ -112,7 +112,7 @@ Coding completion, passing quality and a retained draft link describe separate o
 
 ## Where the detail lives
 
-- [Roadmap](../../../ROADMAP.md#m7-delivery-scopes) records milestone direction and delivery order.
+- [Roadmap](../history/backend-foundation-roadmap.md#m7-delivery-scopes) records milestone direction and delivery order.
 - [Project continuity](../architecture/project-continuity.md) defines the first slice's frozen facts and privacy boundary.
 - [Conversation execution](../architecture/conversation-execution.md) defines existing context, tools and provider authority.
 - [M6 delivery plan](project-workflow-m6-delivery-plan.md) records inherited recovery prerequisites.

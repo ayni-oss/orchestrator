@@ -12,12 +12,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .next()
         .unwrap_or_else(|| "127.0.0.1:50051".into())
         .parse()?;
+    let web_directory = arguments.next();
     if arguments.next().is_some() {
         return Err(
-            "usage: workflow-console [LOOPBACK_LISTEN_ADDRESS] [LOOPBACK_GRPC_ADDRESS]".into(),
+            "usage: workflow-console [LOOPBACK_LISTEN_ADDRESS] [LOOPBACK_GRPC_ADDRESS] [WEB_BUILD_DIRECTORY]".into(),
         );
     }
-    let console = Console::new(address, endpoint)?;
+    let mut console = Console::new(address, endpoint)?;
+    if let Some(directory) = web_directory {
+        console = console.with_web_assets(std::path::Path::new(&directory))?;
+        println!("Project workspace: http://{address}/workspace/");
+    }
     let listener = tokio::net::TcpListener::bind(address).await?;
     println!("Contributor console: http://{address}");
     axum::serve(listener, router(console))
