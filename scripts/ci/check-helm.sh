@@ -271,3 +271,38 @@ grep -q 'app.kubernetes.io/name: ayni-workflow-traces' "$collector_render"
 grep -q 'automountServiceAccountToken: false' "$collector_render"
 grep -q 'max_megabytes: 8' "$collector_render"
 grep -q 'max_backups: 2' "$collector_render"
+
+# The publisher must be able to export its attempt-correlated reconciliation span.
+# Test both real GitHub and fixture isolation profiles: each must allow only the
+# internal collector selector on OTLP, and the default must retain its isolation.
+for publication_fixture in false true; do
+  traced_publication="$scratch/traced-publication-$publication_fixture.yaml"
+  helm template traced "$reusable_chart" --namespace test "${publication_options[@]}" \
+    --set observability.collector.enabled=true \
+    --set publication.fixtureEnabled="$publication_fixture" \
+    --set-string publication.fixtureApiUrl=http://publication-fixture.test.svc:8080 \
+    --set-string publication.fixtureGitUrl=git://publication-fixture.test.svc:9418/fixture/repo.git > "$traced_publication"
+  python3 - "$traced_publication" "$publication_render" <<'PYTHON'
+import pathlib, sys
+
+def document(path, name, kind):
+    return next(doc for doc in pathlib.Path(path).read_text().split("\n---")
+                if f"kind: {kind}\n" in doc and f"  name: {name}\n" in doc)
+
+policy = document(sys.argv[1], "task-publisher-isolation", "NetworkPolicy")
+expected = """    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: test
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ayni-workflow-traces
+      ports:
+        - { protocol: TCP, port: 4318 }"""
+assert expected in policy, "publisher OTLP endpoint has no scoped collector egress"
+assert policy.count("port: 4318") == 1
+assert "port: 4318" not in document(sys.argv[2], "task-publisher-isolation", "NetworkPolicy")
+deployment = document(sys.argv[1], "task-publisher", "Deployment")
+assert 'value: "http://workflow-traces.test.svc:4318/v1/traces"' in deployment
+PYTHON
+done

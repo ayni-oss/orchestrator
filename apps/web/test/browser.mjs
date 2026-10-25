@@ -68,7 +68,7 @@ try {
   await page.getByRole('button', { name: 'Refresh timeline', exact: true }).click();
   await timeline.getByText(newestActivity, { exact: true }).waitFor({ state: 'attached' });
   const foreignTimeline = await page.evaluate(async scope => {
-    const response = await fetch('/api/ListExecutionTimeline', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Console-Request': '1' }, body: JSON.stringify({ ...scope, projectId: 'foreign-project' }) });
+    const response = await fetch('/api/ListExecutionTimeline', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Console-Request': '1' }, body: JSON.stringify({ ...scope, projectId: scope.workspaceId }) });
     return response.status;
   }, firstScope);
   assert.equal(foreignTimeline, 404);
@@ -241,6 +241,8 @@ try {
       }
       assert.equal(inspected, attemptId, 'requested attempt exceeds bounded recovery inspection');
     }
+    const blockers = await taskTab.getByRole('region', { name: 'Preparation evidence' }).locator('dt').filter({ hasText: /^Blockers$/ }).evaluate(element => element.nextElementSibling.textContent);
+    assert.equal(blockers, (preparation?.blockers || []).join('\n') || 'None recorded');
     const coding = taskTab.getByRole('region', { name: 'Coding evidence' });
     const quality = taskTab.getByRole('region', { name: 'Quality evidence' });
     const publication = taskTab.getByRole('region', { name: 'Publication evidence' });

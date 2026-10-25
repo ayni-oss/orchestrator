@@ -104,6 +104,17 @@ spec:
   policyTypes: [Ingress, Egress]
   ingress: []
   egress:
+    {{- if .Values.observability.collector.enabled }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ayni-workflow-traces
+      ports:
+        - { protocol: TCP, port: 4318 }
+    {{- end }}
     - to:
         - namespaceSelector:
             matchLabels: { kubernetes.io/metadata.name: kube-system }

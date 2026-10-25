@@ -34,7 +34,7 @@
       <section aria-label="Preparation evidence"><h3>Preparation</h3>
         <dl><dt>Status</dt><dd>{!selected.preparation ? 'Awaiting preparation' : selected.preparation.attemptId ? 'Prepared' : 'Blocked'}</dd>
           <dt>Preparation recorded</dt><dd>{recorded(selected.preparation?.createdAt)}</dd>
-          <dt>Blockers</dt><dd>{(selected.preparation?.blockers || selected.task?.executionBlockers || []).join('\n') || 'None recorded'}</dd>
+          <dt>Blockers</dt><dd>{(selected.preparation ? (selected.preparation.blockers || []) : (selected.task?.executionBlockers || [])).join('\n') || 'None recorded'}</dd>
           <dt>Source commit</dt><dd>{run?.sourceCommit || selected.preparation?.inputs?.sourceCommit || 'Not recorded'}</dd>
           <dt>Runtime image</dt><dd>{run?.runtimeImage || selected.preparation?.inputs?.runtimeImage || 'Not recorded'}</dd></dl>
       </section>
