@@ -24,7 +24,11 @@ navigation, retained transcript, stable older history, cancellation and current
 activity use existing canonical commands and resumable SSE observation.
 Provider usage preserves unknown counters and uncertainty. Message counts and
 turn counts are retained conversation facts, not task success rates or round metrics.
-Updates in the inspector cover the current browser view; they are not a complete audit export.
+The inspector restores accepted execution transitions across reloads. Load older
+activity for stable history pages, or refresh when new activity is available.
+History pruned before timeline installation is unavailable; accepted timestamps
+do not measure exact worker-stage duration. See the
+[timeline contract](../../docs/technical/architecture/execution-timeline.md).
 
 The contributor console remains at `/` for configuration, plans, task evidence,
 publication, assessments and recovery. Workspace links carry the exact selected

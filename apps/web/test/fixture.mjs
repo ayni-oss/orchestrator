@@ -6,7 +6,7 @@ import { resolve, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 const build = fileURLToPath(new URL('../build/', import.meta.url));
 export async function startFixture() {
-  const workspaces = [], projects = [], conversations = [], snapshots = new Map(), receipts = new Map(), watchers = new Map();
+  const workspaces = [], projects = [], conversations = [], snapshots = new Map(), receipts = new Map(), watchers = new Map(), timelines = new Map();
   const timestamp = () => new Date().toISOString();
   function requireScope(body) {
     const conversation = conversations.find(value => value.id === body.conversationId && value.workspaceId === body.workspaceId && value.projectId === body.projectId);
@@ -22,6 +22,9 @@ export async function startFixture() {
     snapshot.resumeCursor = `${snapshot.conversationId}-${snapshot.conversationRevision}`;
     snapshot.currentActivity = { stage: terminal ? 'ACTIVITY_STAGE_TERMINAL' : 'ACTIVITY_STAGE_EXECUTION', presentationState: terminal ? 'PRESENTATION_STATE_COMPLETED' : 'PRESENTATION_STATE_PROCESSING', safeReason: reason, acceptedAt: timestamp() };
     snapshot.historyCounts = { messages: String(snapshot.recentMessages.length), turns: String(Math.ceil(snapshot.recentMessages.length / 2)), hasOlderHistory: snapshot.recentMessages.length > 16 };
+    const entries = timelines.get(snapshot.conversationId) || [];
+    entries.unshift({ activity: { ...snapshot.currentActivity, id: randomUUID(), conversationRevision: snapshot.conversationRevision, turnId: snapshot.nonterminalTurns[0]?.id || snapshot.recentTerminalTurns[0]?.id || '' }, kind: 'turn_state_changed', affectedResourceIds: [] });
+    timelines.set(snapshot.conversationId, entries);
     notify(snapshot);
   }
   async function api(method, body) {
@@ -42,6 +45,13 @@ export async function startFixture() {
         result = { conversation, receipt }; break;
       }
       case 'GetConversationSnapshot': { const snapshot = requireScope(body); return { snapshot: { ...snapshot, recentMessages: snapshot.recentMessages.slice(-16) } }; }
+      case 'ListExecutionTimeline': {
+        const snapshot = requireScope(body);
+        const boundary = body.snapshotRevision && body.snapshotRevision !== '0' ? body.snapshotRevision : snapshot.conversationRevision;
+        const entries = (timelines.get(body.conversationId) || []).filter(entry => BigInt(entry.activity.conversationRevision) <= BigInt(boundary) && (!body.beforeRevision || body.beforeRevision === '0' || BigInt(entry.activity.conversationRevision) < BigInt(body.beforeRevision)));
+        const limit = body.limit || 50;
+        return { entries: entries.slice(0, limit), snapshotRevision: boundary, nextBeforeRevision: entries.length > limit ? entries[limit - 1].activity.conversationRevision : '0', retainedFromRevision: timelines.get(body.conversationId)?.at(-1)?.activity.conversationRevision || '0' };
+      }
       case 'ListProviderCalls': requireScope(body); return { calls: [] };
       case 'ListConversationHistory': {
         const snapshot = requireScope(body);

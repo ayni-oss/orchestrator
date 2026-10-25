@@ -3,7 +3,7 @@ use thiserror::Error;
 use tokio_postgres::{Client, Transaction};
 
 pub const MIGRATION_LOCK_ID: i64 = 4_702_199_126_064_921;
-pub const CURRENT_SCHEMA_VERSION: i64 = 27;
+pub const CURRENT_SCHEMA_VERSION: i64 = 28;
 
 const MIGRATION_1: &str = include_str!("../migrations/0001_durable_foundation.sql");
 const MIGRATION_2: &str = include_str!("../migrations/0002_report_acceptance.sql");
@@ -14,6 +14,7 @@ const MIGRATION_6: &str = include_str!("../migrations/0006_transport_rejections.
 const MIGRATION_7: &str = include_str!("../migrations/0007_broker_capacity.sql");
 const MIGRATION_8: &str = include_str!("../migrations/0008_agent_configuration.sql");
 const MIGRATION_24: &str = include_str!("../migrations/0024_task_source_retention.sql");
+const MIGRATION_28: &str = include_str!("../migrations/0028_execution_timeline.sql");
 const MIGRATION_27: &str = include_str!("../migrations/0027_task_quality_capacity.sql");
 const MIGRATION_26: &str = include_str!("../migrations/0026_anthropic_provider.sql");
 const MIGRATION_23: &str = include_str!("../migrations/0023_concurrent_tasks.sql");
@@ -200,6 +201,7 @@ async fn apply_pending_migrations(
             MIGRATION_27,
             "Bounded repository quality artifacts and recovery context",
         ),
+        (28_i64, MIGRATION_28, "Durable scoped execution timeline"),
     ] {
         if current < version {
             transaction.batch_execute(source).await?;
@@ -280,6 +282,7 @@ async fn validate_inner(client: &Client) -> Result<(), MigrationError> {
         (25_i64, MIGRATION_25),
         (26_i64, MIGRATION_26),
         (27_i64, MIGRATION_27),
+        (28_i64, MIGRATION_28),
     ];
     if rows.len() != migrations.len() {
         return Err(MigrationError::InvalidHistory);
@@ -344,6 +347,7 @@ async fn validate_checksum(transaction: &Transaction<'_>) -> Result<(), Migratio
         (25_i64, MIGRATION_25),
         (26_i64, MIGRATION_26),
         (27_i64, MIGRATION_27),
+        (28_i64, MIGRATION_28),
     ] {
         let checksum: String = transaction
             .query_one(
@@ -396,12 +400,12 @@ async fn apply_runtime_privileges(
              REVOKE ALL PRIVILEGES ON TABLE \
                workflow_workspaces, workflow_projects, workflow_conversations, \
                workflow_command_receipts, workflow_messages, workflow_turns, \
-               workflow_activities, workflow_updates, workflow_dispatch_intents, \
+               workflow_activities, workflow_updates, workflow_execution_timeline, workflow_dispatch_intents, \
                workflow_outbox, workflow_history_snapshots, workflow_report_receipts, workflow_transport_quarantine, workflow_watch_watermarks, workflow_pending_reports, workflow_transport_rejections, workflow_broker_capacity, workflow_agent_configurations, workflow_agent_configuration_heads, workflow_configuration_receipts, workflow_turn_inputs, workflow_sessions, workflow_turn_sessions, workflow_session_receipts, workflow_context_manifests, workflow_context_manifest_messages, workflow_provider_calls, workflow_cancellation_receipts, workflow_provider_uncertainty_receipts, workflow_plans, workflow_plan_versions, workflow_plan_receipts, workflow_plan_proposals, workflow_plan_approvals, workflow_tasks, workflow_task_preparations, workflow_task_attempts, workflow_task_runs, workflow_task_run_receipts, workflow_task_quality, workflow_task_publications, workflow_task_publication_receipts, workflow_task_publication_reports, workflow_task_feedback, workflow_task_recovery, workflow_task_recovery_confirmations, workflow_task_recovery_confirmation_receipts, workflow_assessment_authorizations, workflow_outcome_assessments, workflow_assessment_scans FROM {role};\
              GRANT SELECT, INSERT ON TABLE \
                workflow_workspaces, workflow_projects, workflow_conversations, \
                workflow_command_receipts, workflow_messages, workflow_turns, \
-               workflow_activities, workflow_updates, workflow_dispatch_intents, \
+               workflow_activities, workflow_updates, workflow_execution_timeline, workflow_dispatch_intents, \
                workflow_outbox, workflow_history_snapshots, workflow_report_receipts, workflow_transport_quarantine, workflow_watch_watermarks, workflow_pending_reports, workflow_transport_rejections, workflow_broker_capacity, workflow_agent_configurations, workflow_agent_configuration_heads, workflow_configuration_receipts, workflow_turn_inputs, workflow_sessions, workflow_turn_sessions, workflow_session_receipts, workflow_context_manifests, workflow_context_manifest_messages, workflow_provider_calls, workflow_cancellation_receipts, workflow_provider_uncertainty_receipts, workflow_plans, workflow_plan_versions, workflow_plan_receipts, workflow_plan_proposals, workflow_plan_approvals, workflow_tasks, workflow_task_preparations, workflow_task_attempts, workflow_task_runs, workflow_task_run_receipts, workflow_task_quality, workflow_task_publications, workflow_task_publication_receipts, workflow_task_publication_reports, workflow_task_feedback, workflow_task_recovery, workflow_task_recovery_confirmations, workflow_task_recovery_confirmation_receipts, workflow_assessment_authorizations, workflow_outcome_assessments, workflow_assessment_scans TO {role};\
              GRANT UPDATE (state,generation,pod_uid,lease_until,commit_sha,tree_sha,outcome) ON workflow_task_publications TO {role};\
              GRANT UPDATE (state,generation,pod_uid,deadline_at,provider_state,request_digest,outcome,reconciled_at,assessment_outcome_at,source_reclaim_after,source_retired_at,source_retired_bytes,source_pack) ON workflow_task_runs TO {role};\
@@ -450,7 +454,7 @@ fn validate_role_name(runtime_role: &str) -> Result<(), MigrationError> {
 }
 
 const SCHEMA_MANIFEST_CHECKSUM: &str =
-    "sha256:1f32c64b33462a32fe88f150f7cb9209769c2ae07c5d9b852e9617b8006c55ec";
+    "sha256:835b9d08dd466cea85b589cbd545eba9cb275144d0aae36a52df428f7bd33a13";
 
 async fn validate_schema(transaction: &Transaction<'_>) -> Result<(), MigrationError> {
     let manifest: String = transaction
@@ -560,7 +564,7 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                        'public.workflow_workspaces', 'public.workflow_projects', \
                        'public.workflow_conversations', 'public.workflow_command_receipts', \
                        'public.workflow_messages', 'public.workflow_turns', \
-                       'public.workflow_activities', 'public.workflow_updates', \
+                       'public.workflow_activities', 'public.workflow_updates', 'public.workflow_execution_timeline', \
                        'public.workflow_dispatch_intents', 'public.workflow_outbox', \
                        'public.workflow_history_snapshots', 'public.workflow_report_receipts', \
                        'public.workflow_transport_quarantine', 'public.workflow_watch_watermarks', 'public.workflow_pending_reports', 'public.workflow_transport_rejections', 'public.workflow_broker_capacity', 'public.workflow_agent_configurations', 'public.workflow_agent_configuration_heads', 'public.workflow_configuration_receipts', 'public.workflow_turn_inputs', 'public.workflow_sessions', 'public.workflow_turn_sessions', 'public.workflow_session_receipts', 'public.workflow_context_manifests', 'public.workflow_context_manifest_messages', 'public.workflow_provider_calls', 'public.workflow_cancellation_receipts', 'public.workflow_provider_uncertainty_receipts', 'public.workflow_plans', 'public.workflow_plan_versions', 'public.workflow_plan_receipts', 'public.workflow_plan_proposals', 'public.workflow_plan_approvals', 'public.workflow_tasks', 'public.workflow_task_preparations', 'public.workflow_task_attempts', 'public.workflow_task_runs', 'public.workflow_task_run_receipts', 'public.workflow_task_feedback', 'public.workflow_task_recovery', 'public.workflow_task_recovery_confirmations', 'public.workflow_task_recovery_confirmation_receipts', 'public.workflow_assessment_authorizations', 'public.workflow_outcome_assessments', 'public.workflow_assessment_scans' \
@@ -701,6 +705,15 @@ SELECT
         WHERE namespace.nspname = 'public'
           AND relation.relname LIKE 'workflow\_%' ESCAPE '\'
           AND NOT trigger.tgisinternal
+          AND NOT (relation.relname = 'workflow_updates'
+                   AND trigger.tgname = 'workflow_retain_execution_activity'
+                   AND trigger.tgenabled = 'O')
+    )
+    AND EXISTS (
+        SELECT 1 FROM pg_trigger AS trigger
+        WHERE trigger.tgrelid = 'public.workflow_updates'::regclass
+          AND trigger.tgname = 'workflow_retain_execution_activity'
+          AND trigger.tgenabled = 'O' AND NOT trigger.tgisinternal
     )
     AND NOT EXISTS (
         SELECT 1
@@ -780,6 +793,12 @@ WITH relations AS (
     SELECT 'index', relation.relname, pg_get_indexdef(relation.oid)
     FROM relations AS relation
     WHERE relation.relkind = 'i'
+    UNION ALL
+    SELECT 'trigger', relation.relname || '.' || trigger.tgname,
+           trigger.tgenabled::text || '|' || pg_get_triggerdef(trigger.oid, true)
+    FROM relations AS relation
+    JOIN pg_trigger AS trigger ON trigger.tgrelid = relation.oid
+    WHERE NOT trigger.tgisinternal
     UNION ALL
     SELECT
         'function',

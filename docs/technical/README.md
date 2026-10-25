@@ -4,6 +4,7 @@ The runtime combines the M1 durable foundation with shared immutable agent confi
 
 ## Current implementation
 
+- [Execution timeline](architecture/execution-timeline.md): retained accepted transitions, stable history pages and the workspace inspector.
 - [Project workspace](architecture/project-workspace.md): Svelte project navigation, chat, retained activity, exact retries and scoped console handoff.
 
 - [Agent plan proposals](architecture/agent-proposals.md): bounded terminal provider proposals, authenticated provenance and retained review.

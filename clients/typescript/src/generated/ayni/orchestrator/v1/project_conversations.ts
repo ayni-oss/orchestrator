@@ -63,6 +63,7 @@ import {
   StartTaskPublicationResponse,
 } from "./plans";
 import {
+  Activity,
   CommandReceipt,
   Conversation,
   ConversationHistoryRecord,
@@ -296,6 +297,39 @@ export interface GetOutcomeAssessmentStatusResponse {
   configurationRevisionId: string;
   maxAssessments: number;
   admittedAssessments: number;
+}
+
+/**
+ * Newest-first accepted transitions, retained independently of watch deltas.
+ * Zero snapshot_revision selects the current boundary. Keep the returned boundary
+ * on subsequent pages; before_revision is exclusive. Limit defaults to 50, max 100.
+ */
+export interface ListExecutionTimelineRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  snapshotRevision: string;
+  beforeRevision: string;
+  limit: number;
+}
+
+export interface ExecutionTimelineEntry {
+  /** cursor is empty: historical revisions cannot resume a live watch. */
+  activity?: Activity | undefined;
+  kind: string;
+  affectedResourceIds: string[];
+}
+
+export interface ListExecutionTimelineResponse {
+  entries: ExecutionTimelineEntry[];
+  snapshotRevision: string;
+  /** Zero means there are no older retained entries in this snapshot. */
+  nextBeforeRevision: string;
+  /**
+   * Earliest available revision, or zero for an empty timeline. Installation
+   * preserves existing watch facts; history already pruned remains unavailable.
+   */
+  retainedFromRevision: string;
 }
 
 function createBaseCreateConversationRequest(): CreateConversationRequest {
@@ -4274,6 +4308,413 @@ export const GetOutcomeAssessmentStatusResponse: MessageFns<GetOutcomeAssessment
   },
 };
 
+function createBaseListExecutionTimelineRequest(): ListExecutionTimelineRequest {
+  return { workspaceId: "", projectId: "", conversationId: "", snapshotRevision: "0", beforeRevision: "0", limit: 0 };
+}
+
+export const ListExecutionTimelineRequest: MessageFns<ListExecutionTimelineRequest> = {
+  encode(message: ListExecutionTimelineRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.snapshotRevision !== "0") {
+      writer.uint32(32).uint64(message.snapshotRevision);
+    }
+    if (message.beforeRevision !== "0") {
+      writer.uint32(40).uint64(message.beforeRevision);
+    }
+    if (message.limit !== 0) {
+      writer.uint32(48).uint32(message.limit);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListExecutionTimelineRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListExecutionTimelineRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.snapshotRevision = reader.uint64().toString();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.beforeRevision = reader.uint64().toString();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.limit = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListExecutionTimelineRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      snapshotRevision: isSet(object.snapshotRevision)
+        ? globalThis.String(object.snapshotRevision)
+        : isSet(object.snapshot_revision)
+        ? globalThis.String(object.snapshot_revision)
+        : "0",
+      beforeRevision: isSet(object.beforeRevision)
+        ? globalThis.String(object.beforeRevision)
+        : isSet(object.before_revision)
+        ? globalThis.String(object.before_revision)
+        : "0",
+      limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
+    };
+  },
+
+  toJSON(message: ListExecutionTimelineRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.snapshotRevision !== "0") {
+      obj.snapshotRevision = message.snapshotRevision;
+    }
+    if (message.beforeRevision !== "0") {
+      obj.beforeRevision = message.beforeRevision;
+    }
+    if (message.limit !== 0) {
+      obj.limit = Math.round(message.limit);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListExecutionTimelineRequest>): ListExecutionTimelineRequest {
+    return ListExecutionTimelineRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListExecutionTimelineRequest>): ListExecutionTimelineRequest {
+    const message = createBaseListExecutionTimelineRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.snapshotRevision = object.snapshotRevision ?? "0";
+    message.beforeRevision = object.beforeRevision ?? "0";
+    message.limit = object.limit ?? 0;
+    return message;
+  },
+};
+
+function createBaseExecutionTimelineEntry(): ExecutionTimelineEntry {
+  return { activity: undefined, kind: "", affectedResourceIds: [] };
+}
+
+export const ExecutionTimelineEntry: MessageFns<ExecutionTimelineEntry> = {
+  encode(message: ExecutionTimelineEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.activity !== undefined) {
+      Activity.encode(message.activity, writer.uint32(10).fork()).join();
+    }
+    if (message.kind !== "") {
+      writer.uint32(18).string(message.kind);
+    }
+    for (const v of message.affectedResourceIds) {
+      writer.uint32(26).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExecutionTimelineEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseExecutionTimelineEntry();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.activity = Activity.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.kind = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.affectedResourceIds.push(reader.string());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ExecutionTimelineEntry {
+    return {
+      activity: isSet(object.activity) ? Activity.fromJSON(object.activity) : undefined,
+      kind: isSet(object.kind) ? globalThis.String(object.kind) : "",
+      affectedResourceIds: globalThis.Array.isArray(object?.affectedResourceIds)
+        ? object.affectedResourceIds.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.affected_resource_ids)
+        ? object.affected_resource_ids.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ExecutionTimelineEntry): unknown {
+    const obj: any = {};
+    if (message.activity !== undefined) {
+      obj.activity = Activity.toJSON(message.activity);
+    }
+    if (message.kind !== "") {
+      obj.kind = message.kind;
+    }
+    if (message.affectedResourceIds?.length) {
+      obj.affectedResourceIds = message.affectedResourceIds;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ExecutionTimelineEntry>): ExecutionTimelineEntry {
+    return ExecutionTimelineEntry.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ExecutionTimelineEntry>): ExecutionTimelineEntry {
+    const message = createBaseExecutionTimelineEntry();
+    message.activity = (object.activity !== undefined && object.activity !== null)
+      ? Activity.fromPartial(object.activity)
+      : undefined;
+    message.kind = object.kind ?? "";
+    message.affectedResourceIds = object.affectedResourceIds?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseListExecutionTimelineResponse(): ListExecutionTimelineResponse {
+  return { entries: [], snapshotRevision: "0", nextBeforeRevision: "0", retainedFromRevision: "0" };
+}
+
+export const ListExecutionTimelineResponse: MessageFns<ListExecutionTimelineResponse> = {
+  encode(message: ListExecutionTimelineResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.entries) {
+      ExecutionTimelineEntry.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.snapshotRevision !== "0") {
+      writer.uint32(16).uint64(message.snapshotRevision);
+    }
+    if (message.nextBeforeRevision !== "0") {
+      writer.uint32(24).uint64(message.nextBeforeRevision);
+    }
+    if (message.retainedFromRevision !== "0") {
+      writer.uint32(32).uint64(message.retainedFromRevision);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListExecutionTimelineResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListExecutionTimelineResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.entries.push(ExecutionTimelineEntry.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.snapshotRevision = reader.uint64().toString();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.nextBeforeRevision = reader.uint64().toString();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.retainedFromRevision = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListExecutionTimelineResponse {
+    return {
+      entries: globalThis.Array.isArray(object?.entries)
+        ? object.entries.map((e: any) => ExecutionTimelineEntry.fromJSON(e))
+        : [],
+      snapshotRevision: isSet(object.snapshotRevision)
+        ? globalThis.String(object.snapshotRevision)
+        : isSet(object.snapshot_revision)
+        ? globalThis.String(object.snapshot_revision)
+        : "0",
+      nextBeforeRevision: isSet(object.nextBeforeRevision)
+        ? globalThis.String(object.nextBeforeRevision)
+        : isSet(object.next_before_revision)
+        ? globalThis.String(object.next_before_revision)
+        : "0",
+      retainedFromRevision: isSet(object.retainedFromRevision)
+        ? globalThis.String(object.retainedFromRevision)
+        : isSet(object.retained_from_revision)
+        ? globalThis.String(object.retained_from_revision)
+        : "0",
+    };
+  },
+
+  toJSON(message: ListExecutionTimelineResponse): unknown {
+    const obj: any = {};
+    if (message.entries?.length) {
+      obj.entries = message.entries.map((e) => ExecutionTimelineEntry.toJSON(e));
+    }
+    if (message.snapshotRevision !== "0") {
+      obj.snapshotRevision = message.snapshotRevision;
+    }
+    if (message.nextBeforeRevision !== "0") {
+      obj.nextBeforeRevision = message.nextBeforeRevision;
+    }
+    if (message.retainedFromRevision !== "0") {
+      obj.retainedFromRevision = message.retainedFromRevision;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListExecutionTimelineResponse>): ListExecutionTimelineResponse {
+    return ListExecutionTimelineResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListExecutionTimelineResponse>): ListExecutionTimelineResponse {
+    const message = createBaseListExecutionTimelineResponse();
+    message.entries = object.entries?.map((e) => ExecutionTimelineEntry.fromPartial(e)) || [];
+    message.snapshotRevision = object.snapshotRevision ?? "0";
+    message.nextBeforeRevision = object.nextBeforeRevision ?? "0";
+    message.retainedFromRevision = object.retainedFromRevision ?? "0";
+    return message;
+  },
+};
+
 /** Scoped conversation execution and operator plan review on the trusted listener. */
 export type ProjectConversationServiceService = typeof ProjectConversationServiceService;
 export const ProjectConversationServiceService = {
@@ -4576,6 +5017,17 @@ export const ProjectConversationServiceService = {
     responseDeserialize: (value: Buffer): GetConversationSnapshotResponse =>
       GetConversationSnapshotResponse.decode(value),
   },
+  listExecutionTimeline: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/ListExecutionTimeline" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListExecutionTimelineRequest): Buffer =>
+      Buffer.from(ListExecutionTimelineRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListExecutionTimelineRequest => ListExecutionTimelineRequest.decode(value),
+    responseSerialize: (value: ListExecutionTimelineResponse): Buffer =>
+      Buffer.from(ListExecutionTimelineResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListExecutionTimelineResponse => ListExecutionTimelineResponse.decode(value),
+  },
   listConversationHistory: {
     path: "/ayni.orchestrator.v1.ProjectConversationService/ListConversationHistory" as const,
     requestStream: false as const,
@@ -4670,6 +5122,7 @@ export interface ProjectConversationServiceServer extends UntypedServiceImplemen
   createConversation: handleUnaryCall<CreateConversationRequest, CreateConversationResponse>;
   sendMessage: handleUnaryCall<SendMessageRequest, SendMessageResponse>;
   getConversationSnapshot: handleUnaryCall<GetConversationSnapshotRequest, GetConversationSnapshotResponse>;
+  listExecutionTimeline: handleUnaryCall<ListExecutionTimelineRequest, ListExecutionTimelineResponse>;
   listConversationHistory: handleUnaryCall<ListConversationHistoryRequest, ListConversationHistoryResponse>;
   watchConversation: handleServerStreamingCall<WatchConversationRequest, WatchConversationResponse>;
   listConversations: handleUnaryCall<ListConversationsRequest, ListConversationsResponse>;
@@ -5097,6 +5550,21 @@ export interface ProjectConversationServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetConversationSnapshotResponse) => void,
+  ): ClientUnaryCall;
+  listExecutionTimeline(
+    request: ListExecutionTimelineRequest,
+    callback: (error: ServiceError | null, response: ListExecutionTimelineResponse) => void,
+  ): ClientUnaryCall;
+  listExecutionTimeline(
+    request: ListExecutionTimelineRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListExecutionTimelineResponse) => void,
+  ): ClientUnaryCall;
+  listExecutionTimeline(
+    request: ListExecutionTimelineRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListExecutionTimelineResponse) => void,
   ): ClientUnaryCall;
   listConversationHistory(
     request: ListConversationHistoryRequest,

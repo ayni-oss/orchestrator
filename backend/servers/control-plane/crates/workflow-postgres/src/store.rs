@@ -23,6 +23,7 @@ mod operational;
 mod retention;
 pub mod sessions;
 mod support;
+pub mod timeline;
 
 use self::support::{
     MessageAdmission, ProposedReceipt, activity_from_row, conversation, cursor, ensure_digest,

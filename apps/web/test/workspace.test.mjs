@@ -179,3 +179,60 @@ test('gateway body-limit rejection is definitive; unreadable responses remain am
   fetch.mock.mockImplementation(async () => new Response('Upstream disconnected', { status: 502 }));
   await assert.rejects(gateway('SendMessage', scope), error => !isDefinitive(error) && /original command/.test(error.message));
 });
+
+test('timeline pages keep a frozen boundary and deduplicate replayed entries', async () => {
+  const entry = revision => ({ activity: { id: `activity-${revision}`, conversationRevision: revision, stage: 'ACTIVITY_STAGE_EXECUTION' } });
+  const { request, calls } = fixture({ ListExecutionTimeline: body => body.beforeRevision === '0'
+    ? { entries: [entry('9007199254740993')], snapshotRevision: '9007199254740993', nextBeforeRevision: '9007199254740993', retainedFromRevision: '1' }
+    : { entries: [entry('9007199254740993'), entry('1')], snapshotRevision: body.snapshotRevision, retainedFromRevision: '1' } });
+  const client = clientFor(request); await client.start();
+  Events.sources.at(-1).frame({ snapshot: snapshot('9007199254740993') }); await tick();
+  await client.timeline(true);
+  assert.equal(client.state.timeline.entries.length, 2);
+  assert.equal(client.state.timeline.nextBeforeRevision, '0');
+  const pages = calls.filter(call => call.method === 'ListExecutionTimeline');
+  assert.equal(pages[1].body.snapshotRevision, '9007199254740993');
+  assert.equal(pages[1].body.beforeRevision, '9007199254740993');
+  client.dispose();
+});
+
+test('timeline refresh fences older pages and scope changes fence late failures', async () => {
+  let finishPage, failPage, count = 0;
+  const { request } = fixture({
+    ListConversations: () => ({ conversations: [{ id: 'conversation-1' }, { id: 'conversation-2' }] }),
+    ListExecutionTimeline: () => {
+      count++;
+      if (count === 2) return new Promise(resolve => { finishPage = resolve; });
+      if (count === 4) return new Promise((_, reject) => { failPage = reject; });
+      return { entries: [{ activity: { id: `activity-${count}` } }], snapshotRevision: String(count), nextBeforeRevision: '1' };
+    },
+  });
+  const client = clientFor(request); await client.start();
+  Events.sources.at(-1).frame({ snapshot: snapshot() }); await tick();
+  const older = client.timeline(true);
+  await client.timeline();
+  finishPage({ entries: [{ activity: { id: 'stale-page' } }], snapshotRevision: '1' }); await older;
+  assert.equal(client.state.timeline.entries[0].activity.id, 'activity-3');
+  const stale = client.timeline();
+  await client.select({ ...scope, conversationId: 'conversation-2' });
+  failPage(new Error('Private error from previous scope')); await stale;
+  assert.deepEqual(client.state.timeline.entries, []);
+  assert.equal(client.state.timeline.error, '');
+  client.dispose();
+});
+
+test('a failed timeline read preserves accepted history and can be retried', async () => {
+  let fail = false;
+  const { request } = fixture({ ListExecutionTimeline: () => {
+    if (fail) throw new Error('Unavailable');
+    return { entries: [{ activity: { id: 'retained' } }], snapshotRevision: '1' };
+  } });
+  const client = clientFor(request); await client.start();
+  Events.sources.at(-1).frame({ snapshot: snapshot() }); await tick();
+  fail = true; await client.timeline();
+  assert.equal(client.state.timeline.entries[0].activity.id, 'retained');
+  assert.equal(client.state.timeline.error, 'Unavailable');
+  fail = false; await client.timeline();
+  assert.equal(client.state.timeline.error, '');
+  client.dispose();
+});

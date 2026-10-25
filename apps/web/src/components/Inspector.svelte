@@ -1,6 +1,8 @@
 <script>
   import { count, elapsed, readable } from '../api.mjs';
-  let { view, now } = $props();
+  import { hasNewActivity } from '../timeline.mjs';
+  import { consoleLink } from '../api.mjs';
+  let { view, now, client } = $props();
   const activity = $derived(view.snapshot?.currentActivity);
 </script>
 <section class="inspector" aria-label="Execution activity">
@@ -10,8 +12,25 @@
     <div class="current-stage"><span class="eyebrow">Current stage</span><h3>{readable(activity.stage)}</h3><p>{readable(activity.presentationState)}{activity.waitingOn && activity.waitingOn !== 'WAITING_ON_UNSPECIFIED' ? ` · ${readable(activity.waitingOn)}` : ''}</p><p>{readable(activity.safeReason)}</p>{#if activity.safeDetail}<p class="muted">{activity.safeDetail}</p>{/if}<small>{elapsed(activity.acceptedAt, now)} since this observation</small></div>
   {/if}
   <dl class="fact-grid"><div><dt>Messages</dt><dd>{view.snapshot ? count(view.snapshot.historyCounts?.messages || '0') : 'Not loaded'}</dd></div><div><dt>Turns</dt><dd>{view.snapshot ? count(view.snapshot.historyCounts?.turns || '0') : 'Not loaded'}</dd></div></dl>
-  <h3>Updates in this view</h3>
-  <ol class="timeline">{#each [...view.activities].reverse() as update (update.cursor)}<li><strong>{readable(update.presentationState)}</strong><p>{readable(update.safeReason) || 'Workflow state changed'}</p><small>{update.acceptedAt ? new Date(update.acceptedAt).toLocaleTimeString() : ''} · revision {update.conversationRevision}</small></li>{:else}<li class="muted">Live updates appear here. The current state and transcript are restored on reconnect.</li>{/each}</ol>
+  <h3>Execution timeline</h3>
+  <p class="muted">Accepted transitions, newest first. Times record acceptance, not the exact start or duration of worker stages.</p>
+  {#if hasNewActivity(view.snapshot, view.timeline)}<p class="notice" role="status">New activity is available.</p>{/if}
+  <button class="text-button" onclick={() => client.timeline()} disabled={view.timeline.busy}>{view.timeline.busy ? 'Loading timeline…' : 'Refresh timeline'}</button>
+  {#if view.timeline.error}<p class="error" role="alert">Timeline unavailable: {view.timeline.error}. Refresh to retry.</p>{/if}
+  <ol class="timeline" aria-label="Execution timeline">
+    {#each view.timeline.entries as entry (entry.activity.id)}
+      {@const item = entry.activity}
+      <li><strong>{readable(item.stage)} · {readable(item.presentationState)}</strong>
+        <p>{readable(item.safeReason) || readable(entry.kind)}</p>
+        {#if item.waitingOn && item.waitingOn !== 'WAITING_ON_UNSPECIFIED'}<p>Waiting on {readable(item.waitingOn)}</p>{/if}
+        {#if item.safeDetail}<p class="muted">{item.safeDetail}</p>{/if}
+        <small>{item.acceptedAt ? new Date(item.acceptedAt).toLocaleString() : 'Time not recorded'} · revision {item.conversationRevision}</small>
+        <details><summary>Transition evidence</summary><dl class="identities"><dt>Activity</dt><dd>{item.id}</dd>{#if item.turnId}<dt>Turn</dt><dd>{item.turnId}</dd>{/if}<dt>Event</dt><dd>{entry.kind}</dd>{#each entry.affectedResourceIds || [] as id}<dt>Related resource</dt><dd>{id}</dd>{/each}</dl><a href={consoleLink(view.scope)}>Inspect plans, tasks & recovery ↗</a></details>
+      </li>
+    {:else}<li class="muted">{view.timeline.busy ? 'Loading retained transitions…' : 'No retained transitions in this snapshot.'}</li>{/each}
+  </ol>
+  {#if view.timeline.nextBeforeRevision !== '0'}<button class="text-button" onclick={() => client.timeline(true)} disabled={view.timeline.busy}>Load older activity</button>{/if}
+  {#if view.timeline.retainedFromRevision !== '0'}<p class="muted">Retained history starts at revision {view.timeline.retainedFromRevision}. History pruned before timeline installation is unavailable.</p>{/if}
   <details><summary>Provider calls & usage</summary>
     {#if view.providerError}<p class="error">Usage is unavailable: {view.providerError}</p>{/if}
     {#each view.providerCalls as call (call.callId)}

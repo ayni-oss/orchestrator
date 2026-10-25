@@ -128,6 +128,17 @@ approval, execution, progress inspection, question/failure recovery and draft
 review. Deliver it through small end-to-end slices. Use its measured behavior to
 refine subsequent scope and capacity targets.
 
+### First observable execution slice
+
+Retain accepted conversation activity independently of seven-day watch replay
+cleanup and expose stable, scoped history pages in the workspace inspector.
+Show current activity live and offer explicit refresh for a new history boundary.
+Preserve recorded turn identities and related plan/task resource references;
+accepted timestamps describe observations, not exact stage durations. Detailed
+worker progress, round/tool timing, incremental assistant text, task-specific
+inspection and complete cross-service tracing remain subsequent slices. See the
+[execution timeline contract](docs/technical/architecture/execution-timeline.md).
+
 ### First product workspace slice
 
 The first slice restores workspace/project navigation and conversation chat in a

@@ -47,9 +47,11 @@ Cursor expiry starts a fresh atomic snapshot. Bounded frame processing reconnect
 from the last applied cursor when overwhelmed. Revision comparisons use integers
 without losing precision above JavaScript's exact number range.
 
-The inspector displays current activity, message/turn counts, recent updates in
-this view, retained provider calls and usage, workflow identities and the latest
-command receipt. Its update list is bounded and is not a full durable audit export.
+The inspector displays current activity, message/turn counts, a paginated
+[durable execution timeline](execution-timeline.md), retained provider calls and
+usage, workflow identities and the latest command receipt. History retains a fixed
+revision while current activity updates live; refresh selects a new boundary.
+The timeline is not a full audit export.
 Non-optional conversation counts use ProtoJSON zero defaults; omitted optional
 provider usage remains unknown. No monetary cost, task success rate, model round
 count or production capacity is inferred.

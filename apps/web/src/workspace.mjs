@@ -1,3 +1,4 @@
+import { emptyTimeline, mergeTimeline } from './timeline.mjs';
 import { request as gateway, readSaved, save, readable } from './api.mjs';
 import { watchConversation } from './watch.mjs';
 
@@ -29,12 +30,12 @@ export function createWorkspace({ request = gateway, storage, EventSource, initi
   let state = {
     scope: cleanScope(initialScope || readSaved(storage, selectionKey, {})),
     workspaces: [], projects: [], conversations: [], pages: {}, busy: false, sending: false,
-    snapshot: null, activities: [], history: [], historyBusy: false, historyMore: false,
+    snapshot: null, timeline: emptyTimeline(), activities: [], history: [], historyBusy: false, historyMore: false,
     providerCalls: [], providerError: '', connection: 'Choose a conversation', error: '',
     pending: readSaved(storage, pendingKey, null), lastReceipt: null, storageWarning: '',
   };
   if (!knownCommands.has(state.pending?.method) || !identity.test(state.pending?.body?.idempotencyKey || '')) state.pending = null;
-  let epoch = 0, catalog = 0, providerQuery = 0, stopWatch, historyId = '', before = '0', disposed = false;
+  let epoch = 0, catalog = 0, providerQuery = 0, stopWatch, historyId = '', before = '0', disposed = false, timelineQuery = 0;
   const listeners = new Set();
   const emit = patch => {
     if (disposed) return;
@@ -48,10 +49,10 @@ export function createWorkspace({ request = gateway, storage, EventSource, initi
     return stored;
   };
   function reset(scope) {
-    stopWatch?.(); stopWatch = undefined; epoch++; providerQuery++; catalog++;
+    stopWatch?.(); stopWatch = undefined; epoch++; providerQuery++; catalog++; timelineQuery++;
     historyId = ''; before = '0';
     persist(selectionKey, scope);
-    emit({ scope, snapshot: null, activities: [], history: [], historyBusy: false, historyMore: false,
+    emit({ scope, snapshot: null, timeline: emptyTimeline(), activities: [], history: [], historyBusy: false, historyMore: false,
       providerCalls: [], providerError: '', error: '', connection: scope.conversationId ? 'Connecting' : 'Choose a conversation' });
   }
   async function loadPage(kind, append = false) {
@@ -93,11 +94,26 @@ export function createWorkspace({ request = gateway, storage, EventSource, initi
       if (version === epoch && query === providerQuery) emit({ providerCalls: [], providerError: error.message });
     }
   }
+  async function timeline(append = false) {
+    if (!state.scope.conversationId || (append && (state.timeline.busy || state.timeline.nextBeforeRevision === '0'))) return;
+    const scope = { ...state.scope }, version = epoch, query = ++timelineQuery;
+    const previous = state.timeline;
+    emit({ timeline: { ...previous, busy: true, error: '' } });
+    try {
+      const page = await request('ListExecutionTimeline', { ...scope, limit: 50,
+        snapshotRevision: append ? previous.snapshotRevision : '0',
+        beforeRevision: append ? previous.nextBeforeRevision : '0' });
+      if (version === epoch && query === timelineQuery && !disposed) emit({ timeline: mergeTimeline(previous, page, append) });
+    } catch (error) {
+      if (version === epoch && query === timelineQuery && !disposed) emit({ timeline: { ...previous, busy: false, error: error.message } });
+    }
+  }
   function apply(snapshot) {
     if (!sameScope(snapshot, state.scope)) throw new Error('Conversation scope mismatch.');
     if (state.snapshot && BigInt(snapshot.conversationRevision || '0') < BigInt(state.snapshot.conversationRevision || '0')) return;
     emit({ snapshot, historyMore: historyId ? state.historyMore : !!snapshot.historyCounts?.hasOlderHistory });
     void providers();
+    if (state.timeline.snapshotRevision === '0' && !state.timeline.busy && !state.timeline.error) void timeline();
   }
   function connect() {
     stopWatch?.();
@@ -181,7 +197,7 @@ export function createWorkspace({ request = gateway, storage, EventSource, initi
     subscribe(listener) { listeners.add(listener); listener(state); return () => listeners.delete(listener); },
     async start() { await select(state.scope); }, select, refresh,
     async more(kind) { try { await loadPage(kind, true); } catch (error) { showError(error); } },
-    submit, retry, older,
+    submit, retry, older, timeline,
     pause() { stopWatch?.(); stopWatch = undefined; emit({ connection: 'Paused · work continues' }); },
     reconnect: connect,
     dismissError() { emit({ error: '' }); },

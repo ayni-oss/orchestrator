@@ -51,6 +51,19 @@ try {
   await page.reload(); await completed(page);
   assert.equal(await page.locator('.transcript .from-user').count(), 1);
   const firstScope = await currentScope(page);
+  // Reload reconstructs durable timeline entries, independently of this tab's watch.
+  const timeline = page.getByRole('list', { name: 'Execution timeline', exact: true });
+  await timeline.locator('li strong').first().waitFor();
+  const retainedTimeline = await api(page, 'ListExecutionTimeline', { ...firstScope, limit: 1 });
+  assert.equal(retainedTimeline.entries.length, 1);
+  const newestActivity = retainedTimeline.entries[0].activity.id;
+  await page.getByRole('button', { name: 'Refresh timeline', exact: true }).click();
+  await timeline.getByText(newestActivity, { exact: true }).waitFor({ state: 'attached' });
+  const foreignTimeline = await page.evaluate(async scope => {
+    const response = await fetch('/api/ListExecutionTimeline', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Console-Request': '1' }, body: JSON.stringify({ ...scope, projectId: 'foreign-project' }) });
+    return response.status;
+  }, firstScope);
+  assert.equal(foreignTimeline, 404);
   const handoff = await page.getByRole('link', { name: 'Contributor console' }).getAttribute('href');
   assert.match(handoff, /workspaceId=.+projectId=.+conversationId=/);
   const second = await context.newPage();
@@ -69,6 +82,9 @@ try {
   await page.getByRole('button', { name: 'Reconnect', exact: true }).click();
   await page.getByText('Written from another tab', { exact: true }).waitFor();
   await completed(page);
+  await page.getByText('New activity is available.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Refresh timeline', exact: true }).click();
+  await page.getByText('New activity is available.', { exact: true }).waitFor({ state: 'hidden' });
   // Lose an accepted response, then reload and retry the exact stored command.
   await page.route('**/api/SendMessage', async route => { await route.fetch(); await route.abort('failed'); }, { times: 1 });
   await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Accepted before response loss');
@@ -141,7 +157,7 @@ try {
   }
   violations.push(...await page.evaluate(() => window.cspViolations));
   assert.deepEqual(errors, []); assert.deepEqual(violations, []);
-  const report = { passed: true, mode: fixture ? 'browser-fixture' : 'deployed', sessions, checks: ['create', 'chat', 'reload', 'two-tabs', 'reconnect', 'exact-command-retry', 'capacity-rejection', 'isolation', 'history', 'content-escaping', 'scoped-console-handoff', 'themes', 'mobile', 'content-security-policy'] };
+  const report = { passed: true, mode: fixture ? 'browser-fixture' : 'deployed', sessions, checks: ['create', 'chat', 'reload', 'two-tabs', 'reconnect', 'exact-command-retry', 'capacity-rejection', 'isolation', 'history', 'retained-execution-timeline', 'timeline-refresh', 'timeline-scope-isolation', 'content-escaping', 'scoped-console-handoff', 'themes', 'mobile', 'content-security-policy'] };
   report.checks.push(fixture ? 'provider-usage-display-fixture' : 'distinct-retained-session-identities');
   if (evidence) await writeFile(`${evidence}/outcome.json`, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report));

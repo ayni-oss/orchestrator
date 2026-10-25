@@ -4,6 +4,7 @@ mod projections;
 mod publications;
 mod recovery;
 mod tasks;
+mod timeline;
 use projections::{
     agent_configuration, conversation, history_record, project, receipt, session, snapshot,
     timestamp, update, valid_request_id, workspace,
@@ -288,6 +289,13 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
 
 #[tonic::async_trait]
 impl v1::project_conversation_service_server::ProjectConversationService for WorkflowGrpc {
+    async fn list_execution_timeline(
+        &self,
+        request: Request<v1::ListExecutionTimelineRequest>,
+    ) -> Result<Response<v1::ListExecutionTimelineResponse>, Status> {
+        timeline::list(&self.store, request).await
+    }
+
     async fn get_outcome_assessment_status(
         &self,
         request: Request<v1::GetOutcomeAssessmentStatusRequest>,
