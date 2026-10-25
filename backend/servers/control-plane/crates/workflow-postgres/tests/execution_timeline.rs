@@ -129,3 +129,71 @@ async fn prove_retention_guards(
     runtime_driver.abort();
     Ok(())
 }
+
+#[tokio::test]
+#[ignore = "requires the disposable PostgreSQL acceptance fixture"]
+async fn runtime_traced_admission_preserves_context_without_wider_privileges()
+-> Result<(), Box<dyn Error>> {
+    let admin_url = std::env::var("AYNI_POSTGRES_FEASIBILITY_URL")?;
+    let runtime_url = std::env::var("AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL")?;
+    let role = std::env::var("AYNI_POSTGRES_RUNTIME_FEASIBILITY_ROLE")?;
+    migrate_for_runtime(&admin_url, &role).await?;
+    let store = WorkflowStore::new(runtime_url.clone());
+    let key = Uuid::now_v7().to_string();
+    let workspace = store
+        .create_workspace(&key, "Traced admission")
+        .await?
+        .resource;
+    let project = store
+        .create_project(&key, &workspace.id, "Traced admission", "")
+        .await?
+        .resource;
+    let conversation = store
+        .create_conversation(&key, &workspace.id, &project.id, "Traced admission")
+        .await?
+        .resource;
+    let parent = "00-7431fc7927bb4f208986f2a4f2418dba-3f49c016c2df402b-01";
+    let receipt = store
+        .send_message_traced(
+            "traced",
+            &workspace.id,
+            &project.id,
+            &conversation.id,
+            "Diagnostic context",
+            Some(parent),
+        )
+        .await
+        .map_err(|error| format!("traced runtime admission failed: {error:?}"))?;
+    let replay = store
+        .send_message_traced(
+            "traced",
+            &workspace.id,
+            &project.id,
+            &conversation.id,
+            "Diagnostic context",
+            None,
+        )
+        .await?;
+    assert_eq!(receipt, replay);
+    let page = store
+        .list_execution_timeline(&workspace.id, &project.id, &conversation.id, 0, 0, 100)
+        .await?;
+    assert!(
+        page.entries
+            .iter()
+            .any(|entry| entry.activity.turn_id == receipt.turn_id && entry.traceparent == parent)
+    );
+    let (runtime, driver) = connect(&runtime_url).await?;
+    let command: Vec<u8> = runtime
+        .query_one(
+            "SELECT event_bytes FROM workflow_outbox WHERE turn_id=$1 ORDER BY created_at LIMIT 1",
+            &[&receipt.turn_id],
+        )
+        .await?
+        .get(0);
+    let (_, metadata, _) = ayni_orchestrator_events::workflow::decode_command(&command)?;
+    assert_eq!(metadata.traceparent, parent);
+    validate(&runtime_url).await?;
+    driver.abort();
+    Ok(())
+}

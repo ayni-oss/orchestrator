@@ -73,7 +73,7 @@ impl WorkflowStore {
              LEFT JOIN workflow_command_receipts r ON r.conversation_id = t.conversation_id \
              AND r.turn_id = t.turn_id AND r.kind = 'send_message' \
              WHERE t.conversation_id = $1 AND t.conversation_revision <= $2 \
-             AND ($3 = 0 OR t.conversation_revision < $3) \
+             AND ($3::bigint = 0 OR t.conversation_revision < $3) \
              ORDER BY t.conversation_revision DESC LIMIT $4",
                 &[&conversation, &boundary, &before, &(i64::from(limit) + 1)],
             )
