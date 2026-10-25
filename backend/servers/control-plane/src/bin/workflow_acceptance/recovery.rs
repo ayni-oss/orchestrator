@@ -93,7 +93,10 @@ pub async fn record(client: &mut Client, start: &v1::StartTaskExecutionRequest) 
         return Err("saved work differs from accepted evidence".into());
     }
     questions(client, request).await?;
-    if client.get_task_attempt(selected).await?.into_inner() != before {
+    if super::attempt_evidence::response_bytes(
+        &client.get_task_attempt(selected).await?.into_inner(),
+    ) != super::attempt_evidence::response_bytes(&before)
+    {
         return Err("review changed task execution authority".into());
     }
     let mut wrong = list(start);

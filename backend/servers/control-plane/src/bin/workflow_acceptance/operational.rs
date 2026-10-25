@@ -238,7 +238,7 @@ pub async fn capture(client: &mut Client) -> Result {
             }
             evidence.active = observations
                 .iter()
-                .map(prost::Message::encode_to_vec)
+                .map(super::attempt_evidence::response_bytes)
                 .collect();
             return output(&evidence);
         }
@@ -294,7 +294,10 @@ pub async fn cancel(client: &mut Client) -> Result {
                 .as_ref()
                 .is_some_and(|a| a.state == "cancelled" && a.generation == 2 && a.patch.is_empty())
         }) {
-            evidence.terminal = terminal.iter().map(prost::Message::encode_to_vec).collect();
+            evidence.terminal = terminal
+                .iter()
+                .map(super::attempt_evidence::response_bytes)
+                .collect();
             return output(&evidence);
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
@@ -322,12 +325,12 @@ pub async fn verify(client: &mut Client) -> Result {
         {
             return Err("start receipt changed after restart".into());
         }
-        if client
-            .get_task_attempt(selected(&evidence.scope, &request))
-            .await?
-            .into_inner()
-            .encode_to_vec()
-            != evidence.terminal[index]
+        if super::attempt_evidence::response_bytes(
+            &client
+                .get_task_attempt(selected(&evidence.scope, &request))
+                .await?
+                .into_inner(),
+        ) != super::attempt_evidence::retained_bytes(&evidence.terminal[index])?
         {
             return Err("terminal authority changed after restart".into());
         }

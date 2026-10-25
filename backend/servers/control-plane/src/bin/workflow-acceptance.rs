@@ -15,6 +15,8 @@ use tokio::time::{Instant, timeout_at};
 use tonic::{Code, Streaming, transport::Channel};
 use uuid::Uuid;
 
+#[path = "workflow_acceptance/attempt_evidence.rs"]
+mod attempt_evidence;
 #[path = "workflow_acceptance/continuation.rs"]
 mod continuation;
 #[path = "workflow_acceptance/execution.rs"]

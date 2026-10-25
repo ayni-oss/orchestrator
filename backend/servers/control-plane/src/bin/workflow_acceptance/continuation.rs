@@ -93,8 +93,12 @@ pub async fn confirm(
         request: request.encode_to_vec(),
         receipt: receipt.encode_to_vec(),
         parent_request: parent_request.encode_to_vec(),
-        parent: ayni_orchestrator_events::task_execution::digest(&parent.encode_to_vec()),
-        child: ayni_orchestrator_events::task_execution::digest(&child.encode_to_vec()),
+        parent: ayni_orchestrator_events::task_execution::digest(
+            &super::attempt_evidence::response_bytes(&parent),
+        ),
+        child: ayni_orchestrator_events::task_execution::digest(
+            &super::attempt_evidence::response_bytes(&child),
+        ),
     };
     let bytes = serde_json::to_vec(&evidence)?;
     verify(client, &bytes).await?;
@@ -119,13 +123,12 @@ pub async fn verify(client: &mut Client, bytes: &[u8]) -> Result {
         .confirmation
         .ok_or("receipt missing")?;
     let parent_request = v1::GetTaskAttemptRequest::decode(evidence.parent_request.as_slice())?;
-    if ayni_orchestrator_events::task_execution::digest(
+    if ayni_orchestrator_events::task_execution::digest(&super::attempt_evidence::response_bytes(
         &client
             .get_task_attempt(parent_request.clone())
             .await?
-            .into_inner()
-            .encode_to_vec(),
-    ) != evidence.parent
+            .into_inner(),
+    )) != evidence.parent
     {
         return Err("recovery overwrote parent evidence".into());
     }
@@ -133,13 +136,9 @@ pub async fn verify(client: &mut Client, bytes: &[u8]) -> Result {
         attempt_id: receipt.attempt_id.clone(),
         ..parent_request
     };
-    if ayni_orchestrator_events::task_execution::digest(
-        &client
-            .get_task_attempt(child)
-            .await?
-            .into_inner()
-            .encode_to_vec(),
-    ) != evidence.child
+    if ayni_orchestrator_events::task_execution::digest(&super::attempt_evidence::response_bytes(
+        &client.get_task_attempt(child).await?.into_inner(),
+    )) != evidence.child
     {
         return Err("linked attempt changed after restart".into());
     }

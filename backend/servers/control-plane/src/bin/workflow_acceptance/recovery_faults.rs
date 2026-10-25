@@ -155,7 +155,7 @@ async fn confirm(client: &mut Client, seed: Seed) -> Result {
     let child = receipt.confirmation.as_ref().ok_or("child missing")?;
     let e = Evidence {
         parent_request: selected.encode_to_vec(),
-        parent: parent.encode_to_vec(),
+        parent: super::attempt_evidence::response_bytes(&parent),
         proposal: record.encode_to_vec(),
         confirmation_request: request.encode_to_vec(),
         worker: format!("task-{}", child.attempt_id.replace('-', "")),
@@ -213,14 +213,14 @@ async fn saved_work(client: &mut Client, e: &Evidence) -> Result<v1::GetTaskAtte
     let old = v1::GetTaskAttemptResponse::decode(e.parent.as_slice())?
         .attempt
         .ok_or("parent missing")?;
-    if client
-        .get_task_attempt(v1::GetTaskAttemptRequest::decode(
-            e.parent_request.as_slice(),
-        )?)
-        .await?
-        .into_inner()
-        .encode_to_vec()
-        != e.parent
+    if super::attempt_evidence::response_bytes(
+        &client
+            .get_task_attempt(v1::GetTaskAttemptRequest::decode(
+                e.parent_request.as_slice(),
+            )?)
+            .await?
+            .into_inner(),
+    ) != super::attempt_evidence::retained_bytes(&e.parent)?
     {
         return Err("recovery changed accepted parent evidence".into());
     }
@@ -292,7 +292,7 @@ async fn capture(client: &mut Client, mut e: Evidence, expected: &str) -> Result
         let response = saved_work(client, &e).await?;
         let state = &response.attempt.as_ref().ok_or("attempt missing")?.state;
         if state == expected {
-            e.terminal = response.encode_to_vec();
+            e.terminal = super::attempt_evidence::response_bytes(&response);
             break;
         }
         if [
@@ -316,7 +316,10 @@ async fn capture(client: &mut Client, mut e: Evidence, expected: &str) -> Result
 async fn verify(client: &mut Client, e: &Evidence) -> Result {
     receipts(client, e).await?;
     let response = saved_work(client, e).await?;
-    if e.terminal.is_empty() || response.encode_to_vec() != e.terminal {
+    if e.terminal.is_empty()
+        || super::attempt_evidence::response_bytes(&response)
+            != super::attempt_evidence::retained_bytes(&e.terminal)?
+    {
         return Err("terminal recovery evidence changed after interruption".into());
     }
     let selected = child_request(e)?;
