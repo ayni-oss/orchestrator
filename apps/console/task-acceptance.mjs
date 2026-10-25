@@ -117,7 +117,8 @@ export async function exerciseTasks({ page, gateway, scope }) {
   assert.match(await page.locator('#task-detail').innerText(), new RegExp(tasks[1].specification.objective));
   // Restore real reads so the cumulative suite finishes on canonical state.
   for (const method of ['GetTaskAttempt', 'GetTaskExecution', 'ReviewTaskPublication', 'StartTaskPublication', 'CancelTaskPublication', 'CancelTaskExecution']) await page.unroute(`**/api/${method}`);
-  await page.locator('#task-refresh').click();
+  // Reopen the task without the fixture-only pinned attempt before canonical reads.
+  await page.locator(`[data-inspect-task="${tasks[1].id}"]`).click();
   await page.waitForFunction(() => document.querySelector('#task-status').textContent.includes('Verify the approved source'));
   console.log(JSON.stringify({ taskConsole: 'pass', cases: ['real-admitted-task-read', 'source-helper-selection', 'separate-outcomes', 'text-only-patch-and-preview', 'exact-publication-consent', 'lost-start-response-reload-retry-fixture', 'lost-cancel-response-retry-fixture', 'uncertainty-does-not-create-again', 'failed-quality-blocks-publication', 'coding-cancellation', 'stale-selection-response-fencing'] }));
 }

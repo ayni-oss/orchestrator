@@ -24,6 +24,15 @@ identity or authorization system. Static assets render retained content as text.
 At most 32 unary requests and eight watches run concurrently per gateway. Request
 bodies are bounded at 64 KiB; canonical input and response bounds still apply.
 
+## Product workspace adapter
+
+`dev/ctl web` builds the Svelte product workspace and supplies its build directory
+to the same gateway. `/workspace/` serves a bounded startup snapshot of those
+assets; `/` retains the complete contributor console. Both share the existing
+host/origin checks, content-security policy, request bounds, API allowlist and
+resumable watch. No additional broker, database or credential capability is added.
+See [project workspace](project-workspace.md) for the first slice and acceptance.
+
 ## Browser transport decision
 
 The console uses same-origin JSON POST requests for commands and queries, and SSE
@@ -193,4 +202,4 @@ is a convenience for retries, not authority; clearing it can lose the local retr
 handle. Transcripts and replay cursors are not persisted in browser storage.
 
 See [local development](../operations/local-development.md) for operation and
-[the roadmap](../../../ROADMAP.md#m1m2-delivery-scopes) for delivery scopes.
+[the roadmap](../history/backend-foundation-roadmap.md#m1m2-delivery-scopes) for delivery scopes.

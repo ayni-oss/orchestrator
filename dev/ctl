@@ -15,6 +15,7 @@ Durable-workflow local Docker Desktop development:
   secrets                       Create immutable database and broker role Secrets
   deploy | redeploy | up        Build and install or upgrade the Slice 3 stack
   check [--expect-empty]        Check migrations, streams, and workload readiness
+  web [PORT]                    Build and open the project workspace (default 3000)
   console [PORT]                Open the local contributor gateway (default 3000)
   prepare-task verify CHECKOUT SELECTION_JSON FROZEN_REQUEST_JSON
   prepare-task submit FROZEN_REQUEST_JSON
@@ -103,6 +104,11 @@ case "$command" in
     ;;
   prepare-task)
     "$scripts/prepare-task.sh" "$@"
+    ;;
+  web)
+    [[ $# -le 1 ]] || { echo "usage: dev/ctl web [PORT]" >&2; exit 2; }
+    pnpm web:build
+    "$scripts/console.sh" "${1:-3000}" "$repository_root/apps/web/build"
     ;;
   console)
     [[ $# -le 1 ]] || { echo "usage: dev/ctl console [PORT]" >&2; exit 2; }

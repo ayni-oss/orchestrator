@@ -158,6 +158,6 @@ validation boundaries.
 
 ## Where the detail lives
 
-- [Roadmap](../../../ROADMAP.md#m6-delivery-scopes) records agreed milestone direction and prerequisites.
+- [Roadmap](../history/backend-foundation-roadmap.md#m6-delivery-scopes) records agreed milestone direction and prerequisites.
 - [Task feedback](../architecture/task-feedback.md) defines the first slice's persistence, API and safety boundary.
 - [Task acceptance](../operations/task-acceptance.md) defines cumulative task-delivery proofs and evidence limits.

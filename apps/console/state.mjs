@@ -52,3 +52,14 @@ export function outcomeAssessmentCommand(scope, configuration, count, consent) {
   if (maxAssessments > 0 && !consent) throw new Error('Confirm the assessment allowance and model limits before saving.');
   return { workspaceId:scope.workspaceId, projectId:scope.projectId, conversationId:scope.conversationId, expectedConfigurationRevisionId:configuration.revisionId, maxAssessments };
 }
+
+// Explicit product-workspace links select only a complete, bounded parent scope.
+export function linkedSelection(search) {
+  const query = new URLSearchParams(search);
+  const valid = value => /^[a-zA-Z0-9_-]{1,128}$/.test(value || '');
+  const scope = {};
+  if (valid(query.get('workspaceId'))) scope.workspaceId = query.get('workspaceId');
+  if (scope.workspaceId && valid(query.get('projectId'))) scope.projectId = query.get('projectId');
+  if (scope.projectId && valid(query.get('conversationId'))) scope.conversationId = query.get('conversationId');
+  return scope.workspaceId ? scope : null;
+}

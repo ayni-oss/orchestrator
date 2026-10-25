@@ -1,7 +1,7 @@
 # Conversation execution contract
 
 This is the consolidated M2 entry contract for [configuration and isolated
-sessions](../../../ROADMAP.md#m1m2-delivery-scopes). It carries forward the
+sessions](../history/backend-foundation-roadmap.md#m1m2-delivery-scopes). It carries forward the
 [M1 handoff](../research/project-workflow-m1-durable-foundation.md#m2-handoff)
 and resolves the configuration, session, provider and tool boundaries identified
 by the [refactor research](../research/project-workflow-refactor-runbook.md).

@@ -48,6 +48,20 @@ All use seven-day age limits, a two-minute duplicate window, one local replica, 
 
 `dev/ctl check` verifies workload readiness, migration history through ordinal 27, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
 
+## Project workspace
+
+After deployment, run `pnpm install --frozen-lockfile` and `dev/ctl web`.
+Open `http://127.0.0.1:3000/workspace/` for workspace/project discovery, creation,
+conversation chat, retained history, cancellation, activity and provider usage.
+`dev/ctl web 3001` selects another port. The command builds Svelte assets and serves
+them through the same trusted local Rust gateway as the contributor console.
+Restart it after rebuilding assets or replacing the control-plane pod.
+
+The scoped console link opens configuration, plans, tasks, recovery and publication
+for the selected conversation. It remains the complete operator surface during
+incremental product refinement. See [the workspace guide](../../../apps/web/README.md)
+for browser-fixture and deployed acceptance commands and their evidence boundaries.
+
 ## Contributor console
 
 After deploying and checking the stack, run:

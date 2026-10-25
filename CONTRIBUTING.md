@@ -71,6 +71,9 @@ cargo check --workspace --all-targets
 pnpm install --frozen-lockfile
 pnpm typecheck
 pnpm test
+pnpm web:build
+pnpm exec playwright install chromium
+pnpm web:acceptance
 pnpm proto:check
 pnpm chart:check
 pnpm docs:check

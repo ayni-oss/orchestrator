@@ -88,7 +88,7 @@ Use these scenarios throughout modeling, experiments, and acceptance. Include a 
 
 ## First implementation slice
 
-The [roadmap](../../../ROADMAP.md#project-workflow-replacement) defines eight delivery milestones, separate from this runbook's research gates. M1 is a runnable PostgreSQL, JetStream, and gRPC slice with a scripted executor, durable admission, and resumable updates. Its [durable foundation contract](project-workflow-m1-durable-foundation.md) specifies the reviewable scope, authority, module map, local stack, and acceptance cases that runtime implementation must satisfy.
+The [roadmap](../history/backend-foundation-roadmap.md#project-workflow-replacement) defines eight delivery milestones, separate from this runbook's research gates. M1 is a runnable PostgreSQL, JetStream, and gRPC slice with a scripted executor, durable admission, and resumable updates. Its [durable foundation contract](project-workflow-m1-durable-foundation.md) specifies the reviewable scope, authority, module map, local stack, and acceptance cases that runtime implementation must satisfy.
 
 The replacement's cumulative acceptance harness is its only executable baseline.
 Historical sandbox behavior supplies lessons, not compatibility requirements. Before

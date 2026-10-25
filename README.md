@@ -5,7 +5,13 @@
 
 # Ayni Orchestrator
 
-Ayni Orchestrator is rebuilding its project-conversation workflow on a durable PostgreSQL foundation.
+Ayni Orchestrator is evolving into an open-source software factory for AI agents,
+built on durable project conversations, reviewed plans and isolated task execution.
+The [active roadmap](ROADMAP.md) focuses on the product workspace, responsive
+feedback, execution traceability, project metrics and future event-driven inputs.
+The [backend foundation roadmap](docs/technical/history/backend-foundation-roadmap.md)
+is archived with its acceptance limits; planned product capabilities are not claims
+of delivered behavior.
 
 The runtime provides **conversation execution, plan approval and isolated task delivery through managed quality and draft publication** on the M1 durable foundation, with a local contributor console, shared agent configuration and isolated sessions supporting scripted or explicitly enabled OpenAI execution. It provides:
 
@@ -30,7 +36,7 @@ The runtime provides **conversation execution, plan approval and isolated task d
 - a canonical private-v1 gRPC API on a trusted pod-loopback listener; and
 - a Docker Desktop Helm stack with separated database/broker identities and retained storage.
 
-This is a clean replacement, not a compatibility migration. The prior SQLite workflow, browser/BFF, runtime workers, legacy development fixtures, and custom-client workflow path are not part of the current runtime.
+This is a clean replacement, not a compatibility migration. The prior SQLite workflow, browser API adapter, runtime workers, legacy development fixtures, and custom-client workflow path are not part of the current runtime. The product workspace selectively reuses the former visual design against current APIs.
 
 The cumulative M1 acceptance evidence is recorded in the delivery PR. The local contributor console exposes shared configuration, isolated sessions, provider usage and cancellation. OpenAI execution requires an explicit model, deployment enablement and a workspace-scoped credential mounted directly into its session. Scripted execution remains the default. OpenAI conversations can read frozen workspace instructions, project status and their own bounded history. The final M2 acceptance scope includes deterministic provider/tool recovery fixtures and a separately reported live-provider smoke test. All Orchestrator interfaces stay v1 until alpha merges.
 
@@ -68,10 +74,15 @@ configuration, retention and the cumulative deployed evidence requirements.
 ```sh
 dev/ctl deploy
 dev/ctl check --expect-empty
-dev/ctl console
+dev/ctl web
 ```
 
-Open `http://127.0.0.1:3000` while the console command runs.
+Open `http://127.0.0.1:3000/workspace/` while the command runs. The Svelte project
+workspace supports discovery, creation, conversations, retained activity and
+provider usage over the existing local gateway. Follow its scoped contributor
+console link for configuration, plan/task review, publication and recovery.
+`dev/ctl console` still opens that complete operator surface directly.
+See the [workspace guide](apps/web/README.md) for scope and browser acceptance.
 
 See [task delivery acceptance](docs/technical/operations/task-acceptance.md) for the cumulative M4 gates and integration limits. See [local development](docs/technical/operations/local-development.md) for prerequisites, trusted diagnostics, validation, restart checks, and explicit cleanup.
 
@@ -83,4 +94,4 @@ See [task delivery acceptance](docs/technical/operations/task-acceptance.md) for
 - [Technical documentation index](docs/technical/README.md)
 - [Contributor preview](docs/site/index.md)
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for repository checks, [AGENTS.md](AGENTS.md) for repository rules, and [ROADMAP.md](ROADMAP.md) for later slices.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for repository checks, [AGENTS.md](AGENTS.md) for repository rules, and [ROADMAP.md](ROADMAP.md) for active product direction.

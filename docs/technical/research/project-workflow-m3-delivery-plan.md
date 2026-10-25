@@ -12,7 +12,7 @@ Date: 2026-10-21. Status: staged implementation plan. PR #238 combines this cont
 ## Why now
 
 M2 is complete on `alpha` at `8e6381b`, following PRs #234–#237.
-Plans and task approval are the next [roadmap scope](../../../ROADMAP.md#delivery-sequence).
+Plans and task approval are the next [roadmap scope](../history/backend-foundation-roadmap.md#delivery-sequence).
 
 ## How it works today
 

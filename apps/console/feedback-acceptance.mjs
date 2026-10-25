@@ -8,7 +8,8 @@ export async function exerciseFeedback({ page, gateway, scope }) {
   const task = (await gateway(page, 'ListTasks', { ...scope, limit: 1 })).tasks[0];
   const other = (await gateway(page, 'CreateConversation', { workspaceId: scope.workspaceId, projectId: scope.projectId, title: 'Feedback isolation', idempotencyKey: crypto.randomUUID() })).conversation;
   const summary = '<img src=x onerror="window.feedbackInjected=true"> Quality needs review.';
-  const first = { ...scope, id: crypto.randomUUID(), taskId: task.id, attemptId: crypto.randomUUID(), category: 'execution', state: 'open', safeReason: 'task_interrupted', summary };
+  // This fixture creates no attempt. A canonical-format missing ID must reach NotFound, not input validation.
+  const first = { ...scope, id: crypto.randomUUID(), taskId: task.id, attemptId: task.id, category: 'execution', state: 'open', safeReason: 'task_interrupted', summary };
   const second = { ...first, id: crypto.randomUUID(), category: 'quality', summary: 'Inspect the retained quality evidence.' };
   let delayed;
   let delayNext = false;

@@ -1,288 +1,165 @@
 # Roadmap
 
-This roadmap records agreed product direction. Requirements, acceptance criteria, evidence, and delivery status belong in the pull request for each bounded slice. Development branches start from current `origin/alpha` and target `alpha`.
+Ayni Orchestrator is evolving into an open-source software factory for AI agents.
+The next phase turns its technical foundations into a product people can use to
+understand, authorize, observe and improve software delivery.
 
-## Project workflow replacement
+This roadmap owns agreed direction and milestone scope. Each bounded PR owns its
+requirements, acceptance evidence and delivery status. Start fresh branches from
+current `origin/alpha` and target `alpha`; users retain merge authority.
 
-The replacement is clean-slate. PostgreSQL is authoritative transactional state, JetStream will carry durable delivery, and gRPC provides command and observation contracts. Prior SQLite workflow schemas, retained data, APIs, tests, browser paths, and broker topology are research input only: do not migrate, dual-write, preserve, or adapt them.
+## Foundation phase archived
 
-The [M1 durable foundation contract](docs/technical/research/project-workflow-m1-durable-foundation.md) is binding for M1. The [refactor runbook](docs/technical/research/project-workflow-refactor-runbook.md), [worksheets](docs/technical/research/project-workflow-design-worksheets.md), and [feasibility evidence](docs/technical/research/project-workflow-m1-feasibility-evidence.md) preserve the investigation and approved boundaries.
+The M1–M8 backend implementation phase is closed as a planning phase. Its
+[delivery roadmap](docs/technical/history/backend-foundation-roadmap.md) is archived
+for provenance. Current architecture and operational contracts remain authoritative.
+Archiving the plan changes neither supported behavior nor acceptance requirements.
 
-### Alpha contract policy
+Live additional-provider qualification and sustained production capacity remain
+unmeasured in the recorded evidence. Confirm the final committed-source cumulative
+M8 result before claiming local acceptance complete. The
+[operational acceptance contract](docs/technical/operations/operational-acceptance.md)
+continues to govern qualification; implementation completion does not establish
+autonomous coding capability or production readiness.
 
-Every Orchestrator-owned interface remains v1 until alpha merges. Consolidate
-research into the canonical implementation; do not create parallel interface
-versions for delivery milestones. Immutable configuration revision IDs, session
-generations, ordering revisions and SQL migration ordinals retain their distinct
-meaning. The [conversation execution contract](docs/technical/architecture/conversation-execution.md)
-owns the consolidated M2 decisions, including provider uncertainty, cancellation
-and initial tool authority.
+## Product direction
 
-### Product constraints
+The project is the durable home for intent, decisions, work and outcomes. Chat is
+the first input surface. Future repository events, schedules, API requests and
+agent inputs enter the same scoped workflow with explicit policy and authority.
 
-- Conversations share project configuration but retain isolated working context.
-- Plans originate in conversations and require explicit approval of an immutable version.
-- Concurrent tasks use isolated worktrees and freeze selected source commits.
-- Questions and failures return to their originating conversation.
-- Task delivery ends at a reviewable draft; users retain merge authority.
-- Workspace instructions and MCP integrations precede multiple providers.
-- Tenancy expansion and user management remain outside this replacement.
+Keep isolated conversations and workers, immutable plan approval, frozen source,
+managed Ayni quality, durable receipts and recoverable draft publication. Execution,
+quality and publication remain separate outcomes. Delivery ends at a reviewable
+draft unless a user explicitly grants further authority.
 
-### Delivery sequence
+Restore useful Svelte layouts and components from the former web application.
+Rebuild its data access against current contracts; exact legacy feature parity is
+not the objective. Project configuration and management screens follow real product
+journeys rather than the former service inventory.
 
-| Milestone | Observable outcome |
+### Product surfaces
+
+| Surface | User outcome |
 | --- | --- |
-| M1: Durable foundation | PostgreSQL persistence, durable delivery, one scripted executor, canonical private-v1 commands, snapshots, history, and resumable observation survive failures. |
-| M2: Conversation execution | Shared agent configuration, isolated sessions, workspace instructions, one provider, and structured activity. |
-| M3: Plans and approval | Conversation-owned immutable plan versions and exactly-once approval receipts admit the reviewed task set. |
-| M4: Isolated task execution | Ayni runtimes, worker supervision, retained evidence, and draft publication expose separate execution, quality, and publication outcomes. |
-| M5: Dependencies and concurrency | Concurrent worktrees and explicit upstream commit selection keep dependent inputs frozen. |
-| M6: Feedback and recovery | Attention items, retained work, recovery proposals, and confirmation survive pod loss. |
-| M7: Project continuity and integrations | Factual summaries, outcome assessment, proactive proposals, MCP integrations, and additional providers respect configured scope. |
-| M8: Operational acceptance | Retention, diagnostics, capacity, self-development, cutover, and obsolete-path removal pass cumulative failure tests. |
+| Workspace overview | Find attention items, compare project progress and understand shared capacity. |
+| Project overview | Understand goals, decisions, approved work, blockers and delivered results without reading every chat. |
+| Conversations | Discuss intent, inspect agent activity and review plans with their originating context. |
+| Work graph | Inspect dependencies, frozen upstream selections and the path blocked by unfinished work. |
+| Execution inspector | Follow each turn and attempt through timing, evidence, failures, recovery and draft publication. |
 
-### M1 runtime slices
+The interface explains the current stage, elapsed time, waiting reason and next
+available action. Infrastructure details are available through inspection. A task
+may finish coding and fail quality; a conversation may wait for a pod, a provider,
+a tool or a human. These states must remain distinguishable.
 
-M1 is delivered as cumulative, executable slices rather than one unsafe cutover.
+### Durable events and responsive feedback
 
-1. **PostgreSQL authority and canonical private-v1.** Minimal hierarchy, scoped idempotency, FIFO message admission, exact outbox bytes, snapshots/history, readiness, trusted-loopback APIs, local PostgreSQL, and deletion of superseded callers.
-2. **Durable scripted handoff.** Isolated authenticated JetStream streams, a retained scripted executor, signed ownership claims, application report decisions, accepted responses, and FIFO successor promotion survive application, broker, and executor restarts without treating broker storage as ownership.
-3. **Resumable observation and cumulative acceptance.** Notification-backed watch replay, quarantine, retention cleanup, metrics, version-skew/capacity evidence, and interruption at every commit/publication/claim/report/decision/ack boundary prove no accepted work or retry bytes are lost.
+PostgreSQL remains the transactional workflow authority. Committed outbox delivery,
+JetStream transport and idempotent consumers preserve accepted work across replay
+and restarts. Browser updates use a scoped gateway with resumable observation.
 
-Slice 3 implements `WatchConversation` using an atomic PostgreSQL snapshot boundary and retained update replay. The cumulative acceptance harness exercises admission, broker delivery, ownership, reports, decisions, replay, capacity, and retained-state recovery. M1 does not deploy providers, browser UX, or custom-client workflow access. Later milestones build on the PostgreSQL and retained handoff authorities.
+Add incremental assistant output and live preparation, model, tool and task
+activity. Distinguish provisional output from accepted results and reconcile after
+reconnect. Token fragments need not become individual durable domain events.
+Disconnecting a browser does not cancel accepted work.
 
-### M1–M2 delivery scopes
+Future event inputs retain origin, scope, deduplication identity and the applicable
+policy revision. A trigger may initiate investigation or propose a plan within its
+grant; receiving an event does not confer approval or execution authority. Begin
+with a bounded repository-event journey before expanding trigger types.
 
-M1's three runtime slices are complete on `alpha`. Four staged PRs bridge local
-browser access and deliver M2. Each PR is its own work item: its description owns
-requirements, acceptance criteria, failure/recovery cases, and validation evidence.
-Do not create a separate issue for these scopes. Each subsequent PR starts from
-current `origin/alpha` after its prerequisite merges.
+### Traceability and measurement
 
-| PR | Scope | Observable outcome and acceptance |
-| --- | --- | --- |
-| 1: Contributor conversation console | Local browser gateway, canonical bounded hierarchy discovery, creation, message admission, history, activity, and resumable observation. | Exercise the scripted stack from the browser. Refresh, two tabs, disconnect/reconnect, slow readers, cursor expiry, and ambiguous command retries preserve scope and accepted work. |
-| 2: Configuration and isolated sessions | Immutable shared agent configuration and workspace instruction revisions within v1; admission-time revisions, model/provider binding and budget; isolated session provisioning, generations, fencing, wake-up, idle expiry, adoption and replacement, initially with scripted execution. Define the complete provider-call/cancellation contract, select one provider from evidence, and agree the initial bounded tool set. | Two conversations share configuration while keeping context, session storage and activity isolated. Later configuration edits do not rewrite admitted turns; replaced executors cannot advance state. |
-| 3: Real provider conversations | One provider in isolated sessions, bounded context, retained request intent/identity and result/usage, budget reservation, cancellation, explicit uncertain outcomes, direct scoped credential injection, and console provider/usage views. | Converse with a real provider through the console. An ambiguous paid call is never blindly retried; accepted results survive restarts and appear once. Provider safety ships with the first real calls. |
-| 4: Tools and complete M2 acceptance | Agreed bounded tools and authority limits, safe preparation/model/tool activity, remaining M2 recovery controls, and the cumulative M2 acceptance matrix. | Observe permitted tools and actionable failure states. Isolation and interruption tests span preparation, request uncertainty, accepted results, reconnect, session overlap and ledger cleanup. |
+Every delivery slice includes durable execution history, correlated traces and
+metrics. Link the originating input, workspace, project, conversation, turn, plan,
+task, attempt, provider call, tool invocation and workload generation where relevant.
+Retries, restarts and recovery retain causal relationships; long workflows use
+linked operation traces rather than one indefinitely open span.
 
-The console remains a maintained local contributor surface through M2. It does not
-introduce shared-environment access or user management. M3/M4 retain plan approval,
-coding worktrees, Ayni task execution, quality evidence, and draft publication; MCP
-integrations remain M7. The [M2 handoff contract](docs/technical/research/project-workflow-m1-durable-foundation.md#m2-handoff)
-owns the inherited invariants. The [conversation execution contract](docs/technical/architecture/conversation-execution.md) consolidates configuration, session, provider/cancellation and bounded-tool decisions within v1.
+Extend the existing OpenTelemetry and operational metrics foundations. Durable
+history explains and recovers accepted work; traces diagnose execution; metrics
+reveal aggregate behavior. Sampled traces and process counters cannot serve as
+authoritative project accounting. Keep sensitive content out of exported telemetry.
 
-M2 conversation execution is implemented: the contributor console, shared frozen
-configuration, isolated sessions, one real provider, bounded read tools and explicit
-uncertainty recovery share the signed acceptance boundary. Cumulative acceptance
-covers deterministic failure fixtures, deployed session interruption and a bounded
-live-provider smoke. The delivery PR owns the execution evidence. M3 plans and
-approval are implemented through the four delivery slices below; M4 task delivery
-builds on that admitted-work boundary.
+Use these measurement definitions when specifying analytics contracts:
 
-Every runtime PR extends the cumulative harness and exercises affected behavior on
-Docker Desktop Kubernetes. PR 4 includes repeatable provider fixtures plus a bounded
-live-provider smoke test. Scripted and fixture timings do not predict real model
-latency. PR descriptions record any failed or blocked checks.
-
-### M3 delivery scopes
-
-The [plans and approval contract](docs/technical/architecture/plans-and-approval.md)
-defines M3 ownership, immutable review, explicit authorization and atomic task
-admission. The [delivery plan](docs/technical/research/project-workflow-m3-delivery-plan.md)
-specifies four sequential PRs and their failure/recovery acceptance gates:
-
-| PR | Observable outcome |
+| Unit | Meaning |
 | --- | --- |
-| 1: Durable plan review | Conversation-owned immutable versions, bounded reads and console review survive reload and concurrent edits. |
-| 2: Agent plan proposals | Scope/constraint discussion produces validated, retained structured proposals without granting approval authority. |
-| 3: Approval and task admission | Explicit approval of one exact version atomically retains one receipt and the complete reviewed task set. |
-| 4: Cumulative M3 acceptance | Deployed interruption, retry, race, isolation and observation evidence closes the milestone. |
+| Turn | One admitted conversation input and its resulting agent execution. |
+| Round | One model invocation and the resulting tool executions, when present. |
+| Attempt | One authorized execution of a task. |
+| Recovery | An explicitly linked continuation or repair with its own authority. |
+| Delivery | A reviewable output with execution, quality and publication recorded separately. |
 
-Every admitted task retains workspace, project, originating conversation, plan
-version and approval receipt as immutable, constrained references. M4 carries
-that origin into attempts and reports. M6 routes questions/failures back to the
-originating conversation; M7 uses accepted outcomes for factual project continuity
-and bounded assessment without sharing private working context.
-
-M3 admits tasks in an awaiting-execution state; it does not dispatch coding work.
-One plan admits one approved task set. Follow-up work requires a new linked plan
-until later confirmed recovery defines replacement of admitted work. PR #238 combines
-the contract with the first operator-authored durable-review slice. The second
-slice adds [structured agent proposals](docs/technical/architecture/agent-proposals.md)
-and retained provenance. The third slice adds [approval and task admission](docs/technical/architecture/task-admission.md): exact reviewed-version authorization, one retained receipt and the complete task set, with immutable origin and visible execution blockers. The fourth slice adds the [cumulative M3 acceptance gates](docs/technical/operations/plan-acceptance.md), including broker-outage approval and exact retained-state recovery through workload restarts. Milestone completion requires passing deployed evidence in the final delivery PR; each delivery PR owns its acceptance evidence and status changes.
-
-### M4 delivery scopes
-
-M3 delivery slices are implemented through PR #241. The
-[M4 delivery plan](docs/technical/research/project-workflow-m4-delivery-plan.md)
-defines six sequential PRs:
-
-| PR | Observable outcome |
+| System performance | Workspace and project understanding |
 | --- | --- |
-| 1: Execution readiness and attempts | Trusted local source verification, frozen commit/lock/configuration, selected runtime and authorized budgets produce one prepared attempt or retained blockers, without dispatch. |
-| 2: Isolated coding execution | One task executes in isolation with durable ownership, fencing, cancellation and retained changes. |
-| 3: Ayni quality and retained evidence | Actual worker runtime verification and frozen validation produce separate quality outcomes and trustworthy artifacts. |
-| 4: Draft publication | Accepted changes produce one recoverable reviewable draft under separate publication authority. |
-| 5: Operator visibility and controls | Complete attempt, progress, evidence and execution/quality/publication views and bounded controls. |
-| 6: Cumulative M4 acceptance | Deployed interruption, restart, fencing, cancellation and cleanup close the milestone. |
+| Queue age and admission-to-start latency | Approval-to-draft lead time and work in progress |
+| Pod scheduling, startup and source preparation | Time blocked by dependencies or human decisions |
+| Active, idle and queued workers; resource use and restarts | First-attempt quality pass rate, eventual delivery and recovery frequency |
+| Outbox age, broker backlog and redeliveries | Failures by execution stage and classified reason |
+| Provider/tool latency, errors and uncertain effects | Turns, rounds, tool calls and tokens per delivered task |
+| Cancellation latency, cleanup and restart adoption | Rework after review, when review outcomes are captured |
 
-The [execution preparation contract](docs/technical/architecture/task-execution.md)
-owns the first-slice authority and frozen-input boundary. PR #242 delivers that
-preparation boundary. The [isolated execution contract](docs/technical/architecture/isolated-task-execution.md)
-defines the second slice: a durable serial task queue, isolated retained checkouts,
-bounded coding, cancellation fencing and exact result acceptance, delivered by PR #243.
-The [task quality contract](docs/technical/architecture/task-quality.md) owns the
-third slice: credential-free managed validation, frozen inputs and retained
-evidence separate from coding completion, delivered by PR #244.
-The [draft publication contract](docs/technical/architecture/task-publication.md)
-defines the fourth slice: explicit publication authority, deterministic Git
-identity and retained draft recovery, delivered by PR #245.
-The [console task contract](docs/technical/architecture/contributor-console.md#task-observation-and-publication-controls)
-defines the fifth slice: bounded task inspection, separate outcome/evidence views,
-cancellation and explicit reviewed draft publication, delivered by PR #246.
-The [task acceptance matrix](docs/technical/operations/task-acceptance.md) owns
-the sixth slice: deployed late-worker fencing, publisher loss around remote
-creation, retained uncertainty and cleanup/redeployment with exact evidence replay.
-Each runtime PR extends the cumulative acceptance harness immediately. M4 begins with serial execution
-and isolated attempts; dependency scheduling and concurrent tasks remain M5,
-conversational recovery remains M6. Automatic quality-repair loops require explicit
-bounded authorization before implementation. M4's six delivery slices are implemented. The final delivery PR records
-executed cumulative closure evidence; the local profile uses scripted coding, real managed
-quality and Git transport, and an explicit GitHub protocol fixture.
+Define cohorts, denominators, time windows and unknown values for every rate.
+Distinguish cancelled, blocked, failed and uncertain outcomes. Aggregate from
+durable identities without counting transport replay as new work. Record cost
+only when supported by explicit pricing or billing evidence, with its provenance.
+Keep resource identifiers in scoped analytics and traces rather than unbounded
+metric labels. Support drill-down from an aggregate to the underlying evidence.
 
-### M5 dependencies and concurrent execution
+## Product delivery sequence
 
-Reviewed plans retain an acyclic graph of task keys. Preparation freezes an exact
-upstream task, attempt and accepted draft commit for each dependency, together with
-an explicitly selected integrated source commit. The trusted source helper proves
-that every selected upstream commit is an ancestor of that source commit. Missing
-selections remain visible blockers; later upstream attempts never rewrite admitted
-inputs. Four isolated attempts may execute concurrently, while per-task pending
-uniqueness, generations and Pod identities fence competing work and cancellation.
+These milestones describe planned outcomes. Each requires focused PRs and passing
+evidence before completion; none is declared implemented by this roadmap.
 
-The combined backend completion PR owns the executed dependency, concurrency and
-restart evidence. Recovery inherits its parent's exact selections. Reviewed
-`source_paths` bound the context and writable files of a task on larger repositories;
-an empty selection retains the existing bounded whole-repository context policy.
-
-### M6 delivery scopes
-
-The [M6 delivery plan](docs/technical/research/project-workflow-m6-delivery-plan.md)
-defines five sequential PRs. Conversations are the interface for task feedback and
-confirmed recovery. Continue existing work where safe, preserve saved changes and
-evidence, and authorize each recovery proposal once with bounded additional time
-and tokens. Explain possible earlier provider charges before approval. Downstream
-tasks keep their selected inputs until an explicit decision changes them.
-
-| PR | Observable outcome |
+| Milestone | Observable outcome and acceptance |
 | --- | --- |
-| 1: Durable feedback and attention | Accepted execution and quality problems appear once in the originating conversation and project attention, surviving reconnect and restart. |
-| 2: Recovery proposals and saved work | Users inspect immutable continuation proposals, saved changes, evidence and additional allowance; task questions and answers gain a retained lifecycle. |
-| 3: Confirmed continuation | Exact, once-only approval safely continues existing work or explicitly links a replacement attempt, respecting frozen dependencies and stale-worker fences. |
-| 4: Complete conversation recovery | Questions, proposal review, consent, attention resolution and outcomes form one usable conversation journey. |
-| 5: Cumulative M6 acceptance | Deployed pod loss, interruption, cancellation, duplicate confirmation and retained-work recovery close the milestone. |
+| Product workspace | Restore the web shell and project Chat, Plans and Tasks surfaces against current APIs. Creation, discussion, exact plan approval, task inspection, recovery and publication preserve scope and exact retries across reload, reconnect and concurrent tabs. Retain the console until replacement coverage passes. |
+| Observable execution | Add the execution inspector, live progress and incremental assistant text. Explain queue, preparation, model/tool execution, quality and publication stages with timing and evidence. Trace a full journey across API, broker, supervisor and worker, including interruption and replay. Instrument the first workspace slice rather than deferring telemetry to this milestone. |
+| Browser-driven development | An approved plan reaches execution through trusted repository/source preparation, digest-pinned runtime selection and explicit budgets without terminal steps. Server-side verification preserves frozen source and upstream selections. Review required onboarding and configuration support for this journey; add canonical APIs where missing. |
+| Project and workspace insight | Ship overviews, attention, dependency visualization and scoped analytics using the measurement definitions above. Demonstrate drill-down, replay-safe counting, pagination and recovery-aware rates with known input cohorts. |
+| Orchestrator self-development | Use a reviewed plan to deliver a real change to Orchestrator through the product, actual agent execution, managed Ayni quality and a retained reviewable draft. Capture human interventions, resource usage, limitations and recovery evidence. Deterministic coding fixtures alone do not satisfy this outcome. |
+| Event-driven entry points | Add a bounded repository-event integration with inspectable trigger policy, origin, deduplication and approval boundaries. Duplicate delivery, reconnect and worker restart do not duplicate tasks or external effects. Design the input contract to admit schedules, API and agent inputs later. |
+| Sustained operation and qualification | Run a defined realistic workload over a recorded duration, concurrency and hardware envelope. Measure throughput, latency, storage growth, saturation, recovery and provider behavior against explicit acceptance thresholds. Complete outstanding provider qualification and cumulative acceptance evidence. One successful self-development task does not establish sustained capacity. |
 
-M5 scheduling and frozen upstream selections are implemented in the combined
-backend completion change. Recovery inherits those exact inputs; it cannot refresh
-a dependent task from a mutable upstream branch. The [task feedback contract](docs/technical/architecture/task-feedback.md)
-defines the first-slice scope: immutable execution/quality notices and bounded
-conversation/project reads, with no recovery or resolution authority. Worker
-questions, publication attention resolution and automatic quality repair are not
-implemented by the first slice. The [recovery review contract](docs/technical/architecture/task-recovery.md)
-defines the second slice: immutable operator proposals with frozen saved-work evidence
-and additional allowance, plus operator question/answer records. Recording or answering
-authorizes no execution. Worker questions and model-generated recovery proposals remain
-later scope. The third slice confirms an exact proposal once and admits a linked
-independent-task attempt with frozen inputs, saved changes, explicit additional allowance
-and charge acknowledgement. Confirmed continuation preserves the reviewed dependency graph and exact upstream
-selections. Choosing different inputs requires a new reviewed plan and preparation.
-The fourth slice completes the operator conversation recovery journey: paginated questions
-retain canonical answers, competing proposals expose the same parent confirmation, and conversation
-notices link resolved decisions to continued coding/quality outcomes. Project attention hides
-resolved decisions without deleting historical feedback. The coding protocol also accepts a bounded worker question with a proposed recovery
-action and allowance. The accepted result retains both in the originating conversation;
-confirmation requires the canonical answer and freezes it into the next segment.
-The [cumulative recovery profile](docs/technical/operations/recovery-acceptance.md) adds
-continued-attempt cancellation, stale-worker rejection, Pod loss, exact replay across owner
-restarts and retained cleanup/redeployment. Its existing report covers independent tasks and explicitly keeps `milestone_complete`
-false. The combined operational profile extends concurrency and retained-state checks;
-its report identifies any deployed dependency and worker-question cases still unmeasured.
-Each delivery PR owns its executed evidence and status.
+The first usable journey is project creation, discussion, plan review, explicit
+approval, execution, progress inspection, question/failure recovery and draft
+review. Deliver it through small end-to-end slices. Use its measured behavior to
+refine subsequent scope and capacity targets.
 
-Use explicit `docker-desktop` Kubernetes for runtime acceptance. Create owned
-test namespaces and clean them up after testing. Preserve stores within each
-restart/recovery test to prove durability before purging its test deployment.
+### First product workspace slice
 
-### M7 delivery scopes
+The first slice restores workspace/project navigation and conversation chat in a
+Svelte application served by the existing local Rust gateway. It includes resource
+creation, retained transcript and older history, resumable observation, explicit
+turn cancellation, current activity, provider usage and exact interrupted-command
+retries. Message and turn counts come from canonical retained facts.
 
-The [M7 delivery plan](docs/technical/research/project-workflow-m7-delivery-plan.md)
-stages project continuity and integrations on the existing retained authorities.
-Fresh conversations receive factual project status without inheriting other
-conversations' transcripts, plans or reasoning. Assessments and proposed actions
-remain scoped to the originating conversation and preserve explicit approval.
+Plans, task evidence, recovery, publication and agent configuration remain available
+through a scoped contributor-console link. The console stays supported until those
+journeys have equivalent web acceptance. Incremental assistant text, full tracing,
+round/task analytics, event triggers and browser-driven source preparation remain
+subsequent slices. PR evidence must distinguish browser fixtures from actual
+PostgreSQL/JetStream and isolated-session execution.
 
-| PR | Observable outcome |
-| --- | --- |
-| 1: Factual project continuity | Frozen project status includes bounded task lifecycle facts and accepted outcomes with separate coding, quality and publication states. |
-| 2: Bounded outcome assessment | Meaningful outcomes trigger retained, budgeted assessment in the originating conversation; ordinary progress invokes no model. |
-| 3: Proactive proposals | Assessments produce reviewable plans or recovery proposals without granting execution authority. |
-| 4: Scoped MCP integrations | Configured servers and tools respect workspace/project scope, budgets, credentials, cancellation and external-effect recovery. |
-| 5: Additional providers | A selected provider passes the existing context, tools, reservation, uncertainty and cancellation contracts after MCP integration. |
-| 6: Cumulative M7 acceptance | Deployed isolation, interruption, duplicate delivery, stale-result and uncertain-effect gates close the milestone. |
+## Delivery discipline
 
-The [factual continuity contract](docs/technical/architecture/project-continuity.md)
-defines the first slice. The existing private-v1 project snapshot retains at most
-20 task facts with `total_tasks` and `has_more_tasks` describing admitted work beyond the selection. The
-`read_project_status` tool reads those exact eligibility-time inputs; it does not
-invoke a model or infer project completion. Later outcomes affect later snapshots.
+- Define user outcomes, observable states, authority and failure/recovery cases before implementation.
+- Extend canonical v1 contracts in place through alpha; keep generated consumers and documentation synchronized.
+- Validate affected behavior on the explicit Docker Desktop Kubernetes topology and extend cumulative acceptance.
+- Replace console workflows only after equivalent web acceptance passes; then remove obsolete entry points and update local startup guidance.
+- Keep system operation and project analytics scoped to the same workspace/project authority as their underlying records.
+- Keep deployment choices explicit and self-hosting practical. Document dependencies, configuration, export and recovery without requiring a proprietary observability service.
+- Record actual evidence and blocked checks in each PR. Release publication, merges and destructive cleanup retain their existing authorization boundaries.
 
-The combined backend change adds explicitly authorized, configuration-pinned
-outcome assessments, coalesced factual inputs, once-only retained turn admission,
-and stale-proposal rejection. Existing proposal review retains approval authority.
-Scoped MCP manifests freeze tool schemas, endpoints and limits; mutations require
-exact one-use consent and uncertain effects remain visible without automatic retry.
-Anthropic Messages joins OpenAI behind the same retained context, exchange, usage,
-tool and cancellation authorities. Provider execution remains explicitly enabled.
-See [MCP integrations](docs/technical/architecture/mcp-integrations.md) and
-[operational acceptance](docs/technical/operations/operational-acceptance.md).
+## Further scope
 
-Implemented paths and executed acceptance are separate. The combined PR records
-actual deployed evidence and remaining unmeasured cases; fixture results alone do
-not establish live provider behavior or production capacity.
+Project/workspace lifecycle management, repository onboarding, provider connections,
+runtime management and richer operations views are candidates driven by these
+journeys. Specify required capabilities against current contracts before adding
+screens. Multi-user access and tenancy expansion need separate scope and decisions.
 
-### M8 operational acceptance
-
-M8 extends the cumulative local profile across retention, diagnostics, capacity,
-clean-slate cutover and own-source execution. The required profile now includes
-successful multi-upstream integration and confirmed repair, worker-originated
-questions and proposals, deployed outcome assessment, OpenAI/Anthropic MCP
-recovery and managed Orchestrator self-development through a retained draft.
-Own-source cancellation and exact replay survive owner restarts.
-
-Eligible source archives retain a 30-day grace period. Accelerated persisted-clock
-integration checks exercise expiry and protection for unresolved work; commands,
-patches, quality evidence and authorization receipts remain retained. Deployed
-readiness and storage metrics accompany hardware, limits, immutable identities
-and the local four-active/two-queued dispatch observation.
-
-The [operational acceptance contract](docs/technical/operations/operational-acceptance.md)
-defines required runtimes, retained evidence and report validation. Required
-profiles cannot be skipped to produce a passing cumulative report. Local passing
-evidence remains distinct from unmeasured live additional-provider qualification
-and sustained production capacity. The final milestone remains open until its
-recorded acceptance requirements have passing execution evidence; implementation
-alone does not close it.
-
-### Validation at every milestone
-
-| Level | Evidence |
-| --- | --- |
-| Contract | Valid transitions, exact API surface, scoped identities, and frozen inputs. |
-| Integration | Real storage/transport, migrations, retries, and projections. |
-| Failure | Controlled interruption at every durability boundary. |
-| Operator scenario | Observable command, progress, reconnect, recovery, and cleanup behavior. |
-
-Keep one cumulative acceptance harness. A passing feasibility experiment does not make its mechanism production runtime behavior. Each delivery PR names prerequisites, observable outcomes, failure cases, validation commands, and obsolete paths to delete.
-
-Ayni's independent CLI roadmap belongs in its own repository.
+Ayni remains an independently useful quality CLI and portable environment builder.
+Its [independent roadmap](https://github.com/ayni-oss/ayni/blob/main/ROADMAP.md)
+remains in its own repository.
