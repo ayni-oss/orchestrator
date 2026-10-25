@@ -569,15 +569,16 @@ pub(super) async fn materialize_command(
         frozen_configuration.is_some(),
     )
     .await?;
-    let produced_at: String = transaction
+    let diagnostics = transaction
         .query_one(
             "SELECT to_char(accepted_at AT TIME ZONE 'UTC', \
-                    'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') \
+                    'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"'), traceparent \
              FROM workflow_command_receipts WHERE command_id = $1",
             &[&command.receipt_command_id],
         )
-        .await?
-        .get(0);
+        .await?;
+    let produced_at: String = diagnostics.get(0);
+    let retained_parent: String = diagnostics.get(1);
     let execution_binding_revision: String = transaction
         .query_one(
             "SELECT execution_binding_revision FROM workflow_turns WHERE id=$1",
@@ -622,7 +623,11 @@ pub(super) async fn materialize_command(
     };
     let metadata = WorkflowEventMetadata {
         produced_at,
-        traceparent: traceparent(),
+        traceparent: if ayni_orchestrator_events::workflow::traceparent(&retained_parent) {
+            retained_parent
+        } else {
+            traceparent()
+        },
     };
     let bytes =
         encode_materialized_command(&identity, &metadata, &mut payload, command.input_message_id)?;

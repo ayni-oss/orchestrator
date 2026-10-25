@@ -170,35 +170,37 @@ async fn dispatch(
     }
     match mode {
         "--prepare-task-recovery-review" => {
-            return task_runs::prepare_recovery_review(projects, client).await;
+            return Box::pin(task_runs::prepare_recovery_review(projects, client)).await;
         }
         "--prepare-task-quality-failed-run" => {
-            return task_runs::prepare_quality_failed(projects, client).await;
+            return Box::pin(task_runs::prepare_quality_failed(projects, client)).await;
         }
         "--verify-task-quality-failed-run-stdin" => {
-            return task_runs::verify_quality_failed_stdin(client).await;
+            return Box::pin(task_runs::verify_quality_failed_stdin(client)).await;
         }
         "--prepare-task-quality-run" => {
-            return task_runs::prepare_quality(projects, client).await;
+            return Box::pin(task_runs::prepare_quality(projects, client)).await;
         }
         "--verify-task-quality-run-stdin" => {
-            return task_runs::verify_quality_stdin(client).await;
+            return Box::pin(task_runs::verify_quality_stdin(client)).await;
         }
         "--settle-project-continuity-stdin" => {
-            return task_runs::settle_continuity_stdin(client).await;
+            return Box::pin(task_runs::settle_continuity_stdin(client)).await;
         }
         "--task-name-stdin" => return task_runs::name_stdin(),
         "--prepare-task-run-pending" => {
-            return task_runs::prepare(projects, client, true).await;
+            return Box::pin(task_runs::prepare(projects, client, true)).await;
         }
-        "--cancel-task-run-stdin" => return task_runs::cancel_stdin(client, true).await,
-        "--cancel-task-run-pending-stdin" => return task_runs::cancel_stdin(client, false).await,
-        "--verify-task-fenced-stdin" => return task_runs::fenced_stdin(client).await,
+        "--cancel-task-run-stdin" => return Box::pin(task_runs::cancel_stdin(client, true)).await,
+        "--cancel-task-run-pending-stdin" => {
+            return Box::pin(task_runs::cancel_stdin(client, false)).await;
+        }
+        "--verify-task-fenced-stdin" => return Box::pin(task_runs::fenced_stdin(client)).await,
         "--verify-interrupted-task-stdin" => {
-            return task_runs::interrupted_stdin(client).await;
+            return Box::pin(task_runs::interrupted_stdin(client)).await;
         }
-        "--prepare-task-run" => return task_runs::prepare(projects, client, false).await,
-        "--verify-task-run-stdin" => return task_runs::verify_stdin(client).await,
+        "--prepare-task-run" => return Box::pin(task_runs::prepare(projects, client, false)).await,
+        "--verify-task-run-stdin" => return Box::pin(task_runs::verify_stdin(client)).await,
         "--prepare-execution" => return execution::prepare(projects, client).await,
         "--verify-execution-stdin" => return execution::verify_stdin(client).await,
         "--prepare-plans" => return plans::prepare(projects, client).await,
@@ -211,7 +213,7 @@ async fn dispatch(
         "measure" => {}
         _ => return Err("unknown acceptance mode".into()),
     }
-    measure_all(projects, client).await
+    Box::pin(measure_all(projects, client)).await
 }
 
 async fn dispatch_publication(

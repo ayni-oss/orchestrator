@@ -9,10 +9,15 @@ use ayni_orchestrator_events::task_publication::{
     PublicationRun, PublicationSupervisorRequest, PublicationWorkerRequest,
     PublicationWorkerResponse, github_repository,
 };
+use ayni_orchestrator_observability::{
+    TraceContext,
+    workflow::{Workflow, finish},
+};
 use ayni_orchestrator_workflow_postgres::WorkflowStore;
 use sha2::{Digest as _, Sha256};
 use std::{io, sync::Arc};
 use subtle::ConstantTimeEq as _;
+use tracing::Instrument as _;
 #[derive(Clone)]
 struct Authority {
     store: WorkflowStore,
@@ -91,7 +96,20 @@ async fn worker(
         .get("x-publication-pod-uid")
         .and_then(|v| v.to_str().ok())
         .ok_or(StatusCode::UNAUTHORIZED)?;
-    s.store
+    let diagnostic = headers
+        .get("traceparent")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|parent| TraceContext::parse(parent, None));
+    let span = Workflow {
+        workspace_id: s.workspace.to_string(),
+        event_id: id.clone(),
+        generation,
+        ..Workflow::default()
+    }
+    .span_with_context("task.publication.accept", diagnostic.as_ref(), false);
+    let started = std::time::Instant::now();
+    let result = s
+        .store
         .publication_worker(
             (&s.workspace, &s.repository),
             &id,
@@ -99,9 +117,19 @@ async fn worker(
             uid,
             &request,
         )
-        .await
-        .map(Json)
-        .map_err(|_| StatusCode::CONFLICT)
+        .instrument(span.clone())
+        .await;
+    ayni_orchestrator_workflow_postgres::metrics::observe(
+        "workflow_publication_authority_seconds",
+        started.elapsed(),
+    );
+    ayni_orchestrator_workflow_postgres::metrics::increment(if result.is_ok() {
+        "workflow_publication_authority_requests_total"
+    } else {
+        "workflow_publication_authority_failures_total"
+    });
+    finish(&span, result.is_ok());
+    result.map(Json).map_err(|_| StatusCode::CONFLICT)
 }
 #[cfg(test)]
 mod tests {

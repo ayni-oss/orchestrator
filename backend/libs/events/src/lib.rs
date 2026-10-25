@@ -24,6 +24,7 @@ pub mod coding_decisions;
 pub mod decisions;
 pub mod event_types;
 pub mod operations;
+pub mod progress;
 
 pub const EVENT_TYPE: &str = "build.ayni.orchestrator.runtime.verification.result.available.v1";
 pub const DATA_SCHEMA: &str = "ayni://orchestrator/schemas/runtime-verification-result/v1";

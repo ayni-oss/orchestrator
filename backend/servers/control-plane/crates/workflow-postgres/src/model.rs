@@ -308,6 +308,7 @@ pub struct ReportDecisionReceipt {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OutboxRecord {
+    pub publication_attempts: u64,
     pub id: String,
     pub conversation_id: String,
     pub turn_id: String,

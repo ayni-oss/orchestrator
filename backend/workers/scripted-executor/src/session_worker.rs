@@ -20,6 +20,7 @@ use subtle::ConstantTimeEq as _;
 
 const SCHEMA: &str = "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS identity(singleton INTEGER PRIMARY KEY CHECK(singleton=1),session_id TEXT NOT NULL,generation INTEGER NOT NULL,conversation_id TEXT NOT NULL,workspace_id TEXT NOT NULL,project_id TEXT NOT NULL); CREATE TABLE IF NOT EXISTS policy(singleton INTEGER PRIMARY KEY CHECK(singleton=1),idle_timeout_seconds INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS results(command_id TEXT PRIMARY KEY,digest TEXT NOT NULL,request BLOB,result TEXT NOT NULL,retained_bytes INTEGER NOT NULL,acknowledged INTEGER NOT NULL DEFAULT 0,acknowledged_at INTEGER);";
 
+pub mod progress;
 pub mod provider_session;
 
 const RESPONSE: &str = "The scripted executor completed this turn.";
@@ -118,6 +119,9 @@ fn open_ledger(
     let connection = Connection::open(path).map_err(io::Error::other)?;
     connection.execute_batch(SCHEMA).map_err(io::Error::other)?;
     connection
+        .execute_batch(progress::SCHEMA)
+        .map_err(io::Error::other)?;
+    connection
         .execute_batch(provider_session::SCHEMA)
         .map_err(io::Error::other)?;
     connection
@@ -164,6 +168,7 @@ pub async fn run() -> Result<(), io::Error> {
         .route("/v1/provider-prepare", post(provider_session::prepare))
         .route("/v1/provider-send", post(provider_session::send))
         .route("/v1/cancel", post(provider_session::cancel))
+        .route("/v1/provider-progress", post(progress::read))
         .layer(DefaultBodyLimit::max(8 * 1024 * 1024))
         .with_state(state);
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8081").await?;
@@ -222,7 +227,38 @@ async fn execute(
     if !authorized(&state, &headers) {
         return Err(StatusCode::UNAUTHORIZED);
     }
-    let (identity, _, command) = decode_command(&body).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let delayed_fixture = decode_command(&body)
+        .map_err(|_| StatusCode::BAD_REQUEST)?
+        .2
+        .input_content
+        .starts_with("Observe streaming");
+    let result = execute_retained(&state, &body)?;
+    // The scripted provider exercises the same provisional transport without
+    // asserting a model invocation or token usage. Terminal acceptance is separate.
+    for text in ["The scripted", "The scripted executor", RESPONSE] {
+        let _ = progress::record(
+            &state,
+            &result.command_id,
+            &result.command_digest,
+            ayni_orchestrator_events::progress::ExecutionProgress {
+                stage: "scripted".into(),
+                call_id: result.command_id.clone(),
+                provisional_text: text.into(),
+                ..Default::default()
+            },
+        );
+        if delayed_fixture {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    }
+    Ok(result)
+}
+
+fn execute_retained(
+    state: &WorkerState,
+    body: &[u8],
+) -> Result<axum::Json<ExecutionResult>, StatusCode> {
+    let (identity, _, command) = decode_command(body).map_err(|_| StatusCode::BAD_REQUEST)?;
     let scope = command.session.ok_or(StatusCode::BAD_REQUEST)?;
     let binding = command.binding.ok_or(StatusCode::BAD_REQUEST)?;
     if scope.session_id != state.session_id
@@ -236,7 +272,11 @@ async fn execute(
     if binding.execution_binding_revision != "scripted-v1" {
         return Err(StatusCode::FORBIDDEN);
     }
-    let digest = digest(&body);
+    let diagnostic = ayni_orchestrator_observability::event_context(body);
+    let span = ayni_orchestrator_observability::workflow::Workflow::from_event(body)
+        .span_with_context("worker.scripted.execute", diagnostic.as_ref(), false);
+    let _entered = span.enter();
+    let digest = digest(body);
     let mut connection = state
         .connection
         .lock()
@@ -252,6 +292,9 @@ async fn execute(
         )
         .optional()
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    if existing.is_some() {
+        ayni_orchestrator_observability::workflow::record_replay(&span, diagnostic.as_ref());
+    }
     let result = if let Some((retained_digest, json)) = existing {
         if retained_digest != digest {
             return Err(StatusCode::CONFLICT);
@@ -286,7 +329,7 @@ async fn execute(
             plan_proposal: None,
         };
         let json = serde_json::to_string(&result).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
-        tx.execute("INSERT INTO results(command_id,digest,request,result,retained_bytes) VALUES(?1,?2,?3,?4,?5)",params![identity.id,digest,body.as_ref(),json,bytes]).map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
+        tx.execute("INSERT INTO results(command_id,digest,request,result,retained_bytes) VALUES(?1,?2,?3,?4,?5)",params![identity.id,digest,body,json,bytes]).map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
         result
     };
     tx.execute("INSERT INTO policy(singleton,idle_timeout_seconds) VALUES(1,?1) ON CONFLICT(singleton) DO UPDATE SET idle_timeout_seconds=excluded.idle_timeout_seconds",[i64::try_from(scope.idle_timeout_seconds).map_err(|_|StatusCode::BAD_REQUEST)?]).map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
@@ -301,6 +344,7 @@ async fn execute(
         .last_request
         .lock()
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)? = Instant::now();
+    ayni_orchestrator_observability::workflow::finish(&span, true);
     Ok(axum::Json(result))
 }
 
@@ -317,6 +361,7 @@ async fn acknowledge(
         .connection
         .lock()
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    progress::clear(&connection, &body)?;
     // Keep a bounded digest/result tombstone for exact retries; release transcript accounting only.
     connection.execute("UPDATE results SET acknowledged=1,request=NULL,retained_bytes=0,acknowledged_at=COALESCE(acknowledged_at,unixepoch()) WHERE command_id=?1",[&body]).map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
     connection.execute("UPDATE provider_calls SET request=NULL WHERE command_id=?1 AND state IN ('completed','failed','cancelled') AND settled=1",[&body]).map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
@@ -348,6 +393,7 @@ mod tests {
     fn state(connection: Connection) -> Arc<WorkerState> {
         connection.execute_batch(SCHEMA).unwrap();
         connection.execute_batch(provider_session::SCHEMA).unwrap();
+        connection.execute_batch(progress::SCHEMA).unwrap();
         Arc::new(WorkerState {
             active: Mutex::new(std::collections::HashSet::new()),
             provider: Mutex::new(None),

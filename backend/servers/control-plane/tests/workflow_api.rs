@@ -235,18 +235,14 @@ async fn exercise_conversation(
         .into_inner()
         .conversation
         .ok_or("conversation missing")?;
-    conversations
-        .send_message(request(
-            SendMessageRequest {
-                idempotency_key: format!("grpc-message-{nonce}"),
-                workspace_id: workspace_id.to_owned(),
-                project_id: project_id.to_owned(),
-                conversation_id: conversation.id.clone(),
-                content: "durable admission".to_owned(),
-            },
-            nonce,
-        ))
-        .await?;
+    prove_trace_admission(
+        conversations,
+        nonce,
+        workspace_id,
+        project_id,
+        &conversation.id,
+    )
+    .await?;
 
     let snapshot = conversations
         .get_conversation_snapshot(request(
@@ -396,5 +392,71 @@ async fn plan_acceptance_client_recovers_exact_evidence_after_listener_restart()
     assert_eq!(result["plan_admission_recovery"], "passed");
     shutdown.send(true)?;
     server.await??;
+    Ok(())
+}
+
+async fn prove_trace_admission(
+    conversations: &mut ProjectConversationServiceClient<Channel>,
+    nonce: &str,
+    workspace_id: &str,
+    project_id: &str,
+    conversation_id: &str,
+) -> TestResult {
+    const PARENT: &str = "00-7431fc7927bb4f208986f2a4f2418dba-3f49c016c2df402b-01";
+    let command = SendMessageRequest {
+        idempotency_key: format!("grpc-message-{nonce}"),
+        workspace_id: workspace_id.to_owned(),
+        project_id: project_id.to_owned(),
+        conversation_id: conversation_id.to_owned(),
+        content: "durable admission".to_owned(),
+    };
+    let mut traced = request(command.clone(), nonce);
+    traced.metadata_mut().insert("traceparent", PARENT.parse()?);
+    let admitted = conversations
+        .send_message(traced)
+        .await?
+        .into_inner()
+        .receipt
+        .ok_or("receipt missing")?;
+    let replay = conversations
+        .send_message(request(command, nonce))
+        .await?
+        .into_inner()
+        .receipt
+        .ok_or("replay missing")?;
+    assert_eq!(admitted, replay);
+    let page = conversations
+        .list_execution_timeline(ayni_orchestrator_api::v1::ListExecutionTimelineRequest {
+            workspace_id: workspace_id.to_owned(),
+            project_id: project_id.to_owned(),
+            conversation_id: conversation_id.to_owned(),
+            limit: 100,
+            ..Default::default()
+        })
+        .await?
+        .into_inner();
+    let entry = page
+        .entries
+        .iter()
+        .find(|entry| {
+            entry
+                .activity
+                .as_ref()
+                .is_some_and(|activity| activity.turn_id == admitted.turn_id)
+        })
+        .ok_or("turn timeline missing")?;
+    assert_eq!(entry.trace_id, &PARENT[3..35]);
+    let url = env::var(TEST_URL_VARIABLE)?;
+    let (client, driver) = ayni_orchestrator_workflow_postgres::connect(&url).await?;
+    let command_bytes: Vec<u8> = client
+        .query_one(
+            "SELECT event_bytes FROM workflow_outbox WHERE turn_id=$1 ORDER BY created_at LIMIT 1",
+            &[&admitted.turn_id],
+        )
+        .await?
+        .get(0);
+    driver.abort();
+    let (_, metadata, _) = ayni_orchestrator_events::workflow::decode_command(&command_bytes)?;
+    assert_eq!(&metadata.traceparent[3..35], entry.trace_id);
     Ok(())
 }

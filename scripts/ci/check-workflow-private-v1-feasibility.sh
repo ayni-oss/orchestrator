@@ -47,6 +47,7 @@ expected = {
             "CreateConversation",
             "SendMessage",
             "GetConversationSnapshot",
+            "ListExecutionProgress",
             "ListExecutionTimeline",
             "ListConversationHistory",
             "WatchConversation",

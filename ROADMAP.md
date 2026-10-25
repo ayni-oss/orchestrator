@@ -128,16 +128,17 @@ approval, execution, progress inspection, question/failure recovery and draft
 review. Deliver it through small end-to-end slices. Use its measured behavior to
 refine subsequent scope and capacity targets.
 
-### First observable execution slice
+### Observable execution delivery
 
-Retain accepted conversation activity independently of seven-day watch replay
-cleanup and expose stable, scoped history pages in the workspace inspector.
-Show current activity live and offer explicit refresh for a new history boundary.
-Preserve recorded turn identities and related plan/task resource references;
-accepted timestamps describe observations, not exact stage durations. Detailed
-worker progress, round/tool timing, incremental assistant text, task-specific
-inspection and complete cross-service tracing remain subsequent slices. See the
-[execution timeline contract](docs/technical/architecture/execution-timeline.md).
+Retain accepted activity independently of seven-day watch replay cleanup and
+expose stable, scoped history pages alongside live progress and provisional
+assistant text. Correlate API admission, transport, supervisor, isolated worker,
+provider/tool execution and task source, coding, quality and publication. Keep
+recorded observations, provisional text, accepted outcomes and sampled diagnostics
+distinct. The inspector includes task evidence, phase timing, waiting reasons and
+explicit next actions, with scoped console handoff for approvals and recovery.
+See the [execution timeline contract](docs/technical/architecture/execution-timeline.md)
+and [combined deployed acceptance](docs/technical/operations/observable-execution-acceptance.md).
 
 ### First product workspace slice
 
@@ -149,9 +150,9 @@ retries. Message and turn counts come from canonical retained facts.
 
 Plans, task evidence, recovery, publication and agent configuration remain available
 through a scoped contributor-console link. The console stays supported until those
-journeys have equivalent web acceptance. Incremental assistant text, full tracing,
-round/task analytics, event triggers and browser-driven source preparation remain
-subsequent slices. PR evidence must distinguish browser fixtures from actual
+journeys have equivalent web acceptance. Observable execution extends this foundation with incremental assistant text,
+tracing and task inspection. Round/task analytics, event triggers and browser-driven
+source preparation remain subsequent milestones. PR evidence must distinguish browser fixtures from actual
 PostgreSQL/JetStream and isolated-session execution.
 
 ## Delivery discipline

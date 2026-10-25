@@ -349,6 +349,7 @@ dependencies = [
  "async-nats",
  "axum",
  "ayni-orchestrator-events",
+ "ayni-orchestrator-observability",
  "ayni-orchestrator-providers",
  "base64 0.22.1",
  "ed25519-dalek",
@@ -369,6 +370,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-stream",
+ "tracing",
  "uuid",
 ]
 

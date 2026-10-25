@@ -78,6 +78,7 @@ mod tests {
                         "GetConversationSnapshot",
                         "ListConversationHistory",
                         "ListExecutionTimeline",
+                        "ListExecutionProgress",
                         "ListConversations",
                         "ListConversationSessions",
                         "ReplaceConversationSession",

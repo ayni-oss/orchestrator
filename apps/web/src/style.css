@@ -1125,3 +1125,70 @@ dialog p {
   align-self: center;
   margin: 0 10px 10px;
 }
+
+.provisional-message {
+  padding: 14px;
+  border: 1px dashed var(--primary);
+  border-radius: 8px;
+  background: var(--primary-soft);
+}
+.provisional-message small {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted-foreground);
+}
+.task-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+.task-picker button {
+  text-align: left;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.task-picker button.selected {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.task-detail {
+  border-top: 1px solid var(--border);
+  margin-top: 14px;
+  padding-top: 14px;
+  font-size: 11px;
+  max-height: 70vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 8px;
+}
+.task-detail>section {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  margin-top: 14px;
+}
+.task-detail pre {
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+}
+.task-detail .notice {
+  padding: 10px;
+  font-size: 11px;
+}
+.task-detail dd {
+  white-space: pre-wrap;
+}
+.task-detail button {
+  font-size: 11px;
+}
+.turn-evidence {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+}
+.turn-evidence p {
+  margin: 7px 0;
+}

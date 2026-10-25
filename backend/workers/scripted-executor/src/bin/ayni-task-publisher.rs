@@ -11,6 +11,12 @@ type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Send + 
 
 #[tokio::main]
 async fn main() -> Result {
+    let telemetry = ayni_orchestrator_observability::init("task-publisher");
+    let result = run().await;
+    telemetry.shutdown();
+    result
+}
+async fn run() -> Result {
     let configuration = config::Configuration::load()?;
     let http = github::client()?;
     loop {

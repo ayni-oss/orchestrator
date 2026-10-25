@@ -8,8 +8,10 @@ use ayni_orchestrator_events::task_publication::{
     PublicationOutcome, PublicationRun, PublicationSupervisorRequest, PublicationWorkerRequest,
     PublicationWorkerResponse,
 };
+use ayni_orchestrator_observability::workflow::{Workflow, finish, identity_context};
 use reqwest::Client;
 use serde::de::DeserializeOwned;
+use tracing::Instrument as _;
 
 async fn authority<T: DeserializeOwned>(
     http: &Client,
@@ -17,11 +19,15 @@ async fn authority<T: DeserializeOwned>(
     path: &str,
     request: &(impl serde::Serialize + Sync),
 ) -> Result<T> {
-    let response = http
+    let mut request_builder = http
         .post(format!("{}{path}", c.authority.trim_end_matches('/')))
         .bearer_auth(&c.authority_token)
         .header("x-publication-pod-uid", &c.pod_uid)
-        .json(request)
+        .json(request);
+    if let Some(context) = ayni_orchestrator_observability::current_context() {
+        request_builder = request_builder.header("traceparent", context.traceparent);
+    }
+    let response = request_builder
         .send()
         .await
         .map_err(|_| "publication authority unavailable")?;
@@ -60,7 +66,24 @@ pub async fn poll(http: &Client, c: &Configuration) -> Result {
     )
     .await?;
     if let Some(run) = run {
-        execute(http, c, run).await?;
+        let command = &run.command;
+        let span = Workflow {
+            workspace_id: command.workspace_id.clone(),
+            project_id: command.project_id.clone(),
+            conversation_id: command.conversation_id.clone(),
+            task_id: command.task_id.clone(),
+            attempt_id: command.attempt_id.clone(),
+            generation: run.generation,
+            ..Workflow::default()
+        }
+        .span_with_context(
+            "task.publication.reconcile",
+            identity_context(&command.attempt_id).as_ref(),
+            consumed(&run),
+        );
+        let result = execute(http, c, run).instrument(span.clone()).await;
+        finish(&span, result.is_ok());
+        result?;
     }
     Ok(())
 }

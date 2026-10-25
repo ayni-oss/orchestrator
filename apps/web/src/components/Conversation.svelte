@@ -1,5 +1,6 @@
 <script>
   import { elapsed, readable } from '../api.mjs';
+  import { progressRound } from '../execution.mjs';
   import { turnStatus } from '../workspace.mjs';
   let { view, client, now } = $props();
   let draft = $state('');
@@ -11,6 +12,10 @@
   });
   $effect(() => {
     if (messages.length && following && transcript) transcript.scrollTop = transcript.scrollHeight;
+  });
+  const provisional = $derived(view.progress.filter(item => item.provisionalText));
+  $effect(() => {
+    if (provisional.length && following && transcript) transcript.scrollTop = transcript.scrollHeight;
   });
   async function send(event) {
     event.preventDefault();
@@ -30,6 +35,12 @@
     {:else}
       <div class="empty-conversation"><span class="empty-symbol" aria-hidden="true">✳</span><h2>Start with a question.</h2><p>Explore an idea, clarify the scope or talk through your next change.</p><p class="muted">Each conversation has its own isolated agent context.</p></div>
     {/each}
+    {#each provisional as progress (progress.turnId)}
+      <article class="message provisional-message" aria-label="Provisional assistant output">
+        <div class="message-avatar" aria-hidden="true">a</div><div class="message-body"><div class="message-meta"><strong>Assistant</strong><span class="badge">PROVISIONAL</span></div><p>{progress.provisionalText}</p><small>{progressRound(progress)} · Partial output awaiting acceptance{view.connection.startsWith('Paused') ? ' · updates paused' : ''}</small></div>
+      </article>
+    {/each}
+    {#if view.progressError && view.snapshot?.nonterminalTurns?.length}<p class="notice" role="status">Live output is temporarily unavailable. Accepted work continues; the next observation retries.</p>{/if}
     {#each view.snapshot?.nonterminalTurns || [] as turn (turn.id)}
       <div class="turn-row"><div><strong>{readable(turn.executionState)}</strong><span class="muted"> · {elapsed(turn.acceptedAt, now)} elapsed</span><small>{view.snapshot.currentActivity?.safeReason || 'Your accepted work continues independently of this tab.'}</small></div><button disabled={!!view.pending || view.sending || view.busy} onclick={() => client.submit('CancelTurn', { ...view.scope, turnId: turn.id })}>Cancel turn</button></div>
     {/each}

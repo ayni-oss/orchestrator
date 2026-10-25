@@ -20,6 +20,7 @@ import {
   type ServiceError,
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
+import { Timestamp } from "../../../google/protobuf/timestamp";
 import {
   ApprovePlanRequest,
   ApprovePlanResponse,
@@ -318,6 +319,7 @@ export interface ExecutionTimelineEntry {
   activity?: Activity | undefined;
   kind: string;
   affectedResourceIds: string[];
+  traceId: string;
 }
 
 export interface ListExecutionTimelineResponse {
@@ -330,6 +332,32 @@ export interface ListExecutionTimelineResponse {
    * preserves existing watch facts; history already pruned remains unavailable.
    */
   retainedFromRevision: string;
+}
+
+/** Full bounded preview snapshots; no fragment is an accepted transcript message. */
+export interface ListExecutionProgressRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+}
+
+export interface LiveExecutionProgress {
+  turnId: string;
+  callId: string;
+  sessionId: string;
+  generation: string;
+  sequence: string;
+  round: number;
+  stage: string;
+  toolName: string;
+  provisionalText: string;
+  observedAt?: Date | undefined;
+  stageObservedAt?: Date | undefined;
+  toolInvocationId: string;
+}
+
+export interface ListExecutionProgressResponse {
+  progress: LiveExecutionProgress[];
 }
 
 function createBaseCreateConversationRequest(): CreateConversationRequest {
@@ -4478,7 +4506,7 @@ export const ListExecutionTimelineRequest: MessageFns<ListExecutionTimelineReque
 };
 
 function createBaseExecutionTimelineEntry(): ExecutionTimelineEntry {
-  return { activity: undefined, kind: "", affectedResourceIds: [] };
+  return { activity: undefined, kind: "", affectedResourceIds: [], traceId: "" };
 }
 
 export const ExecutionTimelineEntry: MessageFns<ExecutionTimelineEntry> = {
@@ -4491,6 +4519,9 @@ export const ExecutionTimelineEntry: MessageFns<ExecutionTimelineEntry> = {
     }
     for (const v of message.affectedResourceIds) {
       writer.uint32(26).string(v!);
+    }
+    if (message.traceId !== "") {
+      writer.uint32(34).string(message.traceId);
     }
     return writer;
   },
@@ -4532,6 +4563,14 @@ export const ExecutionTimelineEntry: MessageFns<ExecutionTimelineEntry> = {
             message.affectedResourceIds.push(reader.string());
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.traceId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -4553,6 +4592,11 @@ export const ExecutionTimelineEntry: MessageFns<ExecutionTimelineEntry> = {
         : globalThis.Array.isArray(object?.affected_resource_ids)
         ? object.affected_resource_ids.map((e: any) => globalThis.String(e))
         : [],
+      traceId: isSet(object.traceId)
+        ? globalThis.String(object.traceId)
+        : isSet(object.trace_id)
+        ? globalThis.String(object.trace_id)
+        : "",
     };
   },
 
@@ -4567,6 +4611,9 @@ export const ExecutionTimelineEntry: MessageFns<ExecutionTimelineEntry> = {
     if (message.affectedResourceIds?.length) {
       obj.affectedResourceIds = message.affectedResourceIds;
     }
+    if (message.traceId !== "") {
+      obj.traceId = message.traceId;
+    }
     return obj;
   },
 
@@ -4580,6 +4627,7 @@ export const ExecutionTimelineEntry: MessageFns<ExecutionTimelineEntry> = {
       : undefined;
     message.kind = object.kind ?? "";
     message.affectedResourceIds = object.affectedResourceIds?.map((e) => e) || [];
+    message.traceId = object.traceId ?? "";
     return message;
   },
 };
@@ -4711,6 +4759,480 @@ export const ListExecutionTimelineResponse: MessageFns<ListExecutionTimelineResp
     message.snapshotRevision = object.snapshotRevision ?? "0";
     message.nextBeforeRevision = object.nextBeforeRevision ?? "0";
     message.retainedFromRevision = object.retainedFromRevision ?? "0";
+    return message;
+  },
+};
+
+function createBaseListExecutionProgressRequest(): ListExecutionProgressRequest {
+  return { workspaceId: "", projectId: "", conversationId: "" };
+}
+
+export const ListExecutionProgressRequest: MessageFns<ListExecutionProgressRequest> = {
+  encode(message: ListExecutionProgressRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListExecutionProgressRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListExecutionProgressRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListExecutionProgressRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+    };
+  },
+
+  toJSON(message: ListExecutionProgressRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListExecutionProgressRequest>): ListExecutionProgressRequest {
+    return ListExecutionProgressRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListExecutionProgressRequest>): ListExecutionProgressRequest {
+    const message = createBaseListExecutionProgressRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    return message;
+  },
+};
+
+function createBaseLiveExecutionProgress(): LiveExecutionProgress {
+  return {
+    turnId: "",
+    callId: "",
+    sessionId: "",
+    generation: "0",
+    sequence: "0",
+    round: 0,
+    stage: "",
+    toolName: "",
+    provisionalText: "",
+    observedAt: undefined,
+    stageObservedAt: undefined,
+    toolInvocationId: "",
+  };
+}
+
+export const LiveExecutionProgress: MessageFns<LiveExecutionProgress> = {
+  encode(message: LiveExecutionProgress, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.turnId !== "") {
+      writer.uint32(10).string(message.turnId);
+    }
+    if (message.callId !== "") {
+      writer.uint32(18).string(message.callId);
+    }
+    if (message.sessionId !== "") {
+      writer.uint32(26).string(message.sessionId);
+    }
+    if (message.generation !== "0") {
+      writer.uint32(32).uint64(message.generation);
+    }
+    if (message.sequence !== "0") {
+      writer.uint32(40).uint64(message.sequence);
+    }
+    if (message.round !== 0) {
+      writer.uint32(48).uint32(message.round);
+    }
+    if (message.stage !== "") {
+      writer.uint32(58).string(message.stage);
+    }
+    if (message.toolName !== "") {
+      writer.uint32(66).string(message.toolName);
+    }
+    if (message.provisionalText !== "") {
+      writer.uint32(74).string(message.provisionalText);
+    }
+    if (message.observedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.observedAt), writer.uint32(82).fork()).join();
+    }
+    if (message.stageObservedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.stageObservedAt), writer.uint32(90).fork()).join();
+    }
+    if (message.toolInvocationId !== "") {
+      writer.uint32(98).string(message.toolInvocationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): LiveExecutionProgress {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseLiveExecutionProgress();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.turnId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.callId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.sessionId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.generation = reader.uint64().toString();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.sequence = reader.uint64().toString();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.round = reader.uint32();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.stage = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.toolName = reader.string();
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.provisionalText = reader.string();
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.observedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.stageObservedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.toolInvocationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): LiveExecutionProgress {
+    return {
+      turnId: isSet(object.turnId)
+        ? globalThis.String(object.turnId)
+        : isSet(object.turn_id)
+        ? globalThis.String(object.turn_id)
+        : "",
+      callId: isSet(object.callId)
+        ? globalThis.String(object.callId)
+        : isSet(object.call_id)
+        ? globalThis.String(object.call_id)
+        : "",
+      sessionId: isSet(object.sessionId)
+        ? globalThis.String(object.sessionId)
+        : isSet(object.session_id)
+        ? globalThis.String(object.session_id)
+        : "",
+      generation: isSet(object.generation) ? globalThis.String(object.generation) : "0",
+      sequence: isSet(object.sequence) ? globalThis.String(object.sequence) : "0",
+      round: isSet(object.round) ? globalThis.Number(object.round) : 0,
+      stage: isSet(object.stage) ? globalThis.String(object.stage) : "",
+      toolName: isSet(object.toolName)
+        ? globalThis.String(object.toolName)
+        : isSet(object.tool_name)
+        ? globalThis.String(object.tool_name)
+        : "",
+      provisionalText: isSet(object.provisionalText)
+        ? globalThis.String(object.provisionalText)
+        : isSet(object.provisional_text)
+        ? globalThis.String(object.provisional_text)
+        : "",
+      observedAt: isSet(object.observedAt)
+        ? fromJsonTimestamp(object.observedAt)
+        : isSet(object.observed_at)
+        ? fromJsonTimestamp(object.observed_at)
+        : undefined,
+      stageObservedAt: isSet(object.stageObservedAt)
+        ? fromJsonTimestamp(object.stageObservedAt)
+        : isSet(object.stage_observed_at)
+        ? fromJsonTimestamp(object.stage_observed_at)
+        : undefined,
+      toolInvocationId: isSet(object.toolInvocationId)
+        ? globalThis.String(object.toolInvocationId)
+        : isSet(object.tool_invocation_id)
+        ? globalThis.String(object.tool_invocation_id)
+        : "",
+    };
+  },
+
+  toJSON(message: LiveExecutionProgress): unknown {
+    const obj: any = {};
+    if (message.turnId !== "") {
+      obj.turnId = message.turnId;
+    }
+    if (message.callId !== "") {
+      obj.callId = message.callId;
+    }
+    if (message.sessionId !== "") {
+      obj.sessionId = message.sessionId;
+    }
+    if (message.generation !== "0") {
+      obj.generation = message.generation;
+    }
+    if (message.sequence !== "0") {
+      obj.sequence = message.sequence;
+    }
+    if (message.round !== 0) {
+      obj.round = Math.round(message.round);
+    }
+    if (message.stage !== "") {
+      obj.stage = message.stage;
+    }
+    if (message.toolName !== "") {
+      obj.toolName = message.toolName;
+    }
+    if (message.provisionalText !== "") {
+      obj.provisionalText = message.provisionalText;
+    }
+    if (message.observedAt !== undefined) {
+      obj.observedAt = message.observedAt.toISOString();
+    }
+    if (message.stageObservedAt !== undefined) {
+      obj.stageObservedAt = message.stageObservedAt.toISOString();
+    }
+    if (message.toolInvocationId !== "") {
+      obj.toolInvocationId = message.toolInvocationId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<LiveExecutionProgress>): LiveExecutionProgress {
+    return LiveExecutionProgress.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<LiveExecutionProgress>): LiveExecutionProgress {
+    const message = createBaseLiveExecutionProgress();
+    message.turnId = object.turnId ?? "";
+    message.callId = object.callId ?? "";
+    message.sessionId = object.sessionId ?? "";
+    message.generation = object.generation ?? "0";
+    message.sequence = object.sequence ?? "0";
+    message.round = object.round ?? 0;
+    message.stage = object.stage ?? "";
+    message.toolName = object.toolName ?? "";
+    message.provisionalText = object.provisionalText ?? "";
+    message.observedAt = object.observedAt ?? undefined;
+    message.stageObservedAt = object.stageObservedAt ?? undefined;
+    message.toolInvocationId = object.toolInvocationId ?? "";
+    return message;
+  },
+};
+
+function createBaseListExecutionProgressResponse(): ListExecutionProgressResponse {
+  return { progress: [] };
+}
+
+export const ListExecutionProgressResponse: MessageFns<ListExecutionProgressResponse> = {
+  encode(message: ListExecutionProgressResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.progress) {
+      LiveExecutionProgress.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListExecutionProgressResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListExecutionProgressResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.progress.push(LiveExecutionProgress.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListExecutionProgressResponse {
+    return {
+      progress: globalThis.Array.isArray(object?.progress)
+        ? object.progress.map((e: any) => LiveExecutionProgress.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ListExecutionProgressResponse): unknown {
+    const obj: any = {};
+    if (message.progress?.length) {
+      obj.progress = message.progress.map((e) => LiveExecutionProgress.toJSON(e));
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListExecutionProgressResponse>): ListExecutionProgressResponse {
+    return ListExecutionProgressResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListExecutionProgressResponse>): ListExecutionProgressResponse {
+    const message = createBaseListExecutionProgressResponse();
+    message.progress = object.progress?.map((e) => LiveExecutionProgress.fromPartial(e)) || [];
     return message;
   },
 };
@@ -5017,6 +5539,17 @@ export const ProjectConversationServiceService = {
     responseDeserialize: (value: Buffer): GetConversationSnapshotResponse =>
       GetConversationSnapshotResponse.decode(value),
   },
+  listExecutionProgress: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/ListExecutionProgress" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListExecutionProgressRequest): Buffer =>
+      Buffer.from(ListExecutionProgressRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListExecutionProgressRequest => ListExecutionProgressRequest.decode(value),
+    responseSerialize: (value: ListExecutionProgressResponse): Buffer =>
+      Buffer.from(ListExecutionProgressResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListExecutionProgressResponse => ListExecutionProgressResponse.decode(value),
+  },
   listExecutionTimeline: {
     path: "/ayni.orchestrator.v1.ProjectConversationService/ListExecutionTimeline" as const,
     requestStream: false as const,
@@ -5122,6 +5655,7 @@ export interface ProjectConversationServiceServer extends UntypedServiceImplemen
   createConversation: handleUnaryCall<CreateConversationRequest, CreateConversationResponse>;
   sendMessage: handleUnaryCall<SendMessageRequest, SendMessageResponse>;
   getConversationSnapshot: handleUnaryCall<GetConversationSnapshotRequest, GetConversationSnapshotResponse>;
+  listExecutionProgress: handleUnaryCall<ListExecutionProgressRequest, ListExecutionProgressResponse>;
   listExecutionTimeline: handleUnaryCall<ListExecutionTimelineRequest, ListExecutionTimelineResponse>;
   listConversationHistory: handleUnaryCall<ListConversationHistoryRequest, ListConversationHistoryResponse>;
   watchConversation: handleServerStreamingCall<WatchConversationRequest, WatchConversationResponse>;
@@ -5551,6 +6085,21 @@ export interface ProjectConversationServiceClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetConversationSnapshotResponse) => void,
   ): ClientUnaryCall;
+  listExecutionProgress(
+    request: ListExecutionProgressRequest,
+    callback: (error: ServiceError | null, response: ListExecutionProgressResponse) => void,
+  ): ClientUnaryCall;
+  listExecutionProgress(
+    request: ListExecutionProgressRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListExecutionProgressResponse) => void,
+  ): ClientUnaryCall;
+  listExecutionProgress(
+    request: ListExecutionProgressRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListExecutionProgressResponse) => void,
+  ): ClientUnaryCall;
   listExecutionTimeline(
     request: ListExecutionTimelineRequest,
     callback: (error: ServiceError | null, response: ListExecutionTimelineResponse) => void,
@@ -5658,6 +6207,28 @@ type DeepPartial<T> = T extends Builtin ? T
   : T extends { $case: string } ? { [K in keyof Omit<T, "$case">]?: DeepPartial<T[K]> } & { $case: T["$case"] }
   : T extends {} ? { [K in keyof T]?: DeepPartial<T[K]> }
   : Partial<T>;
+
+function toTimestamp(date: Date): Timestamp {
+  const seconds = Math.trunc(date.getTime() / 1_000).toString();
+  const nanos = (date.getTime() % 1_000) * 1_000_000;
+  return { seconds, nanos };
+}
+
+function fromTimestamp(t: Timestamp): Date {
+  let millis = (globalThis.Number(t.seconds) || 0) * 1_000;
+  millis += (t.nanos || 0) / 1_000_000;
+  return new globalThis.Date(millis);
+}
+
+function fromJsonTimestamp(o: any): Date {
+  if (o instanceof globalThis.Date) {
+    return o;
+  } else if (typeof o === "string") {
+    return new globalThis.Date(o);
+  } else {
+    return fromTimestamp(Timestamp.fromJSON(o));
+  }
+}
 
 function isSet(value: any): boolean {
   return value !== null && value !== undefined;

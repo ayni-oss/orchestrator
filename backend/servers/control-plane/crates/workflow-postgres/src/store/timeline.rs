@@ -8,6 +8,7 @@ pub struct TimelineEntry {
     pub activity: Activity,
     pub kind: String,
     pub affected_resource_ids: Vec<String>,
+    pub traceparent: String,
 }
 
 #[derive(Debug)]
@@ -65,12 +66,15 @@ impl WorkflowStore {
             .get(0);
         let rows = tx
             .query(
-                "SELECT activity_id, conversation_id, conversation_revision, 0::bigint, turn_id, \
-             stage, presentation_state, waiting_on, safe_reason, workflow_ts_seconds(accepted_at), \
-             workflow_ts_nanos(accepted_at), safe_detail, kind, affected_resource_ids \
-             FROM workflow_execution_timeline WHERE conversation_id = $1 \
-             AND conversation_revision <= $2 AND ($3 = 0 OR conversation_revision < $3) \
-             ORDER BY conversation_revision DESC LIMIT $4",
+                "SELECT t.activity_id, t.conversation_id, t.conversation_revision, 0::bigint, t.turn_id, \
+             t.stage, t.presentation_state, t.waiting_on, t.safe_reason, workflow_ts_seconds(t.accepted_at), \
+             workflow_ts_nanos(t.accepted_at), t.safe_detail, t.kind, t.affected_resource_ids, \
+             COALESCE(r.traceparent, '') FROM workflow_execution_timeline t \
+             LEFT JOIN workflow_command_receipts r ON r.conversation_id = t.conversation_id \
+             AND r.turn_id = t.turn_id AND r.kind = 'send_message' \
+             WHERE t.conversation_id = $1 AND t.conversation_revision <= $2 \
+             AND ($3 = 0 OR t.conversation_revision < $3) \
+             ORDER BY t.conversation_revision DESC LIMIT $4",
                 &[&conversation, &boundary, &before, &(i64::from(limit) + 1)],
             )
             .await?;
@@ -86,6 +90,7 @@ impl WorkflowStore {
                     activity,
                     kind: row.get(12),
                     affected_resource_ids: row.get(13),
+                    traceparent: row.get(14),
                 })
             })
             .collect::<Result<Vec<_>, StoreError>>()?;

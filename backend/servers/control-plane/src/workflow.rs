@@ -1,3 +1,4 @@
+mod admission;
 mod assessments;
 mod plans;
 mod projections;
@@ -289,6 +290,13 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
 
 #[tonic::async_trait]
 impl v1::project_conversation_service_server::ProjectConversationService for WorkflowGrpc {
+    async fn list_execution_progress(
+        &self,
+        request: Request<v1::ListExecutionProgressRequest>,
+    ) -> Result<Response<v1::ListExecutionProgressResponse>, Status> {
+        timeline::progress(&self.store, request).await
+    }
+
     async fn list_execution_timeline(
         &self,
         request: Request<v1::ListExecutionTimelineRequest>,
@@ -830,29 +838,7 @@ impl v1::project_conversation_service_server::ProjectConversationService for Wor
         &self,
         request: Request<v1::SendMessageRequest>,
     ) -> Result<Response<v1::SendMessageResponse>, Status> {
-        let context = RequestContext::new(&request);
-        validation::send_message(request.get_ref()).map_err(|error| context.validation(&error))?;
-        let request = request.into_inner();
-        let accepted = self
-            .store
-            .send_message(
-                &request.idempotency_key,
-                &request.workspace_id,
-                &request.project_id,
-                &request.conversation_id,
-                &request.content,
-            )
-            .await
-            .map_err(|error| context.store(&error))?;
-        let handoff = std::time::Instant::now();
-        let response = context.response(v1::SendMessageResponse {
-            receipt: Some(receipt(accepted)),
-        });
-        ayni_orchestrator_workflow_postgres::metrics::observe(
-            "workflow_receipt_handoff_seconds",
-            handoff.elapsed(),
-        );
-        Ok(response)
+        admission::send(&self.store, request).await
     }
 
     async fn get_conversation_snapshot(

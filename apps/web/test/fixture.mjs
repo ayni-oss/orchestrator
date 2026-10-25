@@ -6,7 +6,7 @@ import { resolve, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 const build = fileURLToPath(new URL('../build/', import.meta.url));
 export async function startFixture() {
-  const workspaces = [], projects = [], conversations = [], snapshots = new Map(), receipts = new Map(), watchers = new Map(), timelines = new Map();
+  const workspaces = [], projects = [], conversations = [], snapshots = new Map(), receipts = new Map(), watchers = new Map(), timelines = new Map(), progress = new Map();
   const timestamp = () => new Date().toISOString();
   function requireScope(body) {
     const conversation = conversations.find(value => value.id === body.conversationId && value.workspaceId === body.workspaceId && value.projectId === body.projectId);
@@ -52,6 +52,8 @@ export async function startFixture() {
         const limit = body.limit || 50;
         return { entries: entries.slice(0, limit), snapshotRevision: boundary, nextBeforeRevision: entries.length > limit ? entries[limit - 1].activity.conversationRevision : '0', retainedFromRevision: timelines.get(body.conversationId)?.at(-1)?.activity.conversationRevision || '0' };
       }
+      case 'ListExecutionProgress': { const snapshot = requireScope(body); return { progress: snapshot.nonterminalTurns.length && progress.has(body.conversationId) ? [progress.get(body.conversationId)] : [] }; }
+      case 'ListTasks': requireScope(body); return { tasks: [] };
       case 'ListProviderCalls': requireScope(body); return { calls: [] };
       case 'ListConversationHistory': {
         const snapshot = requireScope(body);
@@ -60,14 +62,25 @@ export async function startFixture() {
       case 'SendMessage': {
         const snapshot = requireScope(body);
         snapshot.recentMessages.push({ id, content: body.content, sequence: String(snapshot.recentMessages.length + 1), role: 'MESSAGE_ROLE_USER', acceptedAt: timestamp() });
-        snapshot.nonterminalTurns = [{ id, acceptedAt: timestamp(), executionState: 'EXECUTION_STATE_PROCESSING' }];
+        const acceptedAt = timestamp();
+        snapshot.nonterminalTurns = [{ id, sequence: String(Math.ceil(snapshot.recentMessages.length / 2)), acceptedAt, executionState: 'EXECUTION_STATE_PROCESSING' }];
+        const partial = { turnId: id, callId: `call-${id}`, sessionId: `session-${snapshot.conversationId}`, generation: '1', sequence: '1', round: 1, stage: 'preparation', provisionalText: '', stageObservedAt: acceptedAt, observedAt: acceptedAt };
+        progress.set(snapshot.conversationId, partial);
+        const model = setTimeout(() => {
+          if (progress.get(snapshot.conversationId) !== partial || !snapshot.nonterminalTurns.length) return;
+          Object.assign(partial, { stage: 'model', sequence: '2', provisionalText: 'Scripted response: ', stageObservedAt: timestamp(), observedAt: timestamp() });
+        }, 100); model.unref();
+        const delta = setTimeout(() => {
+          if (progress.get(snapshot.conversationId) !== partial || !snapshot.nonterminalTurns.length) return;
+          Object.assign(partial, { sequence: '3', provisionalText: `Scripted response: ${body.content}`, observedAt: timestamp() });
+        }, 400); delta.unref();
         update(snapshot, 'fixture_execution', false);
         const timer = setTimeout(() => {
           if (!snapshot.nonterminalTurns.length) return;
           snapshot.recentMessages.push({ id: randomUUID(), content: `Scripted response: ${body.content}`, sequence: String(snapshot.recentMessages.length + 1), role: 'MESSAGE_ROLE_ASSISTANT', acceptedAt: timestamp() });
-          snapshot.nonterminalTurns = []; snapshot.recentTerminalTurns = [{ id, presentationState: 'PRESENTATION_STATE_COMPLETED' }];
+          snapshot.nonterminalTurns = []; snapshot.recentTerminalTurns = [{ id, sequence: String(Math.ceil(snapshot.recentMessages.length / 2)), acceptedAt, terminalAt: timestamp(), presentationState: 'PRESENTATION_STATE_COMPLETED' }]; progress.delete(snapshot.conversationId);
           update(snapshot, 'terminal_outcome_accepted', true);
-        }, 150); timer.unref();
+        }, body.content.startsWith('Observe streaming') ? 3000 : 1100); timer.unref();
         result = { receipt: { ...receipt, turnId: id } }; break;
       }
       case 'CancelTurn': { const snapshot = requireScope(body); snapshot.nonterminalTurns = []; update(snapshot, 'cancelled', true); result = { commandId: id }; break; }

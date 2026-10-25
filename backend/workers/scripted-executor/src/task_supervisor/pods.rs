@@ -118,7 +118,7 @@ async fn delete(api: &Api<Pod>, name: &str, pod: &Pod) -> Result {
 }
 async fn storage(s: &Supervisor, client: Client, run: &TaskRun, name: &str) -> Result {
     let pvcs: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), &s.namespace);
-    let labels = json!({"app.kubernetes.io/name":"ayni-task-worker","build.ayni/attempt":run.command.attempt_id});
+    let labels = json!({"app.kubernetes.io/name":"ayni-task-worker","app.kubernetes.io/part-of":"ayni-orchestrator","build.ayni/attempt":run.command.attempt_id});
     if let Some(pvc) = pvcs.get_opt(name).await? {
         if pvc
             .metadata
@@ -171,21 +171,7 @@ fn pod_spec(s: &Supervisor, run: &TaskRun, name: &str) -> Result<Pod> {
     let command = &run.command;
     let security = json!({"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"]}});
     let launcher_security = json!({"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"runAsUser":0,"runAsGroup":10001,"runAsNonRoot":false,"capabilities":{"drop":["ALL"],"add":["SETUID","SETGID"]}});
-    let env = json!([
-        {"name":"ORCHESTRATOR_TASK_AUTHORITY_URL","value":s.url},{"name":"ORCHESTRATOR_TASK_ATTEMPT","value":command.attempt_id},
-        {"name":"ORCHESTRATOR_TASK_GENERATION","value":command.generation.to_string()},
-        {"name":"ORCHESTRATOR_TASK_TOKEN_PATH","value":"/var/run/task-capability/token"},
-        {"name":"ORCHESTRATOR_TASK_POD_UID","valueFrom":{"fieldRef":{"fieldPath":"metadata.uid"}}},
-        {"name":"ORCHESTRATOR_TASK_LEDGER_ROOT","value":"/var/lib/ayni-task/ledger"},
-        {"name":"ORCHESTRATOR_TASK_SOURCE","value":"/workspace"},
-        {"name":"ORCHESTRATOR_TASK_FIXTURE_ENABLED","value":s.fixture.to_string()},
-        {"name":"ORCHESTRATOR_OPENAI_ENABLED","value":s.openai.to_string()},
-        {"name":"ORCHESTRATOR_ANTHROPIC_ENABLED","value":s.anthropic.to_string()},
-        {"name":"ORCHESTRATOR_ANTHROPIC_KEY_PATH","value":"/var/run/provider/api-key"},
-        {"name":"ANTHROPIC_BASE_URL","value":s.anthropic_endpoint},
-        {"name":"ORCHESTRATOR_OPENAI_KEY_PATH","value":"/var/run/provider/api-key"},
-        {"name":"OPENAI_BASE_URL","value":s.endpoint},{"name":"HOME","value":"/tmp/home"}
-    ]);
+    let env = task_environment(s, command)?;
     let runtime_env = json!([
         {"name":"HOME","value":"/tmp/home"},{"name":"XDG_CACHE_HOME","value":"/tmp/cache"},
         {"name":"MISE_CACHE_DIR","value":"/tmp/mise"},{"name":"CARGO_HOME","value":"/tmp/cargo"},
@@ -251,7 +237,7 @@ fn pod_spec(s: &Supervisor, run: &TaskRun, name: &str) -> Result<Pod> {
     ]);
     let quality_mounts = json!([source_ro, artifacts, tools_ro, frozen_ro,
         {"name":"work","mountPath":"/quality-private","subPath":"quality/runtime"}, runtime_temp]);
-    let pod = json!({"apiVersion":"v1","kind":"Pod","metadata":{"name":name,"labels":{"app.kubernetes.io/name":"ayni-task-worker","build.ayni/attempt":command.attempt_id},"annotations":{"build.ayni/command-digest":digest(&serde_json::to_vec(command)?)}},"spec":{
+    let pod = json!({"apiVersion":"v1","kind":"Pod","metadata":{"name":name,"labels":{"app.kubernetes.io/name":"ayni-task-worker","app.kubernetes.io/part-of":"ayni-orchestrator","build.ayni/attempt":command.attempt_id},"annotations":{"build.ayni/command-digest":digest(&serde_json::to_vec(command)?)}},"spec":{
         "automountServiceAccountToken":false,"restartPolicy":"OnFailure","activeDeadlineSeconds":command.max_seconds,"terminationGracePeriodSeconds":10,
         "securityContext":{"runAsNonRoot":true,"runAsUser":10001,"runAsGroup":10001,"fsGroup":10001,"seccompProfile":{"type":"RuntimeDefault"}},
         "initContainers":[
@@ -266,6 +252,33 @@ fn pod_spec(s: &Supervisor, run: &TaskRun, name: &str) -> Result<Pod> {
         "volumes":volumes
     }});
     Ok(serde_json::from_value(pod)?)
+}
+
+fn task_environment(
+    s: &Supervisor,
+    command: &ayni_orchestrator_events::task_execution::TaskCommand,
+) -> Result<serde_json::Value> {
+    let mut env = json!([
+        {"name":"ORCHESTRATOR_TASK_AUTHORITY_URL","value":s.url},{"name":"ORCHESTRATOR_TASK_ATTEMPT","value":command.attempt_id},
+        {"name":"ORCHESTRATOR_TASK_GENERATION","value":command.generation.to_string()},
+        {"name":"ORCHESTRATOR_TASK_TOKEN_PATH","value":"/var/run/task-capability/token"},
+        {"name":"ORCHESTRATOR_TASK_POD_UID","valueFrom":{"fieldRef":{"fieldPath":"metadata.uid"}}},
+        {"name":"ORCHESTRATOR_TASK_LEDGER_ROOT","value":"/var/lib/ayni-task/ledger"},
+        {"name":"ORCHESTRATOR_TASK_SOURCE","value":"/workspace"},
+        {"name":"ORCHESTRATOR_TASK_FIXTURE_ENABLED","value":s.fixture.to_string()},
+        {"name":"ORCHESTRATOR_OPENAI_ENABLED","value":s.openai.to_string()},
+        {"name":"ORCHESTRATOR_ANTHROPIC_ENABLED","value":s.anthropic.to_string()},
+        {"name":"ORCHESTRATOR_ANTHROPIC_KEY_PATH","value":"/var/run/provider/api-key"},
+        {"name":"ANTHROPIC_BASE_URL","value":s.anthropic_endpoint},
+        {"name":"ORCHESTRATOR_OPENAI_KEY_PATH","value":"/var/run/provider/api-key"},
+        {"name":"OPENAI_BASE_URL","value":s.endpoint},{"name":"HOME","value":"/tmp/home"}
+    ]);
+    if let Some(endpoint) = ayni_orchestrator_observability::exporter_endpoint() {
+        env.as_array_mut()
+            .ok_or("task environment")?
+            .push(json!({"name":"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT","value":endpoint}));
+    }
+    Ok(env)
 }
 
 #[cfg(test)]

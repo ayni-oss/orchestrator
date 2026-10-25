@@ -17,6 +17,10 @@ use ayni_orchestrator_events::{
         transport::{ConsumerRole, rejected_delivery},
     },
 };
+use ayni_orchestrator_observability::{
+    event_context,
+    workflow::{Workflow, finish},
+};
 use ayni_orchestrator_scripted_executor::{
     Command, CommandDelivery, Decision, Ledger, LedgerLimits, Report, RetainedEvent,
 };
@@ -33,6 +37,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::time;
+use tracing::Instrument as _;
 use uuid::Uuid;
 
 const COMMAND_STREAM: &str = "ORCHESTRATOR_WORKFLOW_COMMAND_V1";
@@ -45,6 +50,19 @@ type RuntimeResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
 #[tokio::main]
 async fn main() -> RuntimeResult {
+    let telemetry = ayni_orchestrator_observability::init(
+        if env::args().nth(1).as_deref() == Some("session-worker") {
+            "conversation-worker"
+        } else {
+            "conversation-supervisor"
+        },
+    );
+    let result = run().await;
+    telemetry.shutdown();
+    result
+}
+
+async fn run() -> RuntimeResult {
     if env::args().nth(1).as_deref() == Some("session-worker") {
         return session_worker::run().await.map_err(Into::into);
     }
@@ -183,7 +201,17 @@ async fn handle_command(
     {
         return Ok(());
     }
-    handle_command_bytes(context, configuration, ledger, &message.payload).await?;
+    let diagnostic = event_context(&message.payload);
+    let span = Workflow::from_event(&message.payload).span_with_context(
+        "supervisor.command.receive",
+        diagnostic.as_ref(),
+        message.info().is_ok_and(|info| info.delivered > 1),
+    );
+    let received = handle_command_bytes(context, configuration, ledger, &message.payload)
+        .instrument(span.clone())
+        .await;
+    finish(&span, received.is_ok());
+    received?;
     message.double_ack().await?;
     Ok(())
 }
@@ -329,7 +357,17 @@ async fn execute_ready(
     for command in ledger.executable_commands()? {
         let (identity, metadata, payload) = decode_command(&command.exact_bytes)?;
         let result = if payload.session.is_some() {
-            session_supervisor::execute(configuration, &command.exact_bytes).await?
+            let diagnostic = event_context(&command.exact_bytes);
+            let span = Workflow::from_event(&command.exact_bytes).span_with_context(
+                "supervisor.session.execute",
+                diagnostic.as_ref(),
+                false,
+            );
+            let executed = session_supervisor::execute(configuration, &command.exact_bytes)
+                .instrument(span.clone())
+                .await;
+            finish(&span, executed.is_ok());
+            executed?
         } else {
             session_worker::ExecutionResult {
                 command_id: identity.id.clone(),

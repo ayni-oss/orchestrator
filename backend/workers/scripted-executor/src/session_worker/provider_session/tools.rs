@@ -1,9 +1,16 @@
 //! The model can request reads; only frozen session inputs grant their authority.
 use super::*;
 use ayni_orchestrator_events::v1::ToolInvocationEvidence;
+use ayni_orchestrator_observability::{
+    TraceContext,
+    workflow::{Workflow, finish},
+};
 use ayni_orchestrator_providers::responses::{FunctionCall, ResponseEvidence, TokenUsage};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
+use tracing::Instrument as _;
+mod transport;
+use transport::paid_request;
 
 #[derive(Deserialize, Serialize)]
 struct RetainedTool {
@@ -36,6 +43,10 @@ pub(super) struct ProviderLoop {
     exchanges: Vec<Exchange>,
     #[serde(default)]
     mcp_tools: BTreeMap<String, super::mcp::Tool>,
+    #[serde(default)]
+    trace_context: Option<TraceContext>,
+    #[serde(default)]
+    turn_id: String,
 }
 
 impl ProviderLoop {
@@ -46,6 +57,10 @@ impl ProviderLoop {
     ) -> Result<Self, StatusCode> {
         let (_, _, command) =
             decode_command(&input.command_bytes).map_err(|_| StatusCode::BAD_REQUEST)?;
+        let turn_id = command
+            .binding
+            .as_ref()
+            .map_or_else(String::new, |b| b.turn_id.clone());
         let config = command
             .frozen_configuration
             .ok_or(StatusCode::BAD_REQUEST)?;
@@ -72,6 +87,8 @@ impl ProviderLoop {
             tools: BTreeMap::new(),
             exchanges: Vec::new(),
             mcp_tools,
+            trace_context: ayni_orchestrator_observability::event_context(&input.command_bytes),
+            turn_id,
         })
     }
 
@@ -138,29 +155,6 @@ fn cancelled(state: &WorkerState, command_id: &str) -> bool {
         .unwrap_or(true)
 }
 
-async fn paid_request(
-    state: &WorkerState,
-    call_id: &str,
-    command_id: &str,
-    bytes: &[u8],
-) -> Result<ResponseEvidence, ()> {
-    let client = state
-        .provider
-        .lock()
-        .ok()
-        .and_then(|client| client.clone())
-        .ok_or(())?;
-    let response = client.send(call_id, bytes);
-    tokio::pin!(response);
-    let mut interval = tokio::time::interval(Duration::from_millis(100));
-    loop {
-        tokio::select! {
-            result=&mut response => return result.map_err(|_|()),
-            _=interval.tick()=>if cancelled(state,command_id) { return Err(()); },
-        }
-    }
-}
-
 fn add_usage(total: &mut TokenUsage, usage: &TokenUsage) {
     let sum = |old: Option<u64>, new: Option<u64>| {
         old.and_then(|old| new.and_then(|new| old.checked_add(new)))
@@ -196,24 +190,7 @@ pub(super) async fn execute(
     let Some(json) = json else {
         // A prepared call retained by the previous executable keeps its exact
         // request bytes and its one-request allowance; it cannot acquire tools.
-        let response = paid_request(state, &input.command_id, &input.command_id, request).await?;
-        evidence.response_id = response.response_id;
-        evidence.reported_model = response.model;
-        evidence.input_tokens = response.usage.input_tokens;
-        evidence.output_tokens = response.usage.output_tokens;
-        evidence.total_tokens = response.usage.total_tokens;
-        let failure_reason = if response.tool_calls.is_empty() {
-            response.failure_reason
-        } else {
-            "provider_tool_rejected".into()
-        };
-        evidence.state = if failure_reason.is_empty() {
-            "completed"
-        } else {
-            "failed"
-        }
-        .into();
-        return Ok((response.content, failure_reason));
+        return execute_single(state, input, request, evidence).await;
     };
     let mut execution: ProviderLoop = serde_json::from_str(&json).map_err(|_| ())?;
     loop {
@@ -256,11 +233,7 @@ pub(super) async fn execute(
                 evidence.state = "cancelled".into();
                 return Ok((String::new(), "cancelled".into()));
             }
-            let invoked = if execution.mcp_tools.contains_key(&call.name) {
-                invoke_mcp(state, input, &mut execution, call).await
-            } else {
-                invoke(&mut execution, call)
-            };
+            let invoked = invoke_observed(state, input, &mut execution, call).await?;
             match invoked {
                 Ok(output) => outputs.push((call.clone(), output)),
                 Err(reason) => {
@@ -347,7 +320,15 @@ async fn advance_exchange(
                 response: None,
             });
             checkpoint(state, &input.command_id, execution)?;
-            let response = paid_request(state, &call_id, &input.command_id, &bytes).await?;
+            let response = paid_request(
+                state,
+                &call_id,
+                &input.command_id,
+                &bytes,
+                execution.trace_context.as_ref(),
+                &execution.turn_id,
+            )
+            .await?;
             add_usage(&mut execution.usage, &response.usage);
             execution.exchanges.last_mut().ok_or(())?.response = Some(response.clone());
             execution.response = Some(response);
@@ -609,299 +590,129 @@ fn invoke(execution: &mut ProviderLoop, call: &FunctionCall) -> Result<String, &
     reason.map_or(Ok(output), Err)
 }
 
+async fn invoke_observed(
+    state: &WorkerState,
+    input: &SendInput,
+    execution: &mut ProviderLoop,
+    call: &FunctionCall,
+) -> Result<Result<String, &'static str>, ()> {
+    let tool_name = ayni_orchestrator_observability::workflow::configured_tool_name(
+        &call.name,
+        execution
+            .sources
+            .keys()
+            .chain(execution.mcp_tools.keys())
+            .map(String::as_str),
+    );
+    let invocation_id = if tool_name != "unknown_tool"
+        && !call.call_id.is_empty()
+        && call.call_id.len() <= 128
+        && call
+            .call_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
+    {
+        call.call_id.as_str()
+    } else {
+        "rejected_invocation"
+    };
+    let command_digest: String = state
+        .connection
+        .lock()
+        .map_err(|_| ())?
+        .query_row(
+            "SELECT command_digest FROM provider_calls WHERE command_id=?1",
+            [&input.command_id],
+            |row| row.get(0),
+        )
+        .map_err(|_| ())?;
+    let _ = super::super::progress::record(
+        state,
+        &input.command_id,
+        &command_digest,
+        ayni_orchestrator_events::progress::ExecutionProgress {
+            stage: "tool".into(),
+            round: u32::from(execution.round),
+            call_id: execution
+                .exchanges
+                .last()
+                .map_or_else(String::new, |e| e.call_id.clone()),
+            tool_name: tool_name.into(),
+            tool_invocation_id: invocation_id.into(),
+            ..Default::default()
+        },
+    );
+    let span = Workflow {
+        project_id: state.project_id.clone(),
+        conversation_id: state.conversation_id.clone(),
+        run_id: input.command_id.clone(),
+        turn_id: execution.turn_id.clone(),
+        provider_call_id: execution
+            .exchanges
+            .last()
+            .map_or_else(String::new, |e| e.call_id.clone()),
+        tool_invocation_id: invocation_id.into(),
+        session_id: state.session_id.clone(),
+        generation: state.generation,
+        ..Default::default()
+    }
+    .span_with_context(
+        "provider.tool.execute",
+        execution.trace_context.as_ref(),
+        false,
+    );
+    span.record("tool", tool_name);
+    let invoked = async {
+        if execution.mcp_tools.contains_key(&call.name) {
+            invoke_mcp(state, input, execution, call).await
+        } else {
+            invoke(execution, call)
+        }
+    }
+    .instrument(span.clone())
+    .await;
+    finish(&span, invoked.is_ok());
+    Ok(invoked)
+}
+
+async fn execute_single(
+    state: &WorkerState,
+    input: &SendInput,
+    request: &[u8],
+    evidence: &mut ProviderCallEvidence,
+) -> Result<(String, String), ()> {
+    let response = paid_request(
+        state,
+        &input.command_id,
+        &input.command_id,
+        request,
+        None,
+        "",
+    )
+    .await?;
+    evidence.response_id = response.response_id;
+    evidence.reported_model = response.model;
+    evidence.input_tokens = response.usage.input_tokens;
+    evidence.output_tokens = response.usage.output_tokens;
+    evidence.total_tokens = response.usage.total_tokens;
+    let failure_reason = if response.tool_calls.is_empty() {
+        response.failure_reason
+    } else {
+        "provider_tool_rejected".into()
+    };
+    evidence.state = if failure_reason.is_empty() {
+        "completed"
+    } else {
+        "failed"
+    }
+    .into();
+    Ok((response.content, failure_reason))
+}
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
     reason = "fixture assertions fail immediately on unexpected state"
 )]
-mod tests {
-    use super::*;
-    fn execution() -> ProviderLoop {
-        ProviderLoop {
-            request: json!({}),
-            phase: "ready".into(),
-            round: 0,
-            response: None,
-            usage: TokenUsage::default(),
-            sources: BTreeMap::from([(
-                "read_workspace_instructions".into(),
-                json!({"instructions":"frozen"}),
-            )]),
-            tools: BTreeMap::new(),
-            exchanges: Vec::new(),
-            mcp_tools: BTreeMap::new(),
-        }
-    }
-    fn call(id: &str, args: &str) -> FunctionCall {
-        FunctionCall {
-            call_id: id.into(),
-            name: "read_workspace_instructions".into(),
-            arguments: args.into(),
-        }
-    }
-    #[test]
-    fn scoped_invocation_replays_exact_output_and_rejects_changed_identity_or_scope() {
-        let mut execution = execution();
-        let request = call("same", "{}");
-        let original = invoke(&mut execution, &request).unwrap();
-        execution
-            .sources
-            .insert(request.name.clone(), json!({"instructions":"changed"}));
-        assert_eq!(invoke(&mut execution, &request).unwrap(), original);
-        assert_eq!(
-            invoke(
-                &mut execution,
-                &call("same", "{\"conversation_id\":\"foreign\"}")
-            ),
-            Err("provider_tool_rejected")
-        );
-        assert_eq!(
-            invoke(
-                &mut execution,
-                &call("foreign", "{\"project_id\":\"foreign\"}")
-            ),
-            Err("provider_tool_rejected")
-        );
-        assert_eq!(execution.tools["foreign"].state, "rejected");
-    }
-    #[test]
-    fn invocation_count_argument_size_and_output_size_are_hard_bounds() {
-        let mut execution = execution();
-        for index in 0..8 {
-            invoke(&mut execution, &call(&format!("call_{index}"), "{}")).unwrap();
-        }
-        assert_eq!(
-            invoke(&mut execution, &call("ninth", "{}")),
-            Err("provider_tool_limit")
-        );
-        let mut execution = super::tests::execution();
-        assert_eq!(
-            invoke(&mut execution, &call("large", &" ".repeat(4097))),
-            Err("provider_tool_rejected")
-        );
-        execution.sources.insert(
-            "read_workspace_instructions".into(),
-            json!({"instructions":"x".repeat(32768)}),
-        );
-        assert_eq!(
-            invoke(&mut execution, &call("output", "{}")),
-            Err("provider_tool_output_limit")
-        );
-        assert!(execution.tools["output"].output.is_empty());
-        let mut unknown = call("shell", "{}");
-        unknown.name = "shell".into();
-        assert_eq!(
-            invoke(&mut execution, &unknown),
-            Err("provider_tool_rejected")
-        );
-    }
-    #[tokio::test]
-    async fn ambiguous_mcp_invocation_replay_cannot_send_again() {
-        let mut execution = execution();
-        let call = FunctionCall {
-            call_id: "mcp_same".into(),
-            name: "mcp_lookup".into(),
-            arguments: "{}".into(),
-        };
-        execution.tools.insert(
-            call.call_id.clone(),
-            RetainedTool {
-                call: call.clone(),
-                input_digest: digest(b"{}"),
-                output: String::new(),
-                state: "sending".into(),
-                consent_id: None,
-            },
-        );
-        let state = WorkerState {
-            active: Mutex::new(std::collections::HashSet::new()),
-            provider: Mutex::new(None),
-            session_id: "session".into(),
-            generation: 1,
-            conversation_id: "conversation".into(),
-            workspace_id: "workspace".into(),
-            project_id: "project".into(),
-            token: "token".into(),
-            connection: Mutex::new(Connection::open_in_memory().unwrap()),
-            last_request: Mutex::new(Instant::now()),
-            idle_timeout: Mutex::new(Duration::from_secs(30)),
-        };
-        let input = SendInput {
-            command_id: "command".into(),
-            request_digest: "digest".into(),
-            allowed: true,
-            state: "sending".into(),
-        };
-        assert_eq!(
-            invoke_mcp(&state, &input, &mut execution, &call).await,
-            Err("provider_tool_uncertain")
-        );
-        let mut changed = call.clone();
-        changed.arguments = "{\"changed\":true}".into();
-        assert_eq!(
-            invoke_mcp(&state, &input, &mut execution, &changed).await,
-            Err("provider_tool_rejected")
-        );
-    }
-    #[tokio::test]
-    #[allow(
-        clippy::too_many_lines,
-        reason = "one retained-ledger external-effect scenario"
-    )]
-    #[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
-    async fn exact_external_effect_consent_is_consumed_once_and_survives_ledger_reopen_requires_loopback()
-     {
-        use axum::{Json, Router, response::IntoResponse, routing::post};
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        let count = Arc::new(AtomicUsize::new(0));
-        let observed = count.clone();
-        let app = Router::new().route("/mcp", post(move |Json(body): Json<Value>| {
-            let count = observed.clone();
-            async move { match body["method"].as_str() {
-                Some("initialize") => Json(json!({"jsonrpc":"2.0","id":"initialize","result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{}}}})).into_response(),
-                Some("notifications/initialized") => StatusCode::ACCEPTED.into_response(),
-                Some("tools/list") => Json(json!({"jsonrpc":"2.0","id":"tools","result":{"tools":(["create","create500","large"].iter().map(|name|json!({"name":name,"inputSchema":{"type":"object","properties":{},"required":[],"additionalProperties":false}})).collect::<Vec<_>>())}})).into_response(),
-                Some("tools/call") => { count.fetch_add(1, Ordering::SeqCst); if body["params"]["name"] == "create500" {return StatusCode::INTERNAL_SERVER_ERROR.into_response();} else if body["params"]["name"] == "large" {return Json(json!({"jsonrpc":"2.0","id":body["id"],"result":{"content":"x".repeat(5000)}})).into_response();} Json(json!({"jsonrpc":"2.0","id":body["id"],"result":{"content":[{"type":"text","text":"created"}]}})).into_response() },
-                _ => StatusCode::BAD_REQUEST.into_response(),
-            }}
-        }));
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let endpoint = format!("http://{}/mcp", listener.local_addr().unwrap());
-        let server = tokio::spawn(async move {
-            axum::serve(listener, app).await.unwrap();
-        });
-        let command_id = uuid::Uuid::now_v7().to_string();
-        let state = WorkerState {
-            active: Mutex::new(std::collections::HashSet::new()),
-            provider: Mutex::new(None),
-            session_id: "session".into(),
-            generation: 1,
-            conversation_id: "conversation".into(),
-            workspace_id: "workspace".into(),
-            project_id: "project".into(),
-            token: "token".into(),
-            connection: Mutex::new(Connection::open_in_memory().unwrap()),
-            last_request: Mutex::new(Instant::now()),
-            idle_timeout: Mutex::new(Duration::from_secs(30)),
-        };
-        state
-            .connection
-            .lock()
-            .unwrap()
-            .execute_batch(super::super::super::SCHEMA)
-            .unwrap();
-        state
-            .connection
-            .lock()
-            .unwrap()
-            .execute_batch(super::super::SCHEMA)
-            .unwrap();
-        state.connection.lock().unwrap().execute("INSERT INTO provider_calls(command_id,command_digest,request_digest,evidence,state) VALUES(?1,'digest','digest','{}','sending')",[&command_id]).unwrap();
-        let mut execution = execution();
-        execution.mcp_tools.insert("mcp_create".into(), super::super::mcp::Tool {
-            alias:"mcp_create".into(),name:"create".into(),endpoint,description:"Create exact reviewed item".into(),input_schema:json!({"type":"object","properties":{},"required":[],"additionalProperties":false}),read_only:false,max_output_bytes:4096,timeout_seconds:5,bearer_file:None,
-            consent:Some(super::super::mcp::Consent {command_id:command_id.clone(),arguments_digest:digest(b"{}"),acknowledge_external_effect:true}),
-        });
-        state
-            .connection
-            .lock()
-            .unwrap()
-            .execute(
-                "INSERT INTO provider_loops(command_id,state) VALUES(?1,?2)",
-                params![command_id, serde_json::to_string(&execution).unwrap()],
-            )
-            .unwrap();
-        let input = SendInput {
-            command_id: command_id.clone(),
-            request_digest: "digest".into(),
-            allowed: true,
-            state: "sending".into(),
-        };
-        let call = FunctionCall {
-            call_id: "effect_1".into(),
-            name: "mcp_create".into(),
-            arguments: "{}".into(),
-        };
-        let result = invoke_mcp(&state, &input, &mut execution, &call)
-            .await
-            .unwrap();
-        assert!(result.contains("created"));
-        let json: String = state
-            .connection
-            .lock()
-            .unwrap()
-            .query_row(
-                "SELECT state FROM provider_loops WHERE command_id=?1",
-                [&command_id],
-                |row| row.get(0),
-            )
-            .unwrap();
-        let mut reopened: ProviderLoop = serde_json::from_str(&json).unwrap();
-        assert_eq!(
-            invoke_mcp(&state, &input, &mut reopened, &call)
-                .await
-                .unwrap(),
-            result
-        );
-        let second = FunctionCall {
-            call_id: "effect_2".into(),
-            ..call.clone()
-        };
-        assert_eq!(
-            invoke_mcp(&state, &input, &mut reopened, &second).await,
-            Err("provider_tool_rejected")
-        );
-        assert_eq!(count.load(Ordering::SeqCst), 1);
-        for (index, name) in ["create500", "large"].iter().enumerate() {
-            let mut tool = reopened.mcp_tools["mcp_create"].clone();
-            tool.alias = format!("mcp_failure_{index}");
-            tool.name = (*name).into();
-            let failed = FunctionCall {
-                call_id: format!("failed_{index}"),
-                name: tool.alias.clone(),
-                arguments: "{}".into(),
-            };
-            reopened.mcp_tools.insert(tool.alias.clone(), tool);
-            assert_eq!(
-                invoke_mcp(&state, &input, &mut reopened, &failed).await,
-                Err("provider_tool_uncertain")
-            );
-            assert_eq!(reopened.tools[&failed.call_id].state, "uncertain");
-            assert_eq!(
-                invoke_mcp(&state, &input, &mut reopened, &failed).await,
-                Err("provider_tool_uncertain")
-            );
-        }
-        assert_eq!(
-            count.load(Ordering::SeqCst),
-            3,
-            "post-commit errors cannot repeat effects"
-        );
-        server.abort();
-    }
-    #[test]
-    fn retained_quota_counts_utf8_bytes_for_loop_results_and_provider_evidence() {
-        let connection = Connection::open_in_memory().unwrap();
-        connection.execute_batch("CREATE TABLE provider_calls(request BLOB,evidence TEXT);CREATE TABLE results(result TEXT);CREATE TABLE provider_loops(command_id TEXT,state TEXT);").unwrap();
-        let text = serde_json::to_string(&json!({"content":"é世界🦀".repeat(10)})).unwrap();
-        connection
-            .execute(
-                "INSERT INTO provider_calls VALUES(?1,?2)",
-                params![text.as_bytes(), text],
-            )
-            .unwrap();
-        connection
-            .execute("INSERT INTO results VALUES(?1)", [&text])
-            .unwrap();
-        connection
-            .execute(
-                "INSERT INTO provider_loops VALUES('retained',?1),('active',?1)",
-                [&text],
-            )
-            .unwrap();
-        assert_eq!(
-            retained_bytes(&connection, "active").unwrap(),
-            i64::try_from(text.len() * 4).unwrap()
-        );
-    }
-}
+#[path = "tools/tests.rs"]
+mod tests;

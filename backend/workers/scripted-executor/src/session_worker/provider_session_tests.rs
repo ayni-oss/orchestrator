@@ -50,7 +50,13 @@ async fn fixture(body: &'static str, delay: Duration) -> Fixture {
                     count.fetch_add(1, Ordering::SeqCst);
                     notify.notify_one();
                     tokio::time::sleep(delay).await;
-                    body
+                    if request["stream"] == true {
+                        let wire = serde_json::from_str::<serde_json::Value>(body).map_or_else(|_| body.to_owned(), |value| {
+                            let text = value.pointer("/output/0/content/0/text").and_then(serde_json::Value::as_str).unwrap_or("");
+                            format!("data: {}\n\ndata: {}\n\n", serde_json::json!({"type":"response.output_text.delta","delta":text}), serde_json::json!({"type":"response.completed","response":value}))
+                        });
+                        ([(axum::http::header::CONTENT_TYPE, "text/event-stream")], wire)
+                    } else { ([(axum::http::header::CONTENT_TYPE, "application/json")], body.to_owned()) }
                 }
             },
         ),
@@ -73,6 +79,9 @@ fn worker(path: &std::path::Path, endpoint: &str, prior: Option<&WorkerState>) -
     let connection = Connection::open(path).unwrap();
     connection.execute_batch(super::super::SCHEMA).unwrap();
     connection.execute_batch(SCHEMA).unwrap();
+    connection
+        .execute_batch(super::super::progress::SCHEMA)
+        .unwrap();
     Arc::new(WorkerState {
         session_id: prior.map_or_else(
             || uuid::Uuid::now_v7().to_string(),
@@ -206,6 +215,20 @@ async fn retained_response_replays_across_worker_restart_without_another_paid_ca
     .unwrap()
     .0;
     assert_eq!(result.response_content, "bounded answer");
+    let progress = super::super::progress::read(
+        State(original.clone()),
+        auth(&original),
+        axum::Json(super::super::progress::ProgressInput {
+            command_id: prepared.call_id.clone(),
+            command_digest: result.command_digest.clone(),
+            after_sequence: 0,
+        }),
+    )
+    .await
+    .unwrap()
+    .0;
+    assert_eq!(progress.last().unwrap().provisional_text, "bounded answer");
+    assert_eq!(progress.last().unwrap().stage, "model");
     assert_eq!(result.provider_call.as_ref().unwrap().total_tokens, Some(7));
     super::super::acknowledge(
         State(original.clone()),

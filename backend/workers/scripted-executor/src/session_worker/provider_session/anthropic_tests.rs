@@ -11,10 +11,20 @@ async fn anthropic_fixture(malformed: bool) -> Fixture {
             assert!(headers.get("authorization").is_none());
             assert!(headers.get("x-client-request-id").is_some());
             assert_eq!(request["thinking"]["type"],"disabled");
-            assert_eq!(request["stream"],false);
+            assert_eq!(request["stream"],true);
             assert!(request.get("previous_response_id").is_none());
             count.fetch_add(1,Ordering::SeqCst);
-            if malformed {"invalid response"} else {r#"{"type":"message","role":"assistant","id":"msg_fixture","model":"fixture-model","stop_reason":"end_turn","content":[{"type":"text","text":"bounded Claude answer"}],"usage":{"input_tokens":4,"output_tokens":3}}"#}
+            let wire = if malformed { "data: malformed\n\n".into() } else {
+                [
+                    serde_json::json!({"type":"message_start","message":{"type":"message","role":"assistant","id":"msg_fixture","model":"fixture-model","content":[],"usage":{"input_tokens":4,"output_tokens":1}}}),
+                    serde_json::json!({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}),
+                    serde_json::json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"bounded Claude answer"}}),
+                    serde_json::json!({"type":"content_block_stop","index":0}),
+                    serde_json::json!({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}),
+                    serde_json::json!({"type":"message_stop"}),
+                ].iter().fold(String::new(), |mut wire, event| { use std::fmt::Write as _; write!(&mut wire, "data: {event}\n\n").unwrap(); wire })
+            };
+            ([(axum::http::header::CONTENT_TYPE,"text/event-stream")], wire)
         }
     }));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

@@ -27,6 +27,27 @@ const proposal = () => ({
   assumptions: ['The user wants a reviewable proposal.'],
   evidence: ['Conversation discussion; repository contents have not been inspected.'],
 });
+function respond(response, streaming, provider, result) {
+  if (!streaming) { response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(result)); return; }
+  response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+  const event = value => response.write(`data: ${JSON.stringify(value)}\n\n`);
+  if (provider === 'openai') {
+    for (const output of result.output) for (const content of output.content || []) {
+      if (content.type === 'output_text') event({ type: 'response.output_text.delta', delta: content.text });
+    }
+    event({ type: 'response.completed', response: result });
+  } else {
+    event({ type: 'message_start', message: { ...result, content: [], stop_reason: null, usage: { input_tokens: result.usage.input_tokens, output_tokens: 0 } } });
+    result.content.forEach((block, index) => {
+      event({ type: 'content_block_start', index, content_block: block.type === 'text' ? { ...block, text: '' } : { ...block, input: {} } });
+      event({ type: 'content_block_delta', index, delta: block.type === 'text' ? { type: 'text_delta', text: block.text } : { type: 'input_json_delta', partial_json: JSON.stringify(block.input) } });
+      event({ type: 'content_block_stop', index });
+    });
+    event({ type: 'message_delta', delta: { stop_reason: result.stop_reason }, usage: { output_tokens: result.usage.output_tokens } });
+    event({ type: 'message_stop' });
+  }
+  response.end();
+}
 const server = http.createServer(async (request, response) => {
   if (request.url === '/health') { response.writeHead(200).end('ok'); return; }
   if (request.method === 'GET' && request.url === '/stats') {
@@ -36,7 +57,7 @@ const server = http.createServer(async (request, response) => {
     if (request.headers['x-api-key'] !== 'provider-fixture-key' || request.headers['anthropic-version'] !== '2023-06-01' || request.headers.authorization) { response.writeHead(401).end(); return; }
     let text=''; for await (const chunk of request) { text+=chunk; if (Buffer.byteLength(text)>256*1024) {response.writeHead(413).end();return;} }
     let body; try {body=JSON.parse(text);} catch {response.writeHead(400).end();return;}
-    if (body.model!=='fixture-model' || body.stream!==false || body.thinking?.type!=='disabled' || !Number.isInteger(body.max_tokens) || !Array.isArray(body.messages) || !Array.isArray(body.tools) || body.messages.some(message=>!['user','assistant'].includes(message.role)||!Array.isArray(message.content)) || body.tools.some(tool=>!tool.name||!tool.input_schema||tool.type)) {response.writeHead(400).end();return;}
+    if (body.model!=='fixture-model' || typeof body.stream!=='boolean' || body.thinking?.type!=='disabled' || !Number.isInteger(body.max_tokens) || !Array.isArray(body.messages) || !Array.isArray(body.tools) || body.messages.some(message=>!['user','assistant'].includes(message.role)||!Array.isArray(message.content)) || body.tools.some(tool=>!tool.name||!tool.input_schema||tool.type)) {response.writeHead(400).end();return;}
     const blocks=body.messages.flatMap(message=>message.content);
     const content=blocks.filter(block=>block.type==='text').map(block=>block.text).join(' ');
     const mode=['disconnect','delay','mcp-lost','mcp-cancel','mcp'].find(mode=>content.includes(`fixture:${mode}`))||'completed';
@@ -50,7 +71,7 @@ const server = http.createServer(async (request, response) => {
     if (use&&!mcpTools(mode).every(name=>body.tools.some(tool=>tool.name===name))) {response.writeHead(400).end();return;}
     const result={id:`msg_fixture_${counters.calls}`,type:'message',role:'assistant',model:'fixture-model',stop_reason:use?'tool_use':'end_turn',content:use?mcpTools(mode).map((name,index)=>({type:'tool_use',id:`mcp_fixture_${index}`,name,input:{}})):[{type:'text',text:'Anthropic fixture completed.'}],usage:{input_tokens:12,output_tokens:8}};
     if (results.length) counters.toolContinuations++;
-    response.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify(result));return;
+    respond(response, body.stream, 'anthropic', result); return;
   }
   if (request.method === 'POST' && request.url === '/mcp') {
     let text = '';
@@ -86,7 +107,7 @@ const server = http.createServer(async (request, response) => {
   }
   let body;
   try { body = JSON.parse(Buffer.concat(chunks).toString()); } catch { response.writeHead(400).end(); return; }
-  if (body.model !== 'fixture-model' || body.store !== false || body.background !== false || body.stream !== false || body.truncation !== 'disabled' || !Array.isArray(body.input) || !Number.isInteger(body.max_output_tokens) || body.max_output_tokens < 1 || body.previous_response_id || body.conversation || !validTools(body.tools)) {
+  if (body.model !== 'fixture-model' || body.store !== false || body.background !== false || typeof body.stream !== 'boolean' || body.truncation !== 'disabled' || !Array.isArray(body.input) || !Number.isInteger(body.max_output_tokens) || body.max_output_tokens < 1 || body.previous_response_id || body.conversation || !validTools(body.tools)) {
     response.writeHead(400).end(); return;
   }
   const content = body.input.filter(item => item.role === 'user').at(-1)?.content || '';
@@ -136,7 +157,7 @@ const server = http.createServer(async (request, response) => {
     if (mode === 'proposal-mixed') result.output.push({ id: `fc_fixture_${sequence}_read`, type: 'function_call', status: 'completed', call_id: `read_fixture_${sequence}`, name: toolNames[0], arguments: '{}' });
   }
   if (mode !== 'no-usage') result.usage = { input_tokens: 12, output_tokens: 8, total_tokens: 20 };
-  response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(result));
+  respond(response, body.stream, 'openai', result);
 });
 server.listen(port, '0.0.0.0', () => console.log(JSON.stringify({ port: server.address().port })));
 process.on('SIGTERM', () => server.close());

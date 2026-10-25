@@ -8,12 +8,14 @@ mod discovery;
 mod execution;
 pub mod outcome_assessments;
 mod plans;
+pub mod progress;
 mod project_continuity;
 pub mod provider_calls;
 pub mod publications;
 pub mod task_feedback;
 pub mod task_recovery;
 pub mod task_runs;
+pub mod task_timing;
 pub use delivery::DecisionAcknowledgement;
 mod ordered_reports;
 mod quarantine;
@@ -383,11 +385,51 @@ impl WorkflowStore {
         conversation_id: &str,
         content: &str,
     ) -> Result<CommandReceipt, StoreError> {
+        self.send_message_traced(
+            idempotency_key,
+            workspace_id,
+            project_id,
+            conversation_id,
+            content,
+            None,
+        )
+        .await
+    }
+
+    /// Admit work while retaining optional, validated diagnostic context. The
+    /// context changes neither command identity nor execution authority.
+    ///
+    /// # Errors
+    /// Returns the same admission errors as `send_message`.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "diagnostic context supplements the existing scoped command"
+    )]
+    pub async fn send_message_traced(
+        &self,
+        idempotency_key: &str,
+        workspace_id: &str,
+        project_id: &str,
+        conversation_id: &str,
+        content: &str,
+        traceparent: Option<&str>,
+    ) -> Result<CommandReceipt, StoreError> {
         validate_key(idempotency_key)?;
         validate_scope(workspace_id, project_id, conversation_id)?;
         validate_text(content, 16_384, false, "content")?;
         let (mut client, driver) = crate::connect(&self.database_url).await?;
         let transaction = client.transaction().await?;
+        if let Some(parent) =
+            traceparent.filter(|value| ayni_orchestrator_events::workflow::traceparent(value))
+        {
+            transaction
+                .query_one(
+                    "SELECT set_config('ayni.traceparent', $1, true)",
+                    &[&parent],
+                )
+                .await?;
+        }
+
         let receipt = admit_message(
             &transaction,
             idempotency_key,
@@ -792,10 +834,10 @@ impl WorkflowStore {
         let (client, driver) = crate::connect(&self.database_url).await?;
         let rows = client
             .query(
-                "SELECT id,conversation_id,turn_id,subject,event_bytes FROM ( \
-                 SELECT id,conversation_id,turn_id,subject,event_bytes,created_at,next_attempt_at FROM workflow_outbox \
+                "SELECT id,conversation_id,turn_id,subject,event_bytes,attempt_count FROM ( \
+                 SELECT id,conversation_id,turn_id,subject,event_bytes,created_at,next_attempt_at,attempt_count FROM workflow_outbox \
                    WHERE state IN ('pending','stored') AND next_attempt_at <= clock_timestamp() \
-                 UNION ALL SELECT decision_event_id,'','',subject,decision_bytes,created_at,next_attempt_at \
+                 UNION ALL SELECT decision_event_id,'','',subject,decision_bytes,created_at,next_attempt_at,attempt_count \
                    FROM workflow_transport_rejections WHERE state IN ('pending','stored') \
                    AND next_attempt_at <= clock_timestamp()) deliveries ORDER BY next_attempt_at,created_at LIMIT $1",
                 &[&i64::from(limit)],
@@ -803,14 +845,17 @@ impl WorkflowStore {
             .await?;
         let records = rows
             .into_iter()
-            .map(|row| OutboxRecord {
-                id: row.get(0),
-                conversation_id: row.get(1),
-                turn_id: row.get(2),
-                subject: row.get(3),
-                event_bytes: row.get(4),
+            .map(|row| {
+                Ok(OutboxRecord {
+                    id: row.get(0),
+                    conversation_id: row.get(1),
+                    turn_id: row.get(2),
+                    subject: row.get(3),
+                    event_bytes: row.get(4),
+                    publication_attempts: unsigned(row.get(5))?,
+                })
             })
-            .collect();
+            .collect::<Result<Vec<_>, StoreError>>()?;
         driver.abort();
         Ok(records)
     }

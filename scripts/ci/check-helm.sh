@@ -240,3 +240,25 @@ if helm template invalid "$reusable_chart" --namespace test "${publication_optio
 fi
 
 echo "Helm authenticated workflow and provider isolation checks passed"
+
+# Optional diagnostics stay internal and do not add credential or public access.
+collector_render="$scratch/collector.yaml"
+helm template traced "$reusable_chart" --namespace test \
+  --set observability.collector.enabled=true \
+  --set-string images.controlPlane="$control_image" \
+  --set-string images.scriptedExecutor="$executor_image" > "$collector_render"
+grep -q 'name: workflow-traces' "$collector_render"
+grep -q 'http://workflow-traces.test.svc:4318/v1/traces' "$collector_render"
+grep -q 'otel/opentelemetry-collector-contrib:0.147.0@sha256:e7c92c715f28ff142f3bcaccd4fc5603cf4c71276ef09954a38eb4038500a5a5' "$collector_render"
+grep -q 'emptyDir: { sizeLimit: 32Mi }' "$collector_render"
+grep -q 'name: reader' "$collector_render"
+grep -q 'type: ClusterIP' "$collector_render"
+! grep -q 'type: NodePort\|type: LoadBalancer' "$collector_render"
+! grep -q 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT' "$reusable_render"
+python3 "$repository_root/scripts/ci/test-execution-traces.py"
+
+grep -q 'name: workflow-traces-isolation' "$collector_render"
+grep -q 'app.kubernetes.io/name: ayni-workflow-traces' "$collector_render"
+grep -q 'automountServiceAccountToken: false' "$collector_render"
+grep -q 'max_megabytes: 8' "$collector_render"
+grep -q 'max_backups: 2' "$collector_render"

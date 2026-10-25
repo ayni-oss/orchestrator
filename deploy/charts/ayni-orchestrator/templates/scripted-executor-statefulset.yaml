@@ -35,6 +35,10 @@ spec:
           image: {{ required "images.scriptedExecutor is required" .Values.images.scriptedExecutor | quote }}
           imagePullPolicy: {{ .Values.images.pullPolicy }}
           env:
+            {{- with include "ayni-orchestrator.traceEndpoint" . }}
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: {{ . | quote }}
+            {{- end }}
             - name: ORCHESTRATOR_MCP_ENABLED
               value: {{ .Values.providers.mcp.enabled | quote }}
             - name: ORCHESTRATOR_ANTHROPIC_ENABLED

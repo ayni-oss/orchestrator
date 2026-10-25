@@ -51,7 +51,11 @@ The inspector displays current activity, message/turn counts, a paginated
 [durable execution timeline](execution-timeline.md), retained provider calls and
 usage, workflow identities and the latest command receipt. History retains a fixed
 revision while current activity updates live; refresh selects a new boundary.
-The timeline is not a full audit export.
+The timeline is not a full audit export. Live provisional output is separate from
+accepted messages. The execution inspector includes per-turn timing, scoped task
+preparation/attempt evidence, independent coding/quality/publication results and
+reviewed recovery records. Read-only inspection does not authorize another attempt.
+Explicit turn/task cancellation retains the exact interrupted-command retry rules.
 Non-optional conversation counts use ProtoJSON zero defaults; omitted optional
 provider usage remains unknown. No monetary cost, task success rate, model round
 count or production capacity is inferred.

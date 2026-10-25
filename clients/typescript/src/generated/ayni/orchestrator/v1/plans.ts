@@ -389,6 +389,7 @@ export interface TaskAttempt {
   savedInputPatch: string;
   maxSeconds: number;
   maxTokens: number;
+  timing?: TaskExecutionTiming | undefined;
 }
 
 export interface GetTaskAttemptResponse {
@@ -626,6 +627,22 @@ export interface TaskRecoveryConfirmation {
 
 export interface ConfirmTaskRecoveryResponse {
   confirmation?: TaskRecoveryConfirmation | undefined;
+}
+
+/**
+ * Database acceptance boundaries, not exact process starts or worker CPU time.
+ * Historical transitions pruned before timeline installation remain absent.
+ */
+export interface TaskExecutionTiming {
+  queueAcceptedAt?: Date | undefined;
+  claimAcceptedAt?: Date | undefined;
+  codingResultAcceptedAt?: Date | undefined;
+  qualityResultAcceptedAt?: Date | undefined;
+  executionStoppedAt?: Date | undefined;
+  publicationAuthorizedAt?: Date | undefined;
+  publicationClaimAcceptedAt?: Date | undefined;
+  publicationResultAcceptedAt?: Date | undefined;
+  observedAt?: Date | undefined;
 }
 
 function createBasePlanTaskSpecification(): PlanTaskSpecification {
@@ -6875,6 +6892,7 @@ function createBaseTaskAttempt(): TaskAttempt {
     savedInputPatch: "",
     maxSeconds: 0,
     maxTokens: 0,
+    timing: undefined,
   };
 }
 
@@ -6942,6 +6960,9 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
     }
     if (message.maxTokens !== 0) {
       writer.uint32(168).uint32(message.maxTokens);
+    }
+    if (message.timing !== undefined) {
+      TaskExecutionTiming.encode(message.timing, writer.uint32(178).fork()).join();
     }
     return writer;
   },
@@ -7127,6 +7148,14 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
             message.maxTokens = reader.uint32();
             continue;
           }
+          case 22: {
+            if (tag !== 178) {
+              break;
+            }
+
+            message.timing = TaskExecutionTiming.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -7226,6 +7255,7 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
         : isSet(object.max_tokens)
         ? globalThis.Number(object.max_tokens)
         : 0,
+      timing: isSet(object.timing) ? TaskExecutionTiming.fromJSON(object.timing) : undefined,
     };
   },
 
@@ -7294,6 +7324,9 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
     if (message.maxTokens !== 0) {
       obj.maxTokens = Math.round(message.maxTokens);
     }
+    if (message.timing !== undefined) {
+      obj.timing = TaskExecutionTiming.toJSON(message.timing);
+    }
     return obj;
   },
 
@@ -7327,6 +7360,9 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
     message.savedInputPatch = object.savedInputPatch ?? "";
     message.maxSeconds = object.maxSeconds ?? 0;
     message.maxTokens = object.maxTokens ?? 0;
+    message.timing = (object.timing !== undefined && object.timing !== null)
+      ? TaskExecutionTiming.fromPartial(object.timing)
+      : undefined;
     return message;
   },
 };
@@ -11525,6 +11561,249 @@ export const ConfirmTaskRecoveryResponse: MessageFns<ConfirmTaskRecoveryResponse
     message.confirmation = (object.confirmation !== undefined && object.confirmation !== null)
       ? TaskRecoveryConfirmation.fromPartial(object.confirmation)
       : undefined;
+    return message;
+  },
+};
+
+function createBaseTaskExecutionTiming(): TaskExecutionTiming {
+  return {
+    queueAcceptedAt: undefined,
+    claimAcceptedAt: undefined,
+    codingResultAcceptedAt: undefined,
+    qualityResultAcceptedAt: undefined,
+    executionStoppedAt: undefined,
+    publicationAuthorizedAt: undefined,
+    publicationClaimAcceptedAt: undefined,
+    publicationResultAcceptedAt: undefined,
+    observedAt: undefined,
+  };
+}
+
+export const TaskExecutionTiming: MessageFns<TaskExecutionTiming> = {
+  encode(message: TaskExecutionTiming, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.queueAcceptedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.queueAcceptedAt), writer.uint32(10).fork()).join();
+    }
+    if (message.claimAcceptedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.claimAcceptedAt), writer.uint32(18).fork()).join();
+    }
+    if (message.codingResultAcceptedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.codingResultAcceptedAt), writer.uint32(26).fork()).join();
+    }
+    if (message.qualityResultAcceptedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.qualityResultAcceptedAt), writer.uint32(34).fork()).join();
+    }
+    if (message.executionStoppedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.executionStoppedAt), writer.uint32(42).fork()).join();
+    }
+    if (message.publicationAuthorizedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.publicationAuthorizedAt), writer.uint32(50).fork()).join();
+    }
+    if (message.publicationClaimAcceptedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.publicationClaimAcceptedAt), writer.uint32(58).fork()).join();
+    }
+    if (message.publicationResultAcceptedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.publicationResultAcceptedAt), writer.uint32(66).fork()).join();
+    }
+    if (message.observedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.observedAt), writer.uint32(74).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TaskExecutionTiming {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTaskExecutionTiming();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.queueAcceptedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.claimAcceptedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.codingResultAcceptedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.qualityResultAcceptedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.executionStoppedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.publicationAuthorizedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.publicationClaimAcceptedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.publicationResultAcceptedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.observedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): TaskExecutionTiming {
+    return {
+      queueAcceptedAt: isSet(object.queueAcceptedAt)
+        ? fromJsonTimestamp(object.queueAcceptedAt)
+        : isSet(object.queue_accepted_at)
+        ? fromJsonTimestamp(object.queue_accepted_at)
+        : undefined,
+      claimAcceptedAt: isSet(object.claimAcceptedAt)
+        ? fromJsonTimestamp(object.claimAcceptedAt)
+        : isSet(object.claim_accepted_at)
+        ? fromJsonTimestamp(object.claim_accepted_at)
+        : undefined,
+      codingResultAcceptedAt: isSet(object.codingResultAcceptedAt)
+        ? fromJsonTimestamp(object.codingResultAcceptedAt)
+        : isSet(object.coding_result_accepted_at)
+        ? fromJsonTimestamp(object.coding_result_accepted_at)
+        : undefined,
+      qualityResultAcceptedAt: isSet(object.qualityResultAcceptedAt)
+        ? fromJsonTimestamp(object.qualityResultAcceptedAt)
+        : isSet(object.quality_result_accepted_at)
+        ? fromJsonTimestamp(object.quality_result_accepted_at)
+        : undefined,
+      executionStoppedAt: isSet(object.executionStoppedAt)
+        ? fromJsonTimestamp(object.executionStoppedAt)
+        : isSet(object.execution_stopped_at)
+        ? fromJsonTimestamp(object.execution_stopped_at)
+        : undefined,
+      publicationAuthorizedAt: isSet(object.publicationAuthorizedAt)
+        ? fromJsonTimestamp(object.publicationAuthorizedAt)
+        : isSet(object.publication_authorized_at)
+        ? fromJsonTimestamp(object.publication_authorized_at)
+        : undefined,
+      publicationClaimAcceptedAt: isSet(object.publicationClaimAcceptedAt)
+        ? fromJsonTimestamp(object.publicationClaimAcceptedAt)
+        : isSet(object.publication_claim_accepted_at)
+        ? fromJsonTimestamp(object.publication_claim_accepted_at)
+        : undefined,
+      publicationResultAcceptedAt: isSet(object.publicationResultAcceptedAt)
+        ? fromJsonTimestamp(object.publicationResultAcceptedAt)
+        : isSet(object.publication_result_accepted_at)
+        ? fromJsonTimestamp(object.publication_result_accepted_at)
+        : undefined,
+      observedAt: isSet(object.observedAt)
+        ? fromJsonTimestamp(object.observedAt)
+        : isSet(object.observed_at)
+        ? fromJsonTimestamp(object.observed_at)
+        : undefined,
+    };
+  },
+
+  toJSON(message: TaskExecutionTiming): unknown {
+    const obj: any = {};
+    if (message.queueAcceptedAt !== undefined) {
+      obj.queueAcceptedAt = message.queueAcceptedAt.toISOString();
+    }
+    if (message.claimAcceptedAt !== undefined) {
+      obj.claimAcceptedAt = message.claimAcceptedAt.toISOString();
+    }
+    if (message.codingResultAcceptedAt !== undefined) {
+      obj.codingResultAcceptedAt = message.codingResultAcceptedAt.toISOString();
+    }
+    if (message.qualityResultAcceptedAt !== undefined) {
+      obj.qualityResultAcceptedAt = message.qualityResultAcceptedAt.toISOString();
+    }
+    if (message.executionStoppedAt !== undefined) {
+      obj.executionStoppedAt = message.executionStoppedAt.toISOString();
+    }
+    if (message.publicationAuthorizedAt !== undefined) {
+      obj.publicationAuthorizedAt = message.publicationAuthorizedAt.toISOString();
+    }
+    if (message.publicationClaimAcceptedAt !== undefined) {
+      obj.publicationClaimAcceptedAt = message.publicationClaimAcceptedAt.toISOString();
+    }
+    if (message.publicationResultAcceptedAt !== undefined) {
+      obj.publicationResultAcceptedAt = message.publicationResultAcceptedAt.toISOString();
+    }
+    if (message.observedAt !== undefined) {
+      obj.observedAt = message.observedAt.toISOString();
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<TaskExecutionTiming>): TaskExecutionTiming {
+    return TaskExecutionTiming.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<TaskExecutionTiming>): TaskExecutionTiming {
+    const message = createBaseTaskExecutionTiming();
+    message.queueAcceptedAt = object.queueAcceptedAt ?? undefined;
+    message.claimAcceptedAt = object.claimAcceptedAt ?? undefined;
+    message.codingResultAcceptedAt = object.codingResultAcceptedAt ?? undefined;
+    message.qualityResultAcceptedAt = object.qualityResultAcceptedAt ?? undefined;
+    message.executionStoppedAt = object.executionStoppedAt ?? undefined;
+    message.publicationAuthorizedAt = object.publicationAuthorizedAt ?? undefined;
+    message.publicationClaimAcceptedAt = object.publicationClaimAcceptedAt ?? undefined;
+    message.publicationResultAcceptedAt = object.publicationResultAcceptedAt ?? undefined;
+    message.observedAt = object.observedAt ?? undefined;
     return message;
   },
 };

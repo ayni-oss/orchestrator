@@ -45,8 +45,31 @@ profile. Remote identity and multi-user authorization are outside this slice.
 - Browser storage failure leaves an in-memory retry and an explicit warning to keep the tab open. Clearing storage can lose an interrupted command's local retry handle.
 - Content is rendered as text. Native gRPC, broker, database and Kubernetes credentials remain outside the browser.
 
-Incremental model text, complete execution traces, task success analytics, event
-triggers and trusted browser-driven source preparation remain planned in the
+## Inspect execution
+
+The conversation shows live assistant text in a separate provisional message.
+It is replaced by the retained assistant message only after terminal acceptance.
+Reload or reconnect reads the latest bounded progress snapshot; it does not retry
+execution or a provider request. Pausing updates pauses observation while accepted
+work continues. Failed progress reads retain the previous display, explain the
+interruption and retry on the next observation.
+
+Open **Turns & current progress** for turn identities, queue/model/tool states,
+rounds, generation, provider call and elapsed time since the recorded stage
+observation. Open **Task execution & delivery** to select an admitted task and
+inspect its frozen source, attempt, accepted patch, managed quality artifacts,
+publication and recovery questions separately. Active turns and attempts offer
+explicit cancellation. Source preparation, recovery confirmation and publication
+review continue through the scoped contributor console.
+
+Task intervals use database acceptance boundaries and include waiting and handoff
+time. Historical boundaries missing before timeline installation are shown as
+not recorded. A quality failure preserves the coding outcome; a publication
+failure does not rerun coding. Diagnostic trace identities correlate inspection
+with the configured trace collector and do not replace retained evidence.
+
+Task success analytics, event triggers and trusted browser-driven source
+preparation remain planned in the
 [product roadmap](../../ROADMAP.md#product-delivery-sequence).
 
 ## Validation
@@ -75,3 +98,20 @@ WEB_URL=http://127.0.0.1:3000/workspace/ \
 The deployed profile uses the default scripted provider and retains its created
 workspaces, conversations and worker evidence. It does not qualify live providers.
 Run the existing console acceptance separately; this slice does not retire it.
+
+To include a real prepared task in deployed browser acceptance, provide its scope
+and optionally an exact task/attempt selection. Omitting `taskId` selects the
+first admitted task returned by the canonical API:
+
+```sh
+WEB_URL=http://127.0.0.1:3000/workspace/ \
+  WEB_EVIDENCE_DIRECTORY=/absolute/new/evidence \
+  WEB_TASK_SCOPE='{"workspaceId":"workspace-id","projectId":"project-id","conversationId":"conversation-id"}' \
+  pnpm web:acceptance
+```
+
+This opens a separate tab and verifies canonical task/attempt evidence, independent
+coding/quality/publication presentation and retained timing. Its report records
+the exact task and attempt. The fixture profile separately exercises partial
+output, lost progress reads, reload reconciliation and contract-shaped task
+outcomes; those checks do not qualify a provider or managed task execution.

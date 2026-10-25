@@ -1,13 +1,28 @@
 use super::{RequestContext, WorkflowStore, plans, v1};
 use ayni_orchestrator_events::task_publication::PublicationRun;
+use ayni_orchestrator_observability::workflow::{Workflow, finish, identity_context};
 use ayni_orchestrator_workflow_postgres::store::publications::PublicationReceipt;
 use tonic::{Request, Response, Status};
+use tracing::Instrument as _;
 pub(super) async fn start(
     store: &WorkflowStore,
     request: Request<v1::StartTaskPublicationRequest>,
 ) -> Result<Response<v1::StartTaskPublicationResponse>, Status> {
     let context = RequestContext::new(&request);
     let v = request.into_inner();
+    let span = Workflow {
+        workspace_id: v.workspace_id.clone(),
+        project_id: v.project_id.clone(),
+        conversation_id: v.conversation_id.clone(),
+        task_id: v.task_id.clone(),
+        attempt_id: v.attempt_id.clone(),
+        ..Workflow::default()
+    }
+    .span_with_context(
+        "task.api.publish",
+        identity_context(&v.attempt_id).as_ref(),
+        false,
+    );
     let result = store
         .start_task_publication(
             plans::scope(&v.workspace_id, &v.project_id, &v.conversation_id),
@@ -17,8 +32,10 @@ pub(super) async fn start(
             &v.expected_patch_digest,
             &v.expected_quality_digest,
         )
-        .await
-        .map_err(|e| context.store(&e))?;
+        .instrument(span.clone())
+        .await;
+    finish(&span, result.is_ok());
+    let result = result.map_err(|e| context.store(&e))?;
     Ok(context.response(v1::StartTaskPublicationResponse {
         receipt: Some(receipt(result)),
     }))

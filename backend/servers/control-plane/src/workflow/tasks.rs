@@ -1,12 +1,27 @@
 use super::{RequestContext, WorkflowStore, plans, v1};
+use ayni_orchestrator_observability::workflow::{Workflow, finish, identity_context};
 use ayni_orchestrator_workflow_postgres::store::task_runs::RunReceipt;
 use tonic::{Request, Response, Status};
+use tracing::Instrument as _;
 pub(super) async fn start(
     store: &WorkflowStore,
     request: Request<v1::StartTaskExecutionRequest>,
 ) -> Result<Response<v1::StartTaskExecutionResponse>, Status> {
     let context = RequestContext::new(&request);
     let v = request.into_inner();
+    let span = Workflow {
+        workspace_id: v.workspace_id.clone(),
+        project_id: v.project_id.clone(),
+        conversation_id: v.conversation_id.clone(),
+        task_id: v.task_id.clone(),
+        attempt_id: v.attempt_id.clone(),
+        ..Workflow::default()
+    }
+    .span_with_context(
+        "task.api.start",
+        identity_context(&v.attempt_id).as_ref(),
+        false,
+    );
     let result = store
         .start_task_execution(
             plans::scope(&v.workspace_id, &v.project_id, &v.conversation_id),
@@ -15,8 +30,10 @@ pub(super) async fn start(
             &v.idempotency_key,
             &v.source_pack,
         )
-        .await
-        .map_err(|e| context.store(&e))?;
+        .instrument(span.clone())
+        .await;
+    finish(&span, result.is_ok());
+    let result = result.map_err(|e| context.store(&e))?;
     Ok(context.response(v1::StartTaskExecutionResponse {
         receipt: Some(receipt(result)),
     }))
@@ -62,6 +79,15 @@ pub(super) async fn get(
         )
         .await
         .map_err(|e| context.store(&e))?;
+    let timing = store
+        .get_task_timing(
+            plans::scope(&v.workspace_id, &v.project_id, &v.conversation_id),
+            &v.task_id,
+            &v.attempt_id,
+            r.command.max_seconds,
+        )
+        .await
+        .map_err(|e| context.store(&e))?;
     let quality_digest = r
         .quality
         .as_ref()
@@ -74,6 +100,7 @@ pub(super) async fn get(
     let hash = ayni_orchestrator_events::task_execution::digest(outcome.patch.as_bytes());
     Ok(context.response(v1::GetTaskAttemptResponse {
         attempt: Some(v1::TaskAttempt {
+            timing: Some(timing_projection(&timing)),
             max_seconds: r.command.max_seconds,
             max_tokens: r.command.max_tokens,
             saved_input_patch: r
@@ -184,4 +211,20 @@ pub(super) async fn feedback(
             .collect(),
         next_after_id: page.next_after_id,
     }))
+}
+
+fn timing_projection(
+    timing: &ayni_orchestrator_workflow_postgres::store::task_timing::TaskTiming,
+) -> v1::TaskExecutionTiming {
+    v1::TaskExecutionTiming {
+        queue_accepted_at: timing.queue_accepted_at.map(super::timestamp),
+        claim_accepted_at: timing.claim_accepted_at.map(super::timestamp),
+        coding_result_accepted_at: timing.coding_result_accepted_at.map(super::timestamp),
+        quality_result_accepted_at: timing.quality_result_accepted_at.map(super::timestamp),
+        execution_stopped_at: timing.execution_stopped_at.map(super::timestamp),
+        publication_authorized_at: timing.publication_authorized_at.map(super::timestamp),
+        publication_claim_accepted_at: timing.publication_claim_accepted_at.map(super::timestamp),
+        publication_result_accepted_at: timing.publication_result_accepted_at.map(super::timestamp),
+        observed_at: timing.observed_at.map(super::timestamp),
+    }
 }
