@@ -100,7 +100,7 @@ test('Anthropic fixture validates selected headers, tools, cancellation delay an
   const body={model:'fixture-model',system:'frozen',messages:[{role:'user',content:[{type:'text',text:'fixture:mcp'}]}],tools,max_tokens:512,stream:false,thinking:{type:'disabled'}};
   const send=(body,selectedHeaders=headers)=>fetch(`${endpoint}/v1/messages`,{method:'POST',headers:selectedHeaders,body:JSON.stringify(body)});
   assert.equal((await send(body,{...headers,'anthropic-version':'incorrect'})).status,401);
-  assert.equal((await send({...body,stream:true})).status,400);
+  assert.equal((await send({...body,stream:"unsupported"})).status,400);
   const first=await(await send(body)).json();
   assert.equal(first.type,'message');
   assert.equal(first.stop_reason,'tool_use');
@@ -134,4 +134,25 @@ test('generated outcome assessment prompts yield reviewable proposals through th
   const stats = await (await fetch(`${endpoint}/stats`)).json();
   assert.equal(stats.modes.assessment, 1);
   assert.equal(stats.calls, 1);
+});
+
+test('provider fixture emits complete OpenAI and Anthropic SSE terminal evidence', async t => {
+  const fixtureProcess = spawn(globalThis.process.execPath, [new URL('../../dev/fixtures/provider/server.mjs', import.meta.url).pathname], { env: { ...globalThis.process.env, PORT: '0' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(() => fixtureProcess.kill('SIGTERM'));
+  const [ready] = await Promise.race([once(fixtureProcess.stdout, 'data'), once(fixtureProcess, 'exit').then(([code]) => { throw new Error(`fixture exited: ${code}`); })]);
+  const endpoint = `http://127.0.0.1:${JSON.parse(ready).port}`;
+  const openai = await fetch(`${endpoint}/v1/responses`, { method: 'POST', headers: { authorization: 'Bearer provider-fixture-key', 'content-type': 'application/json' }, body: JSON.stringify({ model: 'fixture-model', input: [{ role: 'user', content: 'completed' }], max_output_tokens: 64, store: false, background: false, stream: true, truncation: 'disabled' }) });
+  assert.equal(openai.status, 200);
+  assert.equal(openai.headers.get('content-type'), 'text/event-stream');
+  const openaiEvents = (await openai.text()).trim().split('\n\n').map(frame => JSON.parse(frame.slice(6)));
+  assert.equal(openaiEvents[0].type, 'response.output_text.delta');
+  assert.equal(openaiEvents.at(-1).type, 'response.completed');
+  assert.equal(openaiEvents.at(-1).response.usage.total_tokens, 20);
+  const anthropic = await fetch(`${endpoint}/v1/messages`, { method: 'POST', headers: { 'x-api-key': 'provider-fixture-key', 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }, body: JSON.stringify({ model: 'fixture-model', stream: true, thinking: { type: 'disabled' }, max_tokens: 64, messages: [{ role: 'user', content: [{ type: 'text', text: 'completed' }] }], tools: [] }) });
+  assert.equal(anthropic.status, 200);
+  assert.equal(anthropic.headers.get('content-type'), 'text/event-stream');
+  const events = (await anthropic.text()).trim().split('\n\n').map(frame => JSON.parse(frame.slice(6)));
+  assert.equal(events[0].type, 'message_start');
+  assert.equal(events.find(event => event.type === 'content_block_delta').delta.text, 'Anthropic fixture completed.');
+  assert.equal(events.at(-1).type, 'message_stop');
 });

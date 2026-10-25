@@ -1,7 +1,9 @@
 # Deterministic provider fixture
 
 This server implements the bounded foreground Responses profile without calling
-OpenAI. It uses the public dummy credential `provider-fixture-key` and model
+OpenAI. It supports bounded streaming Responses and Anthropic Messages SSE
+profiles, as well as complete JSON fixtures. Only public assistant text is emitted
+as preview; tool arguments remain provider protocol data. It uses the public dummy credential `provider-fixture-key` and model
 `fixture-model`. It rejects provider state, native tools and unsupported request
 profiles. It retains request counters and client call IDs; it does not retain
 prompts, response text or authorization headers.
