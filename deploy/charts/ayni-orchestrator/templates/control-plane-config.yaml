@@ -37,14 +37,14 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-{{- with include "ayni-orchestrator.traceEndpoint" . }}
-  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: {{ . | quote }}
-{{- end }}
   name: control-plane-config
   labels:
     {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
     app.kubernetes.io/name: ayni-orchestrator-control-plane
 data:
+{{- with include "ayni-orchestrator.traceEndpoint" . }}
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: {{ . | quote }}
+{{- end }}
   ORCHESTRATOR_HTTP_BIND_ADDRESS: "0.0.0.0:{{ .Values.controlPlane.httpPort }}"
   # The canonical private-v1 workflow API is pod-local by design. Operators
   # reach it only through an explicit pod port-forward for diagnostics.

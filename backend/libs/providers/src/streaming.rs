@@ -170,50 +170,7 @@ impl Decoder {
                 blocks.push(value["content_block"].clone());
                 self.arguments.push(String::new());
             }
-            Some("content_block_delta") => {
-                let index = value["index"]
-                    .as_u64()
-                    .and_then(|n| usize::try_from(n).ok())
-                    .ok_or(ResponseError::Uncertain)?;
-                if self.open_block != Some(index) {
-                    return Err(ResponseError::Uncertain);
-                }
-                let block = self
-                    .message
-                    .as_mut()
-                    .and_then(|m| m["content"].as_array_mut())
-                    .and_then(|blocks| blocks.get_mut(index))
-                    .ok_or(ResponseError::Uncertain)?;
-                match value["delta"]["type"].as_str() {
-                    Some("text_delta") if block["type"] == "text" => {
-                        let text = value["delta"]["text"]
-                            .as_str()
-                            .ok_or(ResponseError::Uncertain)?;
-                        let target = block["text"]
-                            .as_str()
-                            .ok_or(ResponseError::Uncertain)?
-                            .to_owned()
-                            + text;
-                        block["text"] = json!(target);
-                        self.append(text, on_text)?;
-                    }
-                    Some("input_json_delta") if block["type"] == "tool_use" => {
-                        let input = self
-                            .arguments
-                            .get_mut(index)
-                            .ok_or(ResponseError::Uncertain)?;
-                        input.push_str(
-                            value["delta"]["partial_json"]
-                                .as_str()
-                                .ok_or(ResponseError::Uncertain)?,
-                        );
-                        if input.len() > 40960 {
-                            return Err(ResponseError::Uncertain);
-                        }
-                    }
-                    _ => return Err(ResponseError::Uncertain),
-                }
-            }
+            Some("content_block_delta") => self.block_delta(value, on_text)?,
             Some("content_block_stop") => self.stop_block(value)?,
             Some("message_delta") => self.message_delta(value)?,
             Some("message_stop") => {
@@ -227,6 +184,56 @@ impl Decoder {
             }
             Some("error") => return Err(ResponseError::Uncertain),
             _ => {}
+        }
+        Ok(())
+    }
+
+    fn block_delta(
+        &mut self,
+        value: &Value,
+        on_text: &mut impl FnMut(&str) -> Result<(), ResponseError>,
+    ) -> Result<(), ResponseError> {
+        let index = value["index"]
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .ok_or(ResponseError::Uncertain)?;
+        if self.open_block != Some(index) {
+            return Err(ResponseError::Uncertain);
+        }
+        let block = self
+            .message
+            .as_mut()
+            .and_then(|m| m["content"].as_array_mut())
+            .and_then(|blocks| blocks.get_mut(index))
+            .ok_or(ResponseError::Uncertain)?;
+        match value["delta"]["type"].as_str() {
+            Some("text_delta") if block["type"] == "text" => {
+                let text = value["delta"]["text"]
+                    .as_str()
+                    .ok_or(ResponseError::Uncertain)?;
+                let target = block["text"]
+                    .as_str()
+                    .ok_or(ResponseError::Uncertain)?
+                    .to_owned()
+                    + text;
+                block["text"] = json!(target);
+                self.append(text, on_text)?;
+            }
+            Some("input_json_delta") if block["type"] == "tool_use" => {
+                let input = self
+                    .arguments
+                    .get_mut(index)
+                    .ok_or(ResponseError::Uncertain)?;
+                input.push_str(
+                    value["delta"]["partial_json"]
+                        .as_str()
+                        .ok_or(ResponseError::Uncertain)?,
+                );
+                if input.len() > 40960 {
+                    return Err(ResponseError::Uncertain);
+                }
+            }
+            _ => return Err(ResponseError::Uncertain),
         }
         Ok(())
     }

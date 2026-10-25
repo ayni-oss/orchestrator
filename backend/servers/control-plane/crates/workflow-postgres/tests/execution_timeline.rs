@@ -71,9 +71,13 @@ async fn timeline_survives_cleanup_restart_and_exact_command_replay() -> Result<
         "target conversation still retained watch deltas"
     );
     assert_eq!(before.retained_from_revision, after.retained_from_revision);
+    let foreign_project = store
+        .create_project(&Uuid::now_v7().to_string(), w, "Other project", "")
+        .await?
+        .resource;
     assert!(matches!(
         restarted
-            .list_execution_timeline(w, "foreign-project", c, 0, 0, 10)
+            .list_execution_timeline(w, &foreign_project.id, c, 0, 0, 10)
             .await,
         Err(StoreError::NotFound)
     ));

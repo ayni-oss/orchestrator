@@ -252,6 +252,15 @@ grep -q 'http://workflow-traces.test.svc:4318/v1/traces' "$collector_render"
 grep -q 'otel/opentelemetry-collector-contrib:0.147.0@sha256:e7c92c715f28ff142f3bcaccd4fc5603cf4c71276ef09954a38eb4038500a5a5' "$collector_render"
 grep -q 'emptyDir: { sizeLimit: 32Mi }' "$collector_render"
 grep -q 'name: reader' "$collector_render"
+# Exporter configuration belongs to ConfigMap data; Kubernetes rejects metadata keys.
+python3 - "$collector_render" <<'PYTHON'
+import pathlib,sys
+text=pathlib.Path(sys.argv[1]).read_text()
+config=next(doc for doc in text.split("\n---") if "kind: ConfigMap\n" in doc and "name: control-plane-config\n" in doc)
+metadata,data=config.split("\ndata:\n",1)
+assert "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT" not in metadata
+assert '  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://workflow-traces.test.svc:4318/v1/traces"' in data
+PYTHON
 grep -q 'type: ClusterIP' "$collector_render"
 ! grep -q 'type: NodePort\|type: LoadBalancer' "$collector_render"
 ! grep -q 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT' "$reusable_render"

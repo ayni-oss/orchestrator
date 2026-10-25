@@ -101,22 +101,7 @@ impl WorkflowStore {
         {
             return Err(StoreError::InvalidInput("stale_command"));
         }
-        let execution: String = row.get(0);
-        let claimed: bool = row.get(2);
-        let cancelled: bool = row.get(3);
-        let mut response = AuthorityResponse {
-            allowed: claimed
-                && execution == "processing"
-                && !cancelled
-                && row.get::<_, String>(4) != "provider_uncertain",
-            cancellation_requested: cancelled,
-            state: if cancelled {
-                "cancelled".into()
-            } else {
-                execution
-            },
-            ..Default::default()
-        };
+        let mut response = authority_response(&row);
         if request.action == "context" {
             let preparing: bool = tx.query_one("SELECT EXISTS(SELECT 1 FROM workflow_activities WHERE conversation_id=$1 AND turn_id=$2 AND stage='preparation')", &[&binding.conversation_id,&binding.turn_id]).await?.get(0);
             if response.allowed && request.after_ordinal == 0 && !preparing {
@@ -150,18 +135,7 @@ impl WorkflowStore {
         }
         if request.action == "progress" {
             if response.allowed {
-                let session = command
-                    .session
-                    .as_ref()
-                    .ok_or(StoreError::InvalidInput("session"))?;
-                let progress = request
-                    .progress
-                    .as_ref()
-                    .ok_or(StoreError::InvalidInput("progress"))?;
-                if session.generation != binding.executor_generation {
-                    return Err(StoreError::InvalidInput("generation"));
-                }
-                super::progress::retain(&tx, binding, &session.session_id, progress).await?;
+                retain_progress(&tx, request, &command, binding).await?;
             }
             tx.commit().await?;
             driver.abort();
@@ -318,6 +292,46 @@ impl WorkflowStore {
         driver.abort();
         Ok(result)
     }
+}
+
+fn authority_response(row: &tokio_postgres::Row) -> AuthorityResponse {
+    let execution: String = row.get(0);
+    let claimed: bool = row.get(2);
+    let cancelled: bool = row.get(3);
+    AuthorityResponse {
+        allowed: claimed
+            && execution == "processing"
+            && !cancelled
+            && row.get::<_, String>(4) != "provider_uncertain",
+        cancellation_requested: cancelled,
+        state: if cancelled {
+            "cancelled".into()
+        } else {
+            execution
+        },
+        ..Default::default()
+    }
+}
+
+async fn retain_progress(
+    tx: &Transaction<'_>,
+    request: &AuthorityRequest,
+    command: &ayni_orchestrator_events::v1::ConversationTurnRequested,
+    binding: &ConversationTurnBinding,
+) -> Result<(), StoreError> {
+    let session = command
+        .session
+        .as_ref()
+        .ok_or(StoreError::InvalidInput("session"))?;
+    let progress = request
+        .progress
+        .as_ref()
+        .ok_or(StoreError::InvalidInput("progress"))?;
+    if session.generation != binding.executor_generation {
+        return Err(StoreError::InvalidInput("generation"));
+    }
+    super::progress::retain(tx, binding, &session.session_id, progress).await?;
+    Ok(())
 }
 
 async fn admit_call(
