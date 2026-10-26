@@ -17,7 +17,7 @@
     "@fontsource/libre-baskerville": "^5.2.0",
     "@fontsource-variable/space-grotesk": "^5.2.0",
     "@lucide/svelte": "^1.52.0",
-    "@sveltejs/kit": "2.70.3",
+    "@sveltejs/kit": "3.0.0",
     "bits-ui": "^2.19.3",
     "clsx": "^2.1.1",
     "formsnap": "2.0.1",
