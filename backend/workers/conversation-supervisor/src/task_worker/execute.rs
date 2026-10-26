@@ -35,7 +35,7 @@ async fn execute_inner(
         return Err("provider_uncertain");
     }
     if c.provider == "scripted" {
-        return scripted(worker, c).await;
+        return execute_fixture(worker, c).await;
     }
     if !matches!(c.provider.as_str(), "openai" | "anthropic")
         || env::var(if c.provider == "anthropic" {
@@ -107,7 +107,7 @@ async fn execute_inner(
         recovery_advice: None,
     })
 }
-async fn scripted(
+async fn execute_fixture(
     worker: &Worker,
     c: &TaskCommand,
 ) -> std::result::Result<TaskOutcome, &'static str> {

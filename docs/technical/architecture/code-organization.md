@@ -23,3 +23,9 @@ Quarantine, fault injection, retention cleanup, metrics and notification-backed
 watches extend these retained ownership boundaries. The [conversation execution
 contract](conversation-execution.md) defines M2 provider and tool safety; the
 [provider request contract](provider-requests.md) owns future paid-call recovery.
+
+Deterministic provider helpers and canned turn responses use `fixture` names.
+The provider key `scripted`, binding `scripted-v1`, and their recorded progress
+and trace identifiers remain retained contracts. The fixture provider returns a
+fixed response without invoking a model; it is separate from the conversation
+supervisor role, which also supervises real provider-backed sessions.

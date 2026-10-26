@@ -46,7 +46,7 @@ pub(super) async fn forward(
     Ok(sequence)
 }
 
-pub(super) async fn execute_scripted(
+pub(super) async fn execute_fixture(
     http: reqwest::Client,
     address: &str,
     token: &str,

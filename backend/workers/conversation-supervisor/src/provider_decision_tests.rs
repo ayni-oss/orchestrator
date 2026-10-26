@@ -42,7 +42,7 @@ fn provider_uncertainty_and_cancellation_decisions_complete_retained_handoff()
         assert!(ledger.pending_reports()?.is_empty());
         assert!(ledger.can_retire()?);
     }
-    let scripted = ConversationTurnReport {
+    let fixture = ConversationTurnReport {
         kind: ConversationTurnReportKind::Failed.into(),
         failure_reason: "script_failed".into(),
         ..Default::default()
@@ -51,7 +51,7 @@ fn provider_uncertainty_and_cancellation_decisions_complete_retained_handoff()
         true,
         ConversationTurnReportKind::Failed,
         "processing",
-        &scripted
+        &fixture
     ));
     Ok(())
 }

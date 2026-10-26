@@ -45,7 +45,6 @@ const COMMAND_STREAM: &str = "ORCHESTRATOR_WORKFLOW_COMMAND_V1";
 const COMMAND_CONSUMER: &str = "scripted-executor";
 const DECISION_STREAM: &str = "ORCHESTRATOR_WORKFLOW_DECISION_V1";
 const RETRY_DELAY: Duration = Duration::from_millis(250);
-const SCRIPTED_RESPONSE: &str = "The conversation supervisor completed this turn.";
 
 type RuntimeResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -373,7 +372,7 @@ async fn execute_ready(
             session_worker::ExecutionResult {
                 command_id: identity.id.clone(),
                 command_digest: digest(&command.exact_bytes),
-                response_content: SCRIPTED_RESPONSE.to_owned(),
+                response_content: session_worker::FIXTURE_TURN_RESPONSE.to_owned(),
                 failure_reason: String::new(),
                 provider_call: None,
                 plan_proposal: None,

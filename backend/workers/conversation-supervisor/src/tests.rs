@@ -183,7 +183,7 @@ fn terminal_fixture_with_binding(
         report_sequence: 2,
         executor_instance_id: executor.into(),
         signing_key_digest: signing_key_digest(&public_key),
-        response_content: "scripted response".into(),
+        response_content: "fixture response".into(),
         ..Default::default()
     };
     sign_report(&identity, &mut payload, seed).map_err(|_| LedgerError::Invalid)?;
