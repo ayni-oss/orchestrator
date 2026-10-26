@@ -22,6 +22,7 @@ fi
 
 context="$(dev_context)"
 namespace="$(dev_namespace)"
+dev_check_component_names "$context" "$namespace"
 "$dev_directory/scripts/configure-development-secrets.sh"
 dev_build_chart_dependencies
 dev_check_capacity 8
@@ -30,7 +31,7 @@ task_fixture="${AYNI_ORCHESTRATOR_TASK_FIXTURE:-false}"
 observability="${AYNI_ORCHESTRATOR_OBSERVABILITY:-false}"
 [[ "$observability" == true || "$observability" == false ]] || { echo 'AYNI_ORCHESTRATOR_OBSERVABILITY must be true or false' >&2; exit 2; }
 control_plane_image_ref="$(dev_build_image control-plane)"
-executor_image_ref="$(dev_build_image scripted-executor)"
+executor_image_ref="$(dev_build_image conversation-supervisor)"
 dev_load_image "$control_plane_image_ref"
 dev_load_image "$executor_image_ref"
 
@@ -41,14 +42,14 @@ helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-values \
   --set "ayni-orchestrator.taskExecution.fixtureEnabled=$task_fixture" \
   --set "ayni-orchestrator.observability.collector.enabled=$observability" \
   --set-string "ayni-orchestrator.images.controlPlane=$control_plane_image_ref" \
-  --set-string "ayni-orchestrator.images.scriptedExecutor=$executor_image_ref" \
+  --set-string "ayni-orchestrator.images.conversationSupervisor=$executor_image_ref" \
   --wait \
   --timeout 5m
 
 for workload in \
-  statefulset/workflow-postgres \
-  statefulset/workflow-jetstream \
-  statefulset/scripted-executor \
+  statefulset/postgres \
+  statefulset/jetstream \
+  statefulset/conversation-supervisor \
   deployment/control-plane \
   deployment/task-supervisor; do
   kubectl --context "$context" --namespace "$namespace" rollout status \
@@ -71,6 +72,6 @@ verify_workload_image() {
 }
 
 verify_workload_image ayni-orchestrator-control-plane control-plane "$control_plane_image_ref"
-verify_workload_image ayni-orchestrator-scripted-executor scripted-executor "$executor_image_ref"
+verify_workload_image ayni-orchestrator-conversation-supervisor conversation-supervisor "$executor_image_ref"
 dev_prune_images control-plane "$control_plane_image_ref"
-dev_prune_images scripted-executor "$executor_image_ref"
+dev_prune_images conversation-supervisor "$executor_image_ref"

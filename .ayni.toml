@@ -44,4 +44,4 @@ fn_cognitive = { warn = 20, fail = 29 }
 "backend/servers/control-plane/crates/grpc-contract" = ["backend/libs/domain", "backend/libs/observability", "backend/libs/providers", "backend/libs/registry", "backend/servers/control-plane", "backend/servers/control-plane/crates/workflow-postgres", "backend/workers/*"]
 "backend/servers/control-plane/crates/workflow-postgres" = ["backend/libs/domain", "backend/libs/observability", "backend/libs/oci", "backend/libs/providers", "backend/libs/registry", "backend/servers/control-plane", "backend/servers/control-plane/crates/grpc-contract", "backend/workers/*"]
 "backend/servers/control-plane" = ["backend/workers/*"]
-"backend/workers/scripted-executor" = ["backend/servers/control-plane", "backend/servers/control-plane/crates/grpc-contract", "backend/servers/control-plane/crates/workflow-postgres"]
+"backend/workers/conversation-supervisor" = ["backend/servers/control-plane", "backend/servers/control-plane/crates/grpc-contract", "backend/servers/control-plane/crates/workflow-postgres"]

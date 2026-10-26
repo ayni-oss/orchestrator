@@ -1,4 +1,4 @@
-# Durable workflow architecture
+# Orchestrator runtime architecture
 
 > UI status: the console and initial product workspace are removed. Browser steps
 > and evidence below describe the retired UI and are historical reference only.
@@ -6,7 +6,7 @@
 > is implemented. The current local API adapter is `dev/ctl gateway`; it serves
 > no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
 
-The M1 runtime extends the clean PostgreSQL workflow authority with authenticated durable delivery and one retained scripted executor. PostgreSQL decides admission, ownership, report acceptance, and visible conversation state. JetStream retains transport copies; no broker ACK independently changes application authority.
+The M1 runtime extends the PostgreSQL application authority with authenticated durable delivery and one retained conversation supervisor. PostgreSQL decides admission, ownership, report acceptance, and visible conversation state. JetStream retains transport copies; no broker ACK independently changes application authority.
 
 The complete M1 contract and later-slice boundary are defined in the [durable foundation contract](../research/project-workflow-m1-durable-foundation.md).
 
@@ -32,7 +32,7 @@ flowchart LR
     H[HTTP probes] --> C
     C -->|runtime role| P[(PostgreSQL 17.6\nauthority)]
     C -->|command + decision bytes| J[(Authenticated\nJetStream)]
-    J -->|command delivery| E[Scripted supervisor]
+    J -->|command delivery| E[Conversation supervisor]
     E -->|signed claim + report| J
     E -->|retained exact bytes| L[(Supervisor ledger PVC)]
     E -->|scoped v1 request + result| S[Isolated conversation session]
@@ -41,7 +41,7 @@ flowchart LR
     J -->|targeted decision| E
 ```
 
-The Kubernetes Service exposes HTTP only. Workflow gRPC binds to `127.0.0.1:50051` in the control-plane Pod. The scripted supervisor has no listener or database credential. Its Kubernetes
+The Kubernetes Service exposes HTTP only. The private gRPC API binds to `127.0.0.1:50051` in the control-plane Pod. The conversation supervisor has no listener or database credential. Its Kubernetes
 service account can provision Pods, PVCs and scoped bearer Secrets only in the
 dedicated session namespace. Session workers expose an authenticated internal
 HTTP listener and mount only their own ledger and bearer Secret; they have no
@@ -55,7 +55,7 @@ immutable revision ID covering instructions, desired provider/model, budgets and
 idle policy. Admission freezes that revision; eligibility freezes bounded
 conversation-only context references and a digest. All interfaces stay v1.
 
-A trusted scripted supervisor owns broker claims and signed reports. It provisions
+A trusted conversation supervisor owns broker claims and signed reports. It provisions
 conversation-scoped Kubernetes workers with separate retained result ledgers.
 The session workers have no PostgreSQL credential, broker credential or Kubernetes
 API token. Session generation comes from PostgreSQL; replacement fences the old
@@ -119,7 +119,7 @@ The isolated broker uses three file-backed `limits` streams:
 
 | Stream | Publisher | Consumer | Local capacity |
 | --- | --- | --- | --- |
-| `ORCHESTRATOR_WORKFLOW_COMMAND_V1` | application outbox | scripted executor | 25,000 / 256 MiB |
+| `ORCHESTRATOR_WORKFLOW_COMMAND_V1` | application outbox | conversation supervisor | 25,000 / 256 MiB |
 | `ORCHESTRATOR_WORKFLOW_REPORT_V1` | executor ledger | application | 50,000 / 192 MiB |
 | `ORCHESTRATOR_WORKFLOW_DECISION_V1` | application outbox | targeted executor and harness | 50,000 / 64 MiB |
 

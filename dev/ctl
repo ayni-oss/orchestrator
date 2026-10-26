@@ -179,7 +179,7 @@ case "$command" in
     helm template "$DEV_RELEASE_NAME" "$DEV_CHART" \
       --namespace "$(dev_namespace)" \
       --set-string "ayni-orchestrator.images.controlPlane=$1" \
-      --set-string "ayni-orchestrator.images.scriptedExecutor=$2"
+      --set-string "ayni-orchestrator.images.conversationSupervisor=$2"
     ;;
   dependencies)
     [[ $# -eq 0 ]] || { echo "usage: dev/ctl dependencies" >&2; exit 2; }

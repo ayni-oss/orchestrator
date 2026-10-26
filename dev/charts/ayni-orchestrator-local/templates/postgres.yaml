@@ -1,4 +1,7 @@
 {{- if .Values.postgres.enabled }}
+{{- if or (lookup "apps/v1" "StatefulSet" .Release.Namespace "workflow-postgres") (lookup "v1" "PersistentVolumeClaim" .Release.Namespace "data-workflow-postgres-0") }}
+{{- fail "component rename requires a fresh namespace or an operator-managed retained-data migration; existing workflow-postgres StatefulSet or retained PVC must not be replaced automatically" }}
+{{- end }}
 {{- if or (eq .Values.postgres.secrets.admin .Values.postgres.secrets.migrator) (eq .Values.postgres.secrets.admin .Values.postgres.secrets.runtime) (eq .Values.postgres.secrets.migrator .Values.postgres.secrets.runtime) }}
 {{- fail "postgres administrator, migrator, and runtime Secret names must differ" }}
 {{- end }}
@@ -8,7 +11,7 @@ metadata:
   name: workflow-postgres-bootstrap
   labels:
     {{- include "local.commonLabels" . | nindent 4 }}
-    app.kubernetes.io/name: workflow-postgres
+    app.kubernetes.io/name: postgres
 data:
   10-bootstrap-roles.sh: |
     #!/usr/bin/env bash
@@ -35,11 +38,11 @@ metadata:
   name: {{ .Values.postgres.serviceName }}
   labels:
     {{- include "local.commonLabels" . | nindent 4 }}
-    app.kubernetes.io/name: workflow-postgres
+    app.kubernetes.io/name: postgres
 spec:
   clusterIP: None
   selector:
-    app.kubernetes.io/name: workflow-postgres
+    app.kubernetes.io/name: postgres
   ports:
     - name: postgres
       port: 5432
@@ -49,20 +52,20 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: workflow-postgres
+  name: postgres
   labels:
     {{- include "local.commonLabels" . | nindent 4 }}
-    app.kubernetes.io/name: workflow-postgres
+    app.kubernetes.io/name: postgres
 spec:
   serviceName: {{ .Values.postgres.serviceName }}
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: workflow-postgres
+      app.kubernetes.io/name: postgres
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: workflow-postgres
+        app.kubernetes.io/name: postgres
         app.kubernetes.io/part-of: ayni-orchestrator
     spec:
       automountServiceAccountToken: false
@@ -172,7 +175,7 @@ spec:
     - metadata:
         name: data
         labels:
-          app.kubernetes.io/name: workflow-postgres
+          app.kubernetes.io/name: postgres
           app.kubernetes.io/part-of: ayni-orchestrator
         annotations:
           helm.sh/resource-policy: keep

@@ -87,7 +87,7 @@ run_driver() {
   [[ "$ready" == true ]] || { echo 'fixture loopback forwards did not become ready' >&2; return 1; }
   local provider_flags=()
   if [[ "$provider" == anthropic ]]; then provider_flags+=(--anthropic); fi
-  MCP_COMMAND_CACHE="$command_cache" MCP_WORKER_URL="http://127.0.0.1:$worker_port" MCP_FIXTURE_URL="http://127.0.0.1:$fixture_port" cargo run --quiet --manifest-path "$root/Cargo.toml" -p ayni-orchestrator-scripted-executor --bin ayni-mcp-acceptance -- "${provider_flags[@]}" "$@" > "$evidence/$stage.json" 2> "$evidence/$stage.stderr"
+  MCP_COMMAND_CACHE="$command_cache" MCP_WORKER_URL="http://127.0.0.1:$worker_port" MCP_FIXTURE_URL="http://127.0.0.1:$fixture_port" cargo run --quiet --manifest-path "$root/Cargo.toml" -p ayni-orchestrator-conversation-supervisor --bin ayni-mcp-acceptance -- "${provider_flags[@]}" "$@" > "$evidence/$stage.json" 2> "$evidence/$stage.stderr"
   kill "$forward_pid"; wait "$forward_pid" 2>/dev/null || true; forward_pid=''
 }
 run_driver initial

@@ -89,7 +89,7 @@ interoperability. The delivery PR records executed evidence and remaining limita
 ## Stage exact mutation consent
 
 Use the trusted local operator workflow to bind consent before the session prepares
-a request. Pause the local `scripted-executor` StatefulSet, admit the intended
+a request. Pause the local `conversation-supervisor` StatefulSet, admit the intended
 message through the console, and read `GetTurnInputs` for its complete workspace,
 project, conversation and turn scope. Its `command_event_id` is the exact retained
 execution identity; the admission receipt's `command_id` identifies a different

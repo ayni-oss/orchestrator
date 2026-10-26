@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class LiveDeployTests(unittest.TestCase):
-    def run_deploy(self, fail_upgrade=False):
+    def run_deploy(self, fail_upgrade=False, legacy_workload=False, retained_storage=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             record = root / 'calls.jsonl'
@@ -25,6 +25,10 @@ if name == 'helm':
     if 'version' in args: print('v4.1.1')
     if 'upgrade' in args and os.environ.get('LIVE_TEST_FAIL') == '1': sys.exit(1)
 if name == 'kubectl':
+    if 'pvc' in args and 'get' in args and os.environ.get('LIVE_TEST_RETAINED') == '1':
+        print('persistentvolumeclaim/data-workflow-postgres-0')
+    if 'statefulset' in args and 'get' in args and os.environ.get('LIVE_TEST_LEGACY') == '1':
+        print('statefulset.apps/scripted-executor')
     if 'current-context' in args: print('docker-desktop')
     if 'deployment/control-plane' in args and 'get' in args:
         print('1' if any('readyReplicas' in arg for arg in args) else 'deployment.apps/control-plane')
@@ -35,11 +39,13 @@ if name == 'kubectl':
                 (root / name).symlink_to(executable)
             env = dict(os.environ, PATH=f'{root}:{os.environ["PATH"]}',
                        LIVE_TEST_RECORD=str(record), LIVE_TEST_FAIL='1' if fail_upgrade else '0',
+                       LIVE_TEST_LEGACY='1' if legacy_workload else '0',
+                       LIVE_TEST_RETAINED='1' if retained_storage else '0',
                        AYNI_ORCHESTRATOR_NAMESPACE='ayni-orchestrator-test',
                        AYNI_ORCHESTRATOR_LIVE_MIGRATE='true')
             result = subprocess.run(['bash', 'dev/scripts/live-deploy.sh',
                                      'local/ayni-live-control-plane:test',
-                                     'local/ayni-live-scripted-executor:test'],
+                                     'local/ayni-live-conversation-supervisor:test'],
                                     cwd=ROOT, env=env, capture_output=True, text=True)
             return result, [json.loads(line) for line in record.read_text().splitlines()]
 
@@ -59,6 +65,20 @@ if name == 'kubectl':
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(any('--replicas=1' in call for call in calls))
         self.assertFalse(any('rollback' in call or 'delete' in call for call in calls))
+
+    def test_component_rename_rejects_existing_storage_before_mutations(self):
+        result, calls = self.run_deploy(legacy_workload=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('operator-managed retained-data migration', result.stderr)
+        self.assertFalse(any('upgrade' in call or 'scale' in call or 'create' in call for call in calls))
+        self.assertFalse(any('secret' in call for call in calls))
+
+    def test_component_rename_rejects_retained_storage_after_uninstall(self):
+        result, calls = self.run_deploy(retained_storage=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('operator-managed retained-data migration', result.stderr)
+        self.assertFalse(any('upgrade' in call or 'scale' in call or 'create' in call for call in calls))
+        self.assertFalse(any('secret' in call for call in calls))
 
 
 if __name__ == '__main__':

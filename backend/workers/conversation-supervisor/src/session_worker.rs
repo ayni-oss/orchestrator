@@ -23,7 +23,7 @@ const SCHEMA: &str = "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE T
 pub mod progress;
 pub mod provider_session;
 
-const RESPONSE: &str = "The scripted executor completed this turn.";
+const RESPONSE: &str = "The conversation supervisor completed this turn.";
 const MAX_RETAINED_BYTES: i64 = 256 * 1024 * 1024;
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -235,7 +235,7 @@ async fn execute(
     let result = execute_retained(&state, &body)?;
     // The scripted provider exercises the same provisional transport without
     // asserting a model invocation or token usage. Terminal acceptance is separate.
-    for text in ["The scripted", "The scripted executor", RESPONSE] {
+    for text in ["The scripted", "The conversation supervisor", RESPONSE] {
         let _ = progress::record(
             &state,
             &result.command_id,

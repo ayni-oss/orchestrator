@@ -1,10 +1,10 @@
 use super::{Worker, ledger::Ledger};
+use ayni_orchestrator_conversation_supervisor::task_files::{self, FileChange};
 use ayni_orchestrator_events::task_execution::{TaskCommand, TaskOutcome, WorkerRequest, digest};
 use ayni_orchestrator_providers::{
     coding,
     responses::{ResponseEvidence, ResponsesClient},
 };
-use ayni_orchestrator_scripted_executor::task_files::{self, FileChange};
 use serde_json::json;
 use std::{env, fs, time::Duration};
 fn failure(reason: &str) -> TaskOutcome {

@@ -51,7 +51,7 @@ create_immutable_secret() {
 }
 
 database=ayni_workflow
-service="workflow-postgres.${namespace}.svc.cluster.local"
+service="postgres.${namespace}.svc.cluster.local"
 create_database_role_secret() {
   local name="$1" username="$2" password url directory
   directory="$scratch/$name"

@@ -4,7 +4,7 @@
 {{- fail "publication authority, GitHub and session capability Secrets must differ" }}
 {{- end }}
 {{- range $secret := list $publication.authoritySecretName $publication.githubSecretName }}
-{{- if or (eq $secret $.Values.workflowPostgres.runtimeSecretName) (eq $secret $.Values.workflowPostgres.migratorSecretName) (eq $secret $.Values.workflowJetstream.applicationSecretName) (eq $secret $.Values.workflowJetstream.executorSecretName) }}
+{{- if or (eq $secret $.Values.postgres.runtimeSecretName) (eq $secret $.Values.postgres.migratorSecretName) (eq $secret $.Values.jetstream.applicationSecretName) (eq $secret $.Values.jetstream.executorSecretName) }}
 {{- fail "publication capabilities must differ from database and broker Secrets" }}
 {{- end }}
 {{- end }}
@@ -43,7 +43,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: publisher
-          image: {{ .Values.images.scriptedExecutor | quote }}
+          image: {{ .Values.images.conversationSupervisor | quote }}
           imagePullPolicy: {{ .Values.images.pullPolicy }}
           command: ["/usr/local/bin/ayni-task-publisher"]
           env:

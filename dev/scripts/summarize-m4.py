@@ -43,7 +43,7 @@ def summarize(root, source):
         'deployed-credential-and-source-isolation': ['task-topology.json'],
         'cleanup-and-redeployment': ['cleanup.txt', 'cleanup-redeployed.txt', 'cleanup-original-draft.txt', 'cleanup-cancelled.txt'],
     }
-    owners = ['control-plane', 'task-publisher', 'publication-fixture', 'task-supervisor', 'scripted-executor', 'workflow-jetstream', 'workflow-postgres']
+    owners = ['control-plane', 'task-publisher', 'publication-fixture', 'task-supervisor', 'conversation-supervisor', 'jetstream', 'postgres']
     for owner in owners:
         cases[f'restart-{owner}'] = [f'replay-{owner}.txt', f'cancel-replay-{owner}.txt', f'before-create-replay-{owner}.txt', f'after-create-replay-{owner}.txt', f'uncertain-replay-{owner}.txt']
     for files in cases.values():

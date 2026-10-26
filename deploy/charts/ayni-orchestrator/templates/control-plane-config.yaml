@@ -1,14 +1,14 @@
 {{- if .Values.enabled }}
-{{- if eq .Values.workflowPostgres.migratorSecretName .Values.workflowPostgres.runtimeSecretName }}
-{{- fail "workflowPostgres migrator and runtime Secret names must differ" }}
+{{- if eq .Values.postgres.migratorSecretName .Values.postgres.runtimeSecretName }}
+{{- fail "postgres migrator and runtime Secret names must differ" }}
 {{- end }}
-{{- if or (eq .Values.workflowJetstream.applicationSecretName .Values.workflowPostgres.runtimeSecretName) (eq .Values.workflowJetstream.applicationSecretName .Values.workflowPostgres.migratorSecretName) }}
+{{- if or (eq .Values.jetstream.applicationSecretName .Values.postgres.runtimeSecretName) (eq .Values.jetstream.applicationSecretName .Values.postgres.migratorSecretName) }}
 {{- fail "workflow JetStream application and PostgreSQL Secret names must differ" }}
 {{- end }}
-{{- if or (eq .Values.workflowJetstream.executorSecretName .Values.workflowJetstream.applicationSecretName) (eq .Values.workflowJetstream.executorSecretName .Values.workflowPostgres.runtimeSecretName) (eq .Values.workflowJetstream.executorSecretName .Values.workflowPostgres.migratorSecretName) }}
+{{- if or (eq .Values.jetstream.executorSecretName .Values.jetstream.applicationSecretName) (eq .Values.jetstream.executorSecretName .Values.postgres.runtimeSecretName) (eq .Values.jetstream.executorSecretName .Values.postgres.migratorSecretName) }}
 {{- fail "workflow executor and application/database Secret names must differ" }}
 {{- end }}
-{{- if or (eq .Values.providers.sessionAuthoritySecretName .Values.workflowPostgres.runtimeSecretName) (eq .Values.providers.sessionAuthoritySecretName .Values.workflowPostgres.migratorSecretName) (eq .Values.providers.sessionAuthoritySecretName .Values.workflowJetstream.applicationSecretName) (eq .Values.providers.sessionAuthoritySecretName .Values.workflowJetstream.executorSecretName) }}
+{{- if or (eq .Values.providers.sessionAuthoritySecretName .Values.postgres.runtimeSecretName) (eq .Values.providers.sessionAuthoritySecretName .Values.postgres.migratorSecretName) (eq .Values.providers.sessionAuthoritySecretName .Values.jetstream.applicationSecretName) (eq .Values.providers.sessionAuthoritySecretName .Values.jetstream.executorSecretName) }}
 {{- fail "session authority Secret must be distinct from database and broker Secrets" }}
 {{- end }}
 {{- if .Values.providers.openai.fixtureEgress }}
@@ -51,9 +51,9 @@ data:
   ORCHESTRATOR_GRPC_BIND_ADDRESS: "127.0.0.1:{{ .Values.controlPlane.trustedGrpcPort }}"
   ORCHESTRATOR_WORKFLOW_MIGRATION_DATABASE_URL_PATH: /var/run/secrets/ayni/workflow-postgres-migrator/url
   ORCHESTRATOR_WORKFLOW_DATABASE_URL_PATH: /var/run/secrets/ayni/workflow-postgres-runtime/url
-  ORCHESTRATOR_WORKFLOW_DATABASE_ROLE: {{ .Values.workflowPostgres.runtimeRoleName | quote }}
-  ORCHESTRATOR_WORKFLOW_BROKER_URL: {{ .Values.workflowJetstream.url | quote }}
-  ORCHESTRATOR_WORKFLOW_BROKER_USERNAME: {{ .Values.workflowJetstream.username | quote }}
+  ORCHESTRATOR_WORKFLOW_DATABASE_ROLE: {{ .Values.postgres.runtimeRoleName | quote }}
+  ORCHESTRATOR_WORKFLOW_BROKER_URL: {{ .Values.jetstream.url | quote }}
+  ORCHESTRATOR_WORKFLOW_BROKER_USERNAME: {{ .Values.jetstream.username | quote }}
   ORCHESTRATOR_WORKFLOW_BROKER_PASSWORD_PATH: /var/run/secrets/ayni/workflow-jetstream-application/password
 {{- if .Values.publication.enabled }}
   ORCHESTRATOR_PUBLICATION_AUTHORITY_TOKEN_PATH: /var/run/secrets/ayni/publication-authority/token

@@ -6,13 +6,13 @@ This reusable chart deploys the durable control plane and retained conversation 
 
 Create five distinct immutable, administrator-owned Secrets before installing:
 
-- `workflowPostgres.migratorSecretName`: a `url` key for the migration-owner role;
-- `workflowPostgres.runtimeSecretName`: a `url` key for the least-privilege application role;
-- `workflowJetstream.applicationSecretName`: a `password` key for the application broker identity;
-- `workflowJetstream.executorSecretName`: `password`, `instance-id`, and `signing-seed-hex` keys owned only by the scripted executor; and
+- `postgres.migratorSecretName`: a `url` key for the migration-owner role;
+- `postgres.runtimeSecretName`: a `url` key for the least-privilege application role;
+- `jetstream.applicationSecretName`: a `password` key for the application broker identity;
+- `jetstream.executorSecretName`: `password`, `instance-id`, and `signing-seed-hex` keys owned only by the conversation supervisor; and
 - `providers.sessionAuthoritySecretName`: a `token` key for authenticated session recovery and paid-call admission.
 
-`workflowPostgres.runtimeRoleName` must name the role in the runtime URL. All Secret names must differ. Database URLs, broker passwords, and the executor signing seed never enter ConfigMaps or command arguments. The migration init container mounts only the migration URL, the serving container mounts the runtime URL plus its broker password, and the executor mounts its own broker/signing Secret and retained ledger.
+`postgres.runtimeRoleName` must name the role in the runtime URL. All Secret names must differ. Database URLs, broker passwords, and the executor signing seed never enter ConfigMaps or command arguments. The migration init container mounts only the migration URL, the serving container mounts the runtime URL plus its broker password, and the executor mounts its own broker/signing Secret and retained ledger.
 The application and supervisor always mount the distinct session-authority bearer
 Secret. Recovery authority remains available when new OpenAI calls are disabled.
 

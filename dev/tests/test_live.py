@@ -17,8 +17,8 @@ class LiveTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.path = Path(self.temp.name) / 'status.json'
-        self.old = {'control-plane': 'a' * 64, 'scripted-executor': 'b' * 64, 'schema': 'c' * 64}
-        self.state = {'active': self.old, 'images': {'control-plane': 'old-control', 'scripted-executor': 'old-executor'}}
+        self.old = {'control-plane': 'a' * 64, 'conversation-supervisor': 'b' * 64, 'schema': 'c' * 64}
+        self.state = {'active': self.old, 'images': {'control-plane': 'old-control', 'conversation-supervisor': 'old-executor'}}
 
     def test_schema_edit_never_builds_or_deploys_automatically(self):
         changed = dict(self.old, schema='d' * 64)

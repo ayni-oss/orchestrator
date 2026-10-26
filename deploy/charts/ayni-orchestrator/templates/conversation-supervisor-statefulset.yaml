@@ -1,21 +1,24 @@
 {{- if .Values.enabled }}
+{{- if or (lookup "apps/v1" "StatefulSet" .Release.Namespace "scripted-executor") (lookup "v1" "PersistentVolumeClaim" .Release.Namespace "ledger-scripted-executor-0") }}
+{{- fail "component rename requires a fresh namespace or an operator-managed retained-data migration; existing scripted-executor StatefulSet or retained PVC must not be replaced automatically" }}
+{{- end }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: scripted-executor
+  name: conversation-supervisor
   labels:
     {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
-    app.kubernetes.io/name: ayni-orchestrator-scripted-executor
+    app.kubernetes.io/name: ayni-orchestrator-conversation-supervisor
 spec:
-  serviceName: scripted-executor
+  serviceName: conversation-supervisor
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: ayni-orchestrator-scripted-executor
+      app.kubernetes.io/name: ayni-orchestrator-conversation-supervisor
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: ayni-orchestrator-scripted-executor
+        app.kubernetes.io/name: ayni-orchestrator-conversation-supervisor
         app.kubernetes.io/part-of: ayni-orchestrator
         orchestrator.ayni.dev/jetstream-client: "true"
     spec:
@@ -31,8 +34,8 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: scripted-executor
-          image: {{ required "images.scriptedExecutor is required" .Values.images.scriptedExecutor | quote }}
+        - name: conversation-supervisor
+          image: {{ required "images.conversationSupervisor is required" .Values.images.conversationSupervisor | quote }}
           imagePullPolicy: {{ .Values.images.pullPolicy }}
           env:
             {{- with include "ayni-orchestrator.traceEndpoint" . }}
@@ -58,11 +61,11 @@ spec:
             - name: ORCHESTRATOR_SESSION_NAMESPACE
               value: {{ printf "%s-sessions" .Release.Namespace | quote }}
             - name: ORCHESTRATOR_SESSION_IMAGE
-              value: {{ required "images.scriptedExecutor is required" .Values.images.scriptedExecutor | quote }}
+              value: {{ required "images.conversationSupervisor is required" .Values.images.conversationSupervisor | quote }}
             - name: ORCHESTRATOR_EXECUTOR_BROKER_URL
-              value: {{ .Values.workflowJetstream.url | quote }}
+              value: {{ .Values.jetstream.url | quote }}
             - name: ORCHESTRATOR_EXECUTOR_BROKER_USERNAME
-              value: {{ .Values.workflowJetstream.executorUsername | quote }}
+              value: {{ .Values.jetstream.executorUsername | quote }}
             - name: ORCHESTRATOR_EXECUTOR_BROKER_PASSWORD_PATH
               value: /var/run/secrets/ayni/workflow-jetstream-executor/password
             - name: ORCHESTRATOR_EXECUTOR_INSTANCE_ID_PATH
@@ -81,7 +84,7 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 2
           resources:
-            {{- toYaml .Values.scriptedExecutor.resources | nindent 12 }}
+            {{- toYaml .Values.conversationSupervisor.resources | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -105,7 +108,7 @@ spec:
                 path: token
         - name: workflow-jetstream-executor
           secret:
-            secretName: {{ required "workflowJetstream.executorSecretName is required" .Values.workflowJetstream.executorSecretName | quote }}
+            secretName: {{ required "jetstream.executorSecretName is required" .Values.jetstream.executorSecretName | quote }}
             items:
               - key: password
                 path: password
@@ -117,7 +120,7 @@ spec:
     - metadata:
         name: ledger
         labels:
-          app.kubernetes.io/name: ayni-orchestrator-scripted-executor
+          app.kubernetes.io/name: ayni-orchestrator-conversation-supervisor
           app.kubernetes.io/part-of: ayni-orchestrator
         annotations:
           helm.sh/resource-policy: keep
@@ -125,5 +128,5 @@ spec:
         accessModes: ["ReadWriteOnce"]
         resources:
           requests:
-            storage: {{ .Values.scriptedExecutor.storage }}
+            storage: {{ .Values.conversationSupervisor.storage }}
 {{- end }}

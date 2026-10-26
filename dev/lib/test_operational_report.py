@@ -43,7 +43,7 @@ class OperationalReportTests(unittest.TestCase):
             self.write(root, f"{directory}/{name}.json", value)
         for n, value in enumerate(upstreams):
             self.write(root, f"{directory}/upstream-{n}-draft.json", value)
-        for owner in ("control-plane", "task-supervisor", "workflow-postgres"):
+        for owner in ("control-plane", "task-supervisor", "postgres"):
             for name, value in (("confirmation", confirmation), ("parent", {"attempt": parent}), ("child", {"attempt": draft}), ("preparation", {"preparation": {"attemptId": "child", "inputs": {**inputs, "maxSeconds": 300, "maxTokens": 4096}}})):
                 self.write(root, f"{directory}/{name}-replay-{owner}.json", {"response": value})
         report = json.loads((root / directory / "outcome.json").read_text())
@@ -89,7 +89,7 @@ class OperationalReportTests(unittest.TestCase):
         for stage in ("active", "adopted", "terminal"):
             self.write(root, f"concurrency-{stage}.json", evidence)
         self.write(root, "concurrency-pods.json", {"items": [{"metadata": {"uid": f"pod{n}"}} for n in range(4)]})
-        for owner in ("control-plane", "task-supervisor", "workflow-postgres"):
+        for owner in ("control-plane", "task-supervisor", "postgres"):
             self.write(root, f"concurrency-replay-{owner}.txt", module.REPLAY)
         for name in ("concurrency-adoption.txt", "operational-readiness.txt", "postgres-integration.txt", "private-v1-cutover.txt"):
             self.write(root, name, "passed")

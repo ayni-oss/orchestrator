@@ -5,9 +5,9 @@
   "required": [
     "enabled",
     "images",
-    "workflowPostgres",
-    "workflowJetstream",
-    "scriptedExecutor",
+    "postgres",
+    "jetstream",
+    "conversationSupervisor",
     "controlPlane",
     "providers"
   ],
@@ -23,7 +23,7 @@
       "additionalProperties": false,
       "required": [
         "controlPlane",
-        "scriptedExecutor",
+        "conversationSupervisor",
         "pullPolicy"
       ],
       "properties": {
@@ -130,7 +130,7 @@
             }
           }
         },
-        "scriptedExecutor": {
+        "conversationSupervisor": {
           "type": "string",
           "minLength": 1
         },
@@ -144,7 +144,7 @@
         }
       }
     },
-    "workflowPostgres": {
+    "postgres": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -167,7 +167,7 @@
         }
       }
     },
-    "workflowJetstream": {
+    "jetstream": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -299,7 +299,7 @@
         }
       }
     },
-    "scriptedExecutor": {
+    "conversationSupervisor": {
       "type": "object",
       "additionalProperties": false,
       "required": [

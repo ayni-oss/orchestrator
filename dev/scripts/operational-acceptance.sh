@@ -95,7 +95,7 @@ before,after=[json.load(open(path)) for path in sys.argv[1:]]
 assert before['active']==after['active'], 'supervisor restart changed active authority or Pod identity'
 PY
 command_stdin --cancel-operational-concurrency-stdin "$evidence/concurrency-adopted.json" > "$evidence/concurrency-terminal.json"
-for workload in deployment/control-plane deployment/task-supervisor statefulset/workflow-postgres; do
+for workload in deployment/control-plane deployment/task-supervisor statefulset/postgres; do
   name="${workload#*/}"
   kubectl --context "$context" --namespace "$namespace" rollout restart "$workload" > "$evidence/restart-$name.txt"
   kubectl --context "$context" --namespace "$namespace" rollout status "$workload" --timeout=3m >> "$evidence/restart-$name.txt"
@@ -130,7 +130,7 @@ scripts/ci/check-workflow-postgres-feasibility.sh > "$evidence/postgres-integrat
 "$dev_directory/scripts/dependency-acceptance.sh" "$evidence/dependencies"
 "$dev_directory/scripts/assessment-acceptance.sh" "$evidence/assessment"
 "$dev_directory/scripts/worker-recovery-acceptance.sh" "$evidence/worker-recovery"
-executor_image="$(kubectl --context "$context" --namespace "$namespace" get statefulset scripted-executor -o jsonpath='{.spec.template.spec.containers[0].image}')"
+executor_image="$(kubectl --context "$context" --namespace "$namespace" get statefulset conversation-supervisor -o jsonpath='{.spec.template.spec.containers[0].image}')"
 for provider in openai anthropic; do
   read -r worker_port fixture_port < <(python3 - <<'PY_PORTS'
 import socket

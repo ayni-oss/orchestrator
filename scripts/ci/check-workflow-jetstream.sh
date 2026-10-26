@@ -79,6 +79,6 @@ if [[ "${AYNI_M1_RUN_INTEGRATED:-0}" == 1 ]]; then
   # scenarios so neither fabricated decisions nor old ACKfloors affect the next.
   cargo test --locked -p ayni-orchestrator-control-plane --test workflow_transport disposable_profile_setup -- --ignored --nocapture
 fi
-cargo test --locked -p ayni-orchestrator-scripted-executor authenticated_jetstream_redelivery_preserves_ledger_ownership -- --ignored --nocapture
+cargo test --locked -p ayni-orchestrator-conversation-supervisor authenticated_jetstream_redelivery_preserves_ledger_ownership -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-control-plane --test workflow_transport profile_authorization_capacity_and_payload -- --ignored --nocapture
 printf 'jetstream-image=%s\n' "$image"

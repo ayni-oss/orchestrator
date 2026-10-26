@@ -219,7 +219,7 @@ try {
 } finally { kube('scale', 'deployment/task-supervisor', '--replicas=1'); }
 kube('rollout', 'status', 'deployment/task-supervisor', '--timeout=2m');
 // Retained successful/cancelled authority must outlive the runtime owners.
-for (const workload of ['deployment/task-supervisor', 'deployment/task-publisher', 'statefulset/workflow-postgres']) {
+for (const workload of ['deployment/task-supervisor', 'deployment/task-publisher', 'statefulset/postgres']) {
   const name = workload.split('/')[1];
   command('kubectl', ['--context', 'docker-desktop', '--namespace', namespace, 'rollout', 'restart', workload], `self-development-restart-${name}.txt`);
   kube('rollout', 'status', workload, '--timeout=3m');

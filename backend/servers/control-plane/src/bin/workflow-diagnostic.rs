@@ -11,7 +11,7 @@ use tonic::transport::Endpoint;
 use uuid::Uuid;
 
 const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:50051";
-const SCRIPTED_RESPONSE: &str = "The scripted executor completed this turn.";
+const SCRIPTED_RESPONSE: &str = "The conversation supervisor completed this turn.";
 
 #[tokio::main]
 async fn main() -> ExitCode {
