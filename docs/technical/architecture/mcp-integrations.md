@@ -1,5 +1,11 @@
 # Scoped MCP integrations
 
+> UI status: the console and initial product workspace are removed. Browser steps
+> and evidence below describe the retired UI and are historical reference only.
+> Browser-dependent acceptance profiles are unavailable until replacement coverage
+> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
+> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+
 The isolated conversation worker supports configured MCP tools through a bounded
 JSON-response Streamable HTTP profile. Configuration is operator-owned deployment
 input; model text cannot add servers, choose credential paths or expand scope.

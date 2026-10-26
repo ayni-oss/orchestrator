@@ -71,15 +71,17 @@ cargo check --workspace --all-targets
 pnpm install --frozen-lockfile
 pnpm typecheck
 pnpm test
-pnpm web:build
-pnpm exec playwright install chromium
-pnpm web:acceptance
 pnpm proto:check
 pnpm chart:check
 pnpm docs:check
 scripts/ci/check-workflow-postgres-feasibility.sh
 scripts/ci/check-workflow-private-v1-feasibility.sh
 ```
+
+The legacy UI in `examples/web` is reference source, excluded from the active
+workspace and checks. Browser-dependent acceptance profiles are unavailable until
+new UI coverage is implemented; do not claim their historical evidence validates
+current source. `dev/ctl gateway` serves only the trusted local API adapter.
 
 Run affected protocol, Helm and repository quality checks described by
 `.github/workflows/pr-validation.yml` and `.ayni.toml`. Runtime behavior changes

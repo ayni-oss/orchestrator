@@ -6,8 +6,8 @@ Verify dependencies and workloads:
 Run the message-to-scripted-response scenario:
   dev/ctl scenario
 
-Local contributor browser console:
-  dev/ctl console
+Local JSON/SSE API adapter (no browser UI):
+  dev/ctl gateway
   Open http://127.0.0.1:3000 while the command runs.
 
 Health:

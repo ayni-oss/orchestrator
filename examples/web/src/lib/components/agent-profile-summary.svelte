@@ -1,0 +1,6 @@
+<script lang="ts">
+  import type {ProjectViewData} from "$lib/project-view.js";
+  type Profile=NonNullable<NonNullable<ProjectViewData["conversation"]>["runs"][number]["plannerProfile"]>;
+  let {profile}:{profile:Profile|undefined}=$props();
+</script>
+{#if profile}<details class="space-y-2 break-words text-xs"><summary class="cursor-pointer">Frozen {profile.role} profile · {profile.revision.slice(7,19)}</summary><dl class="space-y-1"><dt>Revision</dt><dd class="break-all font-mono">{profile.revision}</dd><dt>Provider and model</dt><dd>{profile.provider} · {profile.model}</dd><dt>Connection revision</dt><dd class="break-all">{profile.connectionId} · {profile.credentialRevision}</dd><dt>Allowed tools</dt><dd>{profile.settings.allowedTools.join(", ")}</dd><dt>Repository scope</dt><dd>{profile.repositoryIds.join(", ")}</dd><dt>Budget ceiling</dt><dd>{profile.settings.maxModelCalls} model calls · {profile.settings.deadlineSeconds} seconds</dd><dt>Role instructions</dt><dd class="whitespace-pre-wrap">{profile.systemInstructions}</dd><dt>Additional instructions</dt><dd class="whitespace-pre-wrap">{profile.settings.instructions||"Application role instructions"}</dd><dt>Pinned skills</dt><dd>{profile.settings.skills.map(s=>`${s.id} @ ${s.revision}`).join(", ")||"None"}</dd></dl></details>{/if}

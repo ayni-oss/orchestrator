@@ -1,5 +1,11 @@
 # Task feedback and attention
 
+> UI status: the console and initial product workspace are removed. Browser steps
+> and evidence below describe the retired UI and are historical reference only.
+> Browser-dependent acceptance profiles are unavailable until replacement coverage
+> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
+> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+
 Task feedback brings accepted execution and quality problems back to their originating conversation.
 Project attention lists the same retained records across that project's conversations.
 These are factual system notices, separate from assistant messages and model reasoning.

@@ -1,5 +1,11 @@
 # Plans and approval acceptance
 
+> UI status: the console and initial product workspace are removed. Browser steps
+> and evidence below describe the retired UI and are historical reference only.
+> Browser-dependent acceptance profiles are unavailable until replacement coverage
+> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
+> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+
 M3 extends the [conversation acceptance](conversation-acceptance.md) gates.
 The final delivery PR records executed results, source and image identities,
 fixture/live distinctions and failed or blocked checks. This matrix is a gate

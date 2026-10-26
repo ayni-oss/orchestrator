@@ -13,10 +13,10 @@ The [backend foundation roadmap](docs/technical/history/backend-foundation-roadm
 is archived with its acceptance limits; planned product capabilities are not claims
 of delivered behavior.
 
-The runtime provides **conversation execution, plan approval and isolated task delivery through managed quality and draft publication** on the M1 durable foundation, with a local contributor console, shared agent configuration and isolated sessions supporting scripted or explicitly enabled OpenAI execution. It provides:
+The runtime provides **conversation execution, plan approval and isolated task delivery through managed quality and draft publication** on the M1 durable foundation, with shared agent configuration and isolated sessions supporting scripted or explicitly enabled OpenAI execution. It provides:
 
 - PostgreSQL 17.6 as the sole workflow authority;
-- conversation-owned operator and agent plans with immutable versions, scoped history, retained provenance, exact write receipts and console review;
+- conversation-owned operator and agent plans with immutable versions, scoped history, retained provenance, exact write receipts and version review;
 - explicit approval of an exact plan version/digest with atomic, once-only admission and immutable task origin;
 - repository-owned forward migrations under an advisory lock;
 - minimal workspace, project, and conversation creation;
@@ -36,11 +36,11 @@ The runtime provides **conversation execution, plan approval and isolated task d
 - a canonical private-v1 gRPC API on a trusted pod-loopback listener; and
 - a Docker Desktop Helm stack with separated database/broker identities and retained storage.
 
-This is a clean replacement, not a compatibility migration. The prior SQLite workflow, browser API adapter, runtime workers, legacy development fixtures, and custom-client workflow path are not part of the current runtime. The product workspace selectively reuses the former visual design against current APIs.
+This is a clean replacement, not a compatibility migration. The prior SQLite workflow, browser API adapter, runtime workers, legacy development fixtures, and custom-client workflow path are not part of the current runtime. The former web design is retained only as an [example](examples/web/EXAMPLE.md); there is no supported product UI.
 
-The cumulative M1 acceptance evidence is recorded in the delivery PR. The local contributor console exposes shared configuration, isolated sessions, provider usage and cancellation. OpenAI execution requires an explicit model, deployment enablement and a workspace-scoped credential mounted directly into its session. Scripted execution remains the default. OpenAI conversations can read frozen workspace instructions, project status and their own bounded history. The final M2 acceptance scope includes deterministic provider/tool recovery fixtures and a separately reported live-provider smoke test. All Orchestrator interfaces stay v1 until alpha merges.
+The cumulative M1 acceptance evidence is recorded in the delivery PR. Canonical APIs expose shared configuration, isolated sessions, provider usage and cancellation. OpenAI execution requires an explicit model, deployment enablement and a workspace-scoped credential mounted directly into its session. Scripted execution remains the default. OpenAI conversations can read frozen workspace instructions, project status and their own bounded history. The final M2 acceptance scope includes deterministic provider/tool recovery fixtures and a separately reported live-provider smoke test. All Orchestrator interfaces stay v1 until alpha merges.
 
-Plan review retains the project and originating conversation for later task feedback. Structured agent proposals retain provider and conversation provenance; explicit approval atomically admits the reviewed task set in an awaiting-execution state. Plan creation and approval dispatch no coding work. Trusted operators can prepare a task with frozen local Git evidence, runtime selection and budgets; preparation retains blockers or one attempt and also dispatches no coding work. Prepared tasks can be explicitly started as isolated coding attempts with bounded concurrency with retained changes and cancellation fencing. A credential-free quality stage validates a frozen reconstruction with managed Ayni evidence and exposes quality separately from coding completion. See [task quality](docs/technical/architecture/task-quality.md). The console Tasks view shows progress, blockers, accepted patches and quality artifacts separately, with bounded cancellation and reviewed publication controls. Source verification and upload use the trusted local helper. Operators can separately authorize accepted changes for a recoverable GitHub draft under scoped publication authority. See [draft publication](docs/technical/architecture/task-publication.md). See [isolated execution](docs/technical/architecture/isolated-task-execution.md). See [execution preparation](docs/technical/architecture/task-execution.md). See [durable plan review](docs/technical/architecture/plan-review.md).
+Plan review retains the project and originating conversation for later task feedback. Structured agent proposals retain provider and conversation provenance; explicit approval atomically admits the reviewed task set in an awaiting-execution state. Plan creation and approval dispatch no coding work. Trusted operators can prepare a task with frozen local Git evidence, runtime selection and budgets; preparation retains blockers or one attempt and also dispatches no coding work. Prepared tasks can be explicitly started as isolated coding attempts with bounded concurrency with retained changes and cancellation fencing. A credential-free quality stage validates a frozen reconstruction with managed Ayni evidence and exposes quality separately from coding completion. See [task quality](docs/technical/architecture/task-quality.md). Canonical task reads expose progress, blockers, accepted patches and quality artifacts separately, with bounded cancellation and reviewed publication controls. Source verification and upload use the trusted local helper. Operators can separately authorize accepted changes for a recoverable GitHub draft under scoped publication authority. See [draft publication](docs/technical/architecture/task-publication.md). See [isolated execution](docs/technical/architecture/isolated-task-execution.md). See [execution preparation](docs/technical/architecture/task-execution.md). See [durable plan review](docs/technical/architecture/plan-review.md).
 
 Task execution and quality problems also produce retained feedback in their
 originating conversation and project attention. Notices link to task evidence;
@@ -74,15 +74,17 @@ configuration, retention and the cumulative deployed evidence requirements.
 ```sh
 dev/ctl deploy
 dev/ctl check --expect-empty
-dev/ctl web
+dev/ctl scenario
 ```
 
-Open `http://127.0.0.1:3000/workspace/` while the command runs. The Svelte project
-workspace supports discovery, creation, conversations, retained activity and
-provider usage over the existing local gateway. Follow its scoped contributor
-console link for configuration, plan/task review, publication and recovery.
-`dev/ctl console` still opens that complete operator surface directly.
-See the [workspace guide](apps/web/README.md) for scope and browser acceptance.
+There is currently no supported browser UI. The former SvelteKit app is preserved
+under [examples/web](examples/web/EXAMPLE.md) as a design reference, outside the
+active workspace and deployment. It uses historical backend contracts.
+
+`dev/ctl gateway` starts a loopback-only JSON/SSE API adapter for trusted local
+tooling; it serves no pages or assets. The private v1 gRPC API and trusted source
+and publication helpers remain available. Browser-dependent acceptance profiles
+are blocked until a future UI is implemented and qualified.
 
 See [task delivery acceptance](docs/technical/operations/task-acceptance.md) for the cumulative M4 gates and integration limits. See [local development](docs/technical/operations/local-development.md) for prerequisites, trusted diagnostics, validation, restart checks, and explicit cleanup.
 

@@ -33,10 +33,13 @@ managed Ayni quality, durable receipts and recoverable draft publication. Execut
 quality and publication remain separate outcomes. Delivery ends at a reviewable
 draft unless a user explicitly grants further authority.
 
-Restore useful Svelte layouts and components from the former web application.
-Rebuild its data access against current contracts; exact legacy feature parity is
-not the objective. Project configuration and management screens follow real product
-journeys rather than the former service inventory.
+The console and initial product web application are withdrawn. Preserve the former
+`main` SvelteKit UI under [examples/web](examples/web/EXAMPLE.md) only as a design
+reference. It is excluded from active builds and has no current backend wiring.
+There is no supported browser UI for now. Continue the backend roadmap; design and
+qualify a future product interface in a separate delivery decision. Historical
+browser acceptance does not qualify current source, and combined profiles that
+require it remain blocked until their replacement coverage exists.
 
 ### Product surfaces
 
@@ -115,7 +118,7 @@ evidence before completion; none is declared implemented by this roadmap.
 
 | Milestone | Observable outcome and acceptance |
 | --- | --- |
-| Product workspace | Restore the web shell and project Chat, Plans and Tasks surfaces against current APIs. Creation, discussion, exact plan approval, task inspection, recovery and publication preserve scope and exact retries across reload, reconnect and concurrent tabs. Retain the console until replacement coverage passes. |
+| Product workspace | Design a future web shell and project Chat, Plans and Tasks surfaces using the preserved example as reference and current APIs as authority. Creation, discussion, exact plan approval, task inspection, recovery and publication preserve scope and exact retries across reload, reconnect and concurrent tabs. The console is removed; qualify each new browser journey before claiming support. |
 | Observable execution | Add the execution inspector, live progress and incremental assistant text. Explain queue, preparation, model/tool execution, quality and publication stages with timing and evidence. Trace a full journey across API, broker, supervisor and worker, including interruption and replay. Instrument the first workspace slice rather than deferring telemetry to this milestone. |
 | Browser-driven development | An approved plan reaches execution through trusted repository/source preparation, digest-pinned runtime selection and explicit budgets without terminal steps. Server-side verification preserves frozen source and upstream selections. Review required onboarding and configuration support for this journey; add canonical APIs where missing. |
 | Project and workspace insight | Ship overviews, attention, dependency visualization and scoped analytics using the measurement definitions above. Demonstrate drill-down, replay-safe counting, pagination and recovery-aware rates with known input cohorts. |
@@ -136,31 +139,25 @@ assistant text. Correlate API admission, transport, supervisor, isolated worker,
 provider/tool execution and task source, coding, quality and publication. Keep
 recorded observations, provisional text, accepted outcomes and sampled diagnostics
 distinct. The inspector includes task evidence, phase timing, waiting reasons and
-explicit next actions, with scoped console handoff for approvals and recovery.
+explicit next actions, with approvals and recovery implemented against canonical APIs when a future UI is authorized.
 See the [execution timeline contract](docs/technical/architecture/execution-timeline.md)
 and [combined deployed acceptance](docs/technical/operations/observable-execution-acceptance.md).
 
-### First product workspace slice
+### UI reference and future workspace
 
-The first slice restores workspace/project navigation and conversation chat in a
-Svelte application served by the existing local Rust gateway. It includes resource
-creation, retained transcript and older history, resumable observation, explicit
-turn cancellation, current activity, provider usage and exact interrupted-command
-retries. Message and turn counts come from canonical retained facts.
-
-Plans, task evidence, recovery, publication and agent configuration remain available
-through a scoped contributor-console link. The console stays supported until those
-journeys have equivalent web acceptance. Observable execution extends this foundation with incremental assistant text,
-tracing and task inspection. Round/task analytics, event triggers and browser-driven
-source preparation remain subsequent milestones. PR evidence must distinguish browser fixtures from actual
-PostgreSQL/JetStream and isolated-session execution.
+The former app is an example only. The discarded console and initial workspace
+are not a foundation for further UI work. Keep durable chat, plans, tasks,
+execution timelines, tracing and exact receipts in the backend. Define the next
+interface from user journeys and the example before implementing screens or
+connecting legacy data access. Any future browser acceptance must cover reload,
+reconnect, scope, concurrent actions and exact interrupted-command retries.
 
 ## Delivery discipline
 
 - Define user outcomes, observable states, authority and failure/recovery cases before implementation.
 - Extend canonical v1 contracts in place through alpha; keep generated consumers and documentation synchronized.
 - Validate affected behavior on the explicit Docker Desktop Kubernetes topology and extend cumulative acceptance.
-- Replace console workflows only after equivalent web acceptance passes; then remove obsolete entry points and update local startup guidance.
+- Keep the legacy web example outside active builds; implement and qualify future UI workflows against canonical APIs before advertising browser support.
 - Keep system operation and project analytics scoped to the same workspace/project authority as their underlying records.
 - Keep deployment choices explicit and self-hosting practical. Document dependencies, configuration, export and recovery without requiring a proprietary observability service.
 - Record actual evidence and blocked checks in each PR. Release publication, merges and destructive cleanup retain their existing authorization boundaries.

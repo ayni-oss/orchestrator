@@ -1,5 +1,11 @@
 # Approval and task admission
 
+> UI status: the console and initial product workspace are removed. Browser steps
+> and evidence below describe the retired UI and are historical reference only.
+> Browser-dependent acceptance profiles are unavailable until replacement coverage
+> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
+> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+
 An operator approves one exact immutable plan version from its originating
 conversation. PostgreSQL retains one approval receipt and every reviewed task in
 the same transaction. Tasks remain `awaiting_execution`; admission creates no

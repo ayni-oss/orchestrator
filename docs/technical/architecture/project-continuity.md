@@ -1,5 +1,11 @@
 # Factual project continuity
 
+> UI status: the console and initial product workspace are removed. Browser steps
+> and evidence below describe the retired UI and are historical reference only.
+> Browser-dependent acceptance profiles are unavailable until replacement coverage
+> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
+> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+
 Fresh conversations can read task lifecycle facts and accepted outcomes from their own project through `read_project_status`.
 The tool uses the existing eligibility-time `ProjectStatusSnapshot` in the private-v1 conversation command.
 Shared facts preserve task evidence without importing another conversation's working context.

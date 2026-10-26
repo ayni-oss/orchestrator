@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+echo 'This combined acceptance profile requires retired browser coverage and is unavailable until UI acceptance is rebuilt.' >&2
+exit 2
+
 readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$dev_directory/lib/common.sh"
 source "$dev_directory/lib/images.sh"

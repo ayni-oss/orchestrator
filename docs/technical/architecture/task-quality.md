@@ -1,5 +1,11 @@
 # Task quality and retained evidence
 
+> UI status: the console and initial product workspace are removed. Browser steps
+> and evidence below describe the retired UI and are historical reference only.
+> Browser-dependent acceptance profiles are unavailable until replacement coverage
+> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
+> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+
 Coding completion and quality acceptance are separate outcomes on the same frozen
 attempt. A completed coding result retains its patch when validation fails or is
 interrupted. Publication remains a separate authority and delivery slice.

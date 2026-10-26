@@ -1,5 +1,11 @@
 # Deterministic provider fixture
 
+> UI status: the console and initial product workspace are removed. Browser steps
+> and evidence below describe the retired UI and are historical reference only.
+> Browser-dependent acceptance profiles are unavailable until replacement coverage
+> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
+> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+
 This server implements the bounded foreground Responses profile without calling
 OpenAI. It supports bounded streaming Responses and Anthropic Messages SSE
 profiles, as well as complete JSON fixtures. Only public assistant text is emitted

@@ -1,5 +1,11 @@
 # Conversation acceptance
 
+> UI status: the console and initial product workspace are removed. Browser steps
+> and evidence below describe the retired UI and are historical reference only.
+> Browser-dependent acceptance profiles are unavailable until replacement coverage
+> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
+> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+
 Run these gates for the final M2 slice. The delivery PR records actual results,
 source revision, deployment identity and blocked checks. This matrix defines the
 required evidence; listing a command does not mean it passed.

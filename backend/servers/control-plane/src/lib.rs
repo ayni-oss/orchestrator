@@ -2,7 +2,7 @@
 
 pub mod broker;
 pub mod configuration;
-pub mod console;
+pub mod gateway;
 pub mod health;
 pub mod maintenance;
 pub mod publication_authority;

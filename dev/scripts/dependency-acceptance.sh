@@ -11,7 +11,7 @@ mkdir -p "$1"
 readonly evidence="$1"
 cd "$DEV_REPOSITORY_ROOT"
 cargo build --locked -p ayni-orchestrator-control-plane \
-  --bin workflow-console --bin workflow-prepare-task --bin workflow-publish-task > "$evidence/host-helper-build.txt" 2>&1
+  --bin workflow-gateway --bin workflow-prepare-task --bin workflow-publish-task > "$evidence/host-helper-build.txt" 2>&1
 runtime="${AYNI_ORCHESTRATOR_QUALITY_RUNTIME_IMAGE:-$(python3 -c 'import json; print(json.load(open(".ayni/task-quality-runtime.json"))["runtime_image"])')}"
 [[ "$runtime" =~ @sha256:[a-f0-9]{64}$ ]] || { echo 'digest-pinned task-quality runtime required' >&2; exit 1; }
 fixture_image="$(dev_build_image publication-fixture)"

@@ -60,9 +60,9 @@ async function connect() {
   assert(pod, 'ready control plane missing'); generation++;
   output(`control-plane-${generation}.json`, { name: pod.metadata.name, uid: pod.metadata.uid });
   grpc = await forward(`pod/${pod.metadata.name}`, [`${grpcPort}:50051`], `grpc-${generation}.txt`);
-  gateway = launch(path.join(root, 'target/debug/workflow-console'), [`127.0.0.1:${consolePort}`, address], `console-${generation}.txt`);
+  gateway = launch(path.join(root, 'target/debug/workflow-gateway'), [`127.0.0.1:${consolePort}`, address], `console-${generation}.txt`);
   for (let n = 0; n < 100; n++) {
-    try { if ((await fetch(base, { signal: AbortSignal.timeout(1000) })).ok) return; } catch {}
+    try { if ((await fetch(`${base}/api/ListWorkspaces`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-console-request': '1', Origin: base }, body: JSON.stringify({ limit: 1 }), signal: AbortSignal.timeout(1000) })).ok) return; } catch {}
     await delay(100);
   }
   throw new Error('owned gateway did not start');

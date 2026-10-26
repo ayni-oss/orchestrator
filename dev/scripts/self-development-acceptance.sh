@@ -23,7 +23,7 @@ cd "$DEV_REPOSITORY_ROOT"
   echo 'commit all tracked and untracked source before own-source self-development acceptance' >&2; exit 1;
 }
 cargo build --locked -p ayni-orchestrator-control-plane \
-  --bin workflow-console --bin workflow-prepare-task --bin workflow-publish-task > "$evidence/host-helper-build.txt" 2>&1
+  --bin workflow-gateway --bin workflow-prepare-task --bin workflow-publish-task > "$evidence/host-helper-build.txt" 2>&1
 fixture_base="$(dev_build_image publication-fixture)"
 printf '%s\n' "$fixture_base" > "$evidence/fixture-base-image.txt"
 read -r grpc_port console_port < <(python3 - <<'PY'
@@ -43,7 +43,7 @@ for _ in $(seq 1 100); do
   kill -0 "$grpc_pid" 2>/dev/null || { cat "$evidence/grpc-forward.txt" >&2; exit 1; }
   sleep .1
 done
-"$DEV_REPOSITORY_ROOT/target/debug/workflow-console" "127.0.0.1:$console_port" "127.0.0.1:$grpc_port" > "$evidence/console.txt" 2>&1 &
+"$DEV_REPOSITORY_ROOT/target/debug/workflow-gateway" "127.0.0.1:$console_port" "127.0.0.1:$grpc_port" > "$evidence/console.txt" 2>&1 &
 console_pid=$!
 SELFDEV_GRPC_PID="$grpc_pid" SELFDEV_CONSOLE_PID="$console_pid" node "$dev_directory/lib/self-development.mjs" "$DEV_REPOSITORY_ROOT" "$evidence" "$namespace" "$runtime" "$grpc_port" "$console_port" "$fixture_base"
 status=passed
