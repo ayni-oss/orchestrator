@@ -2,7 +2,11 @@
 #[path = "../task_supervisor/pods.rs"]
 mod pods;
 use ayni_orchestrator_events::task_execution::{SupervisorRequest, TaskRun};
+use ayni_orchestrator_observability::workflow::{
+    Workflow, finish, identity_context, link_recovery,
+};
 use std::{env, fs, io, time::Duration};
+use tracing::Instrument as _;
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 pub struct Supervisor {
     http: reqwest::Client,
@@ -18,14 +22,15 @@ pub struct Supervisor {
 }
 impl Supervisor {
     async fn call(&self, request: &SupervisorRequest) -> Result<Option<TaskRun>> {
-        let mut response = self
+        let mut request_builder = self
             .http
             .post(format!("{}/v1/task-supervisor", self.url))
             .bearer_auth(&self.token)
-            .json(request)
-            .send()
-            .await?
-            .error_for_status()?;
+            .json(request);
+        if let Some(context) = ayni_orchestrator_observability::current_context() {
+            request_builder = request_builder.header("traceparent", context.traceparent);
+        }
+        let mut response = request_builder.send().await?.error_for_status()?;
         let mut body = Vec::new();
         while let Some(chunk) = response.chunk().await? {
             if body.len() + chunk.len()
@@ -43,6 +48,12 @@ fn required(name: &str) -> Result<String> {
 }
 #[tokio::main]
 async fn main() -> Result {
+    let telemetry = ayni_orchestrator_observability::init("task-supervisor");
+    let result = Box::pin(run()).await;
+    telemetry.shutdown();
+    result
+}
+async fn run() -> Result {
     let s = Supervisor {
         http: reqwest::Client::builder()
             .timeout(Duration::from_secs(15))
@@ -65,7 +76,34 @@ async fn main() -> Result {
     loop {
         let operation = async {
             if let Some(run) = s.call(&SupervisorRequest::Poll).await? {
-                pods::reconcile(&s, client.clone(), &run).await?;
+                let c = &run.command;
+                let parent = c
+                    .recovery
+                    .as_ref()
+                    .map_or("", |recovery| recovery.parent_attempt_id.as_str());
+                let span = Workflow {
+                    workspace_id: c.workspace_id.clone(),
+                    project_id: c.project_id.clone(),
+                    conversation_id: c.conversation_id.clone(),
+                    task_id: c.task_id.clone(),
+                    attempt_id: c.attempt_id.clone(),
+                    plan_id: c.plan_id.clone(),
+                    generation: run.generation,
+                    parent_attempt_id: parent.to_owned(),
+                    ..Workflow::default()
+                }
+                .span_with_context(
+                    "task.supervisor.reconcile",
+                    identity_context(&c.attempt_id).as_ref(),
+                    false,
+                );
+                span.record("execution", run.state.as_str());
+                link_recovery(&span, parent);
+                let reconciled = pods::reconcile(&s, client.clone(), &run)
+                    .instrument(span.clone())
+                    .await;
+                finish(&span, reconciled.is_ok());
+                reconciled?;
             }
             Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
         };

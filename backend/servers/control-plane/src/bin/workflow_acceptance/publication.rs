@@ -178,7 +178,10 @@ pub async fn reject_cancel_stdin(client: &mut Client) -> Result {
         .await
         .err()
         .ok_or("consumed publication permit was cancellable")?;
-    if status.code() != Code::FailedPrecondition || attempt(client, &start).await? != before {
+    if status.code() != Code::FailedPrecondition
+        || super::attempt_evidence::attempt(&attempt(client, &start).await?)
+            != super::attempt_evidence::attempt(&before)
+    {
         return Err("rejected cancellation changed retained publication".into());
     }
     println!("consumed-publication-cancel: rejected=pass retained-identity=pass");

@@ -6,6 +6,10 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::post,
 };
+use ayni_orchestrator_observability::{
+    event_context,
+    workflow::{Workflow, finish},
+};
 use ayni_orchestrator_workflow_postgres::{
     WorkflowStore,
     store::provider_calls::{AuthorityRequest, AuthorityResponse},
@@ -13,6 +17,7 @@ use ayni_orchestrator_workflow_postgres::{
 use sha2::{Digest as _, Sha256};
 use std::{io, sync::Arc};
 use subtle::ConstantTimeEq as _;
+use tracing::Instrument as _;
 
 #[derive(Clone)]
 struct Authority {
@@ -62,12 +67,32 @@ async fn authority(
     }
     let request: AuthorityRequest =
         serde_json::from_slice(&body).map_err(|_| StatusCode::BAD_REQUEST)?;
-    state
+    let diagnostic = event_context(&request.command_bytes);
+    let workflow = Workflow::from_event(&request.command_bytes);
+    let operation = match request.action.as_str() {
+        "admit" => "provider.authority.admit",
+        "progress" => "provider.authority.progress",
+        "poll" => "provider.authority.poll",
+        _ => "provider.authority.context",
+    };
+    let span = workflow.span_with_context(operation, diagnostic.as_ref(), false);
+    let started = std::time::Instant::now();
+    let result = state
         .store
         .session_authority(&request)
-        .await
-        .map(axum::Json)
-        .map_err(|_| StatusCode::CONFLICT)
+        .instrument(span.clone())
+        .await;
+    ayni_orchestrator_workflow_postgres::metrics::observe(
+        "workflow_provider_authority_seconds",
+        started.elapsed(),
+    );
+    ayni_orchestrator_workflow_postgres::metrics::increment(if result.is_ok() {
+        "workflow_provider_authority_requests_total"
+    } else {
+        "workflow_provider_authority_failures_total"
+    });
+    finish(&span, result.is_ok());
+    result.map(axum::Json).map_err(|_| StatusCode::CONFLICT)
 }
 
 #[cfg(test)]

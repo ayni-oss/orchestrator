@@ -76,6 +76,7 @@ export AYNI_POSTGRES_FEASIBILITY_URL="$AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL"
 cargo test --locked -p ayni-orchestrator-control-plane --test workflow_api -- --nocapture
 cargo test --locked -p ayni-orchestrator-control-plane --test workflow_api -- --ignored --nocapture
 export AYNI_POSTGRES_FEASIBILITY_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${port}/${DATABASE}"
+cargo test --locked -p ayni-orchestrator-workflow-postgres --test execution_timeline -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test watch_feasibility -- --ignored --nocapture
 
 echo "postgres-image=$IMAGE"

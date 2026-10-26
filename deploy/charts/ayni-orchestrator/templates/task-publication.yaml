@@ -28,6 +28,7 @@ spec:
   template:
     metadata:
       labels:
+        app.kubernetes.io/part-of: ayni-orchestrator
         app.kubernetes.io/name: ayni-task-publisher
       annotations:
         build.ayni/publication-workspace: {{ $publication.workspaceId | quote }}
@@ -46,6 +47,10 @@ spec:
           imagePullPolicy: {{ .Values.images.pullPolicy }}
           command: ["/usr/local/bin/ayni-task-publisher"]
           env:
+            {{- with include "ayni-orchestrator.traceEndpoint" . }}
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: {{ . | quote }}
+            {{- end }}
             - name: ORCHESTRATOR_PUBLICATION_AUTHORITY_URL
               value: http://control-plane.{{ .Release.Namespace }}.svc:{{ .Values.controlPlane.httpPort }}
             - name: ORCHESTRATOR_PUBLICATION_AUTHORITY_TOKEN_PATH
@@ -99,6 +104,17 @@ spec:
   policyTypes: [Ingress, Egress]
   ingress: []
   egress:
+    {{- if .Values.observability.collector.enabled }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ayni-workflow-traces
+      ports:
+        - { protocol: TCP, port: 4318 }
+    {{- end }}
     - to:
         - namespaceSelector:
             matchLabels: { kubernetes.io/metadata.name: kube-system }

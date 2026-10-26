@@ -87,6 +87,7 @@ pub async fn exercise(address: SocketAddr) -> Result {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let scope = json!({"workspaceId":workspace_id,"projectId":project_id,"conversationId":conversations[0]});
     plan_review(&app, &scope).await?;
+    execution_timeline(&app, &scope).await?;
     replay_watch(&app, scope).await
 }
 
@@ -283,5 +284,36 @@ async fn source_upload_remains_outside_the_browser_mutation_boundary() -> Result
             StatusCode::NOT_FOUND
         );
     }
+    Ok(())
+}
+
+async fn execution_timeline(app: &axum::Router, scope: &Value) -> Result {
+    let mut query = scope.clone();
+    query["limit"] = json!(1);
+    let (status, page) = call(app, "ListExecutionTimeline", query.clone()).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        page["entries"].as_array().ok_or("missing timeline")?.len(),
+        1
+    );
+    assert!(page["entries"][0]["activity"]["cursor"].is_null());
+    assert!(page["entries"][0]["activity"]["id"].is_string());
+    query["snapshotRevision"] = page["snapshotRevision"].clone();
+    query["beforeRevision"] = page["nextBeforeRevision"].clone();
+    let (status, older) = call(app, "ListExecutionTimeline", query).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(older["snapshotRevision"], page["snapshotRevision"]);
+    let mut foreign = scope.clone();
+    foreign["projectId"] = json!(Uuid::now_v7().to_string());
+    assert_eq!(
+        call(app, "ListExecutionTimeline", foreign).await?.0,
+        StatusCode::NOT_FOUND
+    );
+    let mut oversized = scope.clone();
+    oversized["limit"] = json!(101);
+    assert_eq!(
+        call(app, "ListExecutionTimeline", oversized).await?.0,
+        StatusCode::BAD_REQUEST
+    );
     Ok(())
 }

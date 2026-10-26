@@ -41,7 +41,7 @@ pub fn request(bytes: &[u8]) -> Result<Vec<u8>, ResponseError> {
         }
     }
     let tools=source["tools"].as_array().ok_or(ResponseError::Configuration)?.iter().map(|tool|json!({"name":tool["name"],"description":tool["description"],"input_schema":tool["parameters"]})).collect::<Vec<_>>();
-    let mut body = json!({"model":source["model"],"system":source["instructions"],"messages":messages,"max_tokens":source["max_output_tokens"],"tools":tools,"stream":false,"thinking":{"type":"disabled"}});
+    let mut body = json!({"model":source["model"],"system":source["instructions"],"messages":messages,"max_tokens":source["max_output_tokens"],"tools":tools,"stream":source["stream"].as_bool().unwrap_or(false),"thinking":{"type":"disabled"}});
     let choice = match source["tool_choice"].as_str() {
         Some("required") => Some("any"),
         Some("auto") => Some("auto"),

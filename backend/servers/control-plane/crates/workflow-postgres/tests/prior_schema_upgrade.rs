@@ -129,7 +129,13 @@ async fn immutable_evidence(client: &Client, prior: usize) -> TestResult<Vec<Str
         "workflow_activities",
         "workflow_updates",
     ] {
-        let row = client.query_one(&format!("SELECT jsonb_agg(to_jsonb(t)-'stream_sequence' ORDER BY to_jsonb(t)::text)::text FROM {table} t"), &[]).await?;
+        // Diagnostic trace context is additive metadata, not frozen authority.
+        let projection = if table == "workflow_command_receipts" {
+            "to_jsonb(t)-'traceparent'"
+        } else {
+            "to_jsonb(t)"
+        };
+        let row = client.query_one(&format!("SELECT jsonb_agg({projection}-'stream_sequence' ORDER BY ({projection})::text)::text FROM {table} t"), &[]).await?;
         evidence.push(row.get(0));
     }
     if prior == 2 {

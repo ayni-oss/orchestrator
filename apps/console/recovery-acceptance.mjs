@@ -1,5 +1,6 @@
 // Canonical deployed recovery review, including accepted response loss and reload.
 import { chromium } from 'playwright';
+import { retainedAttemptEvidence } from './attempt-evidence.mjs';
 import assert from 'node:assert/strict';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 const endpoint = process.env.CONSOLE_URL;
@@ -66,7 +67,7 @@ try {
   assert.match(await secondQuestion.innerText(), /Preserve it and review the failed check/);
   await page.reload(); await page.locator(`[data-recovery-id="${question.id}"]`).waitFor();
   assert.equal(await page.locator(`[data-recovery-id="${question.id}"] form`).count(), 0);
-  assert.deepEqual(await api('GetTaskAttempt', selected), before);
+  assert.deepEqual(retainedAttemptEvidence(await api('GetTaskAttempt', selected)), retainedAttemptEvidence(before));
   assert.equal((await api('ListTaskFeedback', { ...scope, limit: 32 })).feedback[0].state, 'open');
   let confirmation;
   if (process.env.TASK_RECOVERY_CONFIRM === 'true') {
@@ -102,7 +103,7 @@ try {
     const child = (await api('GetTaskAttempt', { ...selected, attemptId: childId })).attempt;
     assert.equal(child.parentAttemptId, attemptId); assert.equal(child.savedInputPatch, before.attempt.patch);
     assert.equal(child.maxSeconds, 180); assert.equal(child.maxTokens, 2048); assert.match(child.patch, /task-recovery-result.txt/);
-    assert.deepEqual(await api('GetTaskAttempt', selected), before);
+    assert.deepEqual(retainedAttemptEvidence(await api('GetTaskAttempt', selected)), retainedAttemptEvidence(before));
     await page.locator('#conversation-feedback-refresh').click();
     const notice = page.locator(`[data-recovery-outcome="${childId}"]`).first();
     await notice.waitFor(); assert.match(await notice.innerText(), /coding: completed/);

@@ -19,6 +19,8 @@ mod confirmation;
 mod quality_evidence;
 #[path = "support/task_recovery.rs"]
 mod recovery;
+#[path = "support/task_timing.rs"]
+mod task_timing;
 #[path = "support/worker_recovery.rs"]
 mod worker_recovery;
 use quality_evidence::failed_quality;
@@ -256,6 +258,7 @@ async fn concurrent_dispatch_fences_cancellation_and_recovers_exact_retained_res
         "quality failure must preserve completed coding"
     );
     verify_quality_receipts(&reopened, second, &uid, &quality).await?;
+    task_timing::prove(&reopened, scope, wrong, second, command.max_seconds).await?;
     assert!(
         reopened
             .task_worker(&second.attempt_id, 1, &uid, &report)

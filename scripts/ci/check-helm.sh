@@ -240,3 +240,69 @@ if helm template invalid "$reusable_chart" --namespace test "${publication_optio
 fi
 
 echo "Helm authenticated workflow and provider isolation checks passed"
+
+# Optional diagnostics stay internal and do not add credential or public access.
+collector_render="$scratch/collector.yaml"
+helm template traced "$reusable_chart" --namespace test \
+  --set observability.collector.enabled=true \
+  --set-string images.controlPlane="$control_image" \
+  --set-string images.scriptedExecutor="$executor_image" > "$collector_render"
+grep -q 'name: workflow-traces' "$collector_render"
+grep -q 'http://workflow-traces.test.svc:4318/v1/traces' "$collector_render"
+grep -q 'otel/opentelemetry-collector-contrib:0.147.0@sha256:e7c92c715f28ff142f3bcaccd4fc5603cf4c71276ef09954a38eb4038500a5a5' "$collector_render"
+grep -q 'emptyDir: { sizeLimit: 32Mi }' "$collector_render"
+grep -q 'name: reader' "$collector_render"
+# Exporter configuration belongs to ConfigMap data; Kubernetes rejects metadata keys.
+python3 - "$collector_render" <<'PYTHON'
+import pathlib,sys
+text=pathlib.Path(sys.argv[1]).read_text()
+config=next(doc for doc in text.split("\n---") if "kind: ConfigMap\n" in doc and "name: control-plane-config\n" in doc)
+metadata,data=config.split("\ndata:\n",1)
+assert "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT" not in metadata
+assert '  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://workflow-traces.test.svc:4318/v1/traces"' in data
+PYTHON
+grep -q 'type: ClusterIP' "$collector_render"
+! grep -q 'type: NodePort\|type: LoadBalancer' "$collector_render"
+! grep -q 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT' "$reusable_render"
+python3 "$repository_root/scripts/ci/test-execution-traces.py"
+
+grep -q 'name: workflow-traces-isolation' "$collector_render"
+grep -q 'app.kubernetes.io/name: ayni-workflow-traces' "$collector_render"
+grep -q 'automountServiceAccountToken: false' "$collector_render"
+grep -q 'max_megabytes: 8' "$collector_render"
+grep -q 'max_backups: 2' "$collector_render"
+
+# The publisher must be able to export its attempt-correlated reconciliation span.
+# Test both real GitHub and fixture isolation profiles: each must allow only the
+# internal collector selector on OTLP, and the default must retain its isolation.
+for publication_fixture in false true; do
+  traced_publication="$scratch/traced-publication-$publication_fixture.yaml"
+  helm template traced "$reusable_chart" --namespace test "${publication_options[@]}" \
+    --set observability.collector.enabled=true \
+    --set publication.fixtureEnabled="$publication_fixture" \
+    --set-string publication.fixtureApiUrl=http://publication-fixture.test.svc:8080 \
+    --set-string publication.fixtureGitUrl=git://publication-fixture.test.svc:9418/fixture/repo.git > "$traced_publication"
+  python3 - "$traced_publication" "$publication_render" <<'PYTHON'
+import pathlib, sys
+
+def document(path, name, kind):
+    return next(doc for doc in pathlib.Path(path).read_text().split("\n---")
+                if f"kind: {kind}\n" in doc and f"  name: {name}\n" in doc)
+
+policy = document(sys.argv[1], "task-publisher-isolation", "NetworkPolicy")
+expected = """    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: test
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ayni-workflow-traces
+      ports:
+        - { protocol: TCP, port: 4318 }"""
+assert expected in policy, "publisher OTLP endpoint has no scoped collector egress"
+assert policy.count("port: 4318") == 1
+assert "port: 4318" not in document(sys.argv[2], "task-publisher-isolation", "NetworkPolicy")
+deployment = document(sys.argv[1], "task-publisher", "Deployment")
+assert 'value: "http://workflow-traces.test.svc:4318/v1/traces"' in deployment
+PYTHON
+done

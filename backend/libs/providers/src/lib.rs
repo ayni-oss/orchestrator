@@ -5,6 +5,7 @@ mod anthropic;
 pub mod coding;
 mod plan_proposals;
 pub mod responses;
+mod streaming;
 
 /// Construct the only enabled completion provider. Credentials never appear in errors.
 ///

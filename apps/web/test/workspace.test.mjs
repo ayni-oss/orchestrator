@@ -179,3 +179,151 @@ test('gateway body-limit rejection is definitive; unreadable responses remain am
   fetch.mock.mockImplementation(async () => new Response('Upstream disconnected', { status: 502 }));
   await assert.rejects(gateway('SendMessage', scope), error => !isDefinitive(error) && /original command/.test(error.message));
 });
+
+test('timeline pages keep a frozen boundary and deduplicate replayed entries', async () => {
+  const entry = revision => ({ activity: { id: `activity-${revision}`, conversationRevision: revision, stage: 'ACTIVITY_STAGE_EXECUTION' } });
+  const { request, calls } = fixture({ ListExecutionTimeline: body => body.beforeRevision === '0'
+    ? { entries: [entry('9007199254740993')], snapshotRevision: '9007199254740993', nextBeforeRevision: '9007199254740993', retainedFromRevision: '1' }
+    : { entries: [entry('9007199254740993'), entry('1')], snapshotRevision: body.snapshotRevision, retainedFromRevision: '1' } });
+  const client = clientFor(request); await client.start();
+  Events.sources.at(-1).frame({ snapshot: snapshot('9007199254740993') }); await tick();
+  await client.timeline(true);
+  assert.equal(client.state.timeline.entries.length, 2);
+  assert.equal(client.state.timeline.nextBeforeRevision, '0');
+  const pages = calls.filter(call => call.method === 'ListExecutionTimeline');
+  assert.equal(pages[1].body.snapshotRevision, '9007199254740993');
+  assert.equal(pages[1].body.beforeRevision, '9007199254740993');
+  client.dispose();
+});
+
+test('timeline refresh fences older pages and scope changes fence late failures', async () => {
+  let finishPage, failPage, count = 0;
+  const { request } = fixture({
+    ListConversations: () => ({ conversations: [{ id: 'conversation-1' }, { id: 'conversation-2' }] }),
+    ListExecutionTimeline: () => {
+      count++;
+      if (count === 2) return new Promise(resolve => { finishPage = resolve; });
+      if (count === 4) return new Promise((_, reject) => { failPage = reject; });
+      return { entries: [{ activity: { id: `activity-${count}` } }], snapshotRevision: String(count), nextBeforeRevision: '1' };
+    },
+  });
+  const client = clientFor(request); await client.start();
+  Events.sources.at(-1).frame({ snapshot: snapshot() }); await tick();
+  const older = client.timeline(true);
+  await client.timeline();
+  finishPage({ entries: [{ activity: { id: 'stale-page' } }], snapshotRevision: '1' }); await older;
+  assert.equal(client.state.timeline.entries[0].activity.id, 'activity-3');
+  const stale = client.timeline();
+  await client.select({ ...scope, conversationId: 'conversation-2' });
+  failPage(new Error('Private error from previous scope')); await stale;
+  assert.deepEqual(client.state.timeline.entries, []);
+  assert.equal(client.state.timeline.error, '');
+  client.dispose();
+});
+
+test('a failed timeline read preserves accepted history and can be retried', async () => {
+  let fail = false;
+  const { request } = fixture({ ListExecutionTimeline: () => {
+    if (fail) throw new Error('Unavailable');
+    return { entries: [{ activity: { id: 'retained' } }], snapshotRevision: '1' };
+  } });
+  const client = clientFor(request); await client.start();
+  Events.sources.at(-1).frame({ snapshot: snapshot() }); await tick();
+  fail = true; await client.timeline();
+  assert.equal(client.state.timeline.entries[0].activity.id, 'retained');
+  assert.equal(client.state.timeline.error, 'Unavailable');
+  fail = false; await client.timeline();
+  assert.equal(client.state.timeline.error, '');
+  client.dispose();
+});
+
+test('task inspection binds complete scope and fences late attempt responses', async () => {
+  let finishAttempt;
+  const task = id => ({ ...scope, id, specification: { objective: id } });
+  const { request } = fixture({
+    ListTasks: () => ({ tasks: [task('task-one'), task('task-two')] }),
+    GetTask: body => ({ task: task(body.taskId) }),
+    GetTaskExecution: body => ({ preparation: { taskId: body.taskId, attemptId: `attempt-${body.taskId}` } }),
+    GetTaskAttempt: body => body.taskId === 'task-one' ? new Promise(resolve => { finishAttempt = resolve; }) : { attempt: { taskId: body.taskId, attemptId: body.attemptId, state: 'completed', quality: { state: 'failed' } } },
+    ListTaskRecovery: () => ({ records: [] }),
+  });
+  const client = clientFor(request); await client.start();
+  Events.sources.at(-1).frame({ snapshot: snapshot() }); await tick();
+  const old = client.inspectTask('task-one'); await tick();
+  await client.inspectTask('task-two');
+  finishAttempt({ attempt: { taskId: 'task-one', attemptId: 'attempt-task-one', state: 'claimed' } }); await old;
+  assert.equal(client.state.tasks.detail.task.id, 'task-two');
+  assert.equal(client.state.tasks.detail.attempt.quality.state, 'failed');
+  client.dispose();
+});
+
+test('task scope mismatch is rejected before rendering and mutations retain exact attempt identity', async () => {
+  let fail = true;
+  const { request, calls } = fixture({
+    GetTask: () => ({ task: { ...scope, projectId: 'foreign', id: 'task-one' } }),
+    GetTaskExecution: () => ({}),
+    CancelTaskExecution: () => { if (fail) throw new Error('Response lost'); return { receipt: { commandId: 'cancelled' } }; },
+  });
+  const client = clientFor(request); await client.start();
+  await client.inspectTask('task-one');
+  assert.equal(client.state.tasks.detail, null);
+  assert.match(client.state.tasks.detailError, /scope mismatch/);
+  await client.submit('CancelTaskExecution', { ...scope, taskId: 'task-one', attemptId: 'attempt-one' });
+  const frozen = structuredClone(client.state.pending);
+  fail = false; await client.retry();
+  const cancellations = calls.filter(call => call.method === 'CancelTaskExecution');
+  assert.deepEqual(cancellations[0], cancellations[1]);
+  assert.equal(frozen.body.attemptId, 'attempt-one');
+  client.dispose();
+});
+
+test('terminal snapshot and paused observation fence in-flight provisional output', async () => {
+  let finish;
+  const { request } = fixture({ ListExecutionProgress: () => new Promise(resolve => { finish = resolve; }) });
+  const client = clientFor(request); await client.start();
+  const source = Events.sources.at(-1);
+  source.frame({ snapshot: { ...snapshot(), nonterminalTurns: [{ id: 'turn-one' }] } }); await tick();
+  source.frame({ snapshot: { ...snapshot('2'), nonterminalTurns: [], recentTerminalTurns: [{ id: 'turn-one' }] } }); await tick();
+  finish({ progress: [{ turnId: 'turn-one', sessionId: 'session', generation: '1', sequence: '1', provisionalText: 'Late output' }] }); await tick();
+  assert.deepEqual(client.state.progress, []);
+  source.frame({ snapshot: { ...snapshot('3'), nonterminalTurns: [{ id: 'turn-two' }] } }); await tick();
+  client.pause();
+  finish({ progress: [{ turnId: 'turn-two', sessionId: 'session', generation: '1', sequence: '1', provisionalText: 'Output after pause' }] }); await tick();
+  assert.deepEqual(client.state.progress, []);
+  client.dispose();
+});
+
+test('scope reset immediately clears loaded task evidence and provisional text even if the new scope is unavailable', async () => {
+  let unavailable = false;
+  const { request } = fixture({
+    ListConversations: () => {
+      if (unavailable) throw new Error('New conversation unavailable');
+      return { conversations: [{ id: 'conversation-1' }, { id: 'conversation-2' }] };
+    },
+    ListTasks: () => ({ tasks: [{ ...scope, id: 'task-one' }] }),
+    GetTask: () => ({ task: { ...scope, id: 'task-one' } }),
+    GetTaskExecution: () => ({ preparation: { taskId: 'task-one', attemptId: 'attempt-one' } }),
+    GetTaskAttempt: () => ({ attempt: { taskId: 'task-one', attemptId: 'attempt-one', state: 'completed', patch: 'Private patch from A' } }),
+    ListTaskRecovery: () => ({ records: [{ id: 'private-recovery', summary: 'Private recovery from A' }] }),
+    ListExecutionProgress: () => ({ progress: [{ turnId: 'turn-one', sessionId: 'session-one', generation: '1', sequence: '1', provisionalText: 'Private partial from A' }] }),
+  });
+  const client = clientFor(request); await client.start();
+  const old = Events.sources.at(-1);
+  old.frame({ snapshot: { ...snapshot(), nonterminalTurns: [{ id: 'turn-one' }] } }); await tick();
+  await client.inspectTask('task-one'); await tick();
+  assert.equal(client.state.tasks.detail.attempt.patch, 'Private patch from A');
+  assert.equal(client.state.progress[0].provisionalText, 'Private partial from A');
+  unavailable = true;
+  const selection = client.select({ ...scope, conversationId: 'conversation-2' });
+  assert.equal(client.state.tasks.selectedId, '');
+  assert.equal(client.state.tasks.detail, null);
+  assert.deepEqual(client.state.tasks.recovery, []);
+  assert.deepEqual(client.state.progress, []);
+  await selection;
+  old.frame({ snapshot: { ...snapshot('99'), nonterminalTurns: [{ id: 'turn-one' }] } }); await tick();
+  assert.equal(client.state.connection, 'Unavailable');
+  assert.equal(client.state.tasks.detail, null);
+  assert.deepEqual(client.state.progress, []);
+  assert.equal(client.state.progressError, '');
+  client.dispose();
+});

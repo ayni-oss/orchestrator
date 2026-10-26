@@ -8,10 +8,15 @@ use axum::{
 use ayni_orchestrator_events::task_execution::{
     SupervisorRequest, TaskRun, WorkerRequest, WorkerResponse, worker_token,
 };
+use ayni_orchestrator_observability::{
+    TraceContext,
+    workflow::{Workflow, finish, identity_context},
+};
 use ayni_orchestrator_workflow_postgres::WorkflowStore;
 use sha2::{Digest as _, Sha256};
 use std::{io, sync::Arc};
 use subtle::ConstantTimeEq as _;
+use tracing::Instrument as _;
 #[derive(Clone)]
 struct Authority {
     store: WorkflowStore,
@@ -85,11 +90,49 @@ async fn worker(
         .get("x-task-pod-uid")
         .and_then(|v| v.to_str().ok())
         .ok_or(StatusCode::UNAUTHORIZED)?;
-    s.store
+    let stage = match &request {
+        WorkerRequest::QualityReport { .. } => "task.quality.accept",
+        WorkerRequest::Report { .. } => "task.coding.accept",
+        WorkerRequest::Sending { .. } => "task.provider.admit",
+        WorkerRequest::Input => "task.source.fetch",
+    };
+    let diagnostic = headers
+        .get("traceparent")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|parent| TraceContext::parse(parent, None))
+        .or_else(|| identity_context(&attempt));
+    let span = Workflow {
+        attempt_id: attempt.clone(),
+        generation,
+        ..Workflow::default()
+    }
+    .span_with_context(stage, diagnostic.as_ref(), false);
+    let started = std::time::Instant::now();
+    let result = s
+        .store
         .task_worker(&attempt, generation, uid, &request)
-        .await
-        .map(Json)
-        .map_err(|_| StatusCode::CONFLICT)
+        .instrument(span.clone())
+        .await;
+    ayni_orchestrator_workflow_postgres::metrics::observe(
+        "workflow_task_authority_seconds",
+        started.elapsed(),
+    );
+    ayni_orchestrator_workflow_postgres::metrics::increment(if result.is_ok() {
+        "workflow_task_authority_requests_total"
+    } else {
+        "workflow_task_authority_failures_total"
+    });
+    if let Ok(response) = &result
+        && let Some(command) = &response.command
+    {
+        span.record("workspace_id", command.workspace_id.as_str());
+        span.record("project_id", command.project_id.as_str());
+        span.record("conversation_id", command.conversation_id.as_str());
+        span.record("task_id", command.task_id.as_str());
+        span.record("plan_id", command.plan_id.as_str());
+    }
+    finish(&span, result.is_ok());
+    result.map(Json).map_err(|_| StatusCode::CONFLICT)
 }
 #[cfg(test)]
 mod tests {

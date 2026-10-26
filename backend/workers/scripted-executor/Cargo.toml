@@ -8,6 +8,8 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+ayni-orchestrator-observability = { path = "../../libs/observability" }
+tracing.workspace = true
 base64.workspace = true
 axum.workspace = true
 kube.workspace = true

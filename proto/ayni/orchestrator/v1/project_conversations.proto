@@ -4,6 +4,7 @@ package ayni.orchestrator.v1;
 
 import "ayni/orchestrator/v1/plans.proto";
 import "ayni/orchestrator/v1/workflow.proto";
+import "google/protobuf/timestamp.proto";
 
 // Scoped conversation execution and operator plan review on the trusted listener.
 service ProjectConversationService {
@@ -35,6 +36,8 @@ service ProjectConversationService {
   rpc CreateConversation(CreateConversationRequest) returns (CreateConversationResponse);
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
   rpc GetConversationSnapshot(GetConversationSnapshotRequest) returns (GetConversationSnapshotResponse);
+  rpc ListExecutionProgress(ListExecutionProgressRequest) returns (ListExecutionProgressResponse);
+  rpc ListExecutionTimeline(ListExecutionTimelineRequest) returns (ListExecutionTimelineResponse);
   rpc ListConversationHistory(ListConversationHistoryRequest) returns (ListConversationHistoryResponse);
   rpc WatchConversation(WatchConversationRequest) returns (stream WatchConversationResponse);
   rpc ListConversations(ListConversationsRequest) returns (ListConversationsResponse);
@@ -249,4 +252,56 @@ message GetOutcomeAssessmentStatusResponse {
   string configuration_revision_id = 2;
   uint32 max_assessments = 3;
   uint32 admitted_assessments = 4;
+}
+
+// Newest-first accepted transitions, retained independently of watch deltas.
+// Zero snapshot_revision selects the current boundary. Keep the returned boundary
+// on subsequent pages; before_revision is exclusive. Limit defaults to 50, max 100.
+message ListExecutionTimelineRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  uint64 snapshot_revision = 4;
+  uint64 before_revision = 5;
+  uint32 limit = 6;
+}
+message ExecutionTimelineEntry {
+  // cursor is empty: historical revisions cannot resume a live watch.
+  Activity activity = 1;
+  string kind = 2;
+  repeated string affected_resource_ids = 3;
+  string trace_id = 4;
+}
+message ListExecutionTimelineResponse {
+  repeated ExecutionTimelineEntry entries = 1;
+  uint64 snapshot_revision = 2;
+  // Zero means there are no older retained entries in this snapshot.
+  uint64 next_before_revision = 3;
+  // Earliest available revision, or zero for an empty timeline. Installation
+  // preserves existing watch facts; history already pruned remains unavailable.
+  uint64 retained_from_revision = 4;
+}
+
+// Full bounded preview snapshots; no fragment is an accepted transcript message.
+message ListExecutionProgressRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+}
+message LiveExecutionProgress {
+  string turn_id = 1;
+  string call_id = 2;
+  string session_id = 3;
+  uint64 generation = 4;
+  uint64 sequence = 5;
+  uint32 round = 6;
+  string stage = 7;
+  string tool_name = 8;
+  string provisional_text = 9;
+  google.protobuf.Timestamp observed_at = 10;
+  google.protobuf.Timestamp stage_observed_at = 11;
+  string tool_invocation_id = 12;
+}
+message ListExecutionProgressResponse {
+  repeated LiveExecutionProgress progress = 1;
 }

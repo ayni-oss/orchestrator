@@ -12,6 +12,9 @@ mod network;
 #[path = "../task_worker/quality.rs"]
 mod quality;
 use ayni_orchestrator_events::task_execution::{TaskCommand, WorkerRequest, WorkerResponse};
+use ayni_orchestrator_observability::workflow::{
+    Workflow, finish, identity_context, link_recovery,
+};
 use ayni_orchestrator_scripted_executor::task_files;
 use std::{
     env, fs,
@@ -20,6 +23,7 @@ use std::{
     process::ExitCode,
     time::Duration,
 };
+use tracing::Instrument as _;
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 pub struct Worker {
     http: reqwest::Client,
@@ -31,15 +35,16 @@ pub struct Worker {
 }
 impl Worker {
     async fn call(&self, request: &WorkerRequest) -> Result<WorkerResponse> {
-        let mut response = self
+        let mut request_builder = self
             .http
             .post(&self.url)
             .bearer_auth(&self.token)
             .header("x-task-pod-uid", &self.uid)
-            .json(request)
-            .send()
-            .await?
-            .error_for_status()?;
+            .json(request);
+        if let Some(context) = ayni_orchestrator_observability::current_context() {
+            request_builder = request_builder.header("traceparent", context.traceparent);
+        }
+        let mut response = request_builder.send().await?.error_for_status()?;
         let mut bytes = Vec::new();
         while let Some(chunk) = response.chunk().await? {
             if bytes.len() + chunk.len() > 40 * 1024 * 1024 {
@@ -72,7 +77,10 @@ fn main() -> ExitCode {
 }
 #[tokio::main]
 async fn asynchronous() -> Result {
-    run().await
+    let telemetry = ayni_orchestrator_observability::init("task-worker");
+    let result = run().await;
+    telemetry.shutdown();
+    result
 }
 
 fn required(name: &str) -> Result<String> {
@@ -103,17 +111,51 @@ async fn run() -> Result {
     }
     let command: TaskCommand =
         serde_json::from_slice(&fs::read(worker.root.join("command.json"))?)?;
+    let c = &command;
+    let parent = c
+        .recovery
+        .as_ref()
+        .map_or("", |recovery| recovery.parent_attempt_id.as_str());
+    let stage = match env::args().nth(1).as_deref() {
+        Some("quality-freeze") => "task.quality.freeze",
+        Some("quality-collect") => "task.quality.collect",
+        _ => "task.coding.execute",
+    };
+    let span = Workflow {
+        workspace_id: c.workspace_id.clone(),
+        project_id: c.project_id.clone(),
+        conversation_id: c.conversation_id.clone(),
+        task_id: c.task_id.clone(),
+        attempt_id: c.attempt_id.clone(),
+        plan_id: c.plan_id.clone(),
+        generation: c.generation,
+        parent_attempt_id: parent.to_owned(),
+        ..Workflow::default()
+    }
+    .span_with_context(stage, identity_context(&c.attempt_id).as_ref(), false);
+    link_recovery(&span, parent);
+    let executed = execute_command(&worker, &command)
+        .instrument(span.clone())
+        .await;
+    finish(&span, executed.is_ok());
+    executed
+}
+async fn execute_command(worker: &Worker, command: &TaskCommand) -> Result {
     let stage = env::args().nth(1);
     match stage.as_deref() {
-        Some("quality-freeze") => return quality::freeze(&worker, &command),
-        Some("quality-collect") => return quality::collect(&worker).await,
+        Some("quality-freeze") => return quality::freeze(worker, command),
+        Some("quality-collect") => return quality::collect(worker).await,
         _ => {}
     }
-    let mut ledger = ledger::Ledger::open(&worker.root, &command)?;
+    let mut ledger = ledger::Ledger::open(&worker.root, command)?;
     let outcome = if let Some(result) = ledger.outcome()? {
+        ayni_orchestrator_observability::workflow::record_replay(
+            &tracing::Span::current(),
+            identity_context(&command.attempt_id).as_ref(),
+        );
         result
     } else {
-        let result = execute::execute(&worker, &command, &mut ledger).await;
+        let result = execute::execute(worker, command, &mut ledger).await;
         ledger.finish(&result)?;
         result
     };
@@ -151,8 +193,26 @@ async fn initialize(worker: &Worker) -> Result {
             return Err("task input identity mismatch".into());
         }
     } else {
-        if task_files::checkout_for_coding(&worker.source, &response.source_pack, &command).is_err()
-        {
+        let span = Workflow {
+            workspace_id: command.workspace_id.clone(),
+            project_id: command.project_id.clone(),
+            conversation_id: command.conversation_id.clone(),
+            task_id: command.task_id.clone(),
+            attempt_id: command.attempt_id.clone(),
+            plan_id: command.plan_id.clone(),
+            generation: command.generation,
+            ..Workflow::default()
+        }
+        .span_with_context(
+            "task.source.prepare",
+            identity_context(&command.attempt_id).as_ref(),
+            false,
+        );
+        let prepared = span.in_scope(|| {
+            task_files::checkout_for_coding(&worker.source, &response.source_pack, &command)
+        });
+        finish(&span, prepared.is_ok());
+        if prepared.is_err() {
             fs::create_dir_all(&worker.source)?;
             let ledger = ledger::Ledger::open(&worker.root, &command)?;
             ledger.finish(&ayni_orchestrator_events::task_execution::TaskOutcome {

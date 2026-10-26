@@ -169,7 +169,7 @@ pub fn prepare_items_with_tools(
         "model":model,"instructions":instructions,"input":input,
         "tools":tools,
         "max_output_tokens":output,"store":false,"background":false,
-        "stream":false,"truncation":"disabled"
+        "stream":true,"truncation":"disabled"
     }))
     .map_err(|_| ResponseError::Configuration)?;
     Ok(PreparedRequest {
@@ -248,6 +248,74 @@ impl ResponsesClient {
         })
     }
 
+    /// Send one streaming exchange. Preview is bounded public text, never accepted evidence.
+    /// # Errors
+    /// Partial or malformed streams preserve uncertainty and are never retried.
+    pub async fn send_streaming(
+        &self,
+        call_id: &str,
+        bytes: &[u8],
+        mut on_text: impl FnMut(&str) -> Result<(), ResponseError>,
+    ) -> Result<ResponseEvidence, ResponseError> {
+        let wire = if self.provider == "anthropic" {
+            crate::anthropic::request(bytes)?
+        } else {
+            bytes.to_vec()
+        };
+        let mut request = self
+            .http
+            .post(self.endpoint.clone())
+            .header("content-type", "application/json")
+            .header("X-Client-Request-Id", call_id);
+        if self.provider == "anthropic" {
+            request = request
+                .header("anthropic-version", "2023-06-01")
+                .header("x-api-key", &self.api_key);
+        } else {
+            request = request.bearer_auth(&self.api_key);
+        }
+        let mut response = request
+            .body(wire)
+            .send()
+            .await
+            .map_err(|_| ResponseError::Uncertain)?;
+        if !response.status().is_success() {
+            return Err(ResponseError::Uncertain);
+        }
+        let streaming = response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|v| {
+                v.split(';')
+                    .next()
+                    .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("text/event-stream"))
+            });
+        let mut decoder = crate::streaming::Decoder::new(&self.provider);
+        let mut body = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| ResponseError::Uncertain)?
+        {
+            if streaming {
+                decoder.push(&chunk, &mut on_text)?;
+            } else {
+                if body.len() + chunk.len() > 256 * 1024 {
+                    return Err(ResponseError::Uncertain);
+                }
+                body.extend_from_slice(&chunk);
+            }
+        }
+        if streaming {
+            decoder.finish()
+        } else if self.provider == "anthropic" {
+            crate::anthropic::response(&body)
+        } else {
+            parse_response(&body)
+        }
+    }
+
     /// Send exactly once. Every failure after sending intent is conservatively uncertain.
     ///
     /// # Errors
@@ -301,7 +369,7 @@ impl ResponsesClient {
     }
 }
 
-fn parse_response(bytes: &[u8]) -> Result<ResponseEvidence, ResponseError> {
+pub(crate) fn parse_response(bytes: &[u8]) -> Result<ResponseEvidence, ResponseError> {
     let body: Value = serde_json::from_slice(bytes).map_err(|_| ResponseError::Uncertain)?;
     let text = |name: &str| {
         body.get(name)

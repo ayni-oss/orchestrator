@@ -1,3 +1,6 @@
+#[path = "provider_calls/progress.rs"]
+mod progress;
+
 use ayni_orchestrator_events::{
     EventIdentity,
     v1::{

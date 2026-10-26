@@ -46,7 +46,7 @@ impl TraceContext {
             tracestate: normalized.remove("tracestate").filter(|s| !s.is_empty()),
         })
     }
-    fn context(&self) -> Context {
+    pub(crate) fn context(&self) -> Context {
         let mut carrier = HashMap::from([("traceparent".to_owned(), self.traceparent.clone())]);
         if let Some(state) = &self.tracestate {
             carrier.insert("tracestate".into(), state.clone());
@@ -142,7 +142,7 @@ impl TelemetryGuard {
     pub(super) fn tracer(&self) -> Option<opentelemetry_sdk::trace::SdkTracer> {
         self.0
             .as_ref()
-            .map(|provider| provider.tracer("ayni-orchestrator-verification"))
+            .map(|provider| provider.tracer("ayni-orchestrator"))
     }
     /// Call after operation spans close. Export failures never change the exit code.
     pub fn shutdown(self) {
@@ -172,7 +172,7 @@ pub fn provider(service: &'static str) -> TelemetryGuard {
         Some(
             SdkTracerProvider::builder()
                 .with_span_processor(processor)
-                .with_max_attributes_per_span(32)
+                .with_max_attributes_per_span(48)
                 .with_max_events_per_span(8)
                 .with_max_links_per_span(8)
                 .with_resource(

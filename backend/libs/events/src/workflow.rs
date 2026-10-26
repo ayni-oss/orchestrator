@@ -470,7 +470,9 @@ fn decode_workflow_metadata(event: &Event) -> Result<WorkflowEventMetadata, Cont
     })
 }
 
-fn traceparent(value: &str) -> bool {
+/// Validate the bounded W3C context used by retained workflow envelopes.
+#[must_use]
+pub fn traceparent(value: &str) -> bool {
     let mut parts = value.split('-');
     let version = parts.next();
     let trace_id = parts.next();

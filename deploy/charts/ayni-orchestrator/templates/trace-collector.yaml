@@ -1,0 +1,143 @@
+{{- if and .Values.enabled .Values.observability.collector.enabled }}
+{{- if not (regexMatch "@sha256:[a-f0-9]{64}$" .Values.observability.collector.image) }}
+{{- fail "trace collector image must be digest pinned" }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workflow-traces
+  labels:
+    {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
+data:
+  collector.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:4318
+            max_request_body_size: 4194304
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 96
+        spike_limit_mib: 24
+      batch:
+        timeout: 1s
+        send_batch_size: 128
+        send_batch_max_size: 256
+    exporters:
+      file:
+        path: /data/traces.jsonl
+        format: json
+        rotation:
+          max_megabytes: 8
+          max_backups: 2
+          max_days: 1
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+    service:
+      extensions: [health_check]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [file]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workflow-traces
+  labels:
+    {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: ayni-workflow-traces }
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ayni-workflow-traces
+        app.kubernetes.io/part-of: ayni-orchestrator
+      annotations:
+        checksum/config: {{ toJson .Values.observability | sha256sum | quote }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: collector
+          image: {{ .Values.observability.collector.image | quote }}
+          imagePullPolicy: IfNotPresent
+          args: ["--config=/etc/otel/collector.yaml"]
+          ports:
+            - { name: otlp-http, containerPort: 4318 }
+            - { name: health, containerPort: 13133 }
+          readinessProbe:
+            httpGet: { path: /, port: health }
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits: { cpu: 250m, memory: 160Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: config, mountPath: /etc/otel, readOnly: true }
+            - { name: traces, mountPath: /data }
+        # Administrative extraction uses this read-only mount. The collector is
+        # a scratch image and intentionally provides no shell or file utility.
+        - name: reader
+          image: {{ .Values.images.controlPlane | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: ["/bin/sh", "-c", "sleep infinity"]
+          resources:
+            requests: { cpu: 1m, memory: 4Mi }
+            limits: { cpu: 25m, memory: 16Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: traces, mountPath: /data, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: workflow-traces }
+        - name: traces
+          emptyDir: { sizeLimit: 32Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: workflow-traces
+spec:
+  type: ClusterIP
+  selector: { app.kubernetes.io/name: ayni-workflow-traces }
+  ports:
+    - { name: otlp-http, port: 4318, targetPort: otlp-http }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: workflow-traces-isolation
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: ayni-workflow-traces }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ .Release.Namespace }} }
+          podSelector:
+            matchLabels: { app.kubernetes.io/part-of: ayni-orchestrator }
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ .Release.Namespace }}-sessions }
+          podSelector:
+            matchLabels: { app.kubernetes.io/part-of: ayni-orchestrator }
+      ports: [{ protocol: TCP, port: 4318 }]
+  egress: []
+{{- end }}

@@ -27,6 +27,8 @@ dev_build_chart_dependencies
 dev_check_capacity 8
 task_fixture="${AYNI_ORCHESTRATOR_TASK_FIXTURE:-false}"
 [[ "$task_fixture" == true || "$task_fixture" == false ]] || { echo 'AYNI_ORCHESTRATOR_TASK_FIXTURE must be true or false' >&2; exit 2; }
+observability="${AYNI_ORCHESTRATOR_OBSERVABILITY:-false}"
+[[ "$observability" == true || "$observability" == false ]] || { echo 'AYNI_ORCHESTRATOR_OBSERVABILITY must be true or false' >&2; exit 2; }
 control_plane_image_ref="$(dev_build_image control-plane)"
 executor_image_ref="$(dev_build_image scripted-executor)"
 dev_load_image "$control_plane_image_ref"
@@ -37,6 +39,7 @@ helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-values \
   --kube-context "$context" \
   --namespace "$namespace" \
   --set "ayni-orchestrator.taskExecution.fixtureEnabled=$task_fixture" \
+  --set "ayni-orchestrator.observability.collector.enabled=$observability" \
   --set-string "ayni-orchestrator.images.controlPlane=$control_plane_image_ref" \
   --set-string "ayni-orchestrator.images.scriptedExecutor=$executor_image_ref" \
   --wait \

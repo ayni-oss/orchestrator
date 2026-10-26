@@ -331,6 +331,15 @@ pub(super) async fn send(
     if let Some(result) = replay {
         return Ok(axum::Json(result));
     }
+    let _ = super::progress::record(
+        &state,
+        &input.command_id,
+        &command_digest,
+        ayni_orchestrator_events::progress::ExecutionProgress {
+            stage: "preparation".into(),
+            ..Default::default()
+        },
+    );
     let (evidence, response_content, failure_reason, plan_proposal) = if send_allowed {
         let mut authorized_input = input.clone();
         authorized_input.allowed = allow_new_requests;

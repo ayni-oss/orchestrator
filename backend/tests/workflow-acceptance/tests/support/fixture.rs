@@ -115,9 +115,10 @@ impl Runtime {
     async fn outbox(&self, id: &str) -> Result<OutboxRecord> {
         let (client, driver) =
             ayni_orchestrator_workflow_postgres::connect(&self.database_url).await?;
-        let row = client.query_one("SELECT id,conversation_id,turn_id,subject,event_bytes FROM workflow_outbox WHERE id=$1", &[&id]).await?;
+        let row = client.query_one("SELECT id,conversation_id,turn_id,subject,event_bytes,attempt_count FROM workflow_outbox WHERE id=$1", &[&id]).await?;
         driver.abort();
         Ok(OutboxRecord {
+            publication_attempts: u64::try_from(row.get::<_, i64>(5))?,
             id: row.get(0),
             conversation_id: row.get(1),
             turn_id: row.get(2),

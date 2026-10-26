@@ -12,11 +12,15 @@ use ayni_orchestrator_events::{
         transport::{ConsumerRole, rejected_delivery},
     },
 };
+use ayni_orchestrator_observability::{
+    event_context,
+    workflow::{Workflow, finish},
+};
 use ayni_orchestrator_workflow_postgres::{WorkflowStore, metrics};
 use futures_util::StreamExt;
 use std::{error::Error as _, io, time::Duration};
 use tokio::{sync::watch, time};
-use tracing::{info, warn};
+use tracing::{Instrument as _, info, warn};
 
 const OUTBOX_BATCH: u32 = 64;
 const RETRY_DELAY: Duration = Duration::from_millis(250);
@@ -152,29 +156,42 @@ async fn run_report_consumer(
                 .map_err(|_| io::Error::other("invalid executor report"))?;
             let kind = ConversationTurnReportKind::try_from(report.kind)
                 .map_err(|_| io::Error::other("invalid executor report"))?;
-            match kind {
-                ConversationTurnReportKind::Started => {
-                    store
-                        .accept_claim(&message.payload)
-                        .await
-                        .map_err(io::Error::other)?;
-                }
-                ConversationTurnReportKind::Completed | ConversationTurnReportKind::Failed => {
-                    if !store
-                        .retain_ordered_report(&message.payload)
-                        .await
-                        .map_err(io::Error::other)?
-                    {
+            let diagnostic = event_context(&message.payload);
+            let span = Workflow::from_event(&message.payload).span_with_context(
+                "broker.report.accept",
+                diagnostic.as_ref(),
+                message.info().is_ok_and(|info| info.delivered > 1),
+            );
+            let accepted = async {
+                match kind {
+                    ConversationTurnReportKind::Started => {
                         store
-                            .accept_terminal_report(&message.payload)
+                            .accept_claim(&message.payload)
                             .await
                             .map_err(io::Error::other)?;
                     }
+                    ConversationTurnReportKind::Completed | ConversationTurnReportKind::Failed => {
+                        if !store
+                            .retain_ordered_report(&message.payload)
+                            .await
+                            .map_err(io::Error::other)?
+                        {
+                            store
+                                .accept_terminal_report(&message.payload)
+                                .await
+                                .map_err(io::Error::other)?;
+                        }
+                    }
+                    ConversationTurnReportKind::Unspecified => {
+                        return Err(io::Error::other("invalid executor report"));
+                    }
                 }
-                ConversationTurnReportKind::Unspecified => {
-                    return Err(io::Error::other("invalid executor report"));
-                }
+                Ok::<(), io::Error>(())
             }
+            .instrument(span.clone())
+            .await;
+            finish(&span, accepted.is_ok());
+            accepted?;
             message
                 .double_ack()
                 .await
@@ -209,7 +226,17 @@ async fn publish_pending(
         metrics::increment("workflow_publish_attempts_total");
         let started = std::time::Instant::now();
         let publication_started = std::time::SystemTime::now();
-        let acknowledgement = match publish_exact(context, &record, headers).await {
+        let diagnostic = event_context(&record.event_bytes);
+        let span = Workflow::from_event(&record.event_bytes).span_with_context(
+            "outbox.publish",
+            diagnostic.as_ref(),
+            record.publication_attempts > 0,
+        );
+        let publication = publish_exact(context, &record, headers)
+            .instrument(span.clone())
+            .await;
+        finish(&span, publication.is_ok());
+        let acknowledgement = match publication {
             Ok(acknowledgement) => acknowledgement,
             Err(error) => {
                 metrics::increment("workflow_publish_failures_total");

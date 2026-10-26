@@ -264,6 +264,12 @@ async fn apply_accepted_outcome(
     let cancelled =
         super::provider_calls::cancellation_requested(transaction, &binding.turn_id).await?;
     if uncertain {
+        transaction
+            .execute(
+                "DELETE FROM workflow_execution_progress WHERE turn_id=$1",
+                &[&binding.turn_id],
+            )
+            .await?;
         transaction.execute("UPDATE workflow_turns SET failure_reason='provider_uncertain',updated_at=clock_timestamp() WHERE id=$1", &[&binding.turn_id]).await?;
         append_activity(
             transaction,
@@ -718,6 +724,12 @@ async fn apply_terminal(
     if changed != 1 {
         return Err(StoreError::CorruptState);
     }
+    transaction
+        .execute(
+            "DELETE FROM workflow_execution_progress WHERE turn_id=$1",
+            &[&binding.turn_id],
+        )
+        .await?;
     append_activity(transaction, binding, "execution", presentation, "", failure).await
 }
 
@@ -728,6 +740,27 @@ pub(super) async fn append_activity(
     presentation: &str,
     waiting_on: &str,
     safe_reason: &str,
+) -> Result<(), StoreError> {
+    append_activity_detail(
+        transaction,
+        binding,
+        stage,
+        presentation,
+        waiting_on,
+        safe_reason,
+        "",
+    )
+    .await
+}
+
+pub(super) async fn append_activity_detail(
+    transaction: &Transaction<'_>,
+    binding: &ConversationTurnBinding,
+    stage: &str,
+    presentation: &str,
+    waiting_on: &str,
+    safe_reason: &str,
+    safe_detail: &str,
 ) -> Result<(), StoreError> {
     let revision: i64 = transaction
         .query_one(
@@ -746,8 +779,8 @@ pub(super) async fn append_activity(
         .execute(
             "INSERT INTO workflow_activities \
              (id, workspace_id, project_id, conversation_id, conversation_revision, turn_id, \
-              stage, presentation_state, waiting_on, safe_reason) \
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+              stage, presentation_state, waiting_on, safe_reason, safe_detail) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
             &[
                 &activity_id,
                 &binding.workspace_id,
@@ -759,6 +792,7 @@ pub(super) async fn append_activity(
                 &presentation,
                 &waiting_on,
                 &safe_reason,
+                &safe_detail,
             ],
         )
         .await?;

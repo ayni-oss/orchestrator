@@ -1,5 +1,6 @@
 //! The trusted broker supervisor provisions credential-free conversation workers.
 //! Session identity and generation originate in the authoritative command bytes.
+mod live_progress;
 use super::{Configuration, RuntimeResult};
 use crate::session_worker::{ExecutionResult, digest};
 use ayni_orchestrator_events::{v1::SessionExecutionScope, workflow::decode_command};
@@ -11,6 +12,7 @@ use kube::{
 use rusqlite::{Connection, OptionalExtension as _, params};
 use serde_json::json;
 use std::{env, io, time::Duration};
+use tracing::Instrument as _;
 
 fn name(scope: &SessionExecutionScope) -> RuntimeResult<String> {
     let id = uuid::Uuid::parse_str(&scope.session_id)?;
@@ -58,11 +60,29 @@ pub async fn execute(
     let pods: Api<Pod> = Api::namespaced(client.clone(), &namespace);
     let pvcs: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), &namespace);
     let secrets: Api<Secret> = Api::namespaced(client, &namespace);
-    retire_previous_pod(&pods, scope, binding).await?;
-    ensure_storage(&pvcs, &name, scope).await?;
+    let diagnostic = ayni_orchestrator_observability::event_context(command_bytes);
+    let workflow = ayni_orchestrator_observability::workflow::Workflow::from_event(command_bytes);
+    retire_previous_pod(&pods, scope, binding)
+        .instrument(workflow.span_with_context(
+            "session.generation.reconcile",
+            diagnostic.as_ref(),
+            false,
+        ))
+        .await?;
+    ensure_storage(&pvcs, &name, scope)
+        .instrument(workflow.span_with_context(
+            "session.storage.prepare",
+            diagnostic.as_ref(),
+            false,
+        ))
+        .await?;
     let token = ensure_token(&secrets, &name, scope).await?;
-    ensure_pod(&pods, &name, scope, binding, &image).await?;
-    let address = wait_address(&pods, &name).await?;
+    ensure_pod(&pods, &name, scope, binding, &image)
+        .instrument(workflow.span_with_context("session.pod.prepare", diagnostic.as_ref(), false))
+        .await?;
+    let address = wait_address(&pods, &name)
+        .instrument(workflow.span_with_context("session.pod.ready", diagnostic.as_ref(), false))
+        .await?;
     retain_route(
         configuration,
         &identity.id,
@@ -78,29 +98,7 @@ pub async fn execute(
     {
         return execute_provider(&http, &address, &token, command_bytes).await;
     }
-    let mut response = http
-        .post(format!("http://{address}:8081/v1/execute"))
-        .bearer_auth(&token)
-        .header("content-type", "application/octet-stream")
-        .body(command_bytes.to_vec())
-        .send()
-        .await?
-        .error_for_status()?;
-    let mut bytes = Vec::new();
-    while let Some(chunk) = response.chunk().await? {
-        if bytes.len() + chunk.len() > 32768 {
-            return Err(io::Error::other("session response bound exceeded").into());
-        }
-        bytes.extend_from_slice(&chunk);
-    }
-    let response: ExecutionResult = serde_json::from_slice(&bytes)?;
-    if response.response_content.len() > 16384 {
-        return Err(io::Error::other("session response bound exceeded").into());
-    }
-    if response.command_id != identity.id || response.command_digest != digest(command_bytes) {
-        return Err(io::Error::other("session result binding mismatch").into());
-    }
-    Ok(response)
+    live_progress::execute_scripted(http.clone(), &address, &token, command_bytes).await
 }
 
 // A newly accepted generation fences the immediately preceding generation.
@@ -318,6 +316,17 @@ fn desired_pod(
     let mut pod: Pod = serde_json::from_value(
         json!({"apiVersion":"v1","kind":"Pod","metadata":{"name":name,"labels":labels(scope)},"spec":{"automountServiceAccountToken":false,"restartPolicy":"Never","terminationGracePeriodSeconds":10,"securityContext":{"runAsNonRoot":true,"runAsUser":10001,"runAsGroup":10001,"fsGroup":10001,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"session","image":image,"imagePullPolicy":"IfNotPresent","args":["session-worker"],"env":[{"name":"ORCHESTRATOR_SESSION_ID","value":scope.session_id},{"name":"ORCHESTRATOR_SESSION_GENERATION","value":scope.generation.to_string()},{"name":"ORCHESTRATOR_SESSION_CONVERSATION_ID","value":binding.conversation_id},{"name":"ORCHESTRATOR_SESSION_WORKSPACE_ID","value":binding.workspace_id},{"name":"ORCHESTRATOR_SESSION_PROJECT_ID","value":binding.project_id},{"name":"ORCHESTRATOR_SESSION_IDLE_SECONDS","value":scope.idle_timeout_seconds.to_string()},{"name":"ORCHESTRATOR_SESSION_TOKEN_PATH","value":"/var/run/session/token"},{"name":"ORCHESTRATOR_SESSION_LEDGER_PATH","value":"/var/lib/ayni-session/results.sqlite"}],"ports":[{"name":"session","containerPort":8081}],"readinessProbe":{"httpGet":{"path":"/health","port":"session"},"periodSeconds":1},"resources":{"requests":{"cpu":"10m","memory":"32Mi"},"limits":{"cpu":"500m","memory":"256Mi"}},"securityContext":{"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"]}},"volumeMounts":[{"name":"ledger","mountPath":"/var/lib/ayni-session"},{"name":"token","mountPath":"/var/run/session","readOnly":true}]}],"volumes":[{"name":"ledger","persistentVolumeClaim":{"claimName":name}},{"name":"token","secret":{"secretName":name,"items":[{"key":"token","path":"token"}]}}]}}),
     )?;
+    if let Some(endpoint) = ayni_orchestrator_observability::exporter_endpoint() {
+        pod.spec
+            .as_mut()
+            .and_then(|spec| spec.containers.first_mut())
+            .ok_or_else(|| io::Error::other("session container missing"))?
+            .env
+            .get_or_insert_default()
+            .push(serde_json::from_value(
+                json!({"name":"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT","value":endpoint}),
+            )?);
+    }
     if let Some(endpoint) = provider_endpoint {
         let workspace = uuid::Uuid::parse_str(&binding.workspace_id)?;
         let anthropic = binding.execution_binding_revision == "anthropic-messages-v1";
@@ -788,14 +797,7 @@ async fn execute_provider_with_runtime(
     };
     let (identity, _, command) = decode_command(command_bytes)?;
     let command_digest = digest(command_bytes);
-    let failure = |reason: &str| ExecutionResult {
-        command_id: identity.id.clone(),
-        command_digest: command_digest.clone(),
-        response_content: String::new(),
-        failure_reason: reason.into(),
-        provider_call: None,
-        plan_proposal: None,
-    };
+    let failure = |reason: &str| failed_execution(&identity.id, &command_digest, reason);
     let mut records = Vec::new();
     let mut after = 0;
     loop {
@@ -869,10 +871,12 @@ async fn execute_provider_with_runtime(
     tokio::pin!(send);
     let mut interval = tokio::time::interval(Duration::from_millis(250));
     let mut stopped = false;
+    let mut progress_sequence = 0;
     loop {
         tokio::select! {
-            response=&mut send=>{let response:ExecutionResult=bounded_json(response?.error_for_status()?,256*1024).await?;if disabled_without_call {return Ok(failure("provider_credentials_unavailable"));} return validate_result(response,&identity.id,&command_digest);}
+            response=&mut send=>{let _ = live_progress::forward(http, worker_url, token, command_bytes, runtime, progress_sequence).await; let response:ExecutionResult=bounded_json(response?.error_for_status()?,256*1024).await?;if disabled_without_call {return Ok(failure("provider_credentials_unavailable"));} return validate_result(response,&identity.id,&command_digest);}
             _=interval.tick(),if !stopped=>{
+                if let Ok(sequence) = live_progress::forward(http, worker_url, token, command_bytes, runtime, progress_sequence).await { progress_sequence = sequence; }
                 let cancellation=authority(http,json!({"command_bytes":command_bytes,"action":"poll"}),runtime).await;
                 if cancellation.as_ref().map_or(true, |state|state.cancellation_requested) {
                     http.post(format!("{worker_url}/v1/cancel")).bearer_auth(token).json(&CancelInput {command_id:identity.id.clone(),command_digest:command_digest.clone()}).send().await?.error_for_status()?;
@@ -933,3 +937,14 @@ fn validate_result(
 #[cfg(test)]
 #[path = "session_supervisor_tests.rs"]
 mod provider_recovery_tests;
+
+fn failed_execution(command_id: &str, command_digest: &str, reason: &str) -> ExecutionResult {
+    ExecutionResult {
+        command_id: command_id.into(),
+        command_digest: command_digest.into(),
+        response_content: String::new(),
+        failure_reason: reason.into(),
+        provider_call: None,
+        plan_proposal: None,
+    }
+}

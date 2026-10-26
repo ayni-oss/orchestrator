@@ -285,6 +285,18 @@ async fn rpc(
             get_conversation_snapshot,
             v1::GetConversationSnapshotRequest
         ),
+        "ListExecutionProgress" => forward!(
+            body,
+            console.conversations(),
+            list_execution_progress,
+            v1::ListExecutionProgressRequest
+        ),
+        "ListExecutionTimeline" => forward!(
+            body,
+            console.conversations(),
+            list_execution_timeline,
+            v1::ListExecutionTimelineRequest
+        ),
         "ListConversationHistory" => forward!(
             body,
             console.conversations(),

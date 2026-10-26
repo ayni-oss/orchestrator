@@ -4,6 +4,9 @@ The runtime combines the M1 durable foundation with shared immutable agent confi
 
 ## Current implementation
 
+- [Observable execution acceptance](operations/observable-execution-acceptance.md): combined deployed progress, task evidence, replay and trace qualification.
+- [Execution tracing](operations/execution-tracing.md): optional self-hosted OTLP export and causal diagnosis.
+- [Execution timeline](architecture/execution-timeline.md): retained accepted transitions, stable history pages and the workspace inspector.
 - [Project workspace](architecture/project-workspace.md): Svelte project navigation, chat, retained activity, exact retries and scoped console handoff.
 
 - [Agent plan proposals](architecture/agent-proposals.md): bounded terminal provider proposals, authenticated provenance and retained review.

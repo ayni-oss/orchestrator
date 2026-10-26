@@ -53,7 +53,7 @@
           <div class="conversation-workspace">
             {#if view.scope.conversationId}
               <div class="conversation-heading"><h2>{view.snapshot?.title || conversation?.title || 'Opening conversation…'}</h2><div class="connection"><span class="status-dot" class:live={view.connection === 'Live'}></span><span role="status">{view.connection}</span><button class="text-button" onclick={() => view.connection.startsWith('Paused') ? client.reconnect() : client.pause()}>{view.connection.startsWith('Paused') ? 'Reconnect' : 'Pause updates'}</button></div></div>
-              <div class="conversation-columns">{#key view.scope.conversationId}<Conversation {view} {client} {now} />{/key}<Inspector {view} {now} /></div>
+              <div class="conversation-columns">{#key view.scope.conversationId}<Conversation {view} {client} {now} />{/key}<Inspector {view} {now} {client} /></div>
             {:else}<section class="welcome"><h2>What would you like to explore?</h2><p>Choose a conversation or start a new discussion.</p></section>{/if}
           </div>
         </div>

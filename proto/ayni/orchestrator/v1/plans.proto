@@ -338,6 +338,7 @@ message TaskAttempt {
   string saved_input_patch = 19;
   uint32 max_seconds = 20;
   uint32 max_tokens = 21;
+  TaskExecutionTiming timing = 22;
 }
 message GetTaskAttemptResponse {
   TaskAttempt attempt = 1;
@@ -552,4 +553,18 @@ message TaskRecoveryConfirmation {
 }
 message ConfirmTaskRecoveryResponse {
   TaskRecoveryConfirmation confirmation = 1;
+}
+
+// Database acceptance boundaries, not exact process starts or worker CPU time.
+// Historical transitions pruned before timeline installation remain absent.
+message TaskExecutionTiming {
+  google.protobuf.Timestamp queue_accepted_at = 1;
+  google.protobuf.Timestamp claim_accepted_at = 2;
+  google.protobuf.Timestamp coding_result_accepted_at = 3;
+  google.protobuf.Timestamp quality_result_accepted_at = 4;
+  google.protobuf.Timestamp execution_stopped_at = 5;
+  google.protobuf.Timestamp publication_authorized_at = 6;
+  google.protobuf.Timestamp publication_claim_accepted_at = 7;
+  google.protobuf.Timestamp publication_result_accepted_at = 8;
+  google.protobuf.Timestamp observed_at = 9;
 }
