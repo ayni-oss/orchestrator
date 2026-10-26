@@ -1,0 +1,12 @@
+:root { font-family: system-ui, sans-serif; color: #e7eaf0; background: #141820; }
+body { margin: 0; }
+main { max-width: 850px; padding: 3rem 1.5rem; margin: auto; }
+.label { color: #8fbeff; text-transform: uppercase; letter-spacing: .12em; font-size: .8rem; }
+h1 { font-size: 2rem; }
+p { line-height: 1.6; }
+section { padding: 1rem 1.5rem; border: 1px solid #364151; border-radius: .6rem; margin: 1rem 0; }
+h2 { font-size: 1.2rem; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .85rem; }
+button { padding: .6rem .9rem; background: #b4d3ff; color: #141820; border: 0; border-radius: .3rem; cursor: pointer; }
+button:disabled { opacity: .5; cursor: wait; }
+code { color: #b4d3ff; }

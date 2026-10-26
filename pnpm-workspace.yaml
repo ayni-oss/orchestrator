@@ -1,5 +1,6 @@
 packages:
   - clients/*
+  - dev/live-ui
 
 ignoredBuiltDependencies:
   - protobufjs

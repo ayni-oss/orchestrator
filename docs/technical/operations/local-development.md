@@ -9,6 +9,14 @@
 The supported stack builds on M1 Slice 3 and runs one control plane, PostgreSQL 17.6, an isolated authenticated NATS/JetStream server, and one retained scripted supervisor on Docker Desktop Kubernetes. The supervisor
 provisions isolated conversation workers in a dedicated session namespace. PostgreSQL is the workflow authority; JetStream is durable transport, and broker storage never implies executor ownership.
 
+## Live editing
+
+The [development-only live loop](../../../dev/LIVE.md) provides frontend HMR and
+cached Rust debug rebuild/rollout in a separate local namespace. It preserves the
+canonical API, database, broker and isolated-worker boundaries. Schema changes
+require an explicit migration command or deliberate disposable-environment reset.
+The diagnostic page is not the product UI; immutable-image acceptance remains required.
+
 ## Prerequisites
 
 - Docker Desktop Kubernetes with current context `docker-desktop`;

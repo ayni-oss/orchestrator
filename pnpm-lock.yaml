@@ -54,6 +54,12 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  dev/live-ui:
+    devDependencies:
+      vite:
+        specifier: 6.4.3
+        version: 6.4.3(@types/node@24.10.1)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.23.15)
+
 packages:
 
   '@algolia/abtesting@1.26.0':

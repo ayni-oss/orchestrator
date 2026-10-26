@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ayni live development</title>
+  </head>
+  <body>
+    <main>
+      <p class="label">Development tools</p>
+      <h1>Ayni live development</h1>
+      <p>This diagnostic shell exercises frontend reload and the local canonical API. The product UI will arrive with repository onboarding.</p>
+      <section aria-labelledby="frontend-title">
+        <h2 id="frontend-title">Frontend</h2>
+        <p id="hmr"></p>
+        <p>Edit <code>dev/live-ui/main.mjs</code> or <code>style.css</code> to exercise HMR.</p>
+      </section>
+      <section aria-labelledby="backend-title">
+        <h2 id="backend-title">Backend build</h2>
+        <p id="freshness" role="status"></p>
+        <pre id="build"></pre>
+      </section>
+      <section aria-labelledby="api-title">
+        <h2 id="api-title">Canonical API connectivity</h2>
+        <button id="refresh" type="button">Read workspaces</button>
+        <p id="api-status" role="status">No request yet.</p>
+        <pre id="workspaces"></pre>
+      </section>
+    </main>
+    <script type="module" src="/main.mjs"></script>
+  </body>
+</html>

@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "packageManager": "pnpm@10.31.0",
   "workspaces": [
-    "clients/*"
+    "clients/*",
+    "dev/live-ui"
   ],
   "engines": {
     "node": "24.14.0"
