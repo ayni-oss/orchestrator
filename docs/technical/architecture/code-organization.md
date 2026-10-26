@@ -1,6 +1,6 @@
 # Code organization
 
-The durable workflow path separates transport contracts, PostgreSQL authority, broker I/O, and executor ownership.
+The Orchestrator runtime separates transport contracts, PostgreSQL authority, broker I/O, and executor ownership.
 
 | Path | Responsibility |
 | --- | --- |
@@ -10,7 +10,7 @@ The durable workflow path separates transport contracts, PostgreSQL authority, b
 | `backend/servers/control-plane/crates/grpc-contract` | Generated Rust API and transport-level request validation |
 | `backend/servers/control-plane/crates/workflow-postgres` | Forward migrations, immutable configuration/turn inputs, session generations, authoritative transactions, report decisions, FIFO promotion, projections, immutable plan review and exact outbox bytes |
 | `backend/servers/control-plane` | Secret-file configuration, HTTP probes, loopback gRPC, outbox publication, report consumption, and process lifecycle |
-| `backend/workers/scripted-executor` | Retained broker authority ledger, claim fencing, targeted decisions, scoped Kubernetes session provisioning and deterministic session workers |
+| `backend/workers/conversation-supervisor` | Retained broker authority ledger, claim fencing, targeted decisions, scoped Kubernetes session provisioning and provider-backed or scripted conversation workers; isolated task supervision, execution and publication binaries |
 | `deploy/charts/ayni-orchestrator` | Reusable control-plane/executor workloads consuming administrator-owned Secrets |
 | `dev/charts/ayni-orchestrator-local` | Docker Desktop PostgreSQL, authenticated three-stream JetStream, retained PVCs, and reusable-chart composition |
 | `clients/typescript` | Generated canonical TypeScript bindings and generation checks |
@@ -23,3 +23,9 @@ Quarantine, fault injection, retention cleanup, metrics and notification-backed
 watches extend these retained ownership boundaries. The [conversation execution
 contract](conversation-execution.md) defines M2 provider and tool safety; the
 [provider request contract](provider-requests.md) owns future paid-call recovery.
+
+Deterministic provider helpers and canned turn responses use `fixture` names.
+The provider key `scripted`, binding `scripted-v1`, and their recorded progress
+and trace identifiers remain retained contracts. The fixture provider returns a
+fixed response without invoking a model; it is separate from the conversation
+supervisor role, which also supervises real provider-backed sessions.

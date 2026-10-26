@@ -68,3 +68,18 @@ dev_check_capacity() {
   fi
   printf 'Docker Desktop capacity check passed: %s GiB minimum\n' "$minimum_gib" >&2
 }
+
+# A StatefulSet rename also changes generated PVC names. Refuse an implicit
+# storage/ownership migration before configuring credentials or stopping services.
+dev_check_component_names() {
+  local context="${1:?context is required}" namespace="${2:?namespace is required}" existing
+  existing="$(kubectl --context "$context" --namespace "$namespace" get statefulset \
+    scripted-executor workflow-postgres workflow-jetstream --ignore-not-found -o name)" || return
+  local retained
+  retained="$(kubectl --context "$context" --namespace "$namespace" get pvc \
+    ledger-scripted-executor-0 data-workflow-postgres-0 --ignore-not-found -o name)" || return
+  if [[ -n "$existing$retained" ]]; then
+    echo "component rename requires a fresh namespace or an operator-managed retained-data migration; existing resources: $existing $retained" >&2
+    return 1
+  fi
+}

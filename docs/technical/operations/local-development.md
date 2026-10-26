@@ -6,8 +6,55 @@
 > is implemented. The current local API adapter is `dev/ctl gateway`; it serves
 > no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
 
-The supported stack builds on M1 Slice 3 and runs one control plane, PostgreSQL 17.6, an isolated authenticated NATS/JetStream server, and one retained scripted supervisor on Docker Desktop Kubernetes. The supervisor
+The supported stack builds on M1 Slice 3 and runs one control plane, PostgreSQL 17.6, an isolated authenticated NATS/JetStream server, and one retained conversation supervisor on Docker Desktop Kubernetes. The supervisor
 provisions isolated conversation workers in a dedicated session namespace. PostgreSQL is the workflow authority; JetStream is durable transport, and broker storage never implies executor ownership.
+
+## Runtime component names
+
+The application models workspaces, projects, conversations, tasks and runtimes.
+“Workflow” in internal persistence or transport names means coordination of those
+entities; it does not identify another product entity.
+
+| Kubernetes workload | Responsibility |
+| --- | --- |
+| `deployment/control-plane` | API, admission, authoritative state transitions and accepted results |
+| `deployment/task-supervisor` | Dispatch and reconciliation of isolated coding-task workers |
+| `statefulset/conversation-supervisor` | Conversation command delivery, session-worker supervision and retained report handoffs |
+| `statefulset/postgres` | Authoritative application database |
+| `statefulset/jetstream` | Durable conversation command, report and decision transport |
+
+Conversation and task workers run in `<application-namespace>-sessions`.
+The supervisor image includes both conversation and task binaries; the scripted
+provider is a deterministic execution mode, not a separate infrastructure role.
+
+### Existing installations
+
+The component rename changes StatefulSet names and therefore the generated
+PostgreSQL and supervisor PVC names. Deployment scripts and cluster-connected
+Helm rendering reject namespaces containing `scripted-executor`,
+`workflow-postgres` or `workflow-jetstream` StatefulSets before replacing them.
+They also reject retained `ledger-scripted-executor-0` and
+`data-workflow-postgres-0` PVCs after an uninstall.
+Use a fresh namespace for a separate installation. Keeping an existing
+installation requires an operator-managed retained-data migration; this change
+does not provide an automatic migration. Do not delete individual old workloads
+or retained volumes to bypass the check.
+
+For a disposable live environment whose retained data can be deleted, an
+explicitly authorized full reset recreates both owned namespaces with the new
+component names:
+
+```sh
+dev/ctl live reset ayni-orchestrator-live
+dev/ctl live once
+```
+
+Existing Secret names, database/schema identifiers, broker streams and the
+`scripted-executor` durable consumer remain stable internal contracts. The
+`workflow-postgres` Rust crate retains its persistence-specific name. They do not
+introduce a workflow entity. Current Helm settings use `postgres`, `jetstream`,
+`conversationSupervisor` and `images.conversationSupervisor`; old values files
+must be updated before deploying to a new namespace.
 
 ## Live editing
 
@@ -287,10 +334,10 @@ Keep the last received cursor to resume `WatchConversation`. An empty cursor sta
 After a successful scenario, restart each owner and rerun the checks:
 
 ```sh
-kubectl --context docker-desktop -n ayni-orchestrator-dev rollout restart statefulset/workflow-postgres
-kubectl --context docker-desktop -n ayni-orchestrator-dev rollout restart statefulset/workflow-jetstream
+kubectl --context docker-desktop -n ayni-orchestrator-dev rollout restart statefulset/postgres
+kubectl --context docker-desktop -n ayni-orchestrator-dev rollout restart statefulset/jetstream
 kubectl --context docker-desktop -n ayni-orchestrator-dev rollout restart deployment/control-plane
-kubectl --context docker-desktop -n ayni-orchestrator-dev rollout restart statefulset/scripted-executor
+kubectl --context docker-desktop -n ayni-orchestrator-dev rollout restart statefulset/conversation-supervisor
 
 dev/ctl check
 dev/ctl scenario

@@ -1,4 +1,7 @@
-{{- define "local.workflowJetstreamConfig" -}}
+{{- define "local.jetstreamConfig" -}}
+{{- if lookup "apps/v1" "StatefulSet" .Release.Namespace "workflow-jetstream" }}
+{{- fail "component rename requires a fresh namespace or an operator-managed retained-data migration; existing workflow-jetstream StatefulSet must not be replaced automatically" }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -9,7 +12,7 @@ data:
   start.sh: |
     {{- .Files.Get "files/jetstream-start.sh" | nindent 4 }}
   nats.conf: |
-    server_name: workflow-jetstream
+    server_name: jetstream
     port: 4222
     http: 127.0.0.1:8222
     max_payload: 327680
@@ -177,13 +180,13 @@ data:
 {{- end -}}
 {{- if .Values.jetstream.enabled }}
 {{- $workflow := index .Values "ayni-orchestrator" }}
-{{- if or (ne $workflow.workflowJetstream.url "nats://jetstream:4222") (ne $workflow.workflowJetstream.username "workflow-application") (ne $workflow.workflowJetstream.executorUsername "workflow-executor") }}
+{{- if or (ne $workflow.jetstream.url "nats://jetstream:4222") (ne $workflow.jetstream.username "workflow-application") (ne $workflow.jetstream.executorUsername "workflow-executor") }}
 {{- fail "local workflow JetStream endpoint and role names are fixed" }}
 {{- end }}
-{{- if or (ne $workflow.workflowJetstream.applicationSecretName .Values.jetstream.secrets.application) (ne $workflow.workflowJetstream.executorSecretName .Values.jetstream.secrets.executor) }}
+{{- if or (ne $workflow.jetstream.applicationSecretName .Values.jetstream.secrets.application) (ne $workflow.jetstream.executorSecretName .Values.jetstream.secrets.executor) }}
 {{- fail "local reusable-workload and JetStream role Secret names must match" }}
 {{- end }}
-{{- if or (ne $workflow.workflowPostgres.migratorSecretName .Values.postgres.secrets.migrator) (ne $workflow.workflowPostgres.runtimeSecretName .Values.postgres.secrets.runtime) }}
+{{- if or (ne $workflow.postgres.migratorSecretName .Values.postgres.secrets.migrator) (ne $workflow.postgres.runtimeSecretName .Values.postgres.secrets.runtime) }}
 {{- fail "local reusable-workload and PostgreSQL role Secret names must match" }}
 {{- end }}
 {{- $streamBytes := add 268435456 201326592 67108864 }}
@@ -194,7 +197,7 @@ data:
 {{- if ne (len (uniq $secrets)) 7 }}
 {{- fail "local PostgreSQL and JetStream role Secret names must all differ" }}
 {{- end }}
-{{ include "local.workflowJetstreamConfig" . }}
+{{ include "local.jetstreamConfig" . }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -202,7 +205,7 @@ metadata:
   name: workflow-jetstream-data
   labels:
     {{- include "local.commonLabels" . | nindent 4 }}
-    app.kubernetes.io/name: workflow-jetstream
+    app.kubernetes.io/name: jetstream
   annotations:
     helm.sh/resource-policy: keep
 spec:
@@ -217,11 +220,11 @@ metadata:
   name: jetstream
   labels:
     {{- include "local.commonLabels" . | nindent 4 }}
-    app.kubernetes.io/name: workflow-jetstream
+    app.kubernetes.io/name: jetstream
 spec:
   clusterIP: None
   selector:
-    app.kubernetes.io/name: workflow-jetstream
+    app.kubernetes.io/name: jetstream
   ports:
     - name: client
       port: 4222
@@ -231,23 +234,23 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: workflow-jetstream
+  name: jetstream
   labels:
     {{- include "local.commonLabels" . | nindent 4 }}
-    app.kubernetes.io/name: workflow-jetstream
+    app.kubernetes.io/name: jetstream
 spec:
   serviceName: jetstream
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: workflow-jetstream
+      app.kubernetes.io/name: jetstream
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: workflow-jetstream
+        app.kubernetes.io/name: jetstream
         app.kubernetes.io/part-of: ayni-orchestrator
       annotations:
-        checksum/config: {{ include "local.workflowJetstreamConfig" . | sha256sum }}
+        checksum/config: {{ include "local.jetstreamConfig" . | sha256sum }}
     spec:
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 30
@@ -334,7 +337,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/name: workflow-jetstream
+      app.kubernetes.io/name: jetstream
   policyTypes: ["Ingress"]
   ingress:
     - from:

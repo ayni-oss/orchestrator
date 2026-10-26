@@ -15,9 +15,9 @@ fi
 context="$(dev_context)"
 namespace="$(dev_namespace)"
 for workload in \
-  statefulset/workflow-postgres \
-  statefulset/workflow-jetstream \
-  statefulset/scripted-executor \
+  statefulset/postgres \
+  statefulset/jetstream \
+  statefulset/conversation-supervisor \
   deployment/control-plane \
   deployment/task-supervisor; do
   kubectl --context "$context" --namespace "$namespace" rollout status \
@@ -25,7 +25,7 @@ for workload in \
 done
 
 postgres_pod="$(kubectl --context "$context" --namespace "$namespace" get pod \
-  -l app.kubernetes.io/name=workflow-postgres \
+  -l app.kubernetes.io/name=postgres \
   -o jsonpath='{.items[0].metadata.name}')"
 read -r expected_count expected_version < <(python3 - "$DEV_REPOSITORY_ROOT" <<'PYTHON'
 from pathlib import Path
@@ -55,7 +55,7 @@ if [[ "$expect_empty" == true ]]; then
 fi
 
 jetstream_pod="$(kubectl --context "$context" --namespace "$namespace" get pod \
-  -l app.kubernetes.io/name=workflow-jetstream \
+  -l app.kubernetes.io/name=jetstream \
   -o jsonpath='{.items[0].metadata.name}')"
 jsz="${TMPDIR:-/tmp}/ayni-workflow-jsz-$.json"
 trap 'rm -f "$jsz"' EXIT
@@ -89,9 +89,9 @@ assert consumers["ORCHESTRATOR_WORKFLOW_DECISION_V1"] == {
 PY
 
 executor_pod="$(kubectl --context "$context" --namespace "$namespace" get pod \
-  -l app.kubernetes.io/name=ayni-orchestrator-scripted-executor \
+  -l app.kubernetes.io/name=ayni-orchestrator-conversation-supervisor \
   -o jsonpath='{.items[0].metadata.name}')"
 kubectl --context "$context" --namespace "$namespace" exec "$executor_pod" -- \
   test -f /var/lib/ayni-executor/ledger.sqlite
 
-echo "local Slice 3 stack ready: PostgreSQL migration v$expected_version, three retained streams, control plane, and scripted executor passed"
+echo "local Slice 3 stack ready: PostgreSQL migration v$expected_version, three retained streams, control plane, and conversation supervisor passed"

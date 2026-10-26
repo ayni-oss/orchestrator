@@ -2,7 +2,7 @@
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 source "$DEV_DIRECTORY/lib/images.sh"
-[[ $# == 2 && "$1" =~ ^(control-plane|scripted-executor)$ && "$2" =~ ^[a-f0-9]{64}$ ]] || exit 2
+[[ $# == 2 && "$1" =~ ^(control-plane|conversation-supervisor)$ && "$2" =~ ^[a-f0-9]{64}$ ]] || exit 2
 dev_context >/dev/null
 dev_check_capacity 8
 component="$1"

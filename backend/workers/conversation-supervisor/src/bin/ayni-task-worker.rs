@@ -11,11 +11,11 @@ mod ledger;
 mod network;
 #[path = "../task_worker/quality.rs"]
 mod quality;
+use ayni_orchestrator_conversation_supervisor::task_files;
 use ayni_orchestrator_events::task_execution::{TaskCommand, WorkerRequest, WorkerResponse};
 use ayni_orchestrator_observability::workflow::{
     Workflow, finish, identity_context, link_recovery,
 };
-use ayni_orchestrator_scripted_executor::task_files;
 use std::{
     env, fs,
     io::{self, Write as _},

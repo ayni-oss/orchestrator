@@ -8,10 +8,10 @@ COPY proto ./proto
 RUN --mount=type=cache,id=ayni-orchestrator-executor-cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=ayni-orchestrator-executor-cargo-git,target=/usr/local/cargo/git \
     --mount=type=cache,id=ayni-orchestrator-executor-target,target=/workspace/target \
-    cargo build --locked --release --package ayni-orchestrator-scripted-executor \
-      --bin ayni-orchestrator-scripted-executor --bin ayni-task-worker --bin ayni-task-supervisor --bin ayni-task-publisher \
-    && install --mode=0755 target/release/ayni-orchestrator-scripted-executor \
-      /tmp/ayni-orchestrator-scripted-executor \
+    cargo build --locked --release --package ayni-orchestrator-conversation-supervisor \
+      --bin ayni-orchestrator-conversation-supervisor --bin ayni-task-worker --bin ayni-task-supervisor --bin ayni-task-publisher \
+    && install --mode=0755 target/release/ayni-orchestrator-conversation-supervisor \
+      /tmp/ayni-orchestrator-conversation-supervisor \
     && install --mode=0755 target/release/ayni-task-worker /tmp/ayni-task-worker \
     && install --mode=0755 target/release/ayni-task-supervisor /tmp/ayni-task-supervisor \
     && install --mode=0755 target/release/ayni-task-publisher /tmp/ayni-task-publisher
@@ -23,10 +23,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --no-create-home orchestrator
 USER 10001
-COPY --from=builder /tmp/ayni-orchestrator-scripted-executor \
-  /usr/local/bin/ayni-orchestrator-scripted-executor
+COPY --from=builder /tmp/ayni-orchestrator-conversation-supervisor \
+  /usr/local/bin/ayni-orchestrator-conversation-supervisor
 COPY --from=builder /tmp/ayni-task-worker /usr/local/bin/ayni-task-worker
 COPY --from=builder /tmp/ayni-task-supervisor /usr/local/bin/ayni-task-supervisor
-ENTRYPOINT ["/usr/local/bin/ayni-orchestrator-scripted-executor"]
+ENTRYPOINT ["/usr/local/bin/ayni-orchestrator-conversation-supervisor"]
 
 COPY --from=builder /tmp/ayni-task-publisher /usr/local/bin/ayni-task-publisher

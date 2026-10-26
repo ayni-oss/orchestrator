@@ -12,7 +12,7 @@ async-nats.workspace = true
 ayni-orchestrator-api = { path = "../../servers/control-plane/crates/grpc-contract" }
 ayni-orchestrator-control-plane = { path = "../../servers/control-plane" }
 ayni-orchestrator-events = { path = "../../libs/events" }
-ayni-orchestrator-scripted-executor = { path = "../../workers/scripted-executor" }
+ayni-orchestrator-conversation-supervisor = { path = "../../workers/conversation-supervisor" }
 ayni-orchestrator-workflow-postgres = { path = "../../servers/control-plane/crates/workflow-postgres" }
 ed25519-dalek.workspace = true
 serde_json.workspace = true

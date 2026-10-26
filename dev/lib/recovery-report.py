@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 
 SCENARIOS = ("queued-cancel", "active-cancel", "pod-loss")
-OWNERS = ("control-plane", "task-supervisor", "scripted-executor", "workflow-jetstream", "workflow-postgres", "redeploy")
+OWNERS = ("control-plane", "task-supervisor", "conversation-supervisor", "jetstream", "postgres", "redeploy")
 REPLAY = "recovery-fault: exact-replay=pass saved-work=pass parent-evidence=pass terminal-fence=pass attention=pass"
 UNMET = ["M5 dependency scheduling and frozen upstream selections", "worker-originated structured questions and answer delivery", "model-generated recovery proposals"]
 

@@ -174,9 +174,9 @@ fn changed_worker_recipes_adopt_the_same_generation_and_retained_volume() {
     let scope = command.session.unwrap();
     let binding = command.binding.unwrap();
     let name = name(&scope).unwrap();
-    let scripted = desired_pod(&name, &scope, &binding, "worker:old", None).unwrap();
+    let fixture = desired_pod(&name, &scope, &binding, "worker:old", None).unwrap();
     let upgraded = desired_pod(&name, &scope, &binding, "worker:new", None).unwrap();
-    assert!(!same_recipe(&scripted, &upgraded));
+    assert!(!same_recipe(&fixture, &upgraded));
     let enabled = desired_pod(
         &name,
         &scope,
@@ -196,7 +196,7 @@ fn changed_worker_recipes_adopt_the_same_generation_and_retained_volume() {
     .unwrap();
     assert!(!same_recipe(&enabled, &changed_endpoint));
     assert!(same_recipe(&enabled, &enabled));
-    let mut old_contract = scripted;
+    let mut old_contract = fixture;
     old_contract.metadata.annotations = None;
     assert!(!same_recipe(&old_contract, &upgraded));
     for pod in [upgraded, enabled, changed_endpoint] {

@@ -2,9 +2,10 @@
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 export HELM_NO_PLUGINS=1
-[[ $# == 2 && "$1" == local/ayni-live-control-plane:* && "$2" == local/ayni-live-scripted-executor:* ]] || exit 2
+[[ $# == 2 && "$1" == local/ayni-live-control-plane:* && "$2" == local/ayni-live-conversation-supervisor:* ]] || exit 2
 context="$(dev_context)"
 namespace="$(dev_namespace)"
+dev_check_component_names "$context" "$namespace"
 [[ "$(helm version --template '{{ .Version }}')" == v4.1.1* ]] || { echo 'Helm 4.1.1 required' >&2; exit 1; }
 "$DEV_DIRECTORY/scripts/configure-development-secrets.sh"
 dev_build_chart_dependencies
@@ -24,14 +25,14 @@ fi
 helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reuse-values \
   --kube-context "$context" --namespace "$namespace" \
   --set-string "ayni-orchestrator.images.controlPlane=$1" \
-  --set-string "ayni-orchestrator.images.scriptedExecutor=$2" \
+  --set-string "ayni-orchestrator.images.conversationSupervisor=$2" \
   --timeout 5m
 if [[ "$restore_serving" == true ]]; then
   # The local profile is a singleton. A prior failed migration may have left
   # observed replicas at zero; never use that as the desired serving count.
   kubectl --context "$context" --namespace "$namespace" scale deployment/control-plane --replicas=1
 fi
-for workload in statefulset/workflow-postgres statefulset/workflow-jetstream deployment/control-plane statefulset/scripted-executor deployment/task-supervisor; do
+for workload in statefulset/postgres statefulset/jetstream deployment/control-plane statefulset/conversation-supervisor deployment/task-supervisor; do
   kubectl --context "$context" --namespace "$namespace" rollout status "$workload" --timeout=5m
 done
 

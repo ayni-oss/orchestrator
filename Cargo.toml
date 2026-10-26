@@ -8,7 +8,7 @@ members = [
     "backend/libs/oci",
     "backend/libs/observability",
     "backend/servers/control-plane",
-    "backend/workers/scripted-executor",
+    "backend/workers/conversation-supervisor",
     "backend/tests/workflow-acceptance",
     "backend/servers/control-plane/crates/workflow-postgres",
 ]

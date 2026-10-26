@@ -1,10 +1,10 @@
 use super::{Worker, ledger::Ledger};
+use ayni_orchestrator_conversation_supervisor::task_files::{self, FileChange};
 use ayni_orchestrator_events::task_execution::{TaskCommand, TaskOutcome, WorkerRequest, digest};
 use ayni_orchestrator_providers::{
     coding,
     responses::{ResponseEvidence, ResponsesClient},
 };
-use ayni_orchestrator_scripted_executor::task_files::{self, FileChange};
 use serde_json::json;
 use std::{env, fs, time::Duration};
 fn failure(reason: &str) -> TaskOutcome {
@@ -35,7 +35,7 @@ async fn execute_inner(
         return Err("provider_uncertain");
     }
     if c.provider == "scripted" {
-        return scripted(worker, c).await;
+        return execute_fixture(worker, c).await;
     }
     if !matches!(c.provider.as_str(), "openai" | "anthropic")
         || env::var(if c.provider == "anthropic" {
@@ -107,7 +107,7 @@ async fn execute_inner(
         recovery_advice: None,
     })
 }
-async fn scripted(
+async fn execute_fixture(
     worker: &Worker,
     c: &TaskCommand,
 ) -> std::result::Result<TaskOutcome, &'static str> {

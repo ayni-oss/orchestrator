@@ -1,10 +1,10 @@
 //! Credential-free preparation and validation with retained launcher-owned evidence.
 use super::{Result, Worker, ledger::Ledger};
+use ayni_orchestrator_conversation_supervisor::task_files;
 use ayni_orchestrator_events::{
     task_execution::{TaskCommand, WorkerRequest, digest},
     task_quality::{MAX_ARTIFACT, QualityOutcome, snapshot_digest},
 };
-use ayni_orchestrator_scripted_executor::task_files;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{

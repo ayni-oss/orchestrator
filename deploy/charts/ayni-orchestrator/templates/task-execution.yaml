@@ -27,7 +27,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: task-supervisor
-          image: {{ .Values.images.scriptedExecutor | quote }}
+          image: {{ .Values.images.conversationSupervisor | quote }}
           imagePullPolicy: {{ .Values.images.pullPolicy }}
           command: ["/usr/local/bin/ayni-task-supervisor"]
           env:
@@ -42,7 +42,7 @@ spec:
             - name: ORCHESTRATOR_SESSION_NAMESPACE
               value: {{ printf "%s-sessions" .Release.Namespace | quote }}
             - name: ORCHESTRATOR_TASK_BOOTSTRAP_IMAGE
-              value: {{ .Values.images.scriptedExecutor | quote }}
+              value: {{ .Values.images.conversationSupervisor | quote }}
             - name: ORCHESTRATOR_TASK_FIXTURE_ENABLED
               value: {{ .Values.taskExecution.fixtureEnabled | quote }}
             - name: ORCHESTRATOR_ANTHROPIC_ENABLED

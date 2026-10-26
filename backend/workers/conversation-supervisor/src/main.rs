@@ -8,6 +8,9 @@ mod session_supervisor;
 mod session_worker;
 
 use async_nats::{ConnectOptions, HeaderMap, jetstream};
+use ayni_orchestrator_conversation_supervisor::{
+    Command, CommandDelivery, Decision, Ledger, LedgerLimits, Report, RetainedEvent,
+};
 use ayni_orchestrator_events::{
     EventIdentity,
     v1::{ConversationTurnReport, ConversationTurnReportKind},
@@ -20,9 +23,6 @@ use ayni_orchestrator_events::{
 use ayni_orchestrator_observability::{
     event_context,
     workflow::{Workflow, finish},
-};
-use ayni_orchestrator_scripted_executor::{
-    Command, CommandDelivery, Decision, Ledger, LedgerLimits, Report, RetainedEvent,
 };
 use ed25519_dalek::SigningKey;
 use futures_util::StreamExt as _;
@@ -41,10 +41,10 @@ use tracing::Instrument as _;
 use uuid::Uuid;
 
 const COMMAND_STREAM: &str = "ORCHESTRATOR_WORKFLOW_COMMAND_V1";
+// Retained broker cursor identity; independent of the supervisor process name.
 const COMMAND_CONSUMER: &str = "scripted-executor";
 const DECISION_STREAM: &str = "ORCHESTRATOR_WORKFLOW_DECISION_V1";
 const RETRY_DELAY: Duration = Duration::from_millis(250);
-const SCRIPTED_RESPONSE: &str = "The scripted executor completed this turn.";
 
 type RuntimeResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -82,7 +82,7 @@ async fn run() -> RuntimeResult {
             result = connected => match result {
                 Ok(context) => context,
                 Err(error) => {
-                    eprintln!("scripted executor broker connection pending: {error}");
+                    eprintln!("conversation supervisor broker connection pending: {error}");
                     if wait_or_shutdown().await? {
                         return Ok(());
                     }
@@ -95,7 +95,7 @@ async fn run() -> RuntimeResult {
             }
         };
         if let Err(error) = Box::pin(run_connected(&context, &configuration, &mut ledger)).await {
-            eprintln!("scripted executor transport pending recovery: {error}");
+            eprintln!("conversation supervisor transport pending recovery: {error}");
             if wait_or_shutdown().await? {
                 return Ok(());
             }
@@ -323,10 +323,10 @@ async fn handle_decision(
     match decision_result {
         Ok(_) => {}
         Err(
-            ayni_orchestrator_scripted_executor::LedgerError::Invalid
-            | ayni_orchestrator_scripted_executor::LedgerError::NotFound
-            | ayni_orchestrator_scripted_executor::LedgerError::EventConflict
-            | ayni_orchestrator_scripted_executor::LedgerError::StaleGeneration,
+            ayni_orchestrator_conversation_supervisor::LedgerError::Invalid
+            | ayni_orchestrator_conversation_supervisor::LedgerError::NotFound
+            | ayni_orchestrator_conversation_supervisor::LedgerError::EventConflict
+            | ayni_orchestrator_conversation_supervisor::LedgerError::StaleGeneration,
         ) => {
             ledger.quarantine_inapplicable_decision(
                 &message.payload,
@@ -372,7 +372,7 @@ async fn execute_ready(
             session_worker::ExecutionResult {
                 command_id: identity.id.clone(),
                 command_digest: digest(&command.exact_bytes),
-                response_content: SCRIPTED_RESPONSE.to_owned(),
+                response_content: session_worker::FIXTURE_TURN_RESPONSE.to_owned(),
                 failure_reason: String::new(),
                 provider_call: None,
                 plan_proposal: None,
@@ -753,14 +753,14 @@ fn delivery_paused(result: RuntimeResult) -> RuntimeResult<bool> {
         Ok(()) => Ok(false),
         Err(error)
             if matches!(
-                error.downcast_ref::<ayni_orchestrator_scripted_executor::LedgerError>(),
+                error.downcast_ref::<ayni_orchestrator_conversation_supervisor::LedgerError>(),
                 Some(
-                    ayni_orchestrator_scripted_executor::LedgerError::Capacity
-                        | ayni_orchestrator_scripted_executor::LedgerError::QuarantineCapacity
+                    ayni_orchestrator_conversation_supervisor::LedgerError::Capacity
+                        | ayni_orchestrator_conversation_supervisor::LedgerError::QuarantineCapacity
                 )
             ) =>
         {
-            eprintln!("scripted executor consumer paused: retained store capacity exhausted");
+            eprintln!("conversation supervisor consumer paused: retained store capacity exhausted");
             Ok(true)
         }
         Err(error) => Err(error),

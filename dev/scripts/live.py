@@ -17,7 +17,7 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
-COMPONENTS = ('control-plane', 'scripted-executor')
+COMPONENTS = ('control-plane', 'conversation-supervisor')
 
 
 def namespace():
@@ -49,7 +49,7 @@ def inputs():
     shared += list((ROOT / 'proto').rglob('*')) + list((ROOT / 'backend/libs').rglob('*'))
     control = list((ROOT / 'backend/servers/control-plane').rglob('*'))
     control += list((ROOT / 'dev/fixtures/task-source').rglob('*')) + list((ROOT / 'dev/fixtures/task-quality').rglob('*'))
-    executor = list((ROOT / 'backend/workers/scripted-executor').rglob('*'))
+    executor = list((ROOT / 'backend/workers/conversation-supervisor').rglob('*'))
     schema = list((ROOT / 'backend/servers/control-plane/crates/workflow-postgres/migrations').glob('*.sql'))
     schema += [ROOT / 'backend/servers/control-plane/crates/workflow-postgres/src/migrations.rs']
     return {COMPONENTS[0]: fingerprint(shared + control), COMPONENTS[1]: fingerprint(shared + executor), 'schema': fingerprint(schema)}

@@ -107,7 +107,7 @@ verify_faults() {
     command_stdin --verify-recovery-fault-stdin "$evidence/$scenario-terminal.json" > "$evidence/$scenario-replay-$suffix.txt"
   done
 }
-for workload in deployment/control-plane deployment/task-supervisor statefulset/scripted-executor statefulset/workflow-jetstream statefulset/workflow-postgres; do
+for workload in deployment/control-plane deployment/task-supervisor statefulset/conversation-supervisor statefulset/jetstream statefulset/postgres; do
   name="${workload#*/}"
   kubectl --context "$context" --namespace "$namespace" rollout restart "$workload" > "$evidence/restart-$name.txt"
   kubectl --context "$context" --namespace "$namespace" rollout status "$workload" --timeout=3m >> "$evidence/restart-$name.txt"
@@ -122,7 +122,7 @@ inventory() {
   done
 }
 control_image="$(kubectl --context "$context" --namespace "$namespace" get deployment control-plane -o jsonpath='{.spec.template.spec.containers[0].image}')"
-executor_image="$(kubectl --context "$context" --namespace "$namespace" get statefulset scripted-executor -o jsonpath='{.spec.template.spec.containers[0].image}')"
+executor_image="$(kubectl --context "$context" --namespace "$namespace" get statefulset conversation-supervisor -o jsonpath='{.spec.template.spec.containers[0].image}')"
 inventory > "$evidence/retained-before.txt"
 "$dev_directory/ctl" cleanup > "$evidence/cleanup.txt" 2>&1
 kubectl --context "$context" --namespace "$namespace" wait --for=delete pod --all --timeout=2m >> "$evidence/cleanup.txt"
@@ -132,7 +132,7 @@ cmp "$evidence/retained-before.txt" "$evidence/retained-stopped.txt"
 helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-values --kube-context "$context" --namespace "$namespace" \
   --set ayni-orchestrator.taskExecution.fixtureEnabled=true \
   --set-string "ayni-orchestrator.images.controlPlane=$control_image" \
-  --set-string "ayni-orchestrator.images.scriptedExecutor=$executor_image" --wait --timeout=5m > "$evidence/redeploy.txt"
+  --set-string "ayni-orchestrator.images.conversationSupervisor=$executor_image" --wait --timeout=5m > "$evidence/redeploy.txt"
 "$dev_directory/scripts/check.sh" >> "$evidence/redeploy.txt" 2>&1
 inventory > "$evidence/retained-after.txt"
 cmp "$evidence/retained-before.txt" "$evidence/retained-after.txt"

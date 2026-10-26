@@ -2,19 +2,19 @@ ayni-orchestrator:
   enabled: true
   images:
     controlPlane: local/ayni-orchestrator-control-plane:replace-me
-    scriptedExecutor: local/ayni-orchestrator-scripted-executor:replace-me
+    conversationSupervisor: local/ayni-orchestrator-conversation-supervisor:replace-me
     pullPolicy: IfNotPresent
-  workflowPostgres:
+  postgres:
     migratorSecretName: workflow-postgres-migrator
     runtimeSecretName: workflow-postgres-runtime
     runtimeRoleName: ayni_runtime
-  workflowJetstream:
+  jetstream:
     url: nats://jetstream:4222
     username: workflow-application
     applicationSecretName: workflow-jetstream-application
     executorUsername: workflow-executor
     executorSecretName: workflow-jetstream-executor
-  scriptedExecutor:
+  conversationSupervisor:
     storage: 512Mi
     resources:
       requests:
@@ -27,7 +27,7 @@ ayni-orchestrator:
 postgres:
   enabled: true
   image: postgres:17.6-bookworm@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3
-  serviceName: workflow-postgres
+  serviceName: postgres
   storage: 4Gi
   secrets:
     admin: workflow-postgres-admin

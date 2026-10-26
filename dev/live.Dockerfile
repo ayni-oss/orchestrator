@@ -15,8 +15,8 @@ RUN --mount=type=cache,id=ayni-live-registry,target=/usr/local/cargo/registry \
     case "$COMPONENT" in \
       control-plane) package=ayni-orchestrator-control-plane; \
         bins='ayni-orchestrator-control-plane workflow-migrate workflow-diagnostic workflow-acceptance workflow-publish-task' ;; \
-      scripted-executor) package=ayni-orchestrator-scripted-executor; \
-        bins='ayni-orchestrator-scripted-executor ayni-task-worker ayni-task-supervisor ayni-task-publisher' ;; \
+      conversation-supervisor) package=ayni-orchestrator-conversation-supervisor; \
+        bins='ayni-orchestrator-conversation-supervisor ayni-task-worker ayni-task-supervisor ayni-task-publisher' ;; \
       *) exit 2 ;; \
     esac; \
     set --; for bin in $bins; do set -- "$@" --bin "$bin"; done; \
@@ -31,5 +31,5 @@ COPY --from=builder /output/ /usr/local/bin/
 # Direct entrypoints preserve the session-worker arguments used by supervisors.
 FROM runtime AS control-plane
 ENTRYPOINT ["/usr/local/bin/ayni-orchestrator-control-plane"]
-FROM runtime AS scripted-executor
-ENTRYPOINT ["/usr/local/bin/ayni-orchestrator-scripted-executor"]
+FROM runtime AS conversation-supervisor
+ENTRYPOINT ["/usr/local/bin/ayni-orchestrator-conversation-supervisor"]

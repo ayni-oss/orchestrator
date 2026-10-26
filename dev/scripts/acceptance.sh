@@ -112,10 +112,10 @@ kubectl --context "$context" --namespace "$namespace" exec "$pod" --container co
 
 # Capture owned timings before any process restart resets them. Neither health
 # diagnostics nor Prometheus exposition contains credentials or message bodies.
-executor_pod="$(kubectl --context "$context" --namespace "$namespace" get pod -l app.kubernetes.io/name=ayni-orchestrator-scripted-executor -o jsonpath='{.items[0].metadata.name}')"
+executor_pod="$(kubectl --context "$context" --namespace "$namespace" get pod -l app.kubernetes.io/name=ayni-orchestrator-conversation-supervisor -o jsonpath='{.items[0].metadata.name}')"
 kubectl --context "$context" --namespace "$namespace" exec "$executor_pod" -- \
   cat /var/lib/ayni-executor/ledger.health.json > "$evidence/executor-health.json"
-jetstream_pod="$(kubectl --context "$context" --namespace "$namespace" get pod -l app.kubernetes.io/name=workflow-jetstream -o jsonpath='{.items[0].metadata.name}')"
+jetstream_pod="$(kubectl --context "$context" --namespace "$namespace" get pod -l app.kubernetes.io/name=jetstream -o jsonpath='{.items[0].metadata.name}')"
 kubectl --context "$context" --namespace "$namespace" exec "$jetstream_pod" -- \
   wget -q -O - 'http://127.0.0.1:8222/jsz?streams=true&consumers=true&config=true' > "$evidence/broker-capacity.json"
 port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
@@ -163,8 +163,8 @@ wait "$metrics_forward_pid" 2>/dev/null || true
 metrics_forward_pid=
 
 # A dependency outage is a correctness gate, never excluded silently as latency.
-postgres_pod="$(kubectl --context "$context" --namespace "$namespace" get pod -l app.kubernetes.io/name=workflow-postgres -o jsonpath='{.items[0].metadata.name}')"
-scaled_down=statefulset/workflow-postgres
+postgres_pod="$(kubectl --context "$context" --namespace "$namespace" get pod -l app.kubernetes.io/name=postgres -o jsonpath='{.items[0].metadata.name}')"
+scaled_down=statefulset/postgres
 kubectl --context "$context" --namespace "$namespace" scale "$scaled_down" --replicas=0 > "$evidence/postgres-outage.txt"
 kubectl --context "$context" --namespace "$namespace" wait --for=delete "pod/$postgres_pod" --timeout=2m >> "$evidence/postgres-outage.txt"
 pod="$(control_pod)"
@@ -177,8 +177,8 @@ fi
 
 # Accept FIFO work without a broker, restart the application before publication,
 # then restore delivery. Authority and exact receipt bytes must survive both.
-jetstream_pod="$(kubectl --context "$context" --namespace "$namespace" get pod -l app.kubernetes.io/name=workflow-jetstream -o jsonpath='{.items[0].metadata.name}')"
-scaled_down=statefulset/workflow-jetstream
+jetstream_pod="$(kubectl --context "$context" --namespace "$namespace" get pod -l app.kubernetes.io/name=jetstream -o jsonpath='{.items[0].metadata.name}')"
+scaled_down=statefulset/jetstream
 kubectl --context "$context" --namespace "$namespace" scale "$scaled_down" --replicas=0 > "$evidence/broker-outage.txt"
 kubectl --context "$context" --namespace "$namespace" wait --for=delete "pod/$jetstream_pod" --timeout=2m >> "$evidence/broker-outage.txt"
 pod="$(control_pod)"
@@ -360,7 +360,7 @@ fi
 
 # Restart each process/dependency with retained volumes, then prove the original
 # accepted receipt and response through canonical gRPC, without database repair.
-for workload in deployment/control-plane deployment/task-supervisor statefulset/scripted-executor statefulset/workflow-jetstream statefulset/workflow-postgres; do
+for workload in deployment/control-plane deployment/task-supervisor statefulset/conversation-supervisor statefulset/jetstream statefulset/postgres; do
   name="${workload#*/}"
   kubectl --context "$context" --namespace "$namespace" rollout restart "$workload" \
     > "$evidence/restart-$name.txt"

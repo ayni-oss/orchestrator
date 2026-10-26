@@ -10,16 +10,16 @@ dev_build_image() {
       repository=ayni-orchestrator-control-plane
       dockerfile="$DEV_REPOSITORY_ROOT/deploy/images/control-plane/Dockerfile"
       ;;
-    scripted-executor)
-      repository=ayni-orchestrator-scripted-executor
-      dockerfile="$DEV_REPOSITORY_ROOT/deploy/images/scripted-executor/Dockerfile"
+    conversation-supervisor)
+      repository=ayni-orchestrator-conversation-supervisor
+      dockerfile="$DEV_REPOSITORY_ROOT/deploy/images/conversation-supervisor/Dockerfile"
       ;;
     publication-fixture)
       repository=ayni-orchestrator-publication-fixture
       dockerfile="$DEV_REPOSITORY_ROOT/dev/fixtures/publication/Dockerfile"
       ;;
     *)
-      echo "component must be control-plane, scripted-executor or publication-fixture" >&2
+      echo "component must be control-plane, conversation-supervisor or publication-fixture" >&2
       return 2
       ;;
   esac
@@ -85,7 +85,7 @@ dev_prune_images() (
   local repository
   case "$component" in
     control-plane) repository=ayni-orchestrator-control-plane ;;
-    scripted-executor) repository=ayni-orchestrator-scripted-executor ;;
+    conversation-supervisor) repository=ayni-orchestrator-conversation-supervisor ;;
     publication-fixture) repository=ayni-orchestrator-publication-fixture ;;
     *) echo "unknown image component: $component" >&2; return 2 ;;
   esac

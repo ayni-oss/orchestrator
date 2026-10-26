@@ -119,19 +119,19 @@ spec:
                 path: token
         - name: workflow-postgres-migrator
           secret:
-            secretName: {{ required "workflowPostgres.migratorSecretName is required" .Values.workflowPostgres.migratorSecretName | quote }}
+            secretName: {{ required "postgres.migratorSecretName is required" .Values.postgres.migratorSecretName | quote }}
             items:
               - key: url
                 path: url
         - name: workflow-postgres-runtime
           secret:
-            secretName: {{ required "workflowPostgres.runtimeSecretName is required" .Values.workflowPostgres.runtimeSecretName | quote }}
+            secretName: {{ required "postgres.runtimeSecretName is required" .Values.postgres.runtimeSecretName | quote }}
             items:
               - key: url
                 path: url
         - name: workflow-jetstream-application
           secret:
-            secretName: {{ required "workflowJetstream.applicationSecretName is required" .Values.workflowJetstream.applicationSecretName | quote }}
+            secretName: {{ required "jetstream.applicationSecretName is required" .Values.jetstream.applicationSecretName | quote }}
             items:
               - key: password
                 path: password

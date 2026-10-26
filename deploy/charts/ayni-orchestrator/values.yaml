@@ -2,17 +2,17 @@ enabled: true
 
 images:
   controlPlane: local/ayni-orchestrator-control-plane:replace-me
-  scriptedExecutor: local/ayni-orchestrator-scripted-executor:replace-me
+  conversationSupervisor: local/ayni-orchestrator-conversation-supervisor:replace-me
   pullPolicy: IfNotPresent
 
-workflowPostgres:
+postgres:
   # These immutable Secrets are administrator-owned. Each must contain a `url`
   # key with a PostgreSQL connection string for its distinct database role.
   migratorSecretName: workflow-postgres-migrator
   runtimeSecretName: workflow-postgres-runtime
   runtimeRoleName: ayni_runtime
 
-workflowJetstream:
+jetstream:
   # The application identity may publish command/decision facts and consume reports.
   # This immutable Secret contains only its own `password` key.
   url: nats://jetstream:4222
@@ -39,7 +39,7 @@ providers:
     egress: []
   sessionAuthoritySecretName: workflow-session-authority
 
-scriptedExecutor:
+conversationSupervisor:
   storage: 512Mi
   resources:
     requests:

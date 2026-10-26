@@ -15,7 +15,7 @@ WORKER_RECOVERY_GATES = {"worker-origin-question-and-proposal", "unanswered-ques
 M6_GATES = {"cumulative-managed-quality", "conversation-consent-response-loss-navigation", "different-key-confirmation-convergence", "queued-recovery-authority-restart-and-cancellation", "active-recovery-supervisor-adoption", "active-recovery-cancellation-and-late-report-fence", "continued-worker-pod-loss", "saved-work-and-parent-evidence", "attention-resolution-and-new-interruption", "all-owner-restart-replay", "retained-cleanup-and-redeployment"}
 M4_CASES = {"retained-fixture-baseline", "frozen-harness-source", "approval-and-preparation-restart", "coding-pod-loss", "late-coding-report-fenced", "managed-quality-pass-and-failure", "browser-publication-retry-and-cancel", "publisher-loss-before-create", "publisher-loss-after-remote-create", "uncertain-without-visible-pr", "existing-branch-conflict", "deployed-credential-and-source-isolation", "cleanup-and-redeployment"}
 
-M4_CASES |= {f"restart-{owner}" for owner in ("control-plane", "task-publisher", "publication-fixture", "task-supervisor", "scripted-executor", "workflow-jetstream", "workflow-postgres")}
+M4_CASES |= {f"restart-{owner}" for owner in ("control-plane", "task-publisher", "publication-fixture", "task-supervisor", "conversation-supervisor", "jetstream", "postgres")}
 
 def read(root, name):
     target = root / name
@@ -77,7 +77,7 @@ def concurrency(root):
     matched = {p["metadata"]["uid"] for p in pods if any(p["metadata"]["uid"].encode() in v for v in active)}
     if len(matched) != 4 or sum(any(uid.encode() in value for uid in matched) for value in active) != 4:
         raise ValueError("missing four distinct deployed active Pod identities and two queued attempts")
-    for owner in ("control-plane", "task-supervisor", "workflow-postgres"):
+    for owner in ("control-plane", "task-supervisor", "postgres"):
         if read(root, f"concurrency-replay-{owner}.txt").strip() != REPLAY:
             raise ValueError(f"missing exact concurrent replay: {owner}")
 
@@ -131,7 +131,7 @@ def json_proof(root, name):
 
 
 def dependency_proofs(root, report):
-    owners = ("control-plane", "task-supervisor", "workflow-postgres")
+    owners = ("control-plane", "task-supervisor", "postgres")
     required = {"dependent-quality-failed.json", "dependent-repaired.json", "dependent-repaired-draft.json", "repair-confirmation.json", "repair-proposal.json", "dependent-request.json", "upstream-0-draft.json", "upstream-1-draft.json"}
     required |= {f"{kind}-replay-{owner}.json" for owner in owners for kind in ("confirmation", "preparation", "child", "parent")}
     verify_manifest(root, report.get("artifacts_sha256"), required)

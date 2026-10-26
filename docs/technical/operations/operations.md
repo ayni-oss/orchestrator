@@ -1,6 +1,6 @@
 # Durable workflow operations
 
-This runbook covers the PostgreSQL-authoritative M1 Slice 3 control plane, isolated authenticated JetStream profile, retained scripted supervisor and
+This runbook covers the PostgreSQL-authoritative M1 Slice 3 control plane, isolated authenticated JetStream profile, retained conversation supervisor and
 conversation-scoped session workers. It does not authorize shared-environment deployment, production credentials, or production data migration.
 
 ## Startup sequence

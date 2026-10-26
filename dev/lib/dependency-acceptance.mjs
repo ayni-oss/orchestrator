@@ -175,7 +175,7 @@ try {
   report.gates.push('confirmed-dependent-repair');
   report.dependent = { task_id: dependent.id, parent_attempt_id: prepared.selection.attemptId, child_attempt_id: childSelection.attemptId, patch_digest: repaired.patchDigest, quality_digest: repaired.qualityDigest, publication_commit: childDraft.publication.commitSha };
   stage = 'owner-restarts-and-exact-replay';
-  for (const workload of ['deployment/control-plane', 'deployment/task-supervisor', 'statefulset/workflow-postgres']) {
+  for (const workload of ['deployment/control-plane', 'deployment/task-supervisor', 'statefulset/postgres']) {
     const name = workload.split('/')[1];
     output(`restart-${name}.txt`, kube('rollout', 'restart', workload) + '\n' + kube('rollout', 'status', workload, '--timeout=3m'));
     await connect();

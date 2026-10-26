@@ -63,7 +63,7 @@ spec:
               kubernetes.io/metadata.name: {{ .Release.Namespace }}
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: ayni-orchestrator-scripted-executor
+              app.kubernetes.io/name: ayni-orchestrator-conversation-supervisor
       ports:
         - protocol: TCP
           port: 8081

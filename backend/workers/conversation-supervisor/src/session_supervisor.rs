@@ -98,7 +98,7 @@ pub async fn execute(
     {
         return execute_provider(&http, &address, &token, command_bytes).await;
     }
-    live_progress::execute_scripted(http.clone(), &address, &token, command_bytes).await
+    live_progress::execute_fixture(http.clone(), &address, &token, command_bytes).await
 }
 
 // A newly accepted generation fences the immediately preceding generation.

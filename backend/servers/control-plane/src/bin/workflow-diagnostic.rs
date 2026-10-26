@@ -11,7 +11,7 @@ use tonic::transport::Endpoint;
 use uuid::Uuid;
 
 const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:50051";
-const SCRIPTED_RESPONSE: &str = "The scripted executor completed this turn.";
+const FIXTURE_TURN_RESPONSE: &str = "The fixture provider completed this turn.";
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -94,7 +94,7 @@ async fn run() -> Result<String, Box<dyn Error>> {
         .into_inner();
     require_receipt(message_response.receipt, "SendMessage")?;
 
-    let snapshot = wait_for_scripted_response(
+    let snapshot = wait_for_fixture_response(
         &mut conversations,
         &workspace.id,
         &project.id,
@@ -119,9 +119,9 @@ async fn run() -> Result<String, Box<dyn Error>> {
         || !history
             .records
             .iter()
-            .any(|record| record.content_or_outcome == SCRIPTED_RESPONSE)
+            .any(|record| record.content_or_outcome == FIXTURE_TURN_RESPONSE)
     {
-        return Err(invalid_response("history did not contain the scripted response").into());
+        return Err(invalid_response("history did not contain the fixture response").into());
     }
 
     Ok(format!(
@@ -160,7 +160,7 @@ async fn initial_snapshot(
     Ok(initial)
 }
 
-async fn wait_for_scripted_response(
+async fn wait_for_fixture_response(
     conversations: &mut ProjectConversationServiceClient<tonic::transport::Channel>,
     workspace_id: &str,
     project_id: &str,
@@ -225,7 +225,7 @@ async fn wait_for_scripted_response(
             || !snapshot
                 .recent_messages
                 .iter()
-                .any(|message| message.content == SCRIPTED_RESPONSE)
+                .any(|message| message.content == FIXTURE_TURN_RESPONSE)
         {
             return Err(
                 invalid_response("terminal watch and authoritative snapshot disagree").into(),

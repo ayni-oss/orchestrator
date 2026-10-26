@@ -23,7 +23,7 @@ const SCHEMA: &str = "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE T
 pub mod progress;
 pub mod provider_session;
 
-const RESPONSE: &str = "The scripted executor completed this turn.";
+pub const FIXTURE_TURN_RESPONSE: &str = "The fixture provider completed this turn.";
 const MAX_RETAINED_BYTES: i64 = 256 * 1024 * 1024;
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -233,9 +233,9 @@ async fn execute(
         .input_content
         .starts_with("Observe streaming");
     let result = execute_retained(&state, &body)?;
-    // The scripted provider exercises the same provisional transport without
+    // The fixture provider exercises the same provisional transport without
     // asserting a model invocation or token usage. Terminal acceptance is separate.
-    for text in ["The scripted", "The scripted executor", RESPONSE] {
+    for text in ["The fixture", "The fixture provider", FIXTURE_TURN_RESPONSE] {
         let _ = progress::record(
             &state,
             &result.command_id,
@@ -323,7 +323,7 @@ fn execute_retained(
         let result = ExecutionResult {
             command_id: identity.id.clone(),
             command_digest: digest.clone(),
-            response_content: RESPONSE.to_owned(),
+            response_content: FIXTURE_TURN_RESPONSE.to_owned(),
             failure_reason: String::new(),
             provider_call: None,
             plan_proposal: None,

@@ -24,7 +24,7 @@ of delivered behavior.
 
 The runtime provides **conversation execution, plan approval and isolated task delivery through managed quality and draft publication** on the M1 durable foundation, with shared agent configuration and isolated sessions supporting scripted or explicitly enabled OpenAI execution. It provides:
 
-- PostgreSQL 17.6 as the sole workflow authority;
+- PostgreSQL 17.6 as the source of truth for workspace, project, conversation and task state;
 - conversation-owned operator and agent plans with immutable versions, scoped history, retained provenance, exact write receipts and version review;
 - explicit approval of an exact plan version/digest with atomic, once-only admission and immutable task origin;
 - repository-owned forward migrations under an advisory lock;
@@ -32,7 +32,7 @@ The runtime provides **conversation execution, plan approval and isolated task d
 - durable, scoped-idempotent message admission with FIFO turn ordering;
 - an isolated authenticated three-stream JetStream profile;
 - exact-byte command and decision publication with broker storage kept separate from ownership;
-- a retained scripted executor with signed claim, acceptance, and terminal-report handoffs;
+- a retained conversation supervisor with signed claim, acceptance, and terminal-report handoffs;
 - accepted scripted responses, FIFO successor promotion, snapshots, and stable bounded history;
 - resumable notification-backed watches with durable replay and typed cursor expiry;
 - bounded consumer quarantine, replay retention cleanup, and operational metrics;

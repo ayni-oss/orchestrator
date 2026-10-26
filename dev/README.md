@@ -6,7 +6,7 @@
 > is implemented. The current local API adapter is `dev/ctl gateway`; it serves
 > no UI. See [the retained UI example](../examples/web/EXAMPLE.md).
 
-The supported Docker Desktop stack contains one Ayni control plane, PostgreSQL 17.6, an isolated authenticated three-stream JetStream server, and one retained scripted executor. PostgreSQL is authoritative; broker storage and consumer ACKs remain distinct from application acceptance and executor ownership.
+The supported Docker Desktop stack contains one Ayni control plane, PostgreSQL 17.6, an isolated authenticated three-stream JetStream server, and one retained conversation supervisor. PostgreSQL is authoritative; broker storage and consumer ACKs remain distinct from application acceptance and executor ownership.
 
 ## Live code changes
 

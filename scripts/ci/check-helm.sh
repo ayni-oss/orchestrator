@@ -15,23 +15,23 @@ export HELM_PLUGINS="$scratch/plugins"
 mkdir -p "$scratch/cache" "$scratch/plugins"
 
 control_image=local/control-plane:test
-executor_image=local/scripted-executor:test
+executor_image=local/conversation-supervisor:test
 helm dependency build "$local_chart" >/dev/null
 helm lint "$reusable_chart" \
   --set-string images.controlPlane="$control_image" \
-  --set-string images.scriptedExecutor="$executor_image" >/dev/null
+  --set-string images.conversationSupervisor="$executor_image" >/dev/null
 helm lint "$local_chart" \
   --set-string ayni-orchestrator.images.controlPlane="$control_image" \
-  --set-string ayni-orchestrator.images.scriptedExecutor="$executor_image" >/dev/null
+  --set-string ayni-orchestrator.images.conversationSupervisor="$executor_image" >/dev/null
 
 reusable_render="$scratch/reusable.yaml"
 local_render="$scratch/local.yaml"
 helm template reusable "$reusable_chart" --namespace test \
   --set-string images.controlPlane="$control_image" \
-  --set-string images.scriptedExecutor="$executor_image" > "$reusable_render"
+  --set-string images.conversationSupervisor="$executor_image" > "$reusable_render"
 helm template local "$local_chart" --namespace test \
   --set-string ayni-orchestrator.images.controlPlane="$control_image" \
-  --set-string ayni-orchestrator.images.scriptedExecutor="$executor_image" > "$local_render"
+  --set-string ayni-orchestrator.images.conversationSupervisor="$executor_image" > "$local_render"
 
 # The reusable chart consumes administrator-owned immutable Secrets and never
 # renders a database, broker, or credential value.
@@ -53,19 +53,19 @@ grep -q 'helm.sh/resource-policy: keep' "$reusable_render"
 
 migration_container="$(awk '/^      initContainers:/{capture=1} /^      containers:/{if(capture){exit}} capture{print}' "$reusable_render")"
 control_container="$(awk '/^        - name: control-plane$/{capture=1} /^      volumes:/{if(capture){exit}} capture{print}' "$reusable_render")"
-executor_container="$(awk '/^        - name: scripted-executor$/{capture=1} /^      volumes:/{if(capture){exit}} capture{print}' "$reusable_render")"
+executor_container="$(awk '/^        - name: conversation-supervisor$/{capture=1} /^      volumes:/{if(capture){exit}} capture{print}' "$reusable_render")"
 grep -q 'name: workflow-migrate' <<<"$migration_container"
 grep -q 'workflow-postgres-migrator' <<<"$migration_container"
 ! grep -q 'workflow-postgres-runtime' <<<"$migration_container"
-! grep -q 'workflow-jetstream' <<<"$migration_container"
+! grep -q 'jetstream' <<<"$migration_container"
 grep -q 'name: control-plane' <<<"$control_container"
 grep -q 'workflow-postgres-runtime' <<<"$control_container"
 grep -q 'workflow-jetstream-application' <<<"$control_container"
 ! grep -q 'workflow-postgres-migrator' <<<"$control_container"
 ! grep -q 'workflow-jetstream-executor' <<<"$control_container"
-grep -q 'name: scripted-executor' <<<"$executor_container"
+grep -q 'name: conversation-supervisor' <<<"$executor_container"
 grep -q 'workflow-jetstream-executor' <<<"$executor_container"
-! grep -q 'workflow-postgres' <<<"$executor_container"
+! grep -q 'postgres' <<<"$executor_container"
 ! grep -q 'workflow-jetstream-application' <<<"$executor_container"
 
 # The trusted workflow listener remains container-local and absent from Service.
@@ -107,17 +107,17 @@ grep -q 'helm.sh/resource-policy: keep' "$local_render"
 
 # Schemas and render-time guards reject unsafe role aliasing and unpinned inputs.
 if helm template invalid "$reusable_chart" \
-  --set-string workflowPostgres.runtimeSecretName= >/dev/null 2>&1; then
+  --set-string postgres.runtimeSecretName= >/dev/null 2>&1; then
   echo "reusable chart accepted an empty runtime Secret name" >&2
   exit 1
 fi
 if helm template invalid "$reusable_chart" \
-  --set-string workflowPostgres.runtimeSecretName=workflow-postgres-migrator >/dev/null 2>&1; then
+  --set-string postgres.runtimeSecretName=workflow-postgres-migrator >/dev/null 2>&1; then
   echo "reusable chart accepted one Secret for migration and runtime roles" >&2
   exit 1
 fi
 if helm template invalid "$reusable_chart" \
-  --set-string workflowJetstream.executorSecretName=workflow-jetstream-application >/dev/null 2>&1; then
+  --set-string jetstream.executorSecretName=workflow-jetstream-application >/dev/null 2>&1; then
   echo "reusable chart accepted one Secret for application and executor roles" >&2
   exit 1
 fi
@@ -152,7 +152,7 @@ if helm template invalid "$local_chart" \
   exit 1
 fi
 if helm template invalid "$local_chart" \
-  --set-string ayni-orchestrator.workflowPostgres.runtimeSecretName=other-runtime >/dev/null 2>&1; then
+  --set-string ayni-orchestrator.postgres.runtimeSecretName=other-runtime >/dev/null 2>&1; then
   echo "local chart accepted mismatched reusable-workload and PostgreSQL Secrets" >&2
   exit 1
 fi
@@ -221,7 +221,7 @@ publisher_container="$(awk '/^        - name: publisher$/{capture=1} /^      vol
 grep -q 'ayni-task-publisher' <<<"$publisher_container"
 grep -q 'mountPath: /var/run/publication-authority' <<<"$publisher_container"
 grep -q 'mountPath: /var/run/publication-github' <<<"$publisher_container"
-! grep -Eq 'workflow-postgres|workflow-jetstream|session-authority|OPENAI' <<<"$publisher_container"
+! grep -Eq 'postgres|jetstream|session-authority|OPENAI' <<<"$publisher_container"
 grep -q 'strategy: { type: Recreate }' "$publication_render"
 grep -q 'name: task-publisher-isolation' "$publication_render"
 for aliased_secret in workflow-publication-authority workflow-session-authority workflow-postgres-runtime workflow-jetstream-executor; do
@@ -246,7 +246,7 @@ collector_render="$scratch/collector.yaml"
 helm template traced "$reusable_chart" --namespace test \
   --set observability.collector.enabled=true \
   --set-string images.controlPlane="$control_image" \
-  --set-string images.scriptedExecutor="$executor_image" > "$collector_render"
+  --set-string images.conversationSupervisor="$executor_image" > "$collector_render"
 grep -q 'name: workflow-traces' "$collector_render"
 grep -q 'http://workflow-traces.test.svc:4318/v1/traces' "$collector_render"
 grep -q 'otel/opentelemetry-collector-contrib:0.147.0@sha256:e7c92c715f28ff142f3bcaccd4fc5603cf4c71276ef09954a38eb4038500a5a5' "$collector_render"
