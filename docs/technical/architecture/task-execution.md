@@ -6,6 +6,12 @@ Preparation never creates a coding command, worktree, provider call or publicati
 The [M4 delivery plan](../research/project-workflow-m4-delivery-plan.md) defines the
 later worker, quality and publication boundaries.
 
+The next [repository preparation extension](repository-preparation.md) will add
+trusted server-side source verification and admitted runtime evidence with a
+browser journey. It must retain this command's immutable scope, exact receipts,
+approved inputs and separate start authority. Until that extension is delivered
+and qualified, the local operator workflow below remains required.
+
 ## Authority and evidence
 
 `PrepareTaskExecution` exists only on the trusted operator private-v1 listener.

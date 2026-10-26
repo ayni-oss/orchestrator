@@ -10,6 +10,13 @@ The M1 runtime extends the clean PostgreSQL workflow authority with authenticate
 
 The complete M1 contract and later-slice boundary are defined in the [durable foundation contract](../research/project-workflow-m1-durable-foundation.md).
 
+The next planned extension is [shared repository preparation](repository-preparation.md),
+with a UI delivered alongside its backend slices. It introduces a catalog beside
+workspaces, direct project associations and verified runtime artifacts feeding
+existing task preparation. It preserves PostgreSQL authority, frozen attempts
+and separate quality/publication boundaries. The [delivery plan](../research/repository-runtime-workspace-delivery.md)
+defines qualification; these capabilities are not part of the current runtime.
+
 ## Runtime boundary
 
 ```mermaid
