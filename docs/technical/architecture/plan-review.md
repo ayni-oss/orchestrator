@@ -1,5 +1,11 @@
 # Durable plan review
 
+> UI status: the console and initial product workspace are removed. Browser steps
+> and evidence below describe the retired UI and are historical reference only.
+> Browser-dependent acceptance profiles are unavailable until replacement coverage
+> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
+> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+
 The first M3 slice retains operator-authored plans in their originating conversation.
 It implements review and revision from the [M3 contract](plans-and-approval.md).
 [Structured agent proposals](agent-proposals.md) extend this review path; [approval and task admission](task-admission.md) bind explicit authorization to an exact reviewed version.

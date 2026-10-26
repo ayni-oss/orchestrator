@@ -1,5 +1,11 @@
 # Task draft publication
 
+> UI status: the console and initial product workspace are removed. Browser steps
+> and evidence below describe the retired UI and are historical reference only.
+> Browser-dependent acceptance profiles are unavailable until replacement coverage
+> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
+> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+
 An operator can publish one exact completed task as a GitHub draft pull request.
 Publication requires accepted changes and passing managed quality evidence.
 Coding, quality and publication retain separate outcomes; publication never

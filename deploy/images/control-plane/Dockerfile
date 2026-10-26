@@ -5,7 +5,6 @@ WORKDIR /workspace
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY backend ./backend
 COPY proto ./proto
-COPY apps/console ./apps/console
 COPY dev/fixtures/task-source ./dev/fixtures/task-source
 COPY dev/fixtures/task-quality ./dev/fixtures/task-quality
 RUN --mount=type=cache,id=ayni-orchestrator-control-cargo-registry,target=/usr/local/cargo/registry \

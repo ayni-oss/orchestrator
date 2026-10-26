@@ -1,5 +1,11 @@
 # Local development
 
+> UI status: the console and initial product workspace are removed. Browser steps
+> and evidence below describe the retired UI and are historical reference only.
+> Browser-dependent acceptance profiles are unavailable until replacement coverage
+> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
+> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+
 The supported stack builds on M1 Slice 3 and runs one control plane, PostgreSQL 17.6, an isolated authenticated NATS/JetStream server, and one retained scripted supervisor on Docker Desktop Kubernetes. The supervisor
 provisions isolated conversation workers in a dedicated session namespace. PostgreSQL is the workflow authority; JetStream is durable transport, and broker storage never implies executor ownership.
 
@@ -48,67 +54,15 @@ All use seven-day age limits, a two-minute duplicate window, one local replica, 
 
 `dev/ctl check` verifies workload readiness, migration history through ordinal 29, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
 
-## Project workspace
+## Local API access
 
-After deployment, run `pnpm install --frozen-lockfile` and `dev/ctl web`.
-Open `http://127.0.0.1:3000/workspace/` for workspace/project discovery, creation,
-conversation chat, retained history, cancellation, activity and provider usage.
-`dev/ctl web 3001` selects another port. The command builds Svelte assets and serves
-them through the same trusted local Rust gateway as the contributor console.
-Restart it after rebuilding assets or replacing the control-plane pod.
-
-The scoped console link opens configuration, plans, tasks, recovery and publication
-for the selected conversation. It remains the complete operator surface during
-incremental product refinement. See [the workspace guide](../../../apps/web/README.md)
-for browser-fixture and deployed acceptance commands and their evidence boundaries.
-
-## Contributor console
-
-After deploying and checking the stack, run:
-
-```sh
-dev/ctl console
-```
-
-Open `http://127.0.0.1:3000`. Create or select a workspace, project and conversation,
-then send a message. The console shows accepted messages, scripted responses,
-activity, waiting states, stable older history, and receipt/cursor diagnostics.
-Use Disconnect/Reconnect to exercise observation without cancelling admitted work.
-Refresh reloads the selected conversation from authoritative state. Open another
-tab to inspect the same conversation or select a different one.
-
-An ambiguous command remains in that tab's pending panel. Retry sends its
-original key and exact content; do not clear browser storage to retry it. A
-canonical capacity rejection confirms non-admission, clears pending state and
-allows a new submission after capacity is available.
-The gateway rejects foreign origins and hostnames, so use the printed numeric
-loopback URL. Stop with Ctrl-C. After a control-plane Pod restart, rerun the console
-command to forward the replacement Pod. `dev/ctl console 3001` selects another port.
-
-To repeat browser acceptance against the running console:
-
-```sh
-pnpm exec playwright install chromium
-pnpm console:acceptance
-```
-
-Run browser acceptance against a deployment separate from an active restart/PVC
-inventory acceptance profile. The scenario creates a separate workspace and retains its accepted data. It checks
-scripted responses, refresh, two tabs, reconnect, a lost command response followed
-by reload/retry, conversation isolation, older history, content escaping and mobile
-layout. It also verifies configuration edits, frozen turn inputs, stale-tab
-conflicts, separate session identities and replacement retry/wake-up. A browser
-fixture verifies that a canonical capacity rejection clears pending state before
-legitimate resubmission; the PostgreSQL gate proves actual capacity behavior.
-Browser-boundary fixtures additionally check typed cursor expiry and a
-bounded slow-reader replay burst; real retention/backpressure is covered by the
-cumulative PostgreSQL gate. `CONSOLE_URL=http://127.0.0.1:3001` selects another local console port;
-`CONSOLE_EVIDENCE_DIRECTORY=/absolute/path` additionally saves a screenshot.
-
-The console is a trusted local contributor surface with scripted execution by
-default. Shared configuration, isolated sessions, opt-in OpenAI calls, reported
-usage and cancellation are available. The three read tools use frozen inputs and have no mutation capability. See [console architecture](../architecture/contributor-console.md)
-for the transport decision, bounds, security and recovery semantics.
+There is no supported browser UI. Run `dev/ctl gateway [PORT]` for the trusted
+loopback JSON/SSE adapter. It serves `/api/{method}` and `/watch`, with no pages or
+assets. See [the gateway boundary](../architecture/contributor-console.md).
+The [former UI example](../../../examples/web/EXAMPLE.md) is not deployed or wired
+to the current backend. Source preparation and publication helpers remain CLI
+operations. Browser-dependent acceptance profiles are unavailable pending future
+UI coverage; backend-only checks remain required.
 
 ## Plan review
 

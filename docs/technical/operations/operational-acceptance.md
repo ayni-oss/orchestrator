@@ -1,5 +1,11 @@
 # Operational acceptance
 
+> UI status: the console and initial product workspace are removed. Browser steps
+> and evidence below describe the retired UI and are historical reference only.
+> Browser-dependent acceptance profiles are unavailable until replacement coverage
+> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
+> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+
 Run the cumulative local profile against a committed checkout in an owned Docker Desktop namespace.
 Build and load the digest-pinned managed runtime for the full Orchestrator source before starting.
 The profile requires the task-quality fixture runtime, local Rust/Node tooling and installed Playwright Chromium.

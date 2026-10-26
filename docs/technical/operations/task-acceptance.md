@@ -1,5 +1,11 @@
 # Isolated task delivery acceptance
 
+> UI status: the console and initial product workspace are removed. Browser steps
+> and evidence below describe the retired UI and are historical reference only.
+> Browser-dependent acceptance profiles are unavailable until replacement coverage
+> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
+> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+
 M4 takes one approved independent task through isolated coding, managed quality
 and a reviewable draft. Run the cumulative gates below before claiming milestone
 completion. Each delivery PR records its executed evidence and failed or blocked

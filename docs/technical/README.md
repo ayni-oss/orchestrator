@@ -1,5 +1,11 @@
 # Technical documentation
 
+> UI status: the console and initial product workspace are removed. Browser steps
+> and evidence below describe the retired UI and are historical reference only.
+> Browser-dependent acceptance profiles are unavailable until replacement coverage
+> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
+> no UI. See [the retained UI example](../../examples/web/EXAMPLE.md).
+
 The runtime combines the M1 durable foundation with shared immutable agent configuration and isolated conversation sessions with scripted and opt-in OpenAI execution. PostgreSQL owns workflow and session authority; authenticated durable delivery and the trusted-loopback API remain v1 through alpha. Real provider calls retain request identity, uncertainty and nullable usage; bounded read tools retain frozen inputs and invocation evidence.
 
 ## Current implementation

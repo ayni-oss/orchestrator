@@ -1,5 +1,11 @@
 # Local durable workflow stack
 
+> UI status: the console and initial product workspace are removed. Browser steps
+> and evidence below describe the retired UI and are historical reference only.
+> Browser-dependent acceptance profiles are unavailable until replacement coverage
+> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
+> no UI. See [the retained UI example](../examples/web/EXAMPLE.md).
+
 The supported Docker Desktop stack contains one Ayni control plane, PostgreSQL 17.6, an isolated authenticated three-stream JetStream server, and one retained scripted executor. PostgreSQL is authoritative; broker storage and consumer ACKs remain distinct from application acceptance and executor ownership.
 
 ## Deploy and exercise
@@ -8,7 +14,7 @@ The supported Docker Desktop stack contains one Ayni control plane, PostgreSQL 1
 dev/ctl deploy
 dev/ctl check --expect-empty
 dev/ctl scenario
-dev/ctl console
+dev/ctl gateway
 ```
 
 The first deploy creates distinct immutable database, application, executor, acceptance, and administrative Secrets without printing their values. Credentials appear only in Secret-backed files or `secretKeyRef` entries. PostgreSQL, JetStream, and the executor ledger each use retained storage.
@@ -53,4 +59,4 @@ dev/ctl purge ayni-orchestrator-dev
 
 The command refuses absent or unlabelled namespaces and deletes all retained local workflow data.
 
-`dev/ctl console` serves the contributor UI at `http://127.0.0.1:3000` through a loopback-only gateway and Pod port-forward. Stop with Ctrl-C; rerun it after a Pod restart.
+`dev/ctl gateway` serves the local JSON/SSE API adapter at `http://127.0.0.1:3000` through a loopback-only gateway and Pod port-forward. It serves no browser UI. Stop with Ctrl-C; rerun after a Pod restart.

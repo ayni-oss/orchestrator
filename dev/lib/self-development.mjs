@@ -43,7 +43,7 @@ async function rpc(method, body, filename, deadline = Date.now() + 45_000) {
 }
 async function waitConsole() {
   for (let i = 0; i < 100; i++) {
-    try { if ((await fetch(base, { signal: AbortSignal.timeout(1000) })).ok) return; } catch {}
+    try { if ((await fetch(`${base}/api/ListWorkspaces`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-console-request': '1', Origin: base }, body: JSON.stringify({ limit: 1 }), signal: AbortSignal.timeout(1000) })).ok) return; } catch {}
     await delay(100);
   }
   throw new Error('local contributor gateway did not become ready');
@@ -111,7 +111,7 @@ async function reconnectGateway() {
     await delay(100);
   }
   assert(ready, 'replacement gRPC forward did not become ready');
-  launch(binary('workflow-console'), [`127.0.0.1:${consolePort}`, `127.0.0.1:${grpcPort}`], 'console-reconnected.txt');
+  launch(binary('workflow-gateway'), [`127.0.0.1:${consolePort}`, `127.0.0.1:${grpcPort}`], 'console-reconnected.txt');
   await waitConsole();
 }
 await waitConsole();

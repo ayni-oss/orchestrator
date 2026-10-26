@@ -80,30 +80,6 @@ jobs:
           node-version: 24.14.0
       - run: pnpm docs:check
 
-  workspace-web:
-    name: Project workspace
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
-      - name: Set up locked workspace dependencies
-        uses: ayni-oss/ayni/.github/actions/node-project@82966446499f11f5668dd314a432c8ab74788c3d # shared CI
-        with:
-          package-manager: pnpm
-          node-version: 24.14.0
-      - run: pnpm web:check
-      - run: pnpm web:test
-      - run: pnpm web:build
-      - run: pnpm exec playwright install --with-deps chromium
-      - name: Exercise browser recovery and isolation
-        run: pnpm web:acceptance
-
   deployment:
     name: Deployment charts
     runs-on: ubuntu-24.04

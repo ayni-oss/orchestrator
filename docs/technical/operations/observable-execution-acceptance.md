@@ -1,5 +1,11 @@
 # Observable execution acceptance
 
+> This combined browser profile is unavailable because the console and product UI
+> are removed. `dev/ctl acceptance ... --observable` exits before cluster work.
+> The procedure below is historical reference, not current validation evidence.
+> See [the UI reference status](../../../examples/web/EXAMPLE.md).
+
+
 Run this profile from a clean, committed checkout on Docker Desktop Kubernetes.
 It combines retained task delivery and recovery with browser progress, inspector
 reads and locally exported correlated traces. It does not require a live provider

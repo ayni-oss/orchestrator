@@ -1,5 +1,11 @@
 # Task recovery review
 
+> UI status: the console and initial product workspace are removed. Browser steps
+> and evidence below describe the retired UI and are historical reference only.
+> Browser-dependent acceptance profiles are unavailable until replacement coverage
+> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
+> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+
 Recovery review lets users inspect a proposed next action without starting it.
 The originating task retains immutable operator and worker proposals, questions and answers.
 [Task feedback](task-feedback.md) remains open until exact confirmation handles its recovery decision.

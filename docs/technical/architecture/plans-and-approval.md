@@ -1,5 +1,11 @@
 # Plans and approval
 
+> UI status: the console and initial product workspace are removed. Browser steps
+> and evidence below describe the retired UI and are historical reference only.
+> Browser-dependent acceptance profiles are unavailable until replacement coverage
+> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
+> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+
 Date: 2026-10-21. Status: M3 implementation contract; operator-authored review, agent proposals and approval/task admission are implemented. Final cumulative M3 acceptance remains planned.
 
 | Term | Meaning |

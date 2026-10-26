@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ $# -eq 1 || "${2:-}" == --quality-only ]]; then
+  echo 'This acceptance profile includes retired browser coverage and is unavailable until UI acceptance is rebuilt.' >&2
+  exit 2
+fi
+
 
 readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$dev_directory/lib/common.sh"
