@@ -15,6 +15,8 @@ Durable-workflow local Docker Desktop development:
   secrets                       Create immutable database and broker role Secrets
   deploy | redeploy | up        Build and install or upgrade the Slice 3 stack
   check [--expect-empty]        Check migrations, streams, and workload readiness
+  live [once|status|migrate|reset NAMESPACE]
+                                Dev-only frontend HMR and cached Rust rebuild/rollout
   gateway [PORT]                Start the local JSON/SSE API adapter (default 3000)
   prepare-task verify CHECKOUT SELECTION_JSON FROZEN_REQUEST_JSON
   prepare-task submit FROZEN_REQUEST_JSON
@@ -103,6 +105,9 @@ case "$command" in
     ;;
   prepare-task)
     "$scripts/prepare-task.sh" "$@"
+    ;;
+  live)
+    exec python3 "$scripts/live.py" "$@"
     ;;
   gateway)
     [[ $# -le 1 ]] || { echo "usage: dev/ctl gateway [PORT]" >&2; exit 2; }

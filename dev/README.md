@@ -8,6 +8,12 @@
 
 The supported Docker Desktop stack contains one Ayni control plane, PostgreSQL 17.6, an isolated authenticated three-stream JetStream server, and one retained scripted executor. PostgreSQL is authoritative; broker storage and consumer ACKs remain distinct from application acceptance and executor ownership.
 
+## Live code changes
+
+Use `dev/ctl live` for a dev-only diagnostic UI with frontend HMR and cached Rust
+rebuild/rollout on Docker Desktop. See [live development](LIVE.md) for migration
+barriers, explicit reset, retained-state behavior and acceptance limits.
+
 ## Deploy and exercise
 
 ```sh

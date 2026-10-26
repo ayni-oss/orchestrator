@@ -78,6 +78,14 @@ jobs:
         with:
           package-manager: pnpm
           node-version: 24.14.0
+      - name: Test dev live UI boundary
+        run: pnpm --filter @ayni-orchestrator/live-ui test
+      - name: Test live API and SSE proxy
+        run: pnpm --filter @ayni-orchestrator/live-ui test:loopback
+      - name: Install live development browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Test development HMR in browser
+        run: pnpm --filter @ayni-orchestrator/live-ui test:browser
       - run: pnpm docs:check
 
   deployment:
@@ -184,6 +192,10 @@ jobs:
         run: cargo fmt --all --check
       - name: Test acceptance report integrity
         run: python3 -m unittest discover -s dev/lib -p 'test_*.py'
+      - name: Test live reload and gateway recovery
+        run: |
+          python3 -m unittest discover -s dev/tests -v
+          python3 -m unittest discover -s dev/live-ui -p 'test_*.py' -v
       - name: Test workspace
         run: cargo test --workspace --all-targets
       - name: Test required loopback fixtures

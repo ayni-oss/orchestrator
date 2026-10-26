@@ -119,6 +119,11 @@ evidence before completion; none is declared implemented by this roadmap.
 
 ### Next focus: repository preparation with a usable UI
 
+PR 0 establishes a [dev-only live editing loop](dev/LIVE.md): frontend HMR, cached
+Rust rebuild/rollout, explicit schema migration/reset and retained-state diagnostics.
+Each product slice uses this loop during implementation and still requires normal
+immutable-image deployment and acceptance evidence.
+
 Deliver shared repository integration, Ayni inspection, verified runtime images
 and project selection before expanding product analytics or event inputs. Build
 the UI and canonical backend together in small end-to-end slices. Each slice must
