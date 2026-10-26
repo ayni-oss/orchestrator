@@ -8,12 +8,22 @@
 
 The runtime combines the M1 durable foundation with shared immutable agent configuration and isolated conversation sessions with scripted and opt-in OpenAI execution. PostgreSQL owns workflow and session authority; authenticated durable delivery and the trusted-loopback API remain v1 through alpha. Real provider calls retain request identity, uncertainty and nullable usage; bounded read tools retain frozen inputs and invocation evidence.
 
+## Next delivery focus
+
+Shared repository onboarding and verified runtime preparation ship alongside a new
+UI in the [active roadmap](../../ROADMAP.md#next-focus-repository-preparation-with-a-usable-ui).
+Projects select catalog repositories directly and can reuse them across workspaces.
+These documents specify planned behavior, not delivered support:
+
+- [Repository preparation](architecture/repository-preparation.md): ownership, Ayni gates, credentials, immutable artifacts and task handoff.
+- [Repository/runtime workspace delivery](research/repository-runtime-workspace-delivery.md): UI increments, failure/recovery matrix and cumulative qualification.
+
 ## Current implementation
 
 - [Observable execution acceptance](operations/observable-execution-acceptance.md): combined deployed progress, task evidence, replay and trace qualification.
 - [Execution tracing](operations/execution-tracing.md): optional self-hosted OTLP export and causal diagnosis.
 - [Execution timeline](architecture/execution-timeline.md): retained accepted transitions, stable history pages and the workspace inspector.
-- [Project workspace](architecture/project-workspace.md): Svelte project navigation, chat, retained activity, exact retries and scoped console handoff.
+- [Project workspace](architecture/project-workspace.md): current API-only status and the planned repository/project interface.
 
 - [Agent plan proposals](architecture/agent-proposals.md): bounded terminal provider proposals, authenticated provenance and retained review.
 - [Task dependencies](architecture/task-dependencies.md): reviewed DAGs, exact upstream commits, trusted source integration and four isolated execution slots.
@@ -53,7 +63,7 @@ The [event-platform history](history/event-platform/index.md) is retained as dat
 [backend foundation roadmap archive](history/backend-foundation-roadmap.md) retains
 M1–M8 delivery scope and acceptance limits.
 
-- [Contributor console](architecture/contributor-console.md): local browser transport, discovery, and retry boundaries.
+- [Local API gateway](architecture/contributor-console.md): current JSON/SSE transport and local operator boundary; no UI assets.
 
 - [Task execution preparation](architecture/task-execution.md): trusted operator evidence and frozen attempts.
 - [M4 delivery plan](research/project-workflow-m4-delivery-plan.md): six staged execution, quality and publication scopes.

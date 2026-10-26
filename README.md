@@ -9,6 +9,15 @@ Ayni Orchestrator is evolving into an open-source software factory for AI agents
 built on durable project conversations, reviewed plans and isolated task execution.
 The [active roadmap](ROADMAP.md) focuses on the product workspace, responsive
 feedback, execution traceability, project metrics and future event-driven inputs.
+
+The next focus is shared repository onboarding and verified runtime preparation,
+with a new UI delivered alongside each slice for local testing. Projects select
+catalog repositories directly, including reuse across workspaces. See the
+[preparation contract](docs/technical/architecture/repository-preparation.md) and
+[UI delivery plan](docs/technical/research/repository-runtime-workspace-delivery.md).
+These are planned capabilities; current task source preparation still uses the
+trusted local helper, and there is no supported browser UI yet.
+
 The [backend foundation roadmap](docs/technical/history/backend-foundation-roadmap.md)
 is archived with its acceptance limits; planned product capabilities are not claims
 of delivered behavior.
@@ -84,7 +93,8 @@ active workspace and deployment. It uses historical backend contracts.
 `dev/ctl gateway` starts a loopback-only JSON/SSE API adapter for trusted local
 tooling; it serves no pages or assets. The private v1 gRPC API and trusted source
 and publication helpers remain available. Browser-dependent acceptance profiles
-are blocked until a future UI is implemented and qualified.
+are blocked until the next-focus UI and its replacement coverage are implemented
+and qualified.
 
 See [task delivery acceptance](docs/technical/operations/task-acceptance.md) for the cumulative M4 gates and integration limits. See [local development](docs/technical/operations/local-development.md) for prerequisites, trusted diagnostics, validation, restart checks, and explicit cleanup.
 
