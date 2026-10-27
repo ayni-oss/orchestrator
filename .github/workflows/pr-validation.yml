@@ -78,14 +78,15 @@ jobs:
         with:
           package-manager: pnpm
           node-version: 24.14.0
-      - name: Test dev live UI boundary
-        run: pnpm --filter @ayni-orchestrator/live-ui test
-      - name: Test live API and SSE proxy
-        run: pnpm --filter @ayni-orchestrator/live-ui test:loopback
-      - name: Install live development browser
+      - name: Validate product frontend
+        run: |
+          pnpm --filter @ayni-orchestrator/web check
+          pnpm --filter @ayni-orchestrator/web test
+          pnpm web:build
+      - name: Install application browser
         run: pnpm exec playwright install --with-deps chromium
-      - name: Test development HMR in browser
-        run: pnpm --filter @ayni-orchestrator/live-ui test:browser
+      - name: Test application HMR
+        run: pnpm --filter @ayni-orchestrator/web test:hmr
       - run: pnpm docs:check
 
   deployment:
@@ -195,15 +196,21 @@ jobs:
       - name: Test live reload and gateway recovery
         run: |
           python3 -m unittest discover -s dev/tests -v
-          python3 -m unittest discover -s dev/live-ui -p 'test_*.py' -v
       - name: Test workspace
         run: cargo test --workspace --all-targets
       - name: Test required loopback fixtures
         run: scripts/ci/check-workflow-loopback.sh
       - name: Lint workspace
         run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Test cumulative M1 authority, transport and recovery
-        run: scripts/ci/check-workflow-m1.sh
+      - name: Set up product browser dependencies
+        uses: ayni-oss/ayni/.github/actions/node-project@82966446499f11f5668dd314a432c8ab74788c3d # shared CI
+        with:
+          package-manager: pnpm
+          node-version: 24.14.0
+      - name: Install product browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Test cumulative M1 authority, transport, recovery and product browser
+        run: AYNI_CONNECTION_BROWSER=1 scripts/ci/check-workflow-m1.sh
 
   ayni:
     name: Ayni quality

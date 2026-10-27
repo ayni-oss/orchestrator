@@ -1,6 +1,6 @@
 # Repository preparation and workspace delivery
 
-Status: next delivery plan, 2026-10-26; no slice is declared implemented here.
+Status: connection foundation delivered in source; full catalog, preparation and cumulative qualification remain pending. See [integration connections](../architecture/integration-connections.md) for the implemented boundary.
 
 Deliver the [roadmap focus](../../../ROADMAP.md#next-focus-repository-preparation-with-a-usable-ui)
 through the [shared repository preparation contract](../architecture/repository-preparation.md).

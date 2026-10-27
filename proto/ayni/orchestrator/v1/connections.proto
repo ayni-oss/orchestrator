@@ -1,0 +1,89 @@
+syntax = "proto3";
+package ayni.orchestrator.v1;
+
+// Trusted local-operator configuration. Credential values are write-only.
+service ConnectionService {
+  rpc SaveGithubConnection(SaveGithubConnectionRequest) returns (SaveGithubConnectionResponse);
+  rpc SetConnectionEnabled(SetConnectionEnabledRequest) returns (SetConnectionEnabledResponse);
+  rpc ValidateGithubConnection(ValidateGithubConnectionRequest) returns (ValidateGithubConnectionResponse);
+  rpc GetConnectionOperation(GetConnectionOperationRequest) returns (GetConnectionOperationResponse);
+  rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse);
+  rpc ListConnectionOperations(ListConnectionOperationsRequest) returns (ListConnectionOperationsResponse);
+}
+
+message Connection {
+  string id = 1;
+  string display_name = 2;
+  string provider = 3;
+  string capability = 4;
+  uint64 revision = 5;
+  bool enabled = 6;
+  string app_id = 7;
+  string active_credential_revision = 8;
+  string candidate_credential_revision = 9;
+  string status = 10;
+  string safe_reason = 11;
+}
+
+message ConnectionOperation {
+  string id = 1;
+  string connection_id = 2;
+  string kind = 3;
+  string state = 4;
+  string safe_reason = 5;
+  uint64 connection_revision = 6;
+  Connection connection = 7;
+}
+
+message SaveGithubConnectionRequest {
+  string idempotency_key = 1;
+  // Empty for creation. Updates require an exact expected_revision.
+  string connection_id = 2;
+  uint64 expected_revision = 3;
+  string display_name = 4;
+  string app_id = 5;
+  // Never returned or copied into a receipt, event or diagnostic.
+  string private_key_pem = 6;
+}
+message SetConnectionEnabledRequest {
+  string idempotency_key = 1;
+  string connection_id = 2;
+  uint64 expected_revision = 3;
+  bool enabled = 4;
+}
+message ValidateGithubConnectionRequest {
+  // Resumes validation of the candidate retained by SaveGithubConnection.
+  string operation_id = 1;
+}
+message GetConnectionOperationRequest {
+  string idempotency_key = 1;
+}
+message SaveGithubConnectionResponse {
+  ConnectionOperation operation = 1;
+}
+message SetConnectionEnabledResponse {
+  ConnectionOperation operation = 1;
+}
+message ValidateGithubConnectionResponse {
+  ConnectionOperation operation = 1;
+}
+message GetConnectionOperationResponse {
+  ConnectionOperation operation = 1;
+}
+message ListConnectionsRequest {
+  string after_id = 1;
+  uint32 limit = 2;
+}
+message ListConnectionsResponse {
+  repeated Connection connections = 1;
+  string next_after_id = 2;
+}
+message ListConnectionOperationsRequest {
+  string connection_id = 1;
+  string after_id = 2;
+  uint32 limit = 3;
+}
+message ListConnectionOperationsResponse {
+  repeated ConnectionOperation operations = 1;
+  string next_after_id = 2;
+}

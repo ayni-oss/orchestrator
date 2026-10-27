@@ -1,6 +1,7 @@
 mod acceptance;
 mod capacity;
 mod configuration;
+pub mod connections;
 mod context_manifest;
 mod delivery;
 mod delivery_failure;

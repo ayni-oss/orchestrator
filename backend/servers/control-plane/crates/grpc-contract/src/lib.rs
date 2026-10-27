@@ -47,6 +47,17 @@ mod tests {
             services,
             BTreeMap::from([
                 (
+                    "ConnectionService",
+                    BTreeSet::from([
+                        "SaveGithubConnection",
+                        "SetConnectionEnabled",
+                        "ValidateGithubConnection",
+                        "GetConnectionOperation",
+                        "ListConnections",
+                        "ListConnectionOperations",
+                    ])
+                ),
+                (
                     "ProjectConversationService",
                     BTreeSet::from([
                         "AuthorizeOutcomeAssessments",

@@ -3,7 +3,7 @@
 > This combined browser profile is unavailable because the console and product UI
 > are removed. `dev/ctl acceptance ... --observable` exits before cluster work.
 > The procedure below is historical reference, not current validation evidence.
-> See [the UI reference status](../../../examples/web/EXAMPLE.md).
+> See [the UI reference status](../../../apps/web/README.md).
 
 
 Run this profile from a clean, committed checkout on Docker Desktop Kubernetes.

@@ -1,8 +1,9 @@
 # Live development
 
-This is a development-only loop for Docker Desktop Kubernetes. It does not qualify
-production images or advertise a supported product UI. The diagnostic page is a
-small HMR and canonical API probe; repository onboarding will supply the product UI.
+This is a development-only loop for Docker Desktop Kubernetes. It runs the sole
+example-derived web application with Svelte HMR and rebuilds/redeploys the Rust
+backend. There is no separate diagnostic frontend. Immutable-image acceptance is
+still required; live debug builds are development evidence only.
 
 ## Start
 
@@ -20,13 +21,12 @@ command when selecting another disposable local namespace. Only the explicitly
 selected `docker-desktop` context is allowed. Namespace names must start with
 `ayni-orchestrator-` and fit the 54-character parent/session bound.
 
-Open http://127.0.0.1:5173. Both ports must be free; select alternatives with
-`AYNI_ORCHESTRATOR_LIVE_UI_PORT` (default 5173) and
-`AYNI_ORCHESTRATOR_LIVE_GATEWAY_PORT` (default 3000). The page shows build state, last successful deployment
-identity, stopped/stale state and a read-only workspace probe. Edit
-`dev/live-ui/main.mjs` to exercise HMR. The local Vite proxy validates Host/Origin
-before forwarding requests to the loopback-only API gateway; private gRPC remains
-pod-local. No credentials are returned through the page or status file.
+Open http://127.0.0.1:5174. The UI and gateway ports must be free; configure them
+with `AYNI_ORCHESTRATOR_LIVE_UI_PORT` (default 5174) and
+`AYNI_ORCHESTRATOR_LIVE_GATEWAY_PORT` (default 3000). Edit the existing application
+in `apps/web` to exercise HMR. Inspect backend build/rollout state with
+`dev/ctl live status` and the terminal; no extra UI or server is required. The
+application forwards only allowlisted requests to the loopback API gateway.
 
 Rust edits are detected by content, including additions and deletions. The loop
 builds affected component images with pinned Linux Rust and BuildKit Cargo caches,
@@ -113,11 +113,19 @@ reset. Do not use an environment containing work you need to preserve for that l
 
 ```sh
 python3 -m unittest discover -s dev/tests -v
-python3 -m unittest discover -s dev/live-ui -p 'test_*.py' -v
-pnpm --filter @ayni-orchestrator/live-ui test
+pnpm --filter @ayni-orchestrator/web check
+pnpm --filter @ayni-orchestrator/web test
+pnpm --filter @ayni-orchestrator/web test:hmr
 ```
 
 Before claiming a delivery validated, run normal repository checks and build/deploy
 immutable production images from the recorded source revision using `dev/ctl deploy`
 in a separate acceptance namespace. Run the relevant cumulative acceptance profiles.
-Debug images, a green status page and an HMR update are development evidence only.
+Debug images, successful build status and an HMR update are development evidence only.
+
+## Product UI
+
+`apps/web` is the only frontend. It uses the example's shared shell, original
+light/dark theme tokens, fonts and component library. The live loop and production
+build serve the same application; no diagnostic page or alternate design remains.
+The reconnecting headless gateway lives in `dev/lib/gateway.py`.

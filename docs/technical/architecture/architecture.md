@@ -1,10 +1,10 @@
 # Orchestrator runtime architecture
 
-> UI status: the console and initial product workspace are removed. Browser steps
-> and evidence below describe the retired UI and are historical reference only.
-> Browser-dependent acceptance profiles are unavailable until replacement coverage
-> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
-> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+> UI status: the local product supports configuration and basic workspace/project
+> navigation; see [integration connections](../architecture/integration-connections.md).
+> Conversation/task browser steps below describe the retired UI and remain
+> historical. Their acceptance profiles require replacement coverage. The API
+> gateway itself serves no UI assets.
 
 The M1 runtime extends the PostgreSQL application authority with authenticated durable delivery and one retained conversation supervisor. PostgreSQL decides admission, ownership, report acceptance, and visible conversation state. JetStream retains transport copies; no broker ACK independently changes application authority.
 
@@ -64,6 +64,8 @@ enabled OpenAI sessions use the [provider request contract](provider-requests.md
 to retain sending intent, results, nullable usage and uncertain outcomes.
 
 ## Canonical private-v1 surface
+
+`ConnectionService` provides trusted local integration commands, safe projections, retained receipts and candidate validation; see [integration connections](integration-connections.md).
 
 `ProjectService` supports `CreateWorkspace`, `CreateProject`, `ListWorkspaces`, and `ListProjects`. `ProjectConversationService` supports `CreateConversation`, `SendMessage`, `GetConversationSnapshot`, and `ListConversationHistory`. `ListConversations` provides scoped bounded discovery. `WatchConversation` streams an atomic snapshot boundary or replays accepted updates strictly after a scoped cursor.
 

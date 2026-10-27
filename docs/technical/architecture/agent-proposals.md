@@ -1,10 +1,10 @@
 # Agent plan proposals
 
-> UI status: the console and initial product workspace are removed. Browser steps
-> and evidence below describe the retired UI and are historical reference only.
-> Browser-dependent acceptance profiles are unavailable until replacement coverage
-> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
-> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+> UI status: the local product supports configuration and basic workspace/project
+> navigation; see [integration connections](../architecture/integration-connections.md).
+> Conversation/task browser steps below describe the retired UI and remain
+> historical. Their acceptance profiles require replacement coverage. The API
+> gateway itself serves no UI assets.
 
 Conversation discussion can end in a structured proposal for review. The agent
 can create a new plan in its originating conversation; it cannot approve a plan,

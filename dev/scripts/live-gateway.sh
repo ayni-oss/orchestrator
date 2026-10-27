@@ -9,4 +9,4 @@ namespace="$(dev_namespace)"
 cd "$DEV_REPOSITORY_ROOT"
 cargo build --locked -p ayni-orchestrator-control-plane --bin workflow-gateway
 binary="${CARGO_TARGET_DIR:-$DEV_REPOSITORY_ROOT/target}/debug/workflow-gateway"
-exec python3 "$dev_directory/live-ui/gateway.py" "$namespace" "$binary"
+exec python3 "$dev_directory/lib/gateway.py" "$namespace" "$binary"

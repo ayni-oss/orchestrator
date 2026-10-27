@@ -1,10 +1,10 @@
 # Local development
 
-> UI status: the console and initial product workspace are removed. Browser steps
-> and evidence below describe the retired UI and are historical reference only.
-> Browser-dependent acceptance profiles are unavailable until replacement coverage
-> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
-> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+> UI status: the local product supports configuration and basic workspace/project
+> navigation; see [integration connections](../architecture/integration-connections.md).
+> Conversation/task browser steps below describe the retired UI and remain
+> historical. Their acceptance profiles require replacement coverage. The API
+> gateway itself serves no UI assets.
 
 The supported stack builds on M1 Slice 3 and runs one control plane, PostgreSQL 17.6, an isolated authenticated NATS/JetStream server, and one retained conversation supervisor on Docker Desktop Kubernetes. The supervisor
 provisions isolated conversation workers in a dedicated session namespace. PostgreSQL is the workflow authority; JetStream is durable transport, and broker storage never implies executor ownership.
@@ -62,7 +62,7 @@ The [development-only live loop](../../../dev/LIVE.md) provides frontend HMR and
 cached Rust debug rebuild/rollout in a separate local namespace. It preserves the
 canonical API, database, broker and isolated-worker boundaries. Schema changes
 require an explicit migration command or deliberate disposable-environment reset.
-The diagnostic page is not the product UI; immutable-image acceptance remains required.
+The live loop serves the sole example-derived application; immutable-image acceptance remains required.
 
 ## Prerequisites
 
@@ -107,17 +107,19 @@ the credentials or writing them to configuration files.
 
 All use seven-day age limits, a two-minute duplicate window, one local replica, and a 260-KiB maximum stored message. The combined 512-MiB stream budget sits below the 1-GiB server budget on a retained 2-GiB PVC. The executor has a retained 512-MiB PVC and enforces a 192-MiB authority ledger plus a 64-MiB quarantine subquota within a 256-MiB combined logical cap.
 
-`dev/ctl check` verifies workload readiness, migration history through ordinal 29, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
+`dev/ctl check` verifies workload readiness, migration history through ordinal 30, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
 
 ## Local API access
 
-There is no supported browser UI. Run `dev/ctl gateway [PORT]` for the trusted
+The local product covers configuration and workspace/project navigation.
+Run `dev/ctl gateway [PORT]` for the trusted
 loopback JSON/SSE adapter. It serves `/api/{method}` and `/watch`, with no pages or
 assets. See [the gateway boundary](../architecture/contributor-console.md).
-The [former UI example](../../../examples/web/EXAMPLE.md) is not deployed or wired
-to the current backend. Source preparation and publication helpers remain CLI
-operations. Browser-dependent acceptance profiles are unavailable pending future
-UI coverage; backend-only checks remain required.
+The [web application](../../../apps/web/README.md) is the sole frontend and uses
+the example design against current APIs. Source preparation and publication helpers remain CLI
+operations. Conversation/task browser acceptance profiles remain unavailable pending their
+replacement coverage. The configuration foundation has its own combined browser
+gate; backend-only checks remain required.
 
 ## Plan review
 
@@ -358,7 +360,7 @@ pnpm proto:check
 pnpm docs:check
 ```
 
-The PostgreSQL gate covers migrations through ordinal 29, frozen configuration, scoped context and session generations, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. Task-quality coverage additionally verifies immutable evidence retries, accepted snapshot/runtime identities, scoped reads and cancellation/deadline fencing. Task feedback coverage verifies failed quality, interrupted work, empty success and exact notice replay through owner restarts. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
+The PostgreSQL gate covers migrations through ordinal 30, frozen configuration, scoped context and session generations, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. Task-quality coverage additionally verifies immutable evidence retries, accepted snapshot/runtime identities, scoped reads and cancellation/deadline fencing. Task feedback coverage verifies failed quality, interrupted work, empty success and exact notice replay through owner restarts. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
 
 After browser acceptance creates at least two conversations, inspect the deployed
 session boundary without reading Secret data:
@@ -483,3 +485,40 @@ dev/ctl purge ayni-orchestrator-dev
 
 The purge command refuses absent, unlabelled, or non-local namespaces. It deletes the exact parent namespace and its ownership-labelled session
 namespace, including all Secrets and retained workflow/session stores.
+
+## Product configuration foundation
+
+`dev/ctl live` now also starts the new SvelteKit product at
+`http://127.0.0.1:5174`. This is the only frontend. The local canonical API gateway
+stays on port 3000; those two ports must be available.
+Existing retained live environments require the explicit forward migration step
+from [the live-development guide](../../../dev/LIVE.md) before the new API can run.
+
+Alternatively, run `dev/ctl gateway` against the deployed stack and `pnpm web:dev`
+in another terminal. `pnpm web:build` builds the Node application; start it with
+`HOST=127.0.0.1 PORT=5174 pnpm --filter @ayni-orchestrator/web start`.
+The API gateway remains required; the frontend owns no database credentials.
+
+In Configuration → Source control, add a named GitHub App connection with its App ID
+and PEM private key. Save, then explicitly validate the retained candidate. App
+installation discovery follows in the next PR. Keys cannot be read back. Replace a
+key by selecting the connection and submitting a candidate; failed validation leaves
+any active credential in place. An interrupted response offers operation recovery.
+
+Credentials live in PostgreSQL without application-level encryption. Hosting must
+protect database storage and backups; local development does not require encryption.
+Never commit real credentials or put them in shell arguments.
+
+Run frontend checks with `pnpm typecheck`, `pnpm test` and `pnpm web:build`.
+Run the real PostgreSQL/gRPC/gateway/browser journey with:
+
+```sh
+pnpm exec playwright install chromium
+AYNI_CONNECTION_BROWSER=1 scripts/ci/check-workflow-postgres-feasibility.sh
+```
+
+This builds the frontend and checks both Vite development and production Node
+serving against its own disposable PostgreSQL fixture. The fixture is removed
+after the gate. It does not use a
+live GitHub App or establish registry, provider or runtime readiness. See
+[connection authority](../architecture/integration-connections.md).

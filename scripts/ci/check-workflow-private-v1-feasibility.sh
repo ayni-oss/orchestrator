@@ -35,6 +35,9 @@ for directory in owned.rglob("*"):
 
 root = Path("proto/ayni/orchestrator/v1")
 expected = {
+    "connections.proto": {
+        "ConnectionService": ["SaveGithubConnection", "SetConnectionEnabled", "ValidateGithubConnection", "GetConnectionOperation", "ListConnections", "ListConnectionOperations"],
+    },
     "projects.proto": {
         "ProjectService": ["CreateWorkspace", "CreateProject", "ListWorkspaces", "ListProjects", "GetAgentConfiguration", "UpdateAgentConfiguration", "GetTurnInputs", "GetTurnContextInputs"],
     },
