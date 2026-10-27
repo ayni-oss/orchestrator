@@ -3,6 +3,7 @@
  import { Button } from '$lib/components/ui/button/index.js';
  import { Input } from '$lib/components/ui/input/index.js';
  import { Textarea } from '$lib/components/ui/textarea/index.js';
+ import * as NativeSelect from '$lib/components/ui/native-select/index.js';
  import { Label } from '$lib/components/ui/label/index.js';
  import InformationCard from '$lib/components/information-card.svelte';
  import Feedback from '$lib/components/feedback.svelte';
@@ -28,8 +29,8 @@
  {#if notice}<Feedback title="Workspace updated" message={notice}/>{/if}
  {#if pending}<InformationCard title="Recover a configuration update"><p>Retry the retained command to recover its original result.</p><div class="flex gap-3"><Button disabled={busy} onclick={recover}>Recover update</Button><Button disabled={busy} variant="outline" onclick={()=>{pending='';sessionStorage.removeItem(storageKey);}}>Abandon recovery</Button></div></InformationCard>{/if}
  {#if configuration}<InformationCard title="Agent configuration"><form onsubmit={submit} class="space-y-5">
-  <div class="space-y-2"><Label for="workspace-connection">OpenAI connection</Label><select id="workspace-connection" class="h-10 w-full border border-input bg-background px-3 text-sm" bind:value={connectionId} onchange={()=>model=''} required disabled={busy||!!pending}><option value="" disabled>Select a connection</option>{#each connections as c (c.id)}<option value={c.id} disabled={!c.enabled||!c.activeCredentialRevision}>{c.displayName}{!c.enabled?' (disabled)':!c.activeCredentialRevision?' (validation required)':''}</option>{/each}</select><p class="text-xs text-muted-foreground"><a class="underline" href="/settings/llm-providers/openai">Manage OpenAI connections</a></p></div>
-  <div class="space-y-2"><Label for="workspace-model">Model</Label><select id="workspace-model" class="h-10 w-full border border-input bg-background px-3 text-sm" bind:value={model} required disabled={busy||!!pending||!selected}><option value="" disabled>Select a discovered model</option>{#each models as id (id)}<option value={id}>{id}</option>{/each}</select></div>
+  <div class="space-y-2"><Label for="workspace-connection">OpenAI connection</Label><NativeSelect.Root id="workspace-connection" class="w-full" bind:value={connectionId} onchange={()=>model=''} required disabled={busy||!!pending}><NativeSelect.Option value="" disabled>Select a connection</NativeSelect.Option>{#each connections as c (c.id)}<NativeSelect.Option value={c.id} disabled={!c.enabled||!c.activeCredentialRevision}>{c.displayName}{!c.enabled?' (disabled)':!c.activeCredentialRevision?' (validation required)':''}</NativeSelect.Option>{/each}</NativeSelect.Root><p class="text-xs text-muted-foreground"><a class="underline" href="/settings/llm-providers/openai">Manage OpenAI connections</a></p></div>
+  <div class="space-y-2"><Label for="workspace-model">Model</Label><NativeSelect.Root id="workspace-model" class="w-full" bind:value={model} required disabled={busy||!!pending||!selected}><NativeSelect.Option value="" disabled>Select a discovered model</NativeSelect.Option>{#each models as id (id)}<NativeSelect.Option value={id}>{id}</NativeSelect.Option>{/each}</NativeSelect.Root></div>
   <div class="space-y-2"><Label for="workspace-instructions">Instructions</Label><Textarea id="workspace-instructions" bind:value={instructions} maxlength={16384} rows={5} disabled={busy||!!pending}/></div>
   <div class="grid gap-4 sm:grid-cols-2">
    <div class="space-y-2"><Label for="max-input">Input token budget</Label><Input id="max-input" type="number" min={1} max={1000000} value={input} oninput={event=>input=event.currentTarget.value} required disabled={busy||!!pending}/></div>
