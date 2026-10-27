@@ -1,1 +1,1 @@
-GitHub mark sourced from Simple Icons 14.0.0 (https://github.com/simple-icons/simple-icons/tree/14.0.0/icons). Simple Icons is CC0; company marks remain subject to their owners’ trademark policies. SVG fills are white for theme-aware display.
+GitHub and OpenAI marks sourced from Simple Icons 14.0.0 (https://github.com/simple-icons/simple-icons/tree/14.0.0/icons). Simple Icons is CC0; company marks remain subject to their owners’ trademark policies. SVG fills are white for theme-aware display.

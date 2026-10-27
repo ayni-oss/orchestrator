@@ -13,7 +13,7 @@
       <Card.Root>
         <Card.Header>
           <Card.Title class="flex items-center gap-3">
-            <span class="font-mono text-primary" aria-hidden="true">AI</span>
+            <img src={`/provider-logos/${provider.logo}.svg`} alt="" class="size-6 shrink-0 invert dark:invert-0" />
             {provider.name}
           </Card.Title>
         </Card.Header>
