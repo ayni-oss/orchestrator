@@ -16,4 +16,18 @@ backend rebuild/rollout. The default web URL is http://127.0.0.1:5174.
 Configuration uses the original `/settings/source-control` and
 `/settings/source-control/github` routes, alongside `/settings/container-registries`,
 `/settings/llm-providers` and `/workspace/settings`. Light/dark themes use the example's
-unchanged design tokens and locally bundled fonts.
+design tokens and locally bundled fonts, with the input token mapped to the border color so form controls stay visible in both themes.
+
+## Shared UI components
+
+Use shadcn-svelte components from `src/lib/components/ui` for interactive controls,
+including Button, Input, Textarea, Dialog and NativeSelect. Keep theme tokens in
+`src/app.css`; `--input` is a control border color, not a field background.
+`components.json` configures the CLI aliases, Tailwind CSS entrypoint and icon library.
+
+NativeSelect is installed from the official shadcn-svelte source at
+[`6149e141`](https://github.com/huntabyte/shadcn-svelte/tree/6149e14107a9de3530a3083de2f1b7623b3c5d1f/docs/src/lib/registry/ui/native-select),
+with the upstream Nova style utilities expanded into component classes and its icon
+resolved to the existing Lucide dependency. Other controls use the same compact
+shadcn styling. Update shared components and tokens instead of adding page-specific
+field borders or raw form controls.
