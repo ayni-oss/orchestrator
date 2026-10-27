@@ -1,0 +1,122 @@
+syntax = "proto3";
+package ayni.orchestrator.v1;
+
+// Shared catalog in the trusted local-operator scope. Source access is not runtime readiness.
+service RepositoryService {
+  rpc ListGithubInstallations(ListGithubInstallationsRequest) returns (ListGithubInstallationsResponse);
+  rpc ListGithubRepositories(ListGithubRepositoriesRequest) returns (ListGithubRepositoriesResponse);
+  rpc ConnectRepository(ConnectRepositoryRequest) returns (ConnectRepositoryResponse);
+  rpc GetRepositoryOperation(GetRepositoryOperationRequest) returns (GetRepositoryOperationResponse);
+  rpc ListRepositoryOperations(ListRepositoryOperationsRequest) returns (ListRepositoryOperationsResponse);
+  rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse);
+  rpc AssociateProjectRepository(AssociateProjectRepositoryRequest) returns (AssociateProjectRepositoryResponse);
+  rpc ListProjectRepositories(ListProjectRepositoriesRequest) returns (ListProjectRepositoriesResponse);
+}
+message GithubInstallation {
+  uint64 installation_id = 1;
+  string account_login = 2;
+  bool suspended = 3;
+}
+message GithubRepository {
+  uint64 provider_repository_id = 1;
+  string full_name = 2;
+  string default_branch = 3;
+  bool private = 4;
+}
+message ListGithubInstallationsRequest {
+  string connection_id = 1;
+  uint64 expected_connection_revision = 2;
+  uint32 page = 3;
+}
+message ListGithubInstallationsResponse {
+  repeated GithubInstallation installations = 1;
+  uint32 next_page = 2;
+  string safe_reason = 3;
+}
+message ListGithubRepositoriesRequest {
+  string connection_id = 1;
+  uint64 expected_connection_revision = 2;
+  uint64 installation_id = 3;
+  uint32 page = 4;
+}
+message ListGithubRepositoriesResponse {
+  repeated GithubRepository repositories = 1;
+  uint32 next_page = 2;
+  string safe_reason = 3;
+}
+message Repository {
+  string id = 1;
+  string connection_id = 2;
+  uint64 installation_id = 3;
+  uint64 provider_repository_id = 4;
+  string full_name = 5;
+  string default_branch = 6;
+  bool private = 7;
+  uint64 connected_at_unix_ms = 8;
+}
+message ConnectRepositoryRequest {
+  string idempotency_key = 1;
+  string connection_id = 2;
+  uint64 expected_connection_revision = 3;
+  uint64 installation_id = 4;
+  uint64 provider_repository_id = 5;
+}
+message RepositoryOperation {
+  string id = 1;
+  string idempotency_key = 2;
+  string connection_id = 3;
+  uint64 connection_revision = 4;
+  uint64 installation_id = 5;
+  uint64 provider_repository_id = 6;
+  // accepted is resumable; completed, failed and superseded are terminal.
+  string state = 7;
+  string safe_reason = 8;
+  Repository repository = 9;
+  uint64 accepted_at_unix_ms = 10;
+  uint64 updated_at_unix_ms = 11;
+}
+message ConnectRepositoryResponse {
+  RepositoryOperation operation = 1;
+}
+message GetRepositoryOperationRequest {
+  string idempotency_key = 1;
+}
+message GetRepositoryOperationResponse {
+  RepositoryOperation operation = 1;
+}
+message ListRepositoryOperationsRequest {
+  string after_id = 1;
+  uint32 limit = 2;
+}
+message ListRepositoryOperationsResponse {
+  repeated RepositoryOperation operations = 1;
+  string next_after_id = 2;
+}
+message ListRepositoriesRequest {
+  string after_id = 1;
+  uint32 limit = 2;
+}
+message ListRepositoriesResponse {
+  repeated Repository repositories = 1;
+  string next_after_id = 2;
+}
+message AssociateProjectRepositoryRequest {
+  string idempotency_key = 1;
+  string workspace_id = 2;
+  string project_id = 3;
+  string repository_id = 4;
+}
+message AssociateProjectRepositoryResponse {
+  Repository repository = 1;
+  string command_id = 2;
+}
+message ListProjectRepositoriesRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string after_id = 3;
+  uint32 limit = 4;
+}
+message ListProjectRepositoriesResponse {
+  repeated Repository repositories = 1;
+  string next_after_id = 2;
+}

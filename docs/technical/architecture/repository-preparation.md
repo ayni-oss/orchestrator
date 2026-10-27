@@ -1,6 +1,6 @@
 # Shared repository and runtime preparation
 
-Status: repository/runtime preparation remains planned. The [connection foundation](integration-connections.md) implements manual GitHub App setup; catalog and runtime gates remain pending.
+Status: shared repository discovery, catalog connection and project associations are implemented for the trusted local operator. Committed Ayni inspection and runtime gates remain planned. See [integration connections](integration-connections.md) for the current source-access boundary.
 
 ## What this decides
 
@@ -22,7 +22,7 @@ The [roadmap](../../../ROADMAP.md#next-focus-repository-preparation-with-a-usabl
 - The trusted local helper verifies Git objects and lock bytes, while the operator supplies a runtime digest.
 - Prepared attempts retain immutable inputs, but preparation does not establish image availability or compatibility.
 - Isolated workers perform separate managed quality; coding, quality and publication remain independent outcomes.
-- The local gateway serves APIs only. The new local product supports manual App connections and workspace/project discovery; repository catalog and runtime preparation follow. The retained web example supplies design reference only.
+- The local gateway serves APIs only. The new local product supports manual App connections, installation/repository discovery, a shared source catalog and project associations. Runtime preparation follows. The retained web example supplies design reference only.
 
 ## Ownership and records
 
@@ -77,8 +77,8 @@ flowchart TD
 | Committed inputs | Inspect policy and lock from the same exact commit with bounded reads. Missing or malformed inputs retain corrective findings. |
 | Ayni compatibility | Admit an explicitly supported CLI, lock/recipe and artifact contract. Resolve the official builder for that contract/platform and freeze its digest. |
 | Full input validation | Use supported Ayni tooling for policy/lock consistency, runtime identity and certification. Parsing an envelope or fingerprint grants no readiness. |
-| Configuration | Validate the chosen platform, isolated build capacity, registry destination and enabled signing certificate. Keep current connection status separate from historical probe success. |
-| Registry access | Test authentication, push and independent pull authority; retain probe cleanup separately. An outage, denial or rate limit cannot become a missing-image result. |
+| Configuration | Validate the chosen platform, isolated build capacity, registry destination and enabled signing certificate. Keep configured credentials separate from observed operation success. |
+| Registry access | Check permissions during the actual discovery, build, push or independent pull operation. Do not publish a disposable test image. Show the failed stage and corrective action; an outage, denial or rate limit cannot become a missing-image result. |
 | Repository trust | Validate the selected public signing identity against committed trust. If changes are needed, separately authorize a narrow PR and inspect the merged source again. |
 | Image discovery | Resolve the candidate to an immutable manifest/platform identity. Confirmed absence permits an opted-in bounded build; an invalid existing image requires replacement authority. |
 | Build/publication | Invoke Ayni's supported build/certification contract. Separate publication credentials and guard destination replacement; reconcile uncertain publication through readback. |

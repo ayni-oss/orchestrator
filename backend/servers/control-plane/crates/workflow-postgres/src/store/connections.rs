@@ -90,7 +90,7 @@ fn operation(row: &Row) -> Result<Operation, StoreError> {
             .map_err(|_| StoreError::CorruptState)?,
     })
 }
-async fn locked(tx: &Transaction<'_>, id: &str) -> Result<Connection, StoreError> {
+pub(super) async fn locked(tx: &Transaction<'_>, id: &str) -> Result<Connection, StoreError> {
     connection(
         &tx.query_opt(
             "SELECT * FROM workflow_connections WHERE id=$1 FOR UPDATE",
@@ -106,7 +106,7 @@ fn revision(value: u64) -> Result<i64, StoreError> {
 fn safe_json(value: &Connection) -> Result<String, StoreError> {
     serde_json::to_string(value).map_err(|_| StoreError::CorruptState)
 }
-async fn serialize_key(tx: &Transaction<'_>, key: &str) -> Result<(), StoreError> {
+pub(super) async fn serialize_key(tx: &Transaction<'_>, key: &str) -> Result<(), StoreError> {
     tx.query_one(
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 30))",
         &[&key],

@@ -167,6 +167,30 @@ export interface GetTurnContextInputsResponse {
   nextAfterOrdinal: string;
 }
 
+/** Fenced renames retain an immutable command receipt. Exact retries never rename twice. */
+export interface RenameWorkspaceRequest {
+  idempotencyKey: string;
+  workspaceId: string;
+  expectedResourceVersion: string;
+  displayName: string;
+}
+
+export interface RenameWorkspaceResponse {
+  commandId: string;
+}
+
+export interface RenameProjectRequest {
+  idempotencyKey: string;
+  workspaceId: string;
+  projectId: string;
+  expectedResourceVersion: string;
+  displayName: string;
+}
+
+export interface RenameProjectResponse {
+  commandId: string;
+}
+
 function createBaseWorkspace(): Workspace {
   return { id: "", displayName: "", createdAt: undefined, updatedAt: undefined, resourceVersion: "0" };
 }
@@ -2566,6 +2590,438 @@ export const GetTurnContextInputsResponse: MessageFns<GetTurnContextInputsRespon
   },
 };
 
+function createBaseRenameWorkspaceRequest(): RenameWorkspaceRequest {
+  return { idempotencyKey: "", workspaceId: "", expectedResourceVersion: "0", displayName: "" };
+}
+
+export const RenameWorkspaceRequest: MessageFns<RenameWorkspaceRequest> = {
+  encode(message: RenameWorkspaceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.workspaceId !== "") {
+      writer.uint32(18).string(message.workspaceId);
+    }
+    if (message.expectedResourceVersion !== "0") {
+      writer.uint32(24).uint64(message.expectedResourceVersion);
+    }
+    if (message.displayName !== "") {
+      writer.uint32(34).string(message.displayName);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RenameWorkspaceRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRenameWorkspaceRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.expectedResourceVersion = reader.uint64().toString();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.displayName = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RenameWorkspaceRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      expectedResourceVersion: isSet(object.expectedResourceVersion)
+        ? globalThis.String(object.expectedResourceVersion)
+        : isSet(object.expected_resource_version)
+        ? globalThis.String(object.expected_resource_version)
+        : "0",
+      displayName: isSet(object.displayName)
+        ? globalThis.String(object.displayName)
+        : isSet(object.display_name)
+        ? globalThis.String(object.display_name)
+        : "",
+    };
+  },
+
+  toJSON(message: RenameWorkspaceRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.expectedResourceVersion !== "0") {
+      obj.expectedResourceVersion = message.expectedResourceVersion;
+    }
+    if (message.displayName !== "") {
+      obj.displayName = message.displayName;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RenameWorkspaceRequest>): RenameWorkspaceRequest {
+    return RenameWorkspaceRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RenameWorkspaceRequest>): RenameWorkspaceRequest {
+    const message = createBaseRenameWorkspaceRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.workspaceId = object.workspaceId ?? "";
+    message.expectedResourceVersion = object.expectedResourceVersion ?? "0";
+    message.displayName = object.displayName ?? "";
+    return message;
+  },
+};
+
+function createBaseRenameWorkspaceResponse(): RenameWorkspaceResponse {
+  return { commandId: "" };
+}
+
+export const RenameWorkspaceResponse: MessageFns<RenameWorkspaceResponse> = {
+  encode(message: RenameWorkspaceResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.commandId !== "") {
+      writer.uint32(10).string(message.commandId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RenameWorkspaceResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRenameWorkspaceResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.commandId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RenameWorkspaceResponse {
+    return {
+      commandId: isSet(object.commandId)
+        ? globalThis.String(object.commandId)
+        : isSet(object.command_id)
+        ? globalThis.String(object.command_id)
+        : "",
+    };
+  },
+
+  toJSON(message: RenameWorkspaceResponse): unknown {
+    const obj: any = {};
+    if (message.commandId !== "") {
+      obj.commandId = message.commandId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RenameWorkspaceResponse>): RenameWorkspaceResponse {
+    return RenameWorkspaceResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RenameWorkspaceResponse>): RenameWorkspaceResponse {
+    const message = createBaseRenameWorkspaceResponse();
+    message.commandId = object.commandId ?? "";
+    return message;
+  },
+};
+
+function createBaseRenameProjectRequest(): RenameProjectRequest {
+  return { idempotencyKey: "", workspaceId: "", projectId: "", expectedResourceVersion: "0", displayName: "" };
+}
+
+export const RenameProjectRequest: MessageFns<RenameProjectRequest> = {
+  encode(message: RenameProjectRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.workspaceId !== "") {
+      writer.uint32(18).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(26).string(message.projectId);
+    }
+    if (message.expectedResourceVersion !== "0") {
+      writer.uint32(32).uint64(message.expectedResourceVersion);
+    }
+    if (message.displayName !== "") {
+      writer.uint32(42).string(message.displayName);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RenameProjectRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRenameProjectRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.expectedResourceVersion = reader.uint64().toString();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.displayName = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RenameProjectRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      expectedResourceVersion: isSet(object.expectedResourceVersion)
+        ? globalThis.String(object.expectedResourceVersion)
+        : isSet(object.expected_resource_version)
+        ? globalThis.String(object.expected_resource_version)
+        : "0",
+      displayName: isSet(object.displayName)
+        ? globalThis.String(object.displayName)
+        : isSet(object.display_name)
+        ? globalThis.String(object.display_name)
+        : "",
+    };
+  },
+
+  toJSON(message: RenameProjectRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.expectedResourceVersion !== "0") {
+      obj.expectedResourceVersion = message.expectedResourceVersion;
+    }
+    if (message.displayName !== "") {
+      obj.displayName = message.displayName;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RenameProjectRequest>): RenameProjectRequest {
+    return RenameProjectRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RenameProjectRequest>): RenameProjectRequest {
+    const message = createBaseRenameProjectRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.expectedResourceVersion = object.expectedResourceVersion ?? "0";
+    message.displayName = object.displayName ?? "";
+    return message;
+  },
+};
+
+function createBaseRenameProjectResponse(): RenameProjectResponse {
+  return { commandId: "" };
+}
+
+export const RenameProjectResponse: MessageFns<RenameProjectResponse> = {
+  encode(message: RenameProjectResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.commandId !== "") {
+      writer.uint32(10).string(message.commandId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RenameProjectResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRenameProjectResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.commandId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RenameProjectResponse {
+    return {
+      commandId: isSet(object.commandId)
+        ? globalThis.String(object.commandId)
+        : isSet(object.command_id)
+        ? globalThis.String(object.command_id)
+        : "",
+    };
+  },
+
+  toJSON(message: RenameProjectResponse): unknown {
+    const obj: any = {};
+    if (message.commandId !== "") {
+      obj.commandId = message.commandId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RenameProjectResponse>): RenameProjectResponse {
+    return RenameProjectResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RenameProjectResponse>): RenameProjectResponse {
+    const message = createBaseRenameProjectResponse();
+    message.commandId = object.commandId ?? "";
+    return message;
+  },
+};
+
 /** Minimal hierarchy commands and bounded discovery on the trusted operator listener. */
 export type ProjectServiceService = typeof ProjectServiceService;
 export const ProjectServiceService = {
@@ -2589,6 +3045,27 @@ export const ProjectServiceService = {
     responseSerialize: (value: CreateProjectResponse): Buffer =>
       Buffer.from(CreateProjectResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): CreateProjectResponse => CreateProjectResponse.decode(value),
+  },
+  renameWorkspace: {
+    path: "/ayni.orchestrator.v1.ProjectService/RenameWorkspace" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RenameWorkspaceRequest): Buffer =>
+      Buffer.from(RenameWorkspaceRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RenameWorkspaceRequest => RenameWorkspaceRequest.decode(value),
+    responseSerialize: (value: RenameWorkspaceResponse): Buffer =>
+      Buffer.from(RenameWorkspaceResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): RenameWorkspaceResponse => RenameWorkspaceResponse.decode(value),
+  },
+  renameProject: {
+    path: "/ayni.orchestrator.v1.ProjectService/RenameProject" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RenameProjectRequest): Buffer => Buffer.from(RenameProjectRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RenameProjectRequest => RenameProjectRequest.decode(value),
+    responseSerialize: (value: RenameProjectResponse): Buffer =>
+      Buffer.from(RenameProjectResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): RenameProjectResponse => RenameProjectResponse.decode(value),
   },
   listWorkspaces: {
     path: "/ayni.orchestrator.v1.ProjectService/ListWorkspaces" as const,
@@ -2661,6 +3138,8 @@ export const ProjectServiceService = {
 export interface ProjectServiceServer extends UntypedServiceImplementation {
   createWorkspace: handleUnaryCall<CreateWorkspaceRequest, CreateWorkspaceResponse>;
   createProject: handleUnaryCall<CreateProjectRequest, CreateProjectResponse>;
+  renameWorkspace: handleUnaryCall<RenameWorkspaceRequest, RenameWorkspaceResponse>;
+  renameProject: handleUnaryCall<RenameProjectRequest, RenameProjectResponse>;
   listWorkspaces: handleUnaryCall<ListWorkspacesRequest, ListWorkspacesResponse>;
   listProjects: handleUnaryCall<ListProjectsRequest, ListProjectsResponse>;
   getAgentConfiguration: handleUnaryCall<GetAgentConfigurationRequest, GetAgentConfigurationResponse>;
@@ -2699,6 +3178,36 @@ export interface ProjectServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CreateProjectResponse) => void,
+  ): ClientUnaryCall;
+  renameWorkspace(
+    request: RenameWorkspaceRequest,
+    callback: (error: ServiceError | null, response: RenameWorkspaceResponse) => void,
+  ): ClientUnaryCall;
+  renameWorkspace(
+    request: RenameWorkspaceRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: RenameWorkspaceResponse) => void,
+  ): ClientUnaryCall;
+  renameWorkspace(
+    request: RenameWorkspaceRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: RenameWorkspaceResponse) => void,
+  ): ClientUnaryCall;
+  renameProject(
+    request: RenameProjectRequest,
+    callback: (error: ServiceError | null, response: RenameProjectResponse) => void,
+  ): ClientUnaryCall;
+  renameProject(
+    request: RenameProjectRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: RenameProjectResponse) => void,
+  ): ClientUnaryCall;
+  renameProject(
+    request: RenameProjectRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: RenameProjectResponse) => void,
   ): ClientUnaryCall;
   listWorkspaces(
     request: ListWorkspacesRequest,

@@ -25,7 +25,7 @@ export default withMermaid(defineConfig({
       { text: 'Source', link: 'https://github.com/ayni-oss/orchestrator' },
       { text: 'Ayni CLI', link: 'https://cli.ayni.build' },
     ],
-    sidebar: [{ text: 'Ayni Orchestrator', items: [{ text: 'M1 Slice 1', link: '/' }] }],
+    sidebar: [{ text: 'Ayni Orchestrator', items: [{ text: 'M1 Slice 1', link: '/' }, { text: 'Connect a repository', link: '/repositories' }] }],
     socialLinks: [{ icon: 'github', link: 'https://github.com/ayni-oss/orchestrator' }],
     editLink: { pattern: 'https://github.com/ayni-oss/orchestrator/edit/alpha/docs/site/:path' },
     search: { provider: 'local' },

@@ -55,6 +55,11 @@ impl Gateway {
         })
     }
 
+    fn repositories(&self) -> v1::repository_service_client::RepositoryServiceClient<Channel> {
+        v1::repository_service_client::RepositoryServiceClient::new(self.channel.clone())
+            .max_decoding_message_size(3 * 1024 * 1024)
+    }
+
     fn connections(&self) -> v1::connection_service_client::ConnectionServiceClient<Channel> {
         v1::connection_service_client::ConnectionServiceClient::new(self.channel.clone())
     }
@@ -382,6 +387,18 @@ async fn project_rpc(
     body: Value,
 ) -> Result<Json<Value>, ApiError> {
     match method {
+        "RenameWorkspace" => forward!(
+            body,
+            gateway.projects(),
+            rename_workspace,
+            v1::RenameWorkspaceRequest
+        ),
+        "RenameProject" => forward!(
+            body,
+            gateway.projects(),
+            rename_project,
+            v1::RenameProjectRequest
+        ),
         "CreateWorkspace" => forward!(
             body,
             gateway.projects(),
@@ -429,6 +446,64 @@ async fn project_rpc(
             gateway.projects(),
             get_turn_inputs,
             v1::GetTurnInputsRequest
+        ),
+        _ => repository_rpc(gateway, method, body).await,
+    }
+}
+
+async fn repository_rpc(
+    gateway: &Gateway,
+    method: &str,
+    body: Value,
+) -> Result<Json<Value>, ApiError> {
+    match method {
+        "ListGithubInstallations" => forward!(
+            body,
+            gateway.repositories(),
+            list_github_installations,
+            v1::ListGithubInstallationsRequest
+        ),
+        "ListGithubRepositories" => forward!(
+            body,
+            gateway.repositories(),
+            list_github_repositories,
+            v1::ListGithubRepositoriesRequest
+        ),
+        "ConnectRepository" => forward!(
+            body,
+            gateway.repositories(),
+            connect_repository,
+            v1::ConnectRepositoryRequest
+        ),
+        "GetRepositoryOperation" => forward!(
+            body,
+            gateway.repositories(),
+            get_repository_operation,
+            v1::GetRepositoryOperationRequest
+        ),
+        "ListRepositoryOperations" => forward!(
+            body,
+            gateway.repositories(),
+            list_repository_operations,
+            v1::ListRepositoryOperationsRequest
+        ),
+        "ListRepositories" => forward!(
+            body,
+            gateway.repositories(),
+            list_repositories,
+            v1::ListRepositoriesRequest
+        ),
+        "AssociateProjectRepository" => forward!(
+            body,
+            gateway.repositories(),
+            associate_project_repository,
+            v1::AssociateProjectRepositoryRequest
+        ),
+        "ListProjectRepositories" => forward!(
+            body,
+            gateway.repositories(),
+            list_project_repositories,
+            v1::ListProjectRepositoriesRequest
         ),
         _ => Err(ApiError::from(Status::unimplemented(
             "unknown gateway method",

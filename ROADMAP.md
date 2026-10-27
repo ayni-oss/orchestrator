@@ -130,13 +130,18 @@ connections and credential revisions, manual GitHub App validation and basic
 workspace/project navigation. Hosting owns credential storage/backup encryption;
 there is no application-level encryption. This is partial delivery of the first
 catalog slice, not completed repository onboarding. Subsequent PRs add guided App
-setup and catalog associations, recoverable GHCR artifact validation and
+setup, further catalog lifecycle management, runtime registry permission handling and
 combined live qualification. The configuration surface includes GHCR PAT entry,
 OpenAI access/model discovery and workspace connection/model/budget selection;
 selected OpenAI turns freeze credential revisions and use scoped runtime delivery. Each connection is selected explicitly; multiple named
 connections per capability are supported. See
 [connection foundation](docs/technical/architecture/integration-connections.md).
 
+
+The shared source catalog adds GitHub installation/repository discovery, retained
+connect operations and direct project associations, including reuse across workspaces.
+Its source-access checks do not establish runtime readiness. Ayni inspection,
+runtime production and live GitHub qualification remain outstanding.
 
 Deliver shared repository integration, Ayni inspection, verified runtime images
 and project selection before expanding product analytics or event inputs. Build

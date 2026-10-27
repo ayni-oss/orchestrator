@@ -1,5 +1,5 @@
 //! Trusted local-operator connection commands and safe projections.
-mod github;
+pub(super) mod github;
 mod providers;
 use super::{RequestContext, WorkflowGrpc, v1};
 use ayni_orchestrator_workflow_postgres::store::connections::{self, SaveGithub};
