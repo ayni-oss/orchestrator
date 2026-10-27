@@ -28,7 +28,9 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   await page.getByLabel('Workspace name',{exact:true}).fill(workspace);
   const [createdWorkspace]=await Promise.all([page.waitForResponse(response=>response.url().endsWith('/api/CreateWorkspace')),page.getByRole('dialog').getByRole('button',{name:'Create workspace',exact:true}).click()]);
   assert.equal(createdWorkspace.status(),200);
-  assert.equal((await createdWorkspace.json()).workspace.displayName,workspace);
+  const workspaceResult=await createdWorkspace.json();
+  assert.equal(workspaceResult.workspace.displayName,workspace);
+  const workspaceId=workspaceResult.workspace.id;
   await page.getByRole('button',{name:workspace,exact:false}).waitFor();
   await page.getByRole('button',{name:'New project',exact:true}).click();
   await page.getByLabel('Project name',{exact:true}).fill('Product acceptance');
@@ -72,9 +74,41 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   assert.equal(fresh.connections.find(c=>c.displayName===connection).enabled,true);
   const rejected=await fetch(`${origin}/api/SaveGithubConnection`,{method:'POST',headers:{Origin:'https://evil.test','Content-Type':'application/json','x-console-request':'1'},body:'{}'});
   assert.equal(rejected.status,403);
+  const providerSecrets=[];
+  for(const registry of [true,false]) {
+   await page.goto(`${origin}/settings/${registry?'container-registries/github':'llm-providers/openai'}`);
+   const provider=registry?'GitHub Container Registry':'OpenAI';
+   await page.getByRole('button',{name:`Add ${provider} connection`,exact:true}).click();
+   const displayName=`${provider} ${randomUUID()}`;
+   await page.getByLabel('Connection name',{exact:true}).fill(displayName);
+   if(registry) {
+    await page.getByLabel('Destination',{exact:true}).fill('ghcr.io/fixture/browser-validation');
+    await page.getByLabel('Push username',{exact:true}).fill('fixture-push');
+    await page.getByLabel('Pull username',{exact:true}).fill('fixture-pull');
+    for(const label of ['Push PAT','Pull PAT']){const value=`fixture-token-${randomUUID()}`;providerSecrets.push(value);await page.getByLabel(label,{exact:true}).fill(value);}
+   } else {const value=`fixture-openai-${randomUUID()}`;providerSecrets.push(value);await page.getByLabel('API key',{exact:true}).fill(value);}
+   let confirm;const lost=new Promise(resolve=>{confirm=resolve;});
+   await page.route('**/api/SaveProviderConnection',async route=>{const response=await route.fetch();assert.equal(response.status(),200);const text=await response.text();for(const secret of providerSecrets)assert.equal(text.includes(secret),false);await route.abort('failed');confirm();});
+   await page.getByRole('button',{name:'Save connection',exact:true}).click();await lost;
+   assert.equal(await page.locator('input[type=password]').evaluateAll(inputs=>inputs.every(input=>input.value==='')),true);
+   await page.unroute('**/api/SaveProviderConnection');await page.reload();
+   await page.getByRole('button',{name:'Recover operation',exact:true}).click();
+   await page.getByRole('button',{name:`Inspect ${displayName}`,exact:true}).waitFor();
+   for(const secret of providerSecrets)assert.equal((await page.locator('body').innerText()).includes(secret),false);
+  }
+  await page.goto(`${origin}/workspace/settings?workspace=${workspaceId}`);
+  await page.getByLabel('OpenAI connection',{exact:true}).selectOption(process.env.AYNI_BROWSER_CONNECTION_ID);
+  await page.getByLabel('Model',{exact:true}).selectOption('fixture-model');
+  await page.getByLabel('Instructions',{exact:true}).fill('Browser-selected provider');
+  const [saved]=await Promise.all([page.waitForResponse(response=>response.url().endsWith('/api/UpdateAgentConfiguration')),page.getByRole('button',{name:'Save workspace configuration',exact:true}).click()]);
+  assert.equal(saved.status(),200);assert.equal((await saved.json()).configuration.connectionId,process.env.AYNI_BROWSER_CONNECTION_ID);
+  await page.reload();await page.waitForFunction(id=>document.querySelector('#workspace-connection')?.value===id,process.env.AYNI_BROWSER_CONNECTION_ID);
+  assert.equal(await page.getByLabel('OpenAI connection',{exact:true}).inputValue(),process.env.AYNI_BROWSER_CONNECTION_ID);
+  assert.equal(await page.getByLabel('Model',{exact:true}).inputValue(),'fixture-model');
+  for(const secret of providerSecrets)assert.equal(await page.evaluate(secret=>[...Object.values(localStorage),...Object.values(sessionStorage)].some(value=>value.includes(secret)),secret),false);
   await page.evaluate(()=>window.scrollTo(0,0));
   await page.screenshot({path:'/tmp/integrations-product.png',fullPage:true});
-  console.log('product-browser: hierarchy, lost-response recovery, reload, redaction, validation, concurrent stale-write rejection and origin boundary passed');
+  console.log('product-browser: hierarchy, lost-response recovery, reload, redaction, validation, concurrent stale-write rejection and origin boundary, GHCR/OpenAI credential recovery and workspace model selection passed');
  } catch(error) { if(browser){const pages=browser.contexts()[0]?.pages()||[];if(pages[0]){await pages[0].screenshot({path:'/tmp/integrations-browser-failure.png',fullPage:true});console.error('Product alert:',await pages[0].getByRole('alert').allTextContents());}}throw error;
  } finally {if(browser)await browser.close();if(child.exitCode===null){process.kill(-child.pid,'SIGTERM');await once(child,'exit');}}
 });

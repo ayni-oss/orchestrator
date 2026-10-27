@@ -919,6 +919,15 @@ fn validate_execution_configuration(
     let Some(config) = &payload.frozen_configuration else {
         return Ok(());
     };
+    if config.connection_id.is_empty() != config.credential_revision.is_empty()
+        || (!config.connection_id.is_empty()
+            && (config.provider != "openai"
+                || uuid::Uuid::parse_str(&config.connection_id).is_err()
+                || uuid::Uuid::parse_str(&config.credential_revision).is_err()))
+    {
+        return Err(ContractError::Invalid("credential binding"));
+    }
+
     if !resource_identifier(&config.revision_id)
         || config.instructions.len() > MAX_CONTENT_BYTES
         || config

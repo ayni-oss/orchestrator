@@ -100,6 +100,7 @@ export interface AgentConfiguration {
   maxOutputTokens: string;
   maxTotalTokens: string;
   idleTimeoutSeconds: string;
+  connectionId: string;
 }
 
 export interface GetAgentConfigurationRequest {
@@ -1297,6 +1298,7 @@ function createBaseAgentConfiguration(): AgentConfiguration {
     maxOutputTokens: "0",
     maxTotalTokens: "0",
     idleTimeoutSeconds: "0",
+    connectionId: "",
   };
 }
 
@@ -1328,6 +1330,9 @@ export const AgentConfiguration: MessageFns<AgentConfiguration> = {
     }
     if (message.idleTimeoutSeconds !== "0") {
       writer.uint32(72).uint64(message.idleTimeoutSeconds);
+    }
+    if (message.connectionId !== "") {
+      writer.uint32(82).string(message.connectionId);
     }
     return writer;
   },
@@ -1417,6 +1422,14 @@ export const AgentConfiguration: MessageFns<AgentConfiguration> = {
             message.idleTimeoutSeconds = reader.uint64().toString();
             continue;
           }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.connectionId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1464,6 +1477,11 @@ export const AgentConfiguration: MessageFns<AgentConfiguration> = {
         : isSet(object.idle_timeout_seconds)
         ? globalThis.String(object.idle_timeout_seconds)
         : "0",
+      connectionId: isSet(object.connectionId)
+        ? globalThis.String(object.connectionId)
+        : isSet(object.connection_id)
+        ? globalThis.String(object.connection_id)
+        : "",
     };
   },
 
@@ -1496,6 +1514,9 @@ export const AgentConfiguration: MessageFns<AgentConfiguration> = {
     if (message.idleTimeoutSeconds !== "0") {
       obj.idleTimeoutSeconds = message.idleTimeoutSeconds;
     }
+    if (message.connectionId !== "") {
+      obj.connectionId = message.connectionId;
+    }
     return obj;
   },
 
@@ -1513,6 +1534,7 @@ export const AgentConfiguration: MessageFns<AgentConfiguration> = {
     message.maxOutputTokens = object.maxOutputTokens ?? "0";
     message.maxTotalTokens = object.maxTotalTokens ?? "0";
     message.idleTimeoutSeconds = object.idleTimeoutSeconds ?? "0";
+    message.connectionId = object.connectionId ?? "";
     return message;
   },
 };

@@ -101,6 +101,7 @@ message AgentConfiguration {
   uint64 max_output_tokens = 7;
   uint64 max_total_tokens = 8;
   uint64 idle_timeout_seconds = 9;
+  string connection_id = 10;
 }
 message GetAgentConfigurationRequest {
   string workspace_id = 1;

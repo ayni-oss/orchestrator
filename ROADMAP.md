@@ -37,7 +37,8 @@ The former console and diagnostic frontend are removed. The example UI has been
 promoted into [apps/web](apps/web/README.md), the sole web application. Preserve its
 shell, typography, themes and components while wiring each delivery slice to
 canonical APIs. Do not introduce parallel products or alternate visual designs.
-The current UI supports workspace/project creation and manual GitHub App setup;
+The current UI supports workspace/project creation, manual GitHub App setup,
+GHCR/OpenAI credential configuration and workspace OpenAI model/budget selection;
 repository/runtime preparation and full delivery journeys remain planned.
 Historical browser acceptance does not qualify current source; each implemented
 journey needs its own replacement coverage.
@@ -129,8 +130,10 @@ connections and credential revisions, manual GitHub App validation and basic
 workspace/project navigation. Hosting owns credential storage/backup encryption;
 there is no application-level encryption. This is partial delivery of the first
 catalog slice, not completed repository onboarding. Subsequent PRs add guided App
-setup and catalog associations, GHCR validation, OpenAI workspace selection and
-combined qualification. Each connection is selected explicitly; multiple named
+setup and catalog associations, recoverable GHCR artifact validation and
+combined live qualification. The configuration surface includes GHCR PAT entry,
+OpenAI access/model discovery and workspace connection/model/budget selection;
+selected OpenAI turns freeze credential revisions and use scoped runtime delivery. Each connection is selected explicitly; multiple named
 connections per capability are supported. See
 [connection foundation](docs/technical/architecture/integration-connections.md).
 

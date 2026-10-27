@@ -1,3 +1,5 @@
+#[path = "provider_calls/credentials.rs"]
+mod credentials;
 #[path = "provider_calls/progress.rs"]
 mod progress;
 
@@ -48,6 +50,7 @@ impl Fixture {
             .id;
         let current = store.get_agent_configuration(&workspace, "").await?;
         let config = ayni_orchestrator_workflow_postgres::model::AgentConfiguration {
+            connection_id: String::new(),
             revision_id: String::new(),
             provider: provider.into(),
             model: "explicit-fixture-model".into(),

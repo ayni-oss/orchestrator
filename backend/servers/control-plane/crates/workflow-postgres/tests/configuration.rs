@@ -59,6 +59,7 @@ async fn immutable_configuration_freezes_admission_and_isolates_conversations() 
         Err(StoreError::NotFound)
     ));
     let mut proposed = AgentConfiguration {
+        connection_id: String::new(),
         revision_id: String::new(),
         instructions: "Shared workspace instructions".into(),
         provider: "openai".into(),
@@ -214,6 +215,7 @@ async fn immutable_configuration_freezes_admission_and_isolates_conversations() 
     );
     let current = store.get_agent_configuration(&workspace.id, "").await?;
     let scripted = AgentConfiguration {
+        connection_id: String::new(),
         revision_id: String::new(),
         provider: "scripted".into(),
         model: "scripted".into(),

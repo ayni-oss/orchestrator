@@ -21,7 +21,8 @@
  function persistKey(key: string) { pendingKey = key; if (key) sessionStorage.setItem(storageKey, key); else sessionStorage.removeItem(storageKey); }
  async function load(append = false) {
    const result = await rpc('ListConnections', { afterId: append ? next : '', limit: 50 });
-   connections = append ? [...connections, ...(result.connections || [])] : result.connections || []; next = result.nextAfterId || '';
+   const sources = (result.connections || []).filter((c: Connection) => c.capability === 'source_control');
+   connections = append ? [...connections, ...sources] : sources; next = result.nextAfterId || '';
  }
  async function inspect(c: Connection, append = false) {
    const generation = ++selectionGeneration;

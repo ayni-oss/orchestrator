@@ -148,6 +148,8 @@ fn command(state: &WorkerState) -> PrepareInput {
             idle_timeout_seconds: 30,
         }),
         frozen_configuration: Some(AgentExecutionConfiguration {
+            connection_id: String::new(),
+            credential_revision: String::new(),
             revision_id: uuid::Uuid::now_v7().to_string(),
             instructions: "frozen instructions".into(),
             provider: "openai".into(),

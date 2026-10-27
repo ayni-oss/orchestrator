@@ -505,6 +505,20 @@ installation discovery follows in the next PR. Keys cannot be read back. Replace
 key by selecting the connection and submitting a candidate; failed validation leaves
 any active credential in place. An interrupted response offers operation recovery.
 
+Configuration → Container registries manages named GHCR destinations with separate
+push/pull classic PATs. Validation currently checks both accounts' authentication;
+it does not yet publish a disposable artifact or establish push/pull permissions.
+Configuration → LLM providers manages named OpenAI keys. Save and validate a key to
+discover models, then choose a connection, model and budgets in Workspace settings.
+OpenAI validation does not issue a paid conversation. Conversation execution uses
+the existing API; the full chat UI remains outside this slice.
+
+Selected connection turns retain the admission-time credential revision. The
+trusted supervisor receives that credential through the scoped internal authority
+endpoint and creates an immutable read-only session Secret. After terminal
+acknowledgement the session consumer and derived credential copy are removed;
+PostgreSQL retains the authoritative revision. Workers have no database access.
+
 Credentials live in PostgreSQL without application-level encryption. Hosting must
 protect database storage and backups; local development does not require encryption.
 Never commit real credentials or put them in shell arguments.

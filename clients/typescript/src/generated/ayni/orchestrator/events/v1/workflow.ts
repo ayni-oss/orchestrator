@@ -178,6 +178,8 @@ export interface AgentExecutionConfiguration {
   maxOutputTokens: string;
   maxTotalTokens: string;
   idleTimeoutSeconds: string;
+  connectionId: string;
+  credentialRevision: string;
 }
 
 /** Immutable eligibility-time history reference. Inline records may be only a tail. */
@@ -1609,6 +1611,8 @@ function createBaseAgentExecutionConfiguration(): AgentExecutionConfiguration {
     maxOutputTokens: "0",
     maxTotalTokens: "0",
     idleTimeoutSeconds: "0",
+    connectionId: "",
+    credentialRevision: "",
   };
 }
 
@@ -1637,6 +1641,12 @@ export const AgentExecutionConfiguration: MessageFns<AgentExecutionConfiguration
     }
     if (message.idleTimeoutSeconds !== "0") {
       writer.uint32(64).uint64(message.idleTimeoutSeconds);
+    }
+    if (message.connectionId !== "") {
+      writer.uint32(74).string(message.connectionId);
+    }
+    if (message.credentialRevision !== "") {
+      writer.uint32(82).string(message.credentialRevision);
     }
     return writer;
   },
@@ -1718,6 +1728,22 @@ export const AgentExecutionConfiguration: MessageFns<AgentExecutionConfiguration
             message.idleTimeoutSeconds = reader.uint64().toString();
             continue;
           }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.connectionId = reader.string();
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.credentialRevision = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1760,6 +1786,16 @@ export const AgentExecutionConfiguration: MessageFns<AgentExecutionConfiguration
         : isSet(object.idle_timeout_seconds)
         ? globalThis.String(object.idle_timeout_seconds)
         : "0",
+      connectionId: isSet(object.connectionId)
+        ? globalThis.String(object.connectionId)
+        : isSet(object.connection_id)
+        ? globalThis.String(object.connection_id)
+        : "",
+      credentialRevision: isSet(object.credentialRevision)
+        ? globalThis.String(object.credentialRevision)
+        : isSet(object.credential_revision)
+        ? globalThis.String(object.credential_revision)
+        : "",
     };
   },
 
@@ -1789,6 +1825,12 @@ export const AgentExecutionConfiguration: MessageFns<AgentExecutionConfiguration
     if (message.idleTimeoutSeconds !== "0") {
       obj.idleTimeoutSeconds = message.idleTimeoutSeconds;
     }
+    if (message.connectionId !== "") {
+      obj.connectionId = message.connectionId;
+    }
+    if (message.credentialRevision !== "") {
+      obj.credentialRevision = message.credentialRevision;
+    }
     return obj;
   },
 
@@ -1805,6 +1847,8 @@ export const AgentExecutionConfiguration: MessageFns<AgentExecutionConfiguration
     message.maxOutputTokens = object.maxOutputTokens ?? "0";
     message.maxTotalTokens = object.maxTotalTokens ?? "0";
     message.idleTimeoutSeconds = object.idleTimeoutSeconds ?? "0";
+    message.connectionId = object.connectionId ?? "";
+    message.credentialRevision = object.credentialRevision ?? "";
     return message;
   },
 };

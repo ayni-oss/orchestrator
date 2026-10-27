@@ -98,6 +98,8 @@ message AgentExecutionConfiguration {
   uint64 max_output_tokens = 6;
   uint64 max_total_tokens = 7;
   uint64 idle_timeout_seconds = 8;
+  string connection_id = 9;
+  string credential_revision = 10;
 }
 
 // Immutable eligibility-time history reference. Inline records may be only a tail.

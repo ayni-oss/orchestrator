@@ -3,7 +3,7 @@
   import type { WorkspaceData } from "$lib/workspace-types";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { Layers, ChevronDown, Settings2, Plus, Check, PanelLeftClose, Menu, X, GitBranch } from "@lucide/svelte";
+  import { Layers, ChevronDown, Settings2, Plus, Check, PanelLeftClose, Menu, X, GitBranch, Package, BrainCircuit } from "@lucide/svelte";
   import ThemeToggle from "$lib/components/theme-toggle.svelte";
   import CreateWorkspaceDialog from "$lib/components/create-workspace-dialog.svelte";
   import * as Dropdown from "$lib/components/ui/dropdown-menu/index.js";
@@ -36,7 +36,8 @@
       </Dropdown.Content>
     </Dropdown.Root>
     <p class="section-label">Workspace</p>
-    <nav><a class={title === "Projects" ? "nav-item selected" : "nav-item"} href={data.workspace ? `/?workspace=${encodeURIComponent(data.workspace.id)}` : "/"} aria-current={title === "Projects" ? "page" : undefined}><Layers size={19} />Projects <span>{data.projects.length}</span></a></nav>
+    <nav><a class={title === "Projects" ? "nav-item selected" : "nav-item"} href={data.workspace ? `/?workspace=${encodeURIComponent(data.workspace.id)}` : "/"} aria-current={title === "Projects" ? "page" : undefined}><Layers size={19} />Projects <span>{data.projects.length}</span></a>
+    {#if data.workspace}<a class={title==='Workspace settings'?'nav-item selected':'nav-item'} href={`/workspace/settings?workspace=${encodeURIComponent(data.workspace.id)}`}><Settings2 size={19}/>Workspace settings</a>{/if}</nav>
     <div class="sidebar-bottom"><button class="settings-link" class:selected={configurationOpen} onclick={() => { configurationOpen = !configurationOpen; sidebarOpen = false; }} aria-expanded={configurationOpen} aria-controls="configuration-navigation"><Settings2 size={17} />Configuration</button></div>
   </aside>
   {#if sidebarOpen}<button class="mobile-backdrop" onclick={() => sidebarOpen = false} aria-label="Close workspace navigation"></button>{/if}
@@ -45,9 +46,8 @@
       <div class="configuration-heading"><h2>Configuration</h2><button onclick={() => configurationOpen = false} aria-label="Close configuration navigation"><X size={17} /></button></div>
       <p class="configuration-group">Integrations</p>
       <a href="/settings/source-control" class:active={page.url.pathname.startsWith('/settings/source-control')} aria-current={page.url.pathname.startsWith('/settings/source-control')?'page':undefined}><GitBranch size={17} />Source control</a>
-
-
-
+      <a href="/settings/container-registries" class:active={page.url.pathname.startsWith('/settings/container-registries')}><Package size={17} />Container registries</a>
+      <a href="/settings/llm-providers" class:active={page.url.pathname.startsWith('/settings/llm-providers')}><BrainCircuit size={17} />LLM providers</a>
     </nav>
   {/if}
   <div class="main-shell">

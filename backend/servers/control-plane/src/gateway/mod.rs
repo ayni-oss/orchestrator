@@ -111,6 +111,18 @@ async fn rpc(
         .try_acquire_owned()
         .map_err(|_| ApiError::from(Status::resource_exhausted("gateway request limit")))?;
     match method.as_str() {
+        "SaveProviderConnection" => forward!(
+            body,
+            gateway.connections(),
+            save_provider_connection,
+            v1::SaveProviderConnectionRequest
+        ),
+        "ValidateProviderConnection" => forward!(
+            body,
+            gateway.connections(),
+            validate_provider_connection,
+            v1::ValidateProviderConnectionRequest
+        ),
         "SaveGithubConnection" => forward!(
             body,
             gateway.connections(),

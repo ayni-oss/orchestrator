@@ -1,6 +1,8 @@
 //! Integration lifecycle. Credentials never enter safe receipts or projections.
 use super::{StoreError, WorkflowStore, new_id, validate_id, validate_key, validate_name};
 use serde::{Deserialize, Serialize};
+mod providers;
+pub use providers::{ProviderCandidate, SaveProvider};
 use tokio_postgres::{Row, Transaction};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -16,6 +18,10 @@ pub struct Connection {
     pub candidate_credential_revision: String,
     pub status: String,
     pub safe_reason: String,
+    #[serde(default)]
+    pub settings: ProviderSettings,
+    #[serde(default)]
+    pub models: Vec<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Operation {
@@ -26,6 +32,15 @@ pub struct Operation {
     pub safe_reason: String,
     pub connection_revision: u64,
     pub connection: Connection,
+}
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProviderSettings {
+    #[serde(default)]
+    pub registry_destination: String,
+    #[serde(default)]
+    pub push_username: String,
+    #[serde(default)]
+    pub pull_username: String,
 }
 // Deliberately neither Debug nor Serialize.
 pub struct GithubCandidate {
@@ -57,6 +72,9 @@ fn connection(row: &Row) -> Result<Connection, StoreError> {
         candidate_credential_revision: row.get("candidate_credential_revision"),
         status: row.get("status"),
         safe_reason: row.get("safe_reason"),
+        settings: serde_json::from_str(row.get("settings"))
+            .map_err(|_| StoreError::CorruptState)?,
+        models: serde_json::from_str(row.get("models")).map_err(|_| StoreError::CorruptState)?,
     })
 }
 fn operation(row: &Row) -> Result<Operation, StoreError> {
@@ -121,6 +139,20 @@ fn validate_candidate_input(input: &SaveGithub<'_>) -> Result<String, StoreError
     let safe = serde_json::to_string(&(input.id, input.expected, input.name, input.app_id))
         .map_err(|_| StoreError::CorruptState)?;
     Ok(safe)
+}
+fn model_json(models: &[String]) -> Result<String, StoreError> {
+    if models.len() > 1000
+        || models.iter().any(|m| {
+            m.len() > 200
+                || m.is_empty()
+                || !m
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"-_.:".contains(&b))
+        })
+    {
+        return Err(StoreError::InvalidInput("models"));
+    }
+    serde_json::to_string(models).map_err(|_| StoreError::CorruptState)
 }
 impl WorkflowStore {
     /// Save an immutable candidate, comparing credential retries only in protected storage.
@@ -283,6 +315,9 @@ impl WorkflowStore {
             .await?
             .ok_or(StoreError::NotFound)?;
         let op = operation(&row)?;
+        if op.connection.capability != "source_control" {
+            return Err(StoreError::InvalidInput("capability"));
+        }
         let value: String = client
             .query_one(
                 "SELECT value FROM workflow_connection_credentials WHERE revision_id=$1",
@@ -305,6 +340,18 @@ impl WorkflowStore {
         id: &str,
         reason: &str,
     ) -> Result<Operation, StoreError> {
+        self.finish_provider_validation(id, reason, &[]).await
+    }
+    /// Complete provider validation under the candidate revision fence.
+    /// # Errors
+    /// Reject unsafe outcomes, stale operations or unavailable storage.
+    pub async fn finish_provider_validation(
+        &self,
+        id: &str,
+        reason: &str,
+        models: &[String],
+    ) -> Result<Operation, StoreError> {
+        let models_json = model_json(models)?;
         if !matches!(
             reason,
             "" | "github_key_invalid"
@@ -314,6 +361,11 @@ impl WorkflowStore {
                 | "github_rate_limited"
                 | "github_unavailable"
                 | "github_response_invalid"
+                | "provider_authentication_failed"
+                | "provider_access_denied"
+                | "provider_rate_limited"
+                | "provider_unavailable"
+                | "provider_response_invalid"
         ) {
             return Err(StoreError::InvalidInput("validation reason"));
         }
@@ -347,18 +399,30 @@ impl WorkflowStore {
         {
             "superseded"
         } else {
-            if matches!(reason, "github_unavailable" | "github_rate_limited") {
+            if matches!(
+                reason,
+                "github_unavailable"
+                    | "github_rate_limited"
+                    | "provider_unavailable"
+                    | "provider_rate_limited"
+            ) {
                 tx.execute(
                     "UPDATE workflow_connections SET safe_reason=$2 WHERE id=$1",
                     &[&current.id, &reason],
                 )
                 .await?;
             } else if reason.is_empty() {
-                tx.execute("UPDATE workflow_connections SET active_credential_revision=$2,candidate_credential_revision='',status='ready',safe_reason='' WHERE id=$1", &[&current.id,&candidate]).await?;
+                tx.execute("UPDATE workflow_connections SET active_credential_revision=$2,candidate_credential_revision='',status='ready',safe_reason='',models=$3 WHERE id=$1", &[&current.id,&candidate,&models_json]).await?;
             } else {
                 tx.execute("UPDATE workflow_connections SET candidate_credential_revision='',status=CASE WHEN active_credential_revision='' THEN 'failed' ELSE 'ready' END,safe_reason=$2 WHERE id=$1", &[&current.id,&reason]).await?;
             }
-            if matches!(reason, "github_unavailable" | "github_rate_limited") {
+            if matches!(
+                reason,
+                "github_unavailable"
+                    | "github_rate_limited"
+                    | "provider_unavailable"
+                    | "provider_rate_limited"
+            ) {
                 "accepted"
             } else if reason.is_empty() {
                 "completed"

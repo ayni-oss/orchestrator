@@ -31,6 +31,10 @@ export interface Connection {
   candidateCredentialRevision: string;
   status: string;
   safeReason: string;
+  registryDestination: string;
+  pushUsername: string;
+  pullUsername: string;
+  models: string[];
 }
 
 export interface ConnectionOperation {
@@ -107,6 +111,36 @@ export interface ListConnectionOperationsResponse {
   nextAfterId: string;
 }
 
+/** Supported pairs are github/container_registry and openai/llm. */
+export interface SaveProviderConnectionRequest {
+  idempotencyKey: string;
+  connectionId: string;
+  expectedRevision: string;
+  displayName: string;
+  provider: string;
+  capability: string;
+  /** Explicit ghcr.io/owner/package destination, immutable for this connection. */
+  registryDestination: string;
+  pushUsername: string;
+  pullUsername: string;
+  /** Write-only inputs. Both registry credentials are required independently. */
+  pushToken: string;
+  pullToken: string;
+  apiKey: string;
+}
+
+export interface SaveProviderConnectionResponse {
+  operation?: ConnectionOperation | undefined;
+}
+
+export interface ValidateProviderConnectionRequest {
+  operationId: string;
+}
+
+export interface ValidateProviderConnectionResponse {
+  operation?: ConnectionOperation | undefined;
+}
+
 function createBaseConnection(): Connection {
   return {
     id: "",
@@ -120,6 +154,10 @@ function createBaseConnection(): Connection {
     candidateCredentialRevision: "",
     status: "",
     safeReason: "",
+    registryDestination: "",
+    pushUsername: "",
+    pullUsername: "",
+    models: [],
   };
 }
 
@@ -157,6 +195,18 @@ export const Connection: MessageFns<Connection> = {
     }
     if (message.safeReason !== "") {
       writer.uint32(90).string(message.safeReason);
+    }
+    if (message.registryDestination !== "") {
+      writer.uint32(98).string(message.registryDestination);
+    }
+    if (message.pushUsername !== "") {
+      writer.uint32(106).string(message.pushUsername);
+    }
+    if (message.pullUsername !== "") {
+      writer.uint32(114).string(message.pullUsername);
+    }
+    for (const v of message.models) {
+      writer.uint32(122).string(v!);
     }
     return writer;
   },
@@ -262,6 +312,38 @@ export const Connection: MessageFns<Connection> = {
             message.safeReason = reader.string();
             continue;
           }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.registryDestination = reader.string();
+            continue;
+          }
+          case 13: {
+            if (tag !== 106) {
+              break;
+            }
+
+            message.pushUsername = reader.string();
+            continue;
+          }
+          case 14: {
+            if (tag !== 114) {
+              break;
+            }
+
+            message.pullUsername = reader.string();
+            continue;
+          }
+          case 15: {
+            if (tag !== 122) {
+              break;
+            }
+
+            message.models.push(reader.string());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -307,6 +389,24 @@ export const Connection: MessageFns<Connection> = {
         : isSet(object.safe_reason)
         ? globalThis.String(object.safe_reason)
         : "",
+      registryDestination: isSet(object.registryDestination)
+        ? globalThis.String(object.registryDestination)
+        : isSet(object.registry_destination)
+        ? globalThis.String(object.registry_destination)
+        : "",
+      pushUsername: isSet(object.pushUsername)
+        ? globalThis.String(object.pushUsername)
+        : isSet(object.push_username)
+        ? globalThis.String(object.push_username)
+        : "",
+      pullUsername: isSet(object.pullUsername)
+        ? globalThis.String(object.pullUsername)
+        : isSet(object.pull_username)
+        ? globalThis.String(object.pull_username)
+        : "",
+      models: globalThis.Array.isArray(object?.models)
+        ? object.models.map((e: any) => globalThis.String(e))
+        : [],
     };
   },
 
@@ -345,6 +445,18 @@ export const Connection: MessageFns<Connection> = {
     if (message.safeReason !== "") {
       obj.safeReason = message.safeReason;
     }
+    if (message.registryDestination !== "") {
+      obj.registryDestination = message.registryDestination;
+    }
+    if (message.pushUsername !== "") {
+      obj.pushUsername = message.pushUsername;
+    }
+    if (message.pullUsername !== "") {
+      obj.pullUsername = message.pullUsername;
+    }
+    if (message.models?.length) {
+      obj.models = message.models;
+    }
     return obj;
   },
 
@@ -364,6 +476,10 @@ export const Connection: MessageFns<Connection> = {
     message.candidateCredentialRevision = object.candidateCredentialRevision ?? "";
     message.status = object.status ?? "";
     message.safeReason = object.safeReason ?? "";
+    message.registryDestination = object.registryDestination ?? "";
+    message.pushUsername = object.pushUsername ?? "";
+    message.pullUsername = object.pullUsername ?? "";
+    message.models = object.models?.map((e) => e) || [];
     return message;
   },
 };
@@ -1659,6 +1775,515 @@ export const ListConnectionOperationsResponse: MessageFns<ListConnectionOperatio
   },
 };
 
+function createBaseSaveProviderConnectionRequest(): SaveProviderConnectionRequest {
+  return {
+    idempotencyKey: "",
+    connectionId: "",
+    expectedRevision: "0",
+    displayName: "",
+    provider: "",
+    capability: "",
+    registryDestination: "",
+    pushUsername: "",
+    pullUsername: "",
+    pushToken: "",
+    pullToken: "",
+    apiKey: "",
+  };
+}
+
+export const SaveProviderConnectionRequest: MessageFns<SaveProviderConnectionRequest> = {
+  encode(message: SaveProviderConnectionRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.connectionId !== "") {
+      writer.uint32(18).string(message.connectionId);
+    }
+    if (message.expectedRevision !== "0") {
+      writer.uint32(24).uint64(message.expectedRevision);
+    }
+    if (message.displayName !== "") {
+      writer.uint32(34).string(message.displayName);
+    }
+    if (message.provider !== "") {
+      writer.uint32(42).string(message.provider);
+    }
+    if (message.capability !== "") {
+      writer.uint32(50).string(message.capability);
+    }
+    if (message.registryDestination !== "") {
+      writer.uint32(58).string(message.registryDestination);
+    }
+    if (message.pushUsername !== "") {
+      writer.uint32(66).string(message.pushUsername);
+    }
+    if (message.pullUsername !== "") {
+      writer.uint32(74).string(message.pullUsername);
+    }
+    if (message.pushToken !== "") {
+      writer.uint32(82).string(message.pushToken);
+    }
+    if (message.pullToken !== "") {
+      writer.uint32(90).string(message.pullToken);
+    }
+    if (message.apiKey !== "") {
+      writer.uint32(98).string(message.apiKey);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SaveProviderConnectionRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSaveProviderConnectionRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.connectionId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.expectedRevision = reader.uint64().toString();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.displayName = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.provider = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.capability = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.registryDestination = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.pushUsername = reader.string();
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.pullUsername = reader.string();
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.pushToken = reader.string();
+            continue;
+          }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.pullToken = reader.string();
+            continue;
+          }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.apiKey = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): SaveProviderConnectionRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      connectionId: isSet(object.connectionId)
+        ? globalThis.String(object.connectionId)
+        : isSet(object.connection_id)
+        ? globalThis.String(object.connection_id)
+        : "",
+      expectedRevision: isSet(object.expectedRevision)
+        ? globalThis.String(object.expectedRevision)
+        : isSet(object.expected_revision)
+        ? globalThis.String(object.expected_revision)
+        : "0",
+      displayName: isSet(object.displayName)
+        ? globalThis.String(object.displayName)
+        : isSet(object.display_name)
+        ? globalThis.String(object.display_name)
+        : "",
+      provider: isSet(object.provider) ? globalThis.String(object.provider) : "",
+      capability: isSet(object.capability) ? globalThis.String(object.capability) : "",
+      registryDestination: isSet(object.registryDestination)
+        ? globalThis.String(object.registryDestination)
+        : isSet(object.registry_destination)
+        ? globalThis.String(object.registry_destination)
+        : "",
+      pushUsername: isSet(object.pushUsername)
+        ? globalThis.String(object.pushUsername)
+        : isSet(object.push_username)
+        ? globalThis.String(object.push_username)
+        : "",
+      pullUsername: isSet(object.pullUsername)
+        ? globalThis.String(object.pullUsername)
+        : isSet(object.pull_username)
+        ? globalThis.String(object.pull_username)
+        : "",
+      pushToken: isSet(object.pushToken)
+        ? globalThis.String(object.pushToken)
+        : isSet(object.push_token)
+        ? globalThis.String(object.push_token)
+        : "",
+      pullToken: isSet(object.pullToken)
+        ? globalThis.String(object.pullToken)
+        : isSet(object.pull_token)
+        ? globalThis.String(object.pull_token)
+        : "",
+      apiKey: isSet(object.apiKey)
+        ? globalThis.String(object.apiKey)
+        : isSet(object.api_key)
+        ? globalThis.String(object.api_key)
+        : "",
+    };
+  },
+
+  toJSON(message: SaveProviderConnectionRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.connectionId !== "") {
+      obj.connectionId = message.connectionId;
+    }
+    if (message.expectedRevision !== "0") {
+      obj.expectedRevision = message.expectedRevision;
+    }
+    if (message.displayName !== "") {
+      obj.displayName = message.displayName;
+    }
+    if (message.provider !== "") {
+      obj.provider = message.provider;
+    }
+    if (message.capability !== "") {
+      obj.capability = message.capability;
+    }
+    if (message.registryDestination !== "") {
+      obj.registryDestination = message.registryDestination;
+    }
+    if (message.pushUsername !== "") {
+      obj.pushUsername = message.pushUsername;
+    }
+    if (message.pullUsername !== "") {
+      obj.pullUsername = message.pullUsername;
+    }
+    if (message.pushToken !== "") {
+      obj.pushToken = message.pushToken;
+    }
+    if (message.pullToken !== "") {
+      obj.pullToken = message.pullToken;
+    }
+    if (message.apiKey !== "") {
+      obj.apiKey = message.apiKey;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<SaveProviderConnectionRequest>): SaveProviderConnectionRequest {
+    return SaveProviderConnectionRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<SaveProviderConnectionRequest>): SaveProviderConnectionRequest {
+    const message = createBaseSaveProviderConnectionRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.connectionId = object.connectionId ?? "";
+    message.expectedRevision = object.expectedRevision ?? "0";
+    message.displayName = object.displayName ?? "";
+    message.provider = object.provider ?? "";
+    message.capability = object.capability ?? "";
+    message.registryDestination = object.registryDestination ?? "";
+    message.pushUsername = object.pushUsername ?? "";
+    message.pullUsername = object.pullUsername ?? "";
+    message.pushToken = object.pushToken ?? "";
+    message.pullToken = object.pullToken ?? "";
+    message.apiKey = object.apiKey ?? "";
+    return message;
+  },
+};
+
+function createBaseSaveProviderConnectionResponse(): SaveProviderConnectionResponse {
+  return { operation: undefined };
+}
+
+export const SaveProviderConnectionResponse: MessageFns<SaveProviderConnectionResponse> = {
+  encode(message: SaveProviderConnectionResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operation !== undefined) {
+      ConnectionOperation.encode(message.operation, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SaveProviderConnectionResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSaveProviderConnectionResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operation = ConnectionOperation.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): SaveProviderConnectionResponse {
+    return { operation: isSet(object.operation) ? ConnectionOperation.fromJSON(object.operation) : undefined };
+  },
+
+  toJSON(message: SaveProviderConnectionResponse): unknown {
+    const obj: any = {};
+    if (message.operation !== undefined) {
+      obj.operation = ConnectionOperation.toJSON(message.operation);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<SaveProviderConnectionResponse>): SaveProviderConnectionResponse {
+    return SaveProviderConnectionResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<SaveProviderConnectionResponse>): SaveProviderConnectionResponse {
+    const message = createBaseSaveProviderConnectionResponse();
+    message.operation = (object.operation !== undefined && object.operation !== null)
+      ? ConnectionOperation.fromPartial(object.operation)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseValidateProviderConnectionRequest(): ValidateProviderConnectionRequest {
+  return { operationId: "" };
+}
+
+export const ValidateProviderConnectionRequest: MessageFns<ValidateProviderConnectionRequest> = {
+  encode(message: ValidateProviderConnectionRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operationId !== "") {
+      writer.uint32(10).string(message.operationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ValidateProviderConnectionRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseValidateProviderConnectionRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ValidateProviderConnectionRequest {
+    return {
+      operationId: isSet(object.operationId)
+        ? globalThis.String(object.operationId)
+        : isSet(object.operation_id)
+        ? globalThis.String(object.operation_id)
+        : "",
+    };
+  },
+
+  toJSON(message: ValidateProviderConnectionRequest): unknown {
+    const obj: any = {};
+    if (message.operationId !== "") {
+      obj.operationId = message.operationId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ValidateProviderConnectionRequest>): ValidateProviderConnectionRequest {
+    return ValidateProviderConnectionRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ValidateProviderConnectionRequest>): ValidateProviderConnectionRequest {
+    const message = createBaseValidateProviderConnectionRequest();
+    message.operationId = object.operationId ?? "";
+    return message;
+  },
+};
+
+function createBaseValidateProviderConnectionResponse(): ValidateProviderConnectionResponse {
+  return { operation: undefined };
+}
+
+export const ValidateProviderConnectionResponse: MessageFns<ValidateProviderConnectionResponse> = {
+  encode(message: ValidateProviderConnectionResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operation !== undefined) {
+      ConnectionOperation.encode(message.operation, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ValidateProviderConnectionResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseValidateProviderConnectionResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operation = ConnectionOperation.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ValidateProviderConnectionResponse {
+    return { operation: isSet(object.operation) ? ConnectionOperation.fromJSON(object.operation) : undefined };
+  },
+
+  toJSON(message: ValidateProviderConnectionResponse): unknown {
+    const obj: any = {};
+    if (message.operation !== undefined) {
+      obj.operation = ConnectionOperation.toJSON(message.operation);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ValidateProviderConnectionResponse>): ValidateProviderConnectionResponse {
+    return ValidateProviderConnectionResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ValidateProviderConnectionResponse>): ValidateProviderConnectionResponse {
+    const message = createBaseValidateProviderConnectionResponse();
+    message.operation = (object.operation !== undefined && object.operation !== null)
+      ? ConnectionOperation.fromPartial(object.operation)
+      : undefined;
+    return message;
+  },
+};
+
 /** Trusted local-operator configuration. Credential values are write-only. */
 export type ConnectionServiceService = typeof ConnectionServiceService;
 export const ConnectionServiceService = {
@@ -1672,6 +2297,31 @@ export const ConnectionServiceService = {
     responseSerialize: (value: SaveGithubConnectionResponse): Buffer =>
       Buffer.from(SaveGithubConnectionResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): SaveGithubConnectionResponse => SaveGithubConnectionResponse.decode(value),
+  },
+  saveProviderConnection: {
+    path: "/ayni.orchestrator.v1.ConnectionService/SaveProviderConnection" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: SaveProviderConnectionRequest): Buffer =>
+      Buffer.from(SaveProviderConnectionRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SaveProviderConnectionRequest => SaveProviderConnectionRequest.decode(value),
+    responseSerialize: (value: SaveProviderConnectionResponse): Buffer =>
+      Buffer.from(SaveProviderConnectionResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SaveProviderConnectionResponse =>
+      SaveProviderConnectionResponse.decode(value),
+  },
+  validateProviderConnection: {
+    path: "/ayni.orchestrator.v1.ConnectionService/ValidateProviderConnection" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ValidateProviderConnectionRequest): Buffer =>
+      Buffer.from(ValidateProviderConnectionRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ValidateProviderConnectionRequest =>
+      ValidateProviderConnectionRequest.decode(value),
+    responseSerialize: (value: ValidateProviderConnectionResponse): Buffer =>
+      Buffer.from(ValidateProviderConnectionResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ValidateProviderConnectionResponse =>
+      ValidateProviderConnectionResponse.decode(value),
   },
   setConnectionEnabled: {
     path: "/ayni.orchestrator.v1.ConnectionService/SetConnectionEnabled" as const,
@@ -1737,6 +2387,8 @@ export const ConnectionServiceService = {
 
 export interface ConnectionServiceServer extends UntypedServiceImplementation {
   saveGithubConnection: handleUnaryCall<SaveGithubConnectionRequest, SaveGithubConnectionResponse>;
+  saveProviderConnection: handleUnaryCall<SaveProviderConnectionRequest, SaveProviderConnectionResponse>;
+  validateProviderConnection: handleUnaryCall<ValidateProviderConnectionRequest, ValidateProviderConnectionResponse>;
   setConnectionEnabled: handleUnaryCall<SetConnectionEnabledRequest, SetConnectionEnabledResponse>;
   validateGithubConnection: handleUnaryCall<ValidateGithubConnectionRequest, ValidateGithubConnectionResponse>;
   getConnectionOperation: handleUnaryCall<GetConnectionOperationRequest, GetConnectionOperationResponse>;
@@ -1759,6 +2411,36 @@ export interface ConnectionServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: SaveGithubConnectionResponse) => void,
+  ): ClientUnaryCall;
+  saveProviderConnection(
+    request: SaveProviderConnectionRequest,
+    callback: (error: ServiceError | null, response: SaveProviderConnectionResponse) => void,
+  ): ClientUnaryCall;
+  saveProviderConnection(
+    request: SaveProviderConnectionRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: SaveProviderConnectionResponse) => void,
+  ): ClientUnaryCall;
+  saveProviderConnection(
+    request: SaveProviderConnectionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: SaveProviderConnectionResponse) => void,
+  ): ClientUnaryCall;
+  validateProviderConnection(
+    request: ValidateProviderConnectionRequest,
+    callback: (error: ServiceError | null, response: ValidateProviderConnectionResponse) => void,
+  ): ClientUnaryCall;
+  validateProviderConnection(
+    request: ValidateProviderConnectionRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ValidateProviderConnectionResponse) => void,
+  ): ClientUnaryCall;
+  validateProviderConnection(
+    request: ValidateProviderConnectionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ValidateProviderConnectionResponse) => void,
   ): ClientUnaryCall;
   setConnectionEnabled(
     request: SetConnectionEnabledRequest,

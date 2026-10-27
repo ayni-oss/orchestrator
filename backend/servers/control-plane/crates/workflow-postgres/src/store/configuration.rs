@@ -2,7 +2,7 @@ use super::{StoreError, WorkflowStore, support};
 use crate::model::{AgentConfiguration, TurnInputs};
 use tokio_postgres::{Row, Transaction};
 
-const COLUMNS: &str = "workspace_id,revision_id,instructions,provider,model,max_input_tokens,max_output_tokens,max_total_tokens,idle_timeout_seconds";
+const COLUMNS: &str = "workspace_id,revision_id,instructions,provider,model,max_input_tokens,max_output_tokens,max_total_tokens,idle_timeout_seconds,connection_id";
 
 pub(super) async fn initialize(tx: &Transaction<'_>, workspace: &str) -> Result<(), StoreError> {
     tx.execute("INSERT INTO workflow_agent_configurations (workspace_id,revision_id,instructions,provider,model,max_input_tokens,max_output_tokens,max_total_tokens,idle_timeout_seconds) VALUES ($1,$1,'','scripted','scripted',8192,2048,10240,300)", &[&workspace]).await?;
@@ -22,7 +22,19 @@ pub(super) async fn freeze_turn_inputs(
     // Lock the same head as updates. Admission observes exactly one committed revision.
     let row = tx.query_one("SELECT revision_id FROM workflow_agent_configuration_heads WHERE workspace_id=$1 FOR SHARE", &[&workspace]).await?;
     let revision: String = row.get(0);
-    tx.execute("INSERT INTO workflow_turn_inputs (turn_id,workspace_id,configuration_revision_id) VALUES ($1,$2,$3)", &[&turn,&workspace,&revision]).await?;
+    let configuration=tx.query_one("SELECT connection_id FROM workflow_agent_configurations WHERE workspace_id=$1 AND revision_id=$2",&[&workspace,&revision]).await?;
+    let connection: String = configuration.get(0);
+    let credential = if connection.is_empty() {
+        String::new()
+    } else {
+        let row=tx.query_opt("SELECT active_credential_revision,enabled FROM workflow_connections WHERE id=$1 AND provider='openai' AND capability='llm' FOR SHARE",&[&connection]).await?.ok_or(StoreError::NotFound)?;
+        let credential: String = row.get(0);
+        if !row.get::<_, bool>(1) || credential.is_empty() {
+            return Err(StoreError::InvalidInput("connection_unavailable"));
+        }
+        credential
+    };
+    tx.execute("INSERT INTO workflow_turn_inputs (turn_id,workspace_id,configuration_revision_id,credential_revision) VALUES ($1,$2,$3,$4)", &[&turn,&workspace,&revision,&credential]).await?;
     Ok(())
 }
 
@@ -30,6 +42,16 @@ pub(super) async fn execution_inputs(
     tx: &Transaction<'_>,
     turn: &str,
 ) -> Result<Option<ayni_orchestrator_events::v1::AgentExecutionConfiguration>, StoreError> {
+    let credential = tx
+        .query_opt(
+            "SELECT credential_revision FROM workflow_turn_inputs WHERE turn_id=$1",
+            &[&turn],
+        )
+        .await?;
+    let Some(credential) = credential else {
+        return Ok(None);
+    };
+    let credential: String = credential.get(0);
     let query = format!(
         "SELECT {COLUMNS} FROM workflow_agent_configurations WHERE (workspace_id,revision_id)=(SELECT workspace_id,configuration_revision_id FROM workflow_turn_inputs WHERE turn_id=$1)"
     );
@@ -39,6 +61,8 @@ pub(super) async fn execution_inputs(
         .map(|row| {
             let value = configuration(row)?;
             Ok(ayni_orchestrator_events::v1::AgentExecutionConfiguration {
+                connection_id: value.connection_id,
+                credential_revision: credential.clone(),
                 revision_id: value.revision_id,
                 instructions: value.instructions,
                 provider: value.provider,
@@ -54,6 +78,7 @@ pub(super) async fn execution_inputs(
 
 fn configuration(row: &Row) -> Result<AgentConfiguration, StoreError> {
     Ok(AgentConfiguration {
+        connection_id: row.get(9),
         workspace_id: row.get(0),
         revision_id: row.get(1),
         instructions: row.get(2),
@@ -68,6 +93,12 @@ fn configuration(row: &Row) -> Result<AgentConfiguration, StoreError> {
 
 fn validate_configuration(value: &AgentConfiguration) -> Result<(), StoreError> {
     support::validate_id(&value.workspace_id, "workspace_id")?;
+    if !value.connection_id.is_empty() {
+        support::validate_id(&value.connection_id, "connection_id")?;
+        if value.provider != "openai" {
+            return Err(StoreError::InvalidInput("connection_provider"));
+        }
+    }
     support::validate_text(&value.instructions, 16_384, true, "instructions")?;
     support::validate_name(&value.model, "model")?;
     if !matches!(value.provider.as_str(), "scripted" | "openai" | "anthropic")
@@ -138,6 +169,7 @@ impl WorkflowStore {
                 proposed.instructions.as_bytes(),
                 proposed.provider.as_bytes(),
                 proposed.model.as_bytes(),
+                proposed.connection_id.as_bytes(),
                 &proposed.max_input_tokens.to_be_bytes(),
                 &proposed.max_output_tokens.to_be_bytes(),
                 &proposed.max_total_tokens.to_be_bytes(),
@@ -155,6 +187,16 @@ impl WorkflowStore {
             if head.get::<_, String>(0) != expected_revision {
                 return Err(StoreError::ConfigurationRevisionConflict);
             }
+            if !proposed.connection_id.is_empty() {
+                let row=tx.query_opt("SELECT enabled,active_credential_revision,models FROM workflow_connections WHERE id=$1 AND provider='openai' AND capability='llm' FOR SHARE",&[&proposed.connection_id]).await?.ok_or(StoreError::NotFound)?;
+                let active: String = row.get(1);
+                let models: Vec<String> =
+                    serde_json::from_str(row.get(2)).map_err(|_| StoreError::CorruptState)?;
+                if !row.get::<_, bool>(0) || active.is_empty() || !models.contains(&proposed.model)
+                {
+                    return Err(StoreError::InvalidInput("connection_model_unavailable"));
+                }
+            }
             let revision = support::new_id();
             let input = i64::try_from(proposed.max_input_tokens)
                 .map_err(|_| StoreError::InvalidInput("max_input_tokens"))?;
@@ -164,7 +206,7 @@ impl WorkflowStore {
                 .map_err(|_| StoreError::InvalidInput("max_total_tokens"))?;
             let idle = i64::try_from(proposed.idle_timeout_seconds)
                 .map_err(|_| StoreError::InvalidInput("idle_timeout_seconds"))?;
-            tx.execute("INSERT INTO workflow_agent_configurations (workspace_id,revision_id,instructions,provider,model,max_input_tokens,max_output_tokens,max_total_tokens,idle_timeout_seconds) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)", &[&proposed.workspace_id,&revision,&proposed.instructions,&proposed.provider,&proposed.model,&input,&output,&total,&idle]).await?;
+            tx.execute("INSERT INTO workflow_agent_configurations (workspace_id,revision_id,instructions,provider,model,max_input_tokens,max_output_tokens,max_total_tokens,idle_timeout_seconds,connection_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", &[&proposed.workspace_id,&revision,&proposed.instructions,&proposed.provider,&proposed.model,&input,&output,&total,&idle,&proposed.connection_id]).await?;
             tx.execute("UPDATE workflow_agent_configuration_heads SET revision_id=$2 WHERE workspace_id=$1", &[&proposed.workspace_id,&revision]).await?;
             tx.execute("INSERT INTO workflow_configuration_receipts (workspace_id,idempotency_key,request_digest,revision_id) VALUES ($1,$2,$3,$4)", &[&proposed.workspace_id,&key,&&digest[..],&revision]).await?;
             revision
@@ -218,6 +260,7 @@ mod tests {
     #[test]
     fn configuration_rejects_unbounded_or_implicit_provider_inputs() {
         let mut value = AgentConfiguration {
+            connection_id: String::new(),
             workspace_id: support::new_id(),
             revision_id: String::new(),
             instructions: String::new(),

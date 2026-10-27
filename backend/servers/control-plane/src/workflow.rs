@@ -173,6 +173,7 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
             )
         })?;
         let proposed = model::AgentConfiguration {
+            connection_id: proposed.connection_id,
             workspace_id: proposed.workspace_id,
             revision_id: proposed.revision_id,
             instructions: proposed.instructions,

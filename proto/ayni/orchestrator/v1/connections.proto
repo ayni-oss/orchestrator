@@ -4,6 +4,8 @@ package ayni.orchestrator.v1;
 // Trusted local-operator configuration. Credential values are write-only.
 service ConnectionService {
   rpc SaveGithubConnection(SaveGithubConnectionRequest) returns (SaveGithubConnectionResponse);
+  rpc SaveProviderConnection(SaveProviderConnectionRequest) returns (SaveProviderConnectionResponse);
+  rpc ValidateProviderConnection(ValidateProviderConnectionRequest) returns (ValidateProviderConnectionResponse);
   rpc SetConnectionEnabled(SetConnectionEnabledRequest) returns (SetConnectionEnabledResponse);
   rpc ValidateGithubConnection(ValidateGithubConnectionRequest) returns (ValidateGithubConnectionResponse);
   rpc GetConnectionOperation(GetConnectionOperationRequest) returns (GetConnectionOperationResponse);
@@ -23,6 +25,10 @@ message Connection {
   string candidate_credential_revision = 9;
   string status = 10;
   string safe_reason = 11;
+  string registry_destination = 12;
+  string push_username = 13;
+  string pull_username = 14;
+  repeated string models = 15;
 }
 
 message ConnectionOperation {
@@ -86,4 +92,31 @@ message ListConnectionOperationsRequest {
 message ListConnectionOperationsResponse {
   repeated ConnectionOperation operations = 1;
   string next_after_id = 2;
+}
+
+// Supported pairs are github/container_registry and openai/llm.
+message SaveProviderConnectionRequest {
+  string idempotency_key = 1;
+  string connection_id = 2;
+  uint64 expected_revision = 3;
+  string display_name = 4;
+  string provider = 5;
+  string capability = 6;
+  // Explicit ghcr.io/owner/package destination, immutable for this connection.
+  string registry_destination = 7;
+  string push_username = 8;
+  string pull_username = 9;
+  // Write-only inputs. Both registry credentials are required independently.
+  string push_token = 10;
+  string pull_token = 11;
+  string api_key = 12;
+}
+message SaveProviderConnectionResponse {
+  ConnectionOperation operation = 1;
+}
+message ValidateProviderConnectionRequest {
+  string operation_id = 1;
+}
+message ValidateProviderConnectionResponse {
+  ConnectionOperation operation = 1;
 }

@@ -50,6 +50,8 @@ mod tests {
                     "ConnectionService",
                     BTreeSet::from([
                         "SaveGithubConnection",
+                        "SaveProviderConnection",
+                        "ValidateProviderConnection",
                         "SetConnectionEnabled",
                         "ValidateGithubConnection",
                         "GetConnectionOperation",

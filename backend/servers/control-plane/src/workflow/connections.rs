@@ -1,5 +1,6 @@
 //! Trusted local-operator connection commands and safe projections.
 mod github;
+mod providers;
 use super::{RequestContext, WorkflowGrpc, v1};
 use ayni_orchestrator_workflow_postgres::store::connections::{self, SaveGithub};
 use tonic::{Request, Response, Status};
@@ -17,6 +18,10 @@ fn connection(c: connections::Connection) -> v1::Connection {
         candidate_credential_revision: c.candidate_credential_revision,
         status: c.status,
         safe_reason: c.safe_reason,
+        registry_destination: c.settings.registry_destination,
+        push_username: c.settings.push_username,
+        pull_username: c.settings.pull_username,
+        models: c.models,
     }
 }
 fn operation(o: connections::Operation) -> v1::ConnectionOperation {
@@ -52,6 +57,73 @@ impl v1::connection_service_server::ConnectionService for WorkflowGrpc {
             .map_err(|e| context.store(&e))?;
         tracing::info!(operation_id = %result.id, connection_id = %result.connection_id, state = %result.state, "GitHub connection candidate retained");
         Ok(context.response(v1::SaveGithubConnectionResponse {
+            operation: Some(operation(result)),
+        }))
+    }
+    async fn save_provider_connection(
+        &self,
+        request: Request<v1::SaveProviderConnectionRequest>,
+    ) -> Result<Response<v1::SaveProviderConnectionResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        if (value.capability == "llm"
+            && (!value.push_token.is_empty() || !value.pull_token.is_empty()))
+            || (value.capability == "container_registry" && !value.api_key.is_empty())
+        {
+            return Err(Status::invalid_argument("unexpected credential fields"));
+        }
+        let credential = if value.capability == "container_registry" {
+            serde_json::to_string(&[value.push_token, value.pull_token])
+                .map_err(|_| Status::internal("credential encoding failed"))?
+        } else {
+            value.api_key
+        };
+        let result = self
+            .store
+            .save_provider_connection(connections::SaveProvider {
+                key: &value.idempotency_key,
+                id: &value.connection_id,
+                expected: value.expected_revision,
+                name: &value.display_name,
+                provider: &value.provider,
+                capability: &value.capability,
+                settings: connections::ProviderSettings {
+                    registry_destination: value.registry_destination,
+                    push_username: value.push_username,
+                    pull_username: value.pull_username,
+                },
+                credential: &credential,
+            })
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::SaveProviderConnectionResponse {
+            operation: Some(operation(result)),
+        }))
+    }
+    async fn validate_provider_connection(
+        &self,
+        request: Request<v1::ValidateProviderConnectionRequest>,
+    ) -> Result<Response<v1::ValidateProviderConnectionResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let candidate = self
+            .store
+            .provider_candidate(&value.operation_id)
+            .await
+            .map_err(|e| context.store(&e))?;
+        let result = if candidate.operation.state == "accepted" {
+            let (reason, models) = match providers::validate(&candidate).await {
+                Ok(models) => ("", models),
+                Err(reason) => (reason, Vec::new()),
+            };
+            self.store
+                .finish_provider_validation(&value.operation_id, reason, &models)
+                .await
+                .map_err(|e| context.store(&e))?
+        } else {
+            candidate.operation
+        };
+        Ok(context.response(v1::ValidateProviderConnectionResponse {
             operation: Some(operation(result)),
         }))
     }

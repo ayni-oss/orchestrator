@@ -272,6 +272,8 @@ fn execution_inputs_and_session_scope_are_bounded_and_bound_to_the_command()
         context: Vec::new(),
         project_status: None,
         frozen_configuration: Some(AgentExecutionConfiguration {
+            connection_id: String::new(),
+            credential_revision: String::new(),
             revision_id: uuid::Uuid::now_v7().to_string(),
             instructions: "Workspace instructions".into(),
             provider: "openai".into(),
