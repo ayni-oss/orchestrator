@@ -8,7 +8,7 @@
  import InformationCard from '$lib/components/information-card.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
  import Feedback from '$lib/components/feedback.svelte';
- import { rpc, reasonText, type Connection, type Operation } from '$lib/api';
+ import { rpc, RpcError, reasonText, type Connection, type Operation } from '$lib/api';
  let connections = $state.raw<Connection[]>([]);
  let history = $state.raw<Operation[]>([]);
  let selected = $state<Connection | null>(null);
@@ -56,13 +56,16 @@
        const result = await rpc('SaveGithubConnection', request);
        request.privateKeyPem = ''; persistKey(''); open=false; await accept(result.operation);
        notice = 'Credentials saved. Validate the candidate to activate this connection.';
+     } catch (e) {
+       if (e instanceof RpcError && e.status === 400) persistKey('');
+       throw e;
      } finally { request.privateKeyPem = ''; }
    });
  }
  async function recover() {
    await perform(async () => {
      const result = await rpc('GetConnectionOperation', { idempotencyKey: pendingKey });
-     persistKey(''); await accept(result.operation);
+     persistKey(''); open=false; await accept(result.operation);
    });
  }
  function createNew() { open=true; ++selectionGeneration; selected = null; name = ''; appId = ''; pem = ''; history = []; notice = ''; error = ''; }
@@ -85,6 +88,9 @@
  <Button variant="outline" disabled={busy} onclick={()=>perform(refresh)}>Refresh connections</Button>
 </div>
 <Dialog.Root bind:open onOpenChange={value=>{if(!value)pem='';}}><Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl"><Dialog.Header><Dialog.Title>{selected?'Connection settings':'Add a GitHub App'}</Dialog.Title><Dialog.Description>Enter credentials from an existing GitHub App.</Dialog.Description></Dialog.Header>
+ {#if error}<Feedback kind="error" title="Connection could not be saved" message={error}/>{/if}
+ {#if pendingKey}<InformationCard title="Recover a submitted command"><p>The save result is uncertain. Recover it before submitting credentials again.</p><div class="flex gap-3"><Button disabled={busy} onclick={recover}>Recover operation</Button><Button variant="outline" disabled={busy} onclick={()=>persistKey('')}>Abandon recovery</Button></div></InformationCard>{/if}
+ {#if busy}<p role="status">Saving connection…</p>{/if}
  <form onsubmit={save} class="space-y-5">
   <div class="space-y-2"><Label for="connection-name">Connection name</Label><Input id="connection-name" bind:value={name} maxlength={120} required disabled={busy||!!pendingKey}/></div>
   <div class="space-y-2"><Label for="app-id">GitHub App ID</Label><Input id="app-id" bind:value={appId} pattern="[1-9][0-9]*" maxlength={20} required disabled={busy||!!pendingKey||!!selected}/></div>

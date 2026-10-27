@@ -1,7 +1,11 @@
+export class RpcError extends Error {
+  constructor(message: string, public status: number) { super(message); }
+}
+
 export async function rpc(method: string, body: unknown): Promise<any> {
-  const response = await fetch(`/api/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-console-request': '1' }, body: JSON.stringify(body) });
+  const response = await fetch(`/api/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-console-request': '1' }, body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });
   const value = await response.json();
-  if (!response.ok) throw new Error(value.message || 'The request could not be completed. Refresh and retry.');
+  if (!response.ok) throw new RpcError(value.message || 'The request could not be completed. Refresh and retry.', response.status);
   return value;
 }
 export type Connection = { id: string; displayName: string; provider: string; capability: string; revision: string; enabled: boolean; appId: string; registryDestination?: string; pushUsername?: string; pullUsername?: string; models?: string[]; status: string; safeReason?: string; candidateCredentialRevision?: string; activeCredentialRevision?: string };
