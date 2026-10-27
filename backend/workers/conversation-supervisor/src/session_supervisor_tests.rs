@@ -43,6 +43,8 @@ fn command() -> Vec<u8> {
             idle_timeout_seconds: 30,
         }),
         frozen_configuration: Some(AgentExecutionConfiguration {
+            connection_id: String::new(),
+            credential_revision: String::new(),
             revision_id: uuid::Uuid::now_v7().to_string(),
             instructions: "frozen".into(),
             provider: "openai".into(),
@@ -174,8 +176,8 @@ fn changed_worker_recipes_adopt_the_same_generation_and_retained_volume() {
     let scope = command.session.unwrap();
     let binding = command.binding.unwrap();
     let name = name(&scope).unwrap();
-    let fixture = desired_pod(&name, &scope, &binding, "worker:old", None).unwrap();
-    let upgraded = desired_pod(&name, &scope, &binding, "worker:new", None).unwrap();
+    let fixture = desired_pod(&name, &scope, &binding, "worker:old", None, false).unwrap();
+    let upgraded = desired_pod(&name, &scope, &binding, "worker:new", None, false).unwrap();
     assert!(!same_recipe(&fixture, &upgraded));
     let enabled = desired_pod(
         &name,
@@ -183,6 +185,7 @@ fn changed_worker_recipes_adopt_the_same_generation_and_retained_volume() {
         &binding,
         "worker:new",
         Some("https://api.openai.com/v1"),
+        false,
     )
     .unwrap();
     assert!(!same_recipe(&upgraded, &enabled));
@@ -192,6 +195,7 @@ fn changed_worker_recipes_adopt_the_same_generation_and_retained_volume() {
         &binding,
         "worker:new",
         Some("http://fixture:8080/v1"),
+        false,
     )
     .unwrap();
     assert!(!same_recipe(&enabled, &changed_endpoint));
@@ -213,7 +217,52 @@ fn changed_worker_recipes_adopt_the_same_generation_and_retained_volume() {
     }
     let mut changed_idle = scope.clone();
     changed_idle.idle_timeout_seconds = 60;
-    let idle = desired_pod(&name, &changed_idle, &binding, "worker:new", None).unwrap();
-    let baseline = desired_pod(&name, &scope, &binding, "worker:new", None).unwrap();
+    let idle = desired_pod(&name, &changed_idle, &binding, "worker:new", None, false).unwrap();
+    let baseline = desired_pod(&name, &scope, &binding, "worker:new", None, false).unwrap();
     assert!(same_recipe(&idle, &baseline));
+}
+
+#[test]
+fn configured_openai_mounts_only_the_required_generation_credential() {
+    let (_, _, command) = decode_command(&command()).unwrap();
+    let scope = command.session.unwrap();
+    let binding = command.binding.unwrap();
+    let name = name(&scope).unwrap();
+    let pod = desired_pod(
+        &name,
+        &scope,
+        &binding,
+        "worker:fixture",
+        Some("https://api.openai.com/v1"),
+        true,
+    )
+    .unwrap();
+    let spec = pod.spec.unwrap();
+    let secret = spec
+        .volumes
+        .unwrap()
+        .into_iter()
+        .find(|v| v.name == "provider")
+        .unwrap()
+        .secret
+        .unwrap();
+    assert_eq!(
+        secret.secret_name,
+        Some(name.replacen("session-", "provider-", 1))
+    );
+    assert_eq!(secret.optional, Some(false));
+    assert!(
+        spec.containers[0]
+            .volume_mounts
+            .as_ref()
+            .unwrap()
+            .iter()
+            .any(|m| m.name == "provider" && m.read_only == Some(true))
+    );
+    let environment = spec.containers[0].env.as_ref().unwrap();
+    assert!(
+        environment.iter().any(|v| v.name == "OPENAI_BASE_URL"
+            && v.value.as_deref() == Some("https://api.openai.com/v1"))
+    );
+    assert!(environment.iter().all(|v| v.name != "OPENAI_API_KEY"));
 }

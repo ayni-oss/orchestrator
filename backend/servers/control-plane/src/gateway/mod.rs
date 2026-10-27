@@ -55,6 +55,10 @@ impl Gateway {
         })
     }
 
+    fn connections(&self) -> v1::connection_service_client::ConnectionServiceClient<Channel> {
+        v1::connection_service_client::ConnectionServiceClient::new(self.channel.clone())
+    }
+
     fn projects(&self) -> ProjectServiceClient<Channel> {
         ProjectServiceClient::new(self.channel.clone()).max_decoding_message_size(3 * 1024 * 1024)
     }
@@ -107,6 +111,55 @@ async fn rpc(
         .try_acquire_owned()
         .map_err(|_| ApiError::from(Status::resource_exhausted("gateway request limit")))?;
     match method.as_str() {
+        "SaveProviderConnection" => forward!(
+            body,
+            gateway.connections(),
+            save_provider_connection,
+            v1::SaveProviderConnectionRequest
+        ),
+        "ValidateProviderConnection" => forward!(
+            body,
+            gateway.connections(),
+            validate_provider_connection,
+            v1::ValidateProviderConnectionRequest
+        ),
+        "SaveGithubConnection" => forward!(
+            body,
+            gateway.connections(),
+            save_github_connection,
+            v1::SaveGithubConnectionRequest
+        ),
+        "SetConnectionEnabled" => forward!(
+            body,
+            gateway.connections(),
+            set_connection_enabled,
+            v1::SetConnectionEnabledRequest
+        ),
+        "ValidateGithubConnection" => forward!(
+            body,
+            gateway.connections(),
+            validate_github_connection,
+            v1::ValidateGithubConnectionRequest
+        ),
+        "GetConnectionOperation" => forward!(
+            body,
+            gateway.connections(),
+            get_connection_operation,
+            v1::GetConnectionOperationRequest
+        ),
+        "ListConnections" => forward!(
+            body,
+            gateway.connections(),
+            list_connections,
+            v1::ListConnectionsRequest
+        ),
+        "ListConnectionOperations" => forward!(
+            body,
+            gateway.connections(),
+            list_connection_operations,
+            v1::ListConnectionOperationsRequest
+        ),
+
         "CreatePlan" => forward!(
             body,
             gateway.conversations(),

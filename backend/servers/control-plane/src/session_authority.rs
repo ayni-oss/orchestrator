@@ -43,6 +43,7 @@ pub fn router(store: WorkflowStore) -> Result<Router, io::Error> {
     }
     Ok(Router::new()
         .route("/v1/session-authority", post(authority))
+        .route("/v1/session-credential", post(credential))
         .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
         .with_state(Authority {
             store,
@@ -55,16 +56,7 @@ async fn authority(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<axum::Json<AuthorityResponse>, StatusCode> {
-    let token = headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .ok_or(StatusCode::UNAUTHORIZED)?;
-    let provided = Sha256::digest(token.as_bytes());
-    let expected = Sha256::digest(state.token.as_bytes());
-    if !bool::from(provided.as_slice().ct_eq(expected.as_slice())) {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
+    authenticate(&state, &headers)?;
     let request: AuthorityRequest =
         serde_json::from_slice(&body).map_err(|_| StatusCode::BAD_REQUEST)?;
     let diagnostic = event_context(&request.command_bytes);
@@ -93,6 +85,35 @@ async fn authority(
     });
     finish(&span, result.is_ok());
     result.map(axum::Json).map_err(|_| StatusCode::CONFLICT)
+}
+
+fn authenticate(state: &Authority, headers: &HeaderMap) -> Result<(), StatusCode> {
+    let token = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    let provided = Sha256::digest(token.as_bytes());
+    let expected = Sha256::digest(state.token.as_bytes());
+    if !bool::from(provided.as_slice().ct_eq(expected.as_slice())) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    Ok(())
+}
+async fn credential(
+    State(state): State<Authority>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<([(axum::http::header::HeaderName, &'static str); 1], String), StatusCode> {
+    authenticate(&state, &headers)?;
+    let request: AuthorityRequest =
+        serde_json::from_slice(&body).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let value = state
+        .store
+        .session_credential(request.command_bytes)
+        .await
+        .map_err(|_| StatusCode::CONFLICT)?;
+    Ok(([(axum::http::header::CACHE_CONTROL, "no-store")], value))
 }
 
 #[cfg(test)]

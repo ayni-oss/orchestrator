@@ -1,10 +1,10 @@
 # Durable plan review
 
-> UI status: the console and initial product workspace are removed. Browser steps
-> and evidence below describe the retired UI and are historical reference only.
-> Browser-dependent acceptance profiles are unavailable until replacement coverage
-> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
-> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+> UI status: the local product supports configuration and basic workspace/project
+> navigation; see [integration connections](../architecture/integration-connections.md).
+> Conversation/task browser steps below describe the retired UI and remain
+> historical. Their acceptance profiles require replacement coverage. The API
+> gateway itself serves no UI assets.
 
 The first M3 slice retains operator-authored plans in their originating conversation.
 It implements review and revision from the [M3 contract](plans-and-approval.md).

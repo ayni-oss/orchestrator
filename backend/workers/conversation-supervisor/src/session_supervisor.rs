@@ -1,14 +1,18 @@
-//! The trusted broker supervisor provisions credential-free conversation workers.
+//! The trusted broker supervisor provisions workers without database credentials.
 //! Session identity and generation originate in the authoritative command bytes.
+mod credential_delivery;
 mod live_progress;
+mod provider_authority;
 use super::{Configuration, RuntimeResult};
 use crate::session_worker::{ExecutionResult, digest};
 use ayni_orchestrator_events::{v1::SessionExecutionScope, workflow::decode_command};
+use credential_delivery::{acknowledge_configured_route, ensure_provider_credential};
 use k8s_openapi::api::core::v1::{PersistentVolumeClaim, Pod, Secret};
 use kube::{
     Api, Client,
     api::{DeleteParams, PostParams},
 };
+use provider_authority::{Authority, ProviderRuntime, authority, bounded_json};
 use rusqlite::{Connection, OptionalExtension as _, params};
 use serde_json::json;
 use std::{env, io, time::Duration};
@@ -77,7 +81,14 @@ pub async fn execute(
         ))
         .await?;
     let token = ensure_token(&secrets, &name, scope).await?;
-    ensure_pod(&pods, &name, scope, binding, &image)
+    let credential = command
+        .frozen_configuration
+        .as_ref()
+        .filter(|c| !c.connection_id.is_empty());
+    if let Some(configuration) = credential {
+        ensure_provider_credential(&secrets, &name, scope, configuration, command_bytes).await?;
+    }
+    ensure_pod(&pods, &name, scope, binding, &image, credential.is_some())
         .instrument(workflow.span_with_context("session.pod.prepare", diagnostic.as_ref(), false))
         .await?;
     let address = wait_address(&pods, &name)
@@ -264,6 +275,7 @@ async fn ensure_pod(
     scope: &SessionExecutionScope,
     binding: &ayni_orchestrator_events::v1::ConversationTurnBinding,
     image: &str,
+    configured_credential: bool,
 ) -> RuntimeResult {
     let anthropic = binding.execution_binding_revision == "anthropic-messages-v1";
     let (enable, endpoint_name, default_endpoint) = if anthropic {
@@ -279,9 +291,22 @@ async fn ensure_pod(
             "https://api.openai.com/v1",
         )
     };
-    let endpoint = (env::var(enable).as_deref() == Ok("true"))
-        .then(|| env::var(endpoint_name).unwrap_or_else(|_| default_endpoint.into()));
-    let pod = desired_pod(name, scope, binding, image, endpoint.as_deref())?;
+    let endpoint =
+        (configured_credential || env::var(enable).as_deref() == Ok("true")).then(|| {
+            if configured_credential {
+                default_endpoint.into()
+            } else {
+                env::var(endpoint_name).unwrap_or_else(|_| default_endpoint.into())
+            }
+        });
+    let pod = desired_pod(
+        name,
+        scope,
+        binding,
+        image,
+        endpoint.as_deref(),
+        configured_credential,
+    )?;
     if let Some(existing) = api.get_opt(name).await? {
         verify_labels(existing.metadata.labels.as_ref(), scope)?;
         let phase = existing
@@ -312,6 +337,7 @@ fn desired_pod(
     binding: &ayni_orchestrator_events::v1::ConversationTurnBinding,
     image: &str,
     provider_endpoint: Option<&str>,
+    configured_credential: bool,
 ) -> RuntimeResult<Pod> {
     let mut pod: Pod = serde_json::from_value(
         json!({"apiVersion":"v1","kind":"Pod","metadata":{"name":name,"labels":labels(scope)},"spec":{"automountServiceAccountToken":false,"restartPolicy":"Never","terminationGracePeriodSeconds":10,"securityContext":{"runAsNonRoot":true,"runAsUser":10001,"runAsGroup":10001,"fsGroup":10001,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"session","image":image,"imagePullPolicy":"IfNotPresent","args":["session-worker"],"env":[{"name":"ORCHESTRATOR_SESSION_ID","value":scope.session_id},{"name":"ORCHESTRATOR_SESSION_GENERATION","value":scope.generation.to_string()},{"name":"ORCHESTRATOR_SESSION_CONVERSATION_ID","value":binding.conversation_id},{"name":"ORCHESTRATOR_SESSION_WORKSPACE_ID","value":binding.workspace_id},{"name":"ORCHESTRATOR_SESSION_PROJECT_ID","value":binding.project_id},{"name":"ORCHESTRATOR_SESSION_IDLE_SECONDS","value":scope.idle_timeout_seconds.to_string()},{"name":"ORCHESTRATOR_SESSION_TOKEN_PATH","value":"/var/run/session/token"},{"name":"ORCHESTRATOR_SESSION_LEDGER_PATH","value":"/var/lib/ayni-session/results.sqlite"}],"ports":[{"name":"session","containerPort":8081}],"readinessProbe":{"httpGet":{"path":"/health","port":"session"},"periodSeconds":1},"resources":{"requests":{"cpu":"10m","memory":"32Mi"},"limits":{"cpu":"500m","memory":"256Mi"}},"securityContext":{"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"]}},"volumeMounts":[{"name":"ledger","mountPath":"/var/lib/ayni-session"},{"name":"token","mountPath":"/var/run/session","readOnly":true}]}],"volumes":[{"name":"ledger","persistentVolumeClaim":{"claimName":name}},{"name":"token","secret":{"secretName":name,"items":[{"key":"token","path":"token"}]}}]}}),
@@ -365,7 +391,7 @@ fn desired_pod(
             .push(serde_json::from_value(
                 json!({"name":"provider","mountPath":"/var/run/provider","readOnly":true}),
             )?);
-        spec.volumes.get_or_insert_default().push(serde_json::from_value(json!({"name":"provider","secret":{"secretName":format!("provider-{provider}-{}",workspace.simple()),"items":[{"key":"api-key","path":"api-key"}],"optional":true}}))?);
+        spec.volumes.get_or_insert_default().push(serde_json::from_value(json!({"name":"provider","secret":{"secretName":if configured_credential { name.replacen("session-", "provider-", 1) } else { format!("provider-{provider}-{}",workspace.simple()) },"items":[{"key":"api-key","path":"api-key"}],"optional":!configured_credential}}))?);
     }
     if env::var("ORCHESTRATOR_MCP_ENABLED").as_deref() == Ok("true") {
         let workspace = uuid::Uuid::parse_str(&binding.workspace_id)?;
@@ -554,8 +580,27 @@ async fn acknowledge_route(command_id: &str, name: &str, command_bytes: &[u8]) -
     let client = Client::try_default().await?;
     let pods: Api<Pod> = Api::namespaced(client.clone(), &namespace);
     let secrets: Api<Secret> = Api::namespaced(client, &namespace);
+    if let Some(config) = command
+        .frozen_configuration
+        .as_ref()
+        .filter(|c| !c.connection_id.is_empty())
+    {
+        return acknowledge_configured_route(&pods, &secrets, name, &scope, config, command_id)
+            .await;
+    }
     let token = ensure_token(&secrets, name, &scope).await?;
-    ensure_pod(&pods, name, &scope, &binding, &image).await?;
+    ensure_pod(
+        &pods,
+        name,
+        &scope,
+        &binding,
+        &image,
+        command
+            .frozen_configuration
+            .as_ref()
+            .is_some_and(|c| !c.connection_id.is_empty()),
+    )
+    .await?;
     let ip = wait_address(&pods, name).await?;
     reqwest::Client::builder()
         .timeout(Duration::from_secs(3))
@@ -654,7 +699,14 @@ mod tests {
             conversation_id: "conversation".into(),
             ..Default::default()
         };
-        let mut pod = desired_pod(&name(&scope)?, &scope, &binding, "fixture-image", None)?;
+        let mut pod = desired_pod(
+            &name(&scope)?,
+            &scope,
+            &binding,
+            "fixture-image",
+            None,
+            false,
+        )?;
         assert!(retirement_preconditions(&pod, &scope, &binding).is_err());
         pod.metadata.uid = Some("retained-pod-uid".into());
         let delete = retirement_preconditions(&pod, &scope, &binding)?;
@@ -692,77 +744,6 @@ mod tests {
     }
 }
 
-#[derive(serde::Deserialize)]
-struct Authority {
-    #[serde(default)]
-    records: Vec<ayni_orchestrator_events::v1::ConversationContextRecord>,
-    #[serde(default)]
-    next_after_ordinal: u64,
-    #[serde(default)]
-    allowed: bool,
-    #[serde(default)]
-    cancellation_requested: bool,
-    #[serde(default)]
-    state: String,
-}
-
-struct ProviderRuntime {
-    enabled: bool,
-    authority_url: String,
-    authority_token: String,
-}
-
-impl ProviderRuntime {
-    fn from_environment(provider: &str) -> RuntimeResult<Self> {
-        let path = env::var("ORCHESTRATOR_SESSION_AUTHORITY_TOKEN_PATH")
-            .map_err(|_| io::Error::other("session authority unavailable"))?;
-        let authority_token = std::fs::read_to_string(path)
-            .map_err(|_| io::Error::other("session authority unavailable"))?;
-        let authority_url = env::var("ORCHESTRATOR_SESSION_AUTHORITY_URL")
-            .map_err(|_| io::Error::other("session authority unavailable"))?;
-        Ok(Self {
-            enabled: env::var(if provider == "anthropic" {
-                "ORCHESTRATOR_ANTHROPIC_ENABLED"
-            } else {
-                "ORCHESTRATOR_OPENAI_ENABLED"
-            })
-            .as_deref()
-                == Ok("true"),
-            authority_url,
-            authority_token,
-        })
-    }
-}
-
-async fn authority(
-    http: &reqwest::Client,
-    body: serde_json::Value,
-    runtime: &ProviderRuntime,
-) -> RuntimeResult<Authority> {
-    let response = http
-        .post(&runtime.authority_url)
-        .bearer_auth(runtime.authority_token.trim())
-        .json(&body)
-        .send()
-        .await?
-        .error_for_status()?;
-    bounded_json(response, 256 * 1024).await
-}
-
-async fn bounded_json<T: serde::de::DeserializeOwned>(
-    mut response: reqwest::Response,
-    maximum: usize,
-) -> RuntimeResult<T> {
-    let mut bytes = Vec::new();
-    while let Some(chunk) = response.chunk().await? {
-        if bytes.len() + chunk.len() > maximum {
-            return Err(io::Error::other("session response bound exceeded").into());
-        }
-        bytes.extend_from_slice(&chunk);
-    }
-    Ok(serde_json::from_slice(&bytes)?)
-}
-
 async fn execute_provider(
     http: &reqwest::Client,
     address: &str,
@@ -774,7 +755,14 @@ async fn execute_provider(
         .frozen_configuration
         .as_ref()
         .map_or("", |c| c.provider.as_str());
-    let runtime = ProviderRuntime::from_environment(provider)?;
+    let mut runtime = ProviderRuntime::from_environment(provider)?;
+    if command
+        .frozen_configuration
+        .as_ref()
+        .is_some_and(|c| !c.connection_id.is_empty())
+    {
+        runtime.enabled = true;
+    }
     execute_provider_with_runtime(
         http,
         &format!("http://{address}:8081"),

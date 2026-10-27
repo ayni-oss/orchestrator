@@ -45,6 +45,7 @@ impl Fixture {
             .id;
         let current = store.get_agent_configuration(&workspace, "").await?;
         let config = ayni_orchestrator_workflow_postgres::model::AgentConfiguration {
+            connection_id: String::new(),
             revision_id: String::new(),
             provider: "openai".into(),
             model: "explicit-fixture-model".into(),

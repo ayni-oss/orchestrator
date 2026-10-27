@@ -459,6 +459,7 @@ async fn assessments_require_bounded_consent_coalesce_and_replay_without_extra_t
         .authorize_outcome_assessments(f.scope(), &key(), &configuration.revision_id, 1)
         .await?;
     let changed = ayni_orchestrator_workflow_postgres::model::AgentConfiguration {
+        connection_id: String::new(),
         revision_id: String::new(),
         instructions: "Changed workspace instructions".into(),
         ..configuration.clone()

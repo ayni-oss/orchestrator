@@ -5,7 +5,7 @@
   "packageManager": "pnpm@10.31.0",
   "workspaces": [
     "clients/*",
-    "dev/live-ui"
+    "apps/web"
   ],
   "engines": {
     "node": "24.14.0"
@@ -14,12 +14,14 @@
     "chart:check": "scripts/ci/check-helm.sh",
     "proto:check": "scripts/ci/check-proto.sh",
     "proto:generate": "buf generate",
-    "typecheck": "pnpm --filter @ayni-orchestrator/grpc-bindings check",
-    "test": "pnpm --filter @ayni-orchestrator/grpc-bindings test",
+    "typecheck": "pnpm --filter @ayni-orchestrator/grpc-bindings check && pnpm --filter @ayni-orchestrator/web check",
+    "test": "pnpm --filter @ayni-orchestrator/grpc-bindings test && pnpm --filter @ayni-orchestrator/web test",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
-    "docs:check": "python3 scripts/ci/check-docs.py && node --test scripts/ci/test-diagram-initialization.mjs && pnpm docs:build && python3 scripts/ci/check-docs-site.py"
+    "docs:check": "python3 scripts/ci/check-docs.py && node --test scripts/ci/test-diagram-initialization.mjs && pnpm docs:build && python3 scripts/ci/check-docs-site.py",
+    "web:dev": "pnpm --filter @ayni-orchestrator/web dev",
+    "web:build": "pnpm --filter @ayni-orchestrator/web build"
   },
   "devDependencies": {
     "@mermaid-js/layout-elk": "0.2.0",

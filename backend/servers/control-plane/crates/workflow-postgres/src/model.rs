@@ -319,6 +319,7 @@ pub struct OutboxRecord {
 /// One immutable complete workspace configuration, identified within interface v1.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AgentConfiguration {
+    pub connection_id: String,
     pub workspace_id: String,
     pub revision_id: String,
     pub instructions: String,

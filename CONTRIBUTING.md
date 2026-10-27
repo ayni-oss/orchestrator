@@ -78,10 +78,12 @@ scripts/ci/check-workflow-postgres-feasibility.sh
 scripts/ci/check-workflow-private-v1-feasibility.sh
 ```
 
-The legacy UI in `examples/web` is reference source, excluded from the active
-workspace and checks. Browser-dependent acceptance profiles are unavailable until
-new UI coverage is implemented; do not claim their historical evidence validates
-current source. `dev/ctl gateway` serves only the trusted local API adapter.
+`apps/web` is the sole frontend, promoted from the former example UI. Extend its
+existing shell, components and design tokens; do not create parallel consoles,
+diagnostic frontends or alternate themes. `dev/ctl live` runs this same application.
+Conversation/task browser acceptance remains unavailable until those journeys are
+wired to current canonical APIs. The current configuration and hierarchy journeys
+have their own real-API browser coverage.
 
 Run affected protocol, Helm and repository quality checks described by
 `.github/workflows/pr-validation.yml` and `.ayni.toml`. Runtime behavior changes

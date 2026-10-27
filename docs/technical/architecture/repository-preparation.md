@@ -1,6 +1,6 @@
 # Shared repository and runtime preparation
 
-Status: agreed next direction, 2026-10-26; implementation and qualification remain pending.
+Status: repository/runtime preparation remains planned. The [connection foundation](integration-connections.md) implements manual GitHub App setup; catalog and runtime gates remain pending.
 
 ## What this decides
 
@@ -22,13 +22,13 @@ The [roadmap](../../../ROADMAP.md#next-focus-repository-preparation-with-a-usabl
 - The trusted local helper verifies Git objects and lock bytes, while the operator supplies a runtime digest.
 - Prepared attempts retain immutable inputs, but preparation does not establish image availability or compatibility.
 - Isolated workers perform separate managed quality; coding, quality and publication remain independent outcomes.
-- The local gateway serves APIs only. The retained web example has historical contracts and supplies design reference only.
+- The local gateway serves APIs only. The new local product supports manual App connections and workspace/project discovery; repository catalog and runtime preparation follow. The retained web example supplies design reference only.
 
 ## Ownership and records
 
 | Record | Ownership and meaning |
 | --- | --- |
-| Integration connection | Shared source, registry or signing capability with safe status and administrator-owned Secret references. |
+| Integration connection | Shared source, registry or signing capability with safe status and PostgreSQL credential revision references. |
 | Repository | Stable provider repository identity and source connection reference, independent of any workspace. |
 | Project association | Explicit use of a catalog repository by one project; several workspaces' projects may reference the same repository. |
 | Source observation | Exact repository commit, inspected policy/lock bytes or protected references, and their digests. |

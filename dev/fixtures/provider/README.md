@@ -1,10 +1,8 @@
 # Deterministic provider fixture
 
-> UI status: the console and initial product workspace are removed. Browser steps
-> and evidence below describe the retired UI and are historical reference only.
-> Browser-dependent acceptance profiles are unavailable until replacement coverage
-> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
-> no UI. See [the retained UI example](../../../examples/web/EXAMPLE.md).
+> UI status: the sole application is in `apps/web`, promoted from the example.
+> Historical conversation/task browser evidence still requires replacement coverage.
+> `dev/ctl live` serves the same application; no diagnostic frontend remains.
 
 This server implements the bounded foreground Responses profile without calling
 OpenAI. It supports bounded streaming Responses and Anthropic Messages SSE

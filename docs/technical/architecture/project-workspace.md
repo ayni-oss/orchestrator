@@ -1,21 +1,24 @@
 # Product workspace status
 
-The initial product workspace and contributor console are removed. There is no
-supported browser UI. [The former web app](../../../examples/web/EXAMPLE.md) is
-preserved as an isolated reference for future design; its clients and backend
-contracts are historical.
+The historical product workspace and contributor console remain removed. The new
+`apps/web` application provides local workspace/project creation and discovery,
+plus manual GitHub App configuration. See [integration connections](integration-connections.md).
+Registry, OpenAI, repository association and delivery screens remain planned.
+[The example-derived application](../../../apps/web/README.md) is the only frontend.
+Its duplicate example and standalone diagnostic UI have been removed.
 
 Backend discovery, conversations, execution timelines, plans, task evidence,
 recovery and publication continue through canonical v1 APIs. The local
 `dev/ctl gateway` command exposes an allowlisted JSON/SSE adapter without pages,
 static assets or legacy backend wiring. See [the gateway boundary](contributor-console.md).
 
-## Next interface
+## Further interface
 
 The [next roadmap focus](../../../ROADMAP.md#next-focus-repository-preparation-with-a-usable-ui)
 delivers repository preparation and the new UI together. Each slice includes a
 usable browser journey against canonical APIs and its own qualification evidence.
-This is planned delivery; the API-only status above remains current.
+The connection foundation above is delivered; repository association and delivery
+journeys in this table remain planned.
 
 | Surface | Planned user outcome |
 | --- | --- |

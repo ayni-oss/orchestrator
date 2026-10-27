@@ -56,6 +56,18 @@ docker exec "$CONTAINER" psql --username postgres --dbname "$DATABASE" \
 export AYNI_POSTGRES_FEASIBILITY_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${port}/${DATABASE}"
 export AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL="postgresql://${RUNTIME_ROLE}:${RUNTIME_PASSWORD}@127.0.0.1:${port}/${DATABASE}"
 export AYNI_POSTGRES_RUNTIME_FEASIBILITY_ROLE="$RUNTIME_ROLE"
+connection_browser() {
+  pnpm web:build
+  cargo test --locked -p ayni-orchestrator-control-plane --test connections_browser -- --ignored --nocapture
+  AYNI_PRODUCT_PRODUCTION=1 cargo test --locked -p ayni-orchestrator-control-plane --test connections_browser -- --ignored --nocapture
+}
+
+if [[ "${AYNI_CONNECTIONS_ONLY:-0}" == 1 ]]; then
+  cargo test --locked -p ayni-orchestrator-workflow-postgres --test connections -- --ignored --nocapture
+  connection_browser
+  exit 0
+fi
+
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test feasibility -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test plans -- --ignored --nocapture
 # Task ownership includes concurrent claims and structured worker questions.
@@ -67,6 +79,7 @@ cargo test --locked -p ayni-orchestrator-workflow-postgres --test plan_approval 
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test plan_proposals -- --ignored --nocapture
 # Continuity includes explicit bounded assessment consent, coalescing and restart replay.
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test project_continuity -- --ignored --nocapture --test-threads=1
+cargo test --locked -p ayni-orchestrator-workflow-postgres --test connections -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test configuration -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test sessions -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test provider_calls -- --ignored --nocapture
@@ -78,6 +91,10 @@ cargo test --locked -p ayni-orchestrator-control-plane --test workflow_api -- --
 export AYNI_POSTGRES_FEASIBILITY_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${port}/${DATABASE}"
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test execution_timeline -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test watch_feasibility -- --ignored --nocapture
+
+if [[ "${AYNI_CONNECTION_BROWSER:-0}" == 1 ]]; then
+  connection_browser
+fi
 
 echo "postgres-image=$IMAGE"
 echo "postgres-platform=$(docker image inspect "$IMAGE" --format '{{.Os}}/{{.Architecture}}')"

@@ -166,6 +166,8 @@ fn fixture_command(
         input_content: mode.into(),
         context: context.clone(),
         frozen_configuration: Some(AgentExecutionConfiguration {
+            connection_id: String::new(),
+            credential_revision: String::new(),
             revision_id: id(5),
             instructions: "Only configured fixture tools.".into(),
             provider: provider.into(),

@@ -7,8 +7,8 @@ addresses. Closing the command stops its port-forward; rerun after a Pod restart
 
 The adapter serves only allowlisted ProtoJSON requests at `/api/{method}` and
 resumable SSE observation at `/watch`. It serves no HTML, JavaScript, CSS or
-workspace assets. Other paths return 404. The console and product web UI are
-removed; [the former app](../../../examples/web/EXAMPLE.md) is a reference only.
+workspace assets. Other paths return 404. The former console is removed. The sole [web application](../../../apps/web/README.md)
+uses the promoted example UI and forwards current canonical APIs.
 
 The gateway owns no database, broker connection, workflow state or credentials.
 Canonical gRPC owns validation and authority. Protobuf 64-bit fields remain

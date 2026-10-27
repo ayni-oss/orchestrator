@@ -1,10 +1,9 @@
 # Technical documentation
 
-> UI status: the console and initial product workspace are removed. Browser steps
-> and evidence below describe the retired UI and are historical reference only.
-> Browser-dependent acceptance profiles are unavailable until replacement coverage
-> is implemented. The current local API adapter is `dev/ctl gateway`; it serves
-> no UI. See [the retained UI example](../../examples/web/EXAMPLE.md).
+> UI status: the new local product provides workspace/project creation and manual
+> GitHub App configuration. See [integration connections](architecture/integration-connections.md).
+> Historical conversation/task browser acceptance still describes the retired UI;
+> those profiles remain unavailable until their replacement coverage exists.
 
 The runtime combines the M1 durable foundation with shared immutable agent configuration and isolated conversation sessions with scripted and opt-in OpenAI execution. PostgreSQL owns workflow and session authority; authenticated durable delivery and the trusted-loopback API remain v1 through alpha. Real provider calls retain request identity, uncertainty and nullable usage; bounded read tools retain frozen inputs and invocation evidence.
 
@@ -23,7 +22,7 @@ These documents specify planned behavior, not delivered support:
 - [Observable execution acceptance](operations/observable-execution-acceptance.md): combined deployed progress, task evidence, replay and trace qualification.
 - [Execution tracing](operations/execution-tracing.md): optional self-hosted OTLP export and causal diagnosis.
 - [Execution timeline](architecture/execution-timeline.md): retained accepted transitions, stable history pages and the workspace inspector.
-- [Project workspace](architecture/project-workspace.md): current API-only status and the planned repository/project interface.
+- [Project workspace](architecture/project-workspace.md): current local UI status and the planned repository/project interface.
 
 - [Agent plan proposals](architecture/agent-proposals.md): bounded terminal provider proposals, authenticated provenance and retained review.
 - [Task dependencies](architecture/task-dependencies.md): reviewed DAGs, exact upstream commits, trusted source integration and four isolated execution slots.

@@ -15,8 +15,9 @@ with a new UI delivered alongside each slice for local testing. Projects select
 catalog repositories directly, including reuse across workspaces. See the
 [preparation contract](docs/technical/architecture/repository-preparation.md) and
 [UI delivery plan](docs/technical/research/repository-runtime-workspace-delivery.md).
-These are planned capabilities; current task source preparation still uses the
-trusted local helper, and there is no supported browser UI yet.
+Repository/runtime preparation remains planned; current task source preparation still uses the
+trusted local helper. The new local UI provides workspace/project creation and
+manual GitHub App configuration; full task-delivery screens remain planned.
 
 The [backend foundation roadmap](docs/technical/history/backend-foundation-roadmap.md)
 is archived with its acceptance limits; planned product capabilities are not claims
@@ -45,7 +46,7 @@ The runtime provides **conversation execution, plan approval and isolated task d
 - a canonical private-v1 gRPC API on a trusted pod-loopback listener; and
 - a Docker Desktop Helm stack with separated database/broker identities and retained storage.
 
-This is a clean replacement, not a compatibility migration. The prior SQLite workflow, browser API adapter, runtime workers, legacy development fixtures, and custom-client workflow path are not part of the current runtime. The former web design is retained only as an [example](examples/web/EXAMPLE.md); there is no supported product UI.
+This is a clean replacement, not a compatibility migration. The prior SQLite workflow, browser API adapter, runtime workers, legacy development fixtures, and custom-client workflow path are not part of the current runtime. The [web application](apps/web/README.md) uses the promoted example UI and supports configuration and basic hierarchy navigation. There is one frontend.
 
 The cumulative M1 acceptance evidence is recorded in the delivery PR. Canonical APIs expose shared configuration, isolated sessions, provider usage and cancellation. OpenAI execution requires an explicit model, deployment enablement and a workspace-scoped credential mounted directly into its session. Scripted execution remains the default. OpenAI conversations can read frozen workspace instructions, project status and their own bounded history. The final M2 acceptance scope includes deterministic provider/tool recovery fixtures and a separately reported live-provider smoke test. All Orchestrator interfaces stay v1 until alpha merges.
 
@@ -86,9 +87,11 @@ dev/ctl check --expect-empty
 dev/ctl scenario
 ```
 
-There is currently no supported browser UI. The former SvelteKit app is preserved
-under [examples/web](examples/web/EXAMPLE.md) as a design reference, outside the
-active workspace and deployment. It uses historical backend contracts.
+Run `dev/ctl live` for the new product at `http://127.0.0.1:5174`, or use
+`dev/ctl gateway` and `pnpm web:dev`. The product supports manual GitHub App
+configuration and workspace/project creation. See [connection setup](docs/technical/operations/local-development.md#product-configuration-foundation).
+The [SvelteKit application](apps/web/README.md) is the sole frontend. Its shell,
+styles and components come from the example UI; historical backend wiring is not restored.
 
 `dev/ctl gateway` starts a loopback-only JSON/SSE API adapter for trusted local
 tooling; it serves no pages or assets. The private v1 gRPC API and trusted source

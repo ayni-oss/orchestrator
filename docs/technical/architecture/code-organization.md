@@ -13,11 +13,12 @@ The Orchestrator runtime separates transport contracts, PostgreSQL authority, br
 | `backend/workers/conversation-supervisor` | Retained broker authority ledger, claim fencing, targeted decisions, scoped Kubernetes session provisioning and provider-backed or scripted conversation workers; isolated task supervision, execution and publication binaries |
 | `deploy/charts/ayni-orchestrator` | Reusable control-plane/executor workloads consuming administrator-owned Secrets |
 | `dev/charts/ayni-orchestrator-local` | Docker Desktop PostgreSQL, authenticated three-stream JetStream, retained PVCs, and reusable-chart composition |
+| `apps/web` | Local SvelteKit product and same-origin allowlisted API forwarding |
 | `clients/typescript` | Generated canonical TypeScript bindings and generation checks |
 
 `workflow-postgres` does not depend on gRPC or a NATS client. The control plane maps persistence models into the canonical API and moves exact persisted bytes across the broker. The executor never receives a PostgreSQL credential. Its ledger library is transport-independent; the binary applies JetStream ACK ordering around ledger commits.
 
-Migration, runtime, application-broker, executor-broker/signing, acceptance, and administrative identities remain distinct. Configuration loads long-lived credentials from mounted files and does not accept them in command-line arguments or ConfigMaps.
+Migration, runtime, application-broker, executor-broker/signing, acceptance, and administrative identities remain distinct. Infrastructure configuration loads long-lived credentials from mounted files and does not accept them in command-line arguments or ConfigMaps. Product integration credentials are write-only inputs stored in PostgreSQL; see [integration connections](integration-connections.md).
 
 Quarantine, fault injection, retention cleanup, metrics and notification-backed
 watches extend these retained ownership boundaries. The [conversation execution

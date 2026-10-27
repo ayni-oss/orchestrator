@@ -286,6 +286,7 @@ pub(super) fn update(value: ConversationUpdate) -> Result<v1::ConversationUpdate
 
 pub(super) fn agent_configuration(value: model::AgentConfiguration) -> v1::AgentConfiguration {
     v1::AgentConfiguration {
+        connection_id: value.connection_id,
         workspace_id: value.workspace_id,
         revision_id: value.revision_id,
         instructions: value.instructions,

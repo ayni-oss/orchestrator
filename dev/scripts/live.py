@@ -138,13 +138,13 @@ def heartbeat(path, stopped):
 
 def require_free_ports():
     ports = []
-    for key, fallback in (('AYNI_ORCHESTRATOR_LIVE_GATEWAY_PORT', 3000), ('AYNI_ORCHESTRATOR_LIVE_UI_PORT', 5173)):
+    for key, fallback in (('AYNI_ORCHESTRATOR_LIVE_GATEWAY_PORT', 3000), ('AYNI_ORCHESTRATOR_LIVE_UI_PORT', 5174)):
         value = os.environ.get(key, str(fallback))
         if not value.isdigit() or not 1024 <= int(value) <= 65535:
             raise ValueError(f'{key} must be a port from 1024 to 65535')
         ports.append(int(value))
-    if ports[0] == ports[1]:
-        raise ValueError('Live UI and gateway ports must differ')
+    if len(set(ports)) != len(ports):
+        raise ValueError('UI and gateway ports must differ')
     for port in ports:
         with socket.socket() as listener:
             try:
@@ -187,7 +187,7 @@ def main():
                 require_free_ports()
                 threading.Thread(target=heartbeat, args=(path, stopped), daemon=True).start()
                 for command in ([str(ROOT / 'dev/scripts/live-gateway.sh')],
-                                ['pnpm', '--dir', 'dev/live-ui', 'dev']):
+                                ['pnpm', '--dir', 'apps/web', 'dev']):
                     children.append(subprocess.Popen(command, cwd=ROOT, env=env, start_new_session=True))
             last = None
             while True:

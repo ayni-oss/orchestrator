@@ -33,14 +33,15 @@ managed Ayni quality, durable receipts and recoverable draft publication. Execut
 quality and publication remain separate outcomes. Delivery ends at a reviewable
 draft unless a user explicitly grants further authority.
 
-The console and initial product web application are withdrawn. Preserve the former
-`main` SvelteKit UI under [examples/web](examples/web/EXAMPLE.md) only as a design
-reference. It is excluded from active builds and has no current backend wiring.
-There is no supported browser UI for now. The next delivery focus is shared
-repository onboarding and verified runtime preparation, with a new product UI
-delivered alongside every slice so maintainers can test the actual journey. Historical
-browser acceptance does not qualify current source, and combined profiles that
-require it remain blocked until their replacement coverage exists.
+The former console and diagnostic frontend are removed. The example UI has been
+promoted into [apps/web](apps/web/README.md), the sole web application. Preserve its
+shell, typography, themes and components while wiring each delivery slice to
+canonical APIs. Do not introduce parallel products or alternate visual designs.
+The current UI supports workspace/project creation, manual GitHub App setup,
+GHCR/OpenAI credential configuration and workspace OpenAI model/budget selection;
+repository/runtime preparation and full delivery journeys remain planned.
+Historical browser acceptance does not qualify current source; each implemented
+journey needs its own replacement coverage.
 
 ### Product surfaces
 
@@ -119,10 +120,23 @@ evidence before completion; none is declared implemented by this roadmap.
 
 ### Next focus: repository preparation with a usable UI
 
-PR 0 establishes a [dev-only live editing loop](dev/LIVE.md): frontend HMR, cached
+PR 0 established a [dev-only live editing loop](dev/LIVE.md): frontend HMR, cached
 Rust rebuild/rollout, explicit schema migration/reset and retained-state diagnostics.
 Each product slice uses this loop during implementation and still requires normal
 immutable-image deployment and acceptance evidence.
+
+The first integration foundation adds the new app shell, PostgreSQL-owned named
+connections and credential revisions, manual GitHub App validation and basic
+workspace/project navigation. Hosting owns credential storage/backup encryption;
+there is no application-level encryption. This is partial delivery of the first
+catalog slice, not completed repository onboarding. Subsequent PRs add guided App
+setup and catalog associations, recoverable GHCR artifact validation and
+combined live qualification. The configuration surface includes GHCR PAT entry,
+OpenAI access/model discovery and workspace connection/model/budget selection;
+selected OpenAI turns freeze credential revisions and use scoped runtime delivery. Each connection is selected explicitly; multiple named
+connections per capability are supported. See
+[connection foundation](docs/technical/architecture/integration-connections.md).
+
 
 Deliver shared repository integration, Ayni inspection, verified runtime images
 and project selection before expanding product analytics or event inputs. Build
@@ -158,7 +172,7 @@ without manual database changes, fabricated evidence or local source-pack comman
 
 | Milestone | Observable outcome and acceptance |
 | --- | --- |
-| Repository preparation and product workspace | Deliver the next-focus slices above, including the shared catalog, project associations, Ayni setup, runtime production and project Chat, Plans and Tasks. Use the preserved example for design and canonical APIs for authority; qualify every browser journey. |
+| Repository preparation and product workspace | Deliver the next-focus slices above, including the shared catalog, project associations, Ayni setup, runtime production and project Chat, Plans and Tasks. Extend the sole example-derived application against canonical APIs; qualify every browser journey. |
 | Observable execution | Add the execution inspector, live progress and incremental assistant text. Explain queue, preparation, model/tool execution, quality and publication stages with timing and evidence. Trace a full journey across API, broker, supervisor and worker, including interruption and replay. Instrument the first workspace slice rather than deferring telemetry to this milestone. |
 | Browser-driven development | Complete the repository-preparation journey through trusted server-side source preparation, verified digest-pinned runtime selection and explicit budgets. Preserve exact approved source and upstream selections; add canonical APIs and browser coverage together. |
 | Project and workspace insight | Ship overviews, attention, dependency visualization and scoped analytics using the measurement definitions above. Demonstrate drill-down, replay-safe counting, pagination and recovery-aware rates with known input cohorts. |
@@ -185,22 +199,21 @@ APIs alongside the next-focus UI slices.
 See the [execution timeline contract](docs/technical/architecture/execution-timeline.md)
 and [combined deployed acceptance](docs/technical/operations/observable-execution-acceptance.md).
 
-### UI reference and future workspace
+### One product workspace
 
-The former app is an example only. Define the new interface from the next-focus
-user journeys and the example; implement it against current canonical contracts.
-Keep durable chat, plans, tasks, execution timelines, tracing and exact receipts
-in the backend. The shared repository catalog, project selection and preparation
-inspector ship with their backend slices rather than waiting for a later UI phase.
-Browser acceptance covers reload, reconnect, scope, concurrent actions and exact
-interrupted-command retries. Historical screens and data access grant no support.
+The example UI is the active application in `apps/web`; its duplicate source tree
+and the standalone diagnostic frontend are removed. New repository, preparation,
+conversation and delivery journeys extend this application and its existing design
+system. Keep durable chat, plans, tasks, execution timelines, tracing and exact
+receipts in the backend. Browser acceptance covers reload, reconnect, scope,
+concurrent actions and interrupted-command retries against canonical APIs.
 
 ## Delivery discipline
 
 - Define user outcomes, observable states, authority and failure/recovery cases before implementation.
 - Extend canonical v1 contracts in place through alpha; keep generated consumers and documentation synchronized.
 - Validate affected behavior on the explicit Docker Desktop Kubernetes topology and extend cumulative acceptance.
-- Keep the legacy web example outside active builds; implement and qualify future UI workflows against canonical APIs before advertising browser support.
+- Maintain one example-derived frontend; qualify each new journey against canonical APIs before advertising support.
 - Keep system operation and project analytics scoped to the same workspace/project authority as their underlying records.
 - Keep deployment choices explicit and self-hosting practical. Document dependencies, configuration, export and recovery without requiring a proprietary observability service.
 - Record actual evidence and blocked checks in each PR. Release publication, merges and destructive cleanup retain their existing authorization boundaries.

@@ -1,0 +1,36 @@
+{
+  "name": "@ayni-orchestrator/web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --host 127.0.0.1 --strictPort",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "build": "vite build",
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "node --test tests/*.browser.mjs",
+    "start": "node build",
+    "test:hmr": "node --test tests/hmr.browser.mjs"
+  },
+  "dependencies": {
+    "@sveltejs/kit": "2.70.3",
+    "@sveltejs/adapter-node": "5.5.7",
+    "svelte": "5.57.1",
+    "@fontsource-variable/jetbrains-mono": "5.3.0",
+    "@fontsource/libre-baskerville": "5.2.0",
+    "@fontsource-variable/space-grotesk": "5.2.0",
+    "@lucide/svelte": "1.52.0",
+    "bits-ui": "2.19.3",
+    "clsx": "2.1.1",
+    "tailwind-merge": "3.7.0",
+    "tailwind-variants": "3.3.1"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "svelte-check": "4.4.5",
+    "typescript": "5.9.3",
+    "vite": "8.0.0",
+    "@tailwindcss/vite": "4.3.3",
+    "tailwindcss": "4.3.3"
+  }
+}

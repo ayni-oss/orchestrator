@@ -1,5 +1,6 @@
 mod admission;
 mod assessments;
+mod connections;
 mod plans;
 mod projections;
 mod publications;
@@ -70,12 +71,20 @@ pub async fn serve(
             v1::project_conversation_service_server::ProjectConversationServiceServer<WorkflowGrpc>,
         >()
         .await;
+    health_reporter
+        .set_serving::<v1::connection_service_server::ConnectionServiceServer<WorkflowGrpc>>()
+        .await;
     let reflection = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(FILE_DESCRIPTOR_SET)
         .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
         .build_v1()
         .map_err(io::Error::other)?;
     Server::builder()
+        .add_service(
+            v1::connection_service_server::ConnectionServiceServer::new(api.clone())
+                .max_decoding_message_size(65536)
+                .max_encoding_message_size(MAX_RESPONSE_BYTES),
+        )
         .add_service(health)
         .add_service(reflection)
         .add_service(
@@ -164,6 +173,7 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
             )
         })?;
         let proposed = model::AgentConfiguration {
+            connection_id: proposed.connection_id,
             workspace_id: proposed.workspace_id,
             revision_id: proposed.revision_id,
             instructions: proposed.instructions,

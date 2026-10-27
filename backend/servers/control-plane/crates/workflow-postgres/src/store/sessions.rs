@@ -141,11 +141,15 @@ pub(super) async fn bind_turn(
     tx: &Transaction<'_>,
     turn_id: &str,
 ) -> Result<Option<SessionExecutionScope>, StoreError> {
-    let Some(config) = tx.query_opt("SELECT t.workspace_id,t.project_id,t.conversation_id,c.idle_timeout_seconds FROM workflow_turns t JOIN workflow_turn_inputs i ON i.turn_id=t.id JOIN workflow_agent_configurations c ON c.workspace_id=i.workspace_id AND c.revision_id=i.configuration_revision_id WHERE t.id=$1", &[&turn_id]).await? else { return Ok(None); };
+    let Some(config) = tx.query_opt("SELECT t.workspace_id,t.project_id,t.conversation_id,c.idle_timeout_seconds,i.credential_revision FROM workflow_turns t JOIN workflow_turn_inputs i ON i.turn_id=t.id JOIN workflow_agent_configurations c ON c.workspace_id=i.workspace_id AND c.revision_id=i.configuration_revision_id WHERE t.id=$1", &[&turn_id]).await? else { return Ok(None); };
     let workspace_id: String = config.get(0);
     let project_id: String = config.get(1);
     let conversation_id: String = config.get(2);
     let timeout: i64 = config.get(3);
+    let credential: String = config.get(4);
+    // Credential-bearing consumers retire at terminal acknowledgement. A new
+    // generation prevents a late acknowledgement from deleting the next turn's mount.
+    tx.execute("UPDATE workflow_sessions SET state='replaced' WHERE conversation_id=$1 AND state IN ('provisioning','idle') AND (credential_binding<>$2 OR $2<>'')",&[&conversation_id,&credential]).await?;
     let current = tx.query_opt("SELECT id,generation FROM workflow_sessions WHERE conversation_id=$1 AND state IN ('provisioning','idle') FOR UPDATE", &[&conversation_id]).await?;
     let (id, generation) = if let Some(row) = current {
         (row.get::<_, String>(0), row.get::<_, i64>(1))
@@ -161,7 +165,7 @@ pub(super) async fn bind_turn(
         } else {
             (new_id(), 1)
         };
-        tx.execute("INSERT INTO workflow_sessions (id,generation,workspace_id,project_id,conversation_id,state,idle_timeout_seconds) VALUES ($1,$2,$3,$4,$5,'provisioning',$6)", &[&id,&generation,&workspace_id,&project_id,&conversation_id,&timeout]).await?;
+        tx.execute("INSERT INTO workflow_sessions (id,generation,workspace_id,project_id,conversation_id,state,idle_timeout_seconds,credential_binding) VALUES ($1,$2,$3,$4,$5,'provisioning',$6,$7)", &[&id,&generation,&workspace_id,&project_id,&conversation_id,&timeout,&credential]).await?;
         (id, generation)
     };
     tx.execute("UPDATE workflow_sessions SET state='provisioning',last_active_at=clock_timestamp(),idle_timeout_seconds=$3 WHERE id=$1 AND generation=$2", &[&id,&generation,&timeout]).await?;
