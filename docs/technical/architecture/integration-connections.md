@@ -28,7 +28,9 @@ transport protection. Local development requires no encryption setup.
 access; the trusted runtime role can insert/read revisions but cannot update or
 delete them. Workers have no database credentials. Selected OpenAI turns freeze the active credential revision at admission under the
 connection lock. Disabling blocks new admissions without changing retained work.
-Changing the frozen credential binding creates a new session generation. The
+Credential-bearing consumers use a fresh session generation per turn, including
+credential changes. Late terminal cleanup therefore cannot delete a later turn's
+consumer or mount. The
 supervisor authenticates to the internal `/v1/session-credential` endpoint with the
 exact accepted, claimed command. Only that owned session's frozen credential is
 returned; this endpoint is absent from public RPC and browser allowlists. The

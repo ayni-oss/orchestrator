@@ -86,6 +86,20 @@ fn validate(input: &SaveProvider<'_>) -> Result<String, StoreError> {
     ))
     .map_err(|_| StoreError::CorruptState)
 }
+fn validate_edit(current: &super::Connection, input: &SaveProvider<'_>) -> Result<(), StoreError> {
+    if current.provider != input.provider
+        || current.capability != input.capability
+        || current.settings != input.settings
+    {
+        return Err(StoreError::InvalidInput(
+            "Provider and destination are immutable",
+        ));
+    }
+    if current.revision != input.expected {
+        return Err(StoreError::ConfigurationRevisionConflict);
+    }
+    Ok(())
+}
 impl WorkflowStore {
     /// Retain a candidate without publishing credential values into receipts.
     /// # Errors
@@ -141,17 +155,7 @@ impl WorkflowStore {
             tx.execute("INSERT INTO workflow_connections (id,display_name,provider,capability,revision,enabled,app_id,candidate_credential_revision,status,settings) VALUES ($1,$2,$3,$4,1,true,'',$5,'pending',$6)", &[&id,&input.name,&input.provider,&input.capability,&credential,&settings]).await?;
         } else {
             let current = locked(&tx, &id).await?;
-            if current.provider != input.provider
-                || current.capability != input.capability
-                || current.settings != input.settings
-            {
-                return Err(StoreError::InvalidInput(
-                    "Provider and destination are immutable",
-                ));
-            }
-            if current.revision != input.expected {
-                return Err(StoreError::ConfigurationRevisionConflict);
-            }
+            validate_edit(&current, &input)?;
             tx.execute("UPDATE workflow_connections SET revision=revision+1,display_name=$2,settings=$3,candidate_credential_revision=$4,safe_reason='',status=CASE WHEN enabled THEN 'pending' ELSE 'disabled' END WHERE id=$1", &[&id,&input.name,&settings,&credential]).await?;
         }
         tx.execute("INSERT INTO workflow_connection_credentials (revision_id,connection_id,value) VALUES ($1,$2,$3)", &[&credential,&id,&input.credential]).await?;

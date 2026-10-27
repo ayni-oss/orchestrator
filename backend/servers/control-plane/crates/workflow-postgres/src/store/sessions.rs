@@ -147,7 +147,9 @@ pub(super) async fn bind_turn(
     let conversation_id: String = config.get(2);
     let timeout: i64 = config.get(3);
     let credential: String = config.get(4);
-    tx.execute("UPDATE workflow_sessions SET state='replaced' WHERE conversation_id=$1 AND state IN ('provisioning','idle') AND credential_binding<>$2",&[&conversation_id,&credential]).await?;
+    // Credential-bearing consumers retire at terminal acknowledgement. A new
+    // generation prevents a late acknowledgement from deleting the next turn's mount.
+    tx.execute("UPDATE workflow_sessions SET state='replaced' WHERE conversation_id=$1 AND state IN ('provisioning','idle') AND (credential_binding<>$2 OR $2<>'')",&[&conversation_id,&credential]).await?;
     let current = tx.query_opt("SELECT id,generation FROM workflow_sessions WHERE conversation_id=$1 AND state IN ('provisioning','idle') FOR UPDATE", &[&conversation_id]).await?;
     let (id, generation) = if let Some(row) = current {
         (row.get::<_, String>(0), row.get::<_, i64>(1))
