@@ -7,7 +7,7 @@
  import InformationCard from '$lib/components/information-card.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
  import Feedback from '$lib/components/feedback.svelte';
- import { rpc, reasonText, type Connection, type Operation } from '$lib/api';
+ import { rpc, RpcError, reasonText, type Connection, type Operation } from '$lib/api';
  let { capability }: { capability: 'llm' | 'container_registry' } = $props();
  const registry=$derived(capability==='container_registry');
  const provider=$derived(registry?'GitHub Container Registry':'OpenAI');
@@ -26,8 +26,8 @@
  async function refresh(){await load();if(selected){const c=connections.find(c=>c.id===selected?.id);if(c)await inspect(c);}}
  async function accept(op:Operation){await load();await inspect(op.connection);notice=op.kind==='enable'?(op.connection.enabled?'Connection enabled.':'Connection disabled.'):op.state==='completed'?'Credentials validated and activated.':op.state==='failed'?'Candidate validation failed. The previous active credential is preserved.':op.state==='superseded'?'This operation was superseded. Refresh before making changes.':'Credentials saved. Validate the candidate before use.';if(op.safeReason)notice+=` ${reasonText[op.safeReason]||op.safeReason}`;}
  function create(){++generation;selected=null;history=[];name='';destination='';pushUsername='';pullUsername='';clearCredentials();error='';notice='';open=true;}
- async function save(event:SubmitEvent){event.preventDefault();if(pendingKey)return;const key=crypto.randomUUID();const request={idempotencyKey:key,connectionId:selected?.id||'',expectedRevision:selected?.revision||'0',displayName:name,provider:registry?'github':'openai',capability,registryDestination:registry?destination:'',pushUsername:registry?pushUsername:'',pullUsername:registry?pullUsername:'',pushToken,pullToken,apiKey};clearCredentials();persist(key);await perform(async()=>{try{const result=await rpc('SaveProviderConnection',request);persist('');open=false;await accept(result.operation);}finally{request.pushToken='';request.pullToken='';request.apiKey='';}});}
- async function recover(){await perform(async()=>{const result=await rpc('GetConnectionOperation',{idempotencyKey:pendingKey});persist('');await accept(result.operation);});}
+ async function save(event:SubmitEvent){event.preventDefault();if(pendingKey)return;const key=crypto.randomUUID();const request={idempotencyKey:key,connectionId:selected?.id||'',expectedRevision:selected?.revision||'0',displayName:name,provider:registry?'github':'openai',capability,registryDestination:registry?destination:'',pushUsername:registry?pushUsername:'',pullUsername:registry?pullUsername:'',pushToken,pullToken,apiKey};clearCredentials();persist(key);await perform(async()=>{try{const result=await rpc('SaveProviderConnection',request);persist('');open=false;await accept(result.operation);}catch(e){if(e instanceof RpcError && e.status===400)persist('');throw e;}finally{request.pushToken='';request.pullToken='';request.apiKey='';}});}
+ async function recover(){await perform(async()=>{const result=await rpc('GetConnectionOperation',{idempotencyKey:pendingKey});persist('');open=false;await accept(result.operation);});}
  async function toggle(){if(!selected)return;const key=crypto.randomUUID();persist(key);const result=await rpc('SetConnectionEnabled',{idempotencyKey:key,connectionId:selected.id,expectedRevision:selected.revision,enabled:!selected.enabled});persist('');await accept(result.operation);}
  onMount(()=>{pendingKey=sessionStorage.getItem(storageKey)||'';void perform(refresh);});
 </script>
@@ -47,10 +47,13 @@
  <Button variant="outline" disabled={busy} onclick={()=>perform(refresh)}>Refresh connections</Button>
 </div>
 <Dialog.Root bind:open onOpenChange={value=>{if(!value)clearCredentials();}}><Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl"><Dialog.Header><Dialog.Title>{selected?'Connection settings':`Add ${provider} connection`}</Dialog.Title><Dialog.Description>{registry?'Use GitHub personal access tokens (classic). Enter push and pull credentials separately.':'Use an OpenAI API key. Validation discovers models without running a paid conversation.'}</Dialog.Description></Dialog.Header>
+ {#if error}<Feedback kind="error" title="Connection could not be saved" message={error}/>{/if}
+ {#if pendingKey}<InformationCard title="Recover a submitted command"><p>The save result is uncertain. Recover it before submitting credentials again.</p><div class="flex gap-3"><Button disabled={busy} onclick={recover}>Recover operation</Button><Button variant="outline" disabled={busy} onclick={()=>persist('')}>Abandon recovery</Button></div></InformationCard>{/if}
+ {#if busy}<p role="status">Saving connection…</p>{/if}
  <form onsubmit={save} class="space-y-5" autocomplete="off">
   <div class="space-y-2"><Label for="provider-name">Connection name</Label><Input id="provider-name" bind:value={name} required maxlength={120} disabled={busy||!!pendingKey}/></div>
   {#if registry}
-   <div class="space-y-2"><Label for="registry-destination">Destination</Label><Input id="registry-destination" bind:value={destination} placeholder="ghcr.io/owner/package" required maxlength={208} disabled={busy||!!pendingKey||!!selected}/><p class="text-xs text-muted-foreground">Choose the package destination explicitly.</p></div>
+   <div class="space-y-2"><Label for="registry-destination">Destination</Label><Input id="registry-destination" bind:value={destination} placeholder="ghcr.io/owner/package" pattern="ghcr\.io/[a-z0-9][a-z0-9._\-]*(/[a-z0-9][a-z0-9._\-]*)+" title="Enter a full image destination, such as ghcr.io/owner/package." required maxlength={208} disabled={busy||!!pendingKey||!!selected}/><p class="text-xs text-muted-foreground">Include the owner and package name, for example ghcr.io/ayni-oss/runtime.</p></div>
    <div class="space-y-2"><Label for="push-username">Push username</Label><Input id="push-username" bind:value={pushUsername} required maxlength={100} disabled={busy||!!pendingKey||!!selected}/></div>
    <div class="space-y-2"><Label for="push-token">{selected?'Replacement push PAT':'Push PAT'}</Label><Input id="push-token" type="password" bind:value={pushToken} required maxlength={4096} autocomplete="new-password" disabled={busy||!!pendingKey}/><p class="text-xs text-muted-foreground">Requires write:packages access to this destination.</p></div>
    <div class="space-y-2"><Label for="pull-username">Pull username</Label><Input id="pull-username" bind:value={pullUsername} required maxlength={100} disabled={busy||!!pendingKey||!!selected}/></div>

@@ -87,10 +87,26 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
     await page.getByLabel('Pull username',{exact:true}).fill('fixture-pull');
     for(const label of ['Push PAT','Pull PAT']){const value=`fixture-token-${randomUUID()}`;providerSecrets.push(value);await page.getByLabel(label,{exact:true}).fill(value);}
    } else {const value=`fixture-openai-${randomUUID()}`;providerSecrets.push(value);await page.getByLabel('API key',{exact:true}).fill(value);}
+   const dialog=page.getByRole('dialog');
+   if(registry) {
+    await page.getByLabel('Destination',{exact:true}).fill('ghcr.io/fixture');
+    assert.equal(await page.getByLabel('Destination',{exact:true}).evaluate(input=>input.checkValidity()),false);
+    await page.getByLabel('Destination',{exact:true}).fill('ghcr.io/fixture/browser-validation');
+   }
+   await page.route('**/api/SaveProviderConnection',route=>route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({message:'Rejected configuration'})}));
+   await dialog.getByRole('button',{name:'Save connection',exact:true}).click();
+   await dialog.getByText('Rejected configuration',{exact:true}).waitFor();
+   assert.equal(await page.getByLabel('Connection name',{exact:true}).isEnabled(),true);
+   assert.equal(await page.evaluate(key=>sessionStorage.getItem(key),`ayni.connection.${registry?'container_registry':'llm'}.pending`),null);
+   if(registry) {
+    for(const label of ['Push PAT','Pull PAT'])await page.getByLabel(label,{exact:true}).fill(`fixture-token-${randomUUID()}`);
+   } else await page.getByLabel('API key',{exact:true}).fill(`fixture-openai-${randomUUID()}`);
+   await page.unroute('**/api/SaveProviderConnection');
    let confirm;const lost=new Promise(resolve=>{confirm=resolve;});
    await page.route('**/api/SaveProviderConnection',async route=>{const response=await route.fetch();assert.equal(response.status(),200);const text=await response.text();for(const secret of providerSecrets)assert.equal(text.includes(secret),false);await route.abort('failed');confirm();});
    await page.getByRole('button',{name:'Save connection',exact:true}).click();await lost;
    assert.equal(await page.locator('input[type=password]').evaluateAll(inputs=>inputs.every(input=>input.value==='')),true);
+   await dialog.getByRole('button',{name:'Recover operation',exact:true}).waitFor();
    await page.unroute('**/api/SaveProviderConnection');await page.reload();
    await page.getByRole('button',{name:'Recover operation',exact:true}).click();
    await page.getByRole('button',{name:`Inspect ${displayName}`,exact:true}).waitFor();
