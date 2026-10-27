@@ -42,7 +42,7 @@ expected = {
         "ConnectionService": ["SaveGithubConnection", "SaveProviderConnection", "ValidateProviderConnection", "SetConnectionEnabled", "ValidateGithubConnection", "GetConnectionOperation", "ListConnections", "ListConnectionOperations"],
     },
     "projects.proto": {
-        "ProjectService": ["RenameWorkspace", "RenameProject", "CreateWorkspace", "CreateProject", "ListWorkspaces", "ListProjects", "GetAgentConfiguration", "UpdateAgentConfiguration", "GetTurnInputs", "GetTurnContextInputs"],
+        "ProjectService": ["CreateWorkspace", "CreateProject", "RenameWorkspace", "RenameProject", "ListWorkspaces", "ListProjects", "GetAgentConfiguration", "UpdateAgentConfiguration", "GetTurnInputs", "GetTurnContextInputs"],
     },
     "project_conversations.proto": {
         "ProjectConversationService": [
