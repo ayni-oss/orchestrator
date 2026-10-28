@@ -3,7 +3,7 @@ use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use serde::Serialize;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-pub(super) async fn validate(app_id: &str, pem: &str) -> Result<(), &'static str> {
+pub(in crate::workflow) fn app_jwt(app_id: &str, pem: &str) -> Result<String, &'static str> {
     #[derive(Serialize)]
     struct Claims<'a> {
         iat: u64,
@@ -25,6 +25,11 @@ pub(super) async fn validate(app_id: &str, pem: &str) -> Result<(), &'static str
         &key,
     )
     .map_err(|_| "github_key_invalid")?;
+    Ok(jwt)
+}
+
+pub(super) async fn validate(app_id: &str, pem: &str) -> Result<(), &'static str> {
+    let jwt = app_jwt(app_id, pem)?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
         .redirect(reqwest::redirect::Policy::none())
@@ -63,7 +68,10 @@ pub(super) async fn validate(app_id: &str, pem: &str) -> Result<(), &'static str
     }
     Ok(())
 }
-const fn classify_status(status: u16, rate_limited: bool) -> Result<(), &'static str> {
+pub(in crate::workflow) const fn classify_status(
+    status: u16,
+    rate_limited: bool,
+) -> Result<(), &'static str> {
     match status {
         200 => Ok(()),
         429 => Err("github_rate_limited"),

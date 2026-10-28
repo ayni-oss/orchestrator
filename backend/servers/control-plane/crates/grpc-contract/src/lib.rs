@@ -25,6 +25,17 @@ mod tests {
     use prost_types::FileDescriptorSet;
     use std::collections::{BTreeMap, BTreeSet};
 
+    const REPOSITORY_METHODS: [&str; 8] = [
+        "ListGithubInstallations",
+        "ListGithubRepositories",
+        "ConnectRepository",
+        "GetRepositoryOperation",
+        "ListRepositoryOperations",
+        "ListRepositories",
+        "AssociateProjectRepository",
+        "ListProjectRepositories",
+    ];
+
     #[test]
     fn descriptor_exposes_only_the_canonical_workflow_services() -> Result<(), prost::DecodeError> {
         let descriptor = FileDescriptorSet::decode(super::FILE_DESCRIPTOR_SET)?;
@@ -46,6 +57,7 @@ mod tests {
         assert_eq!(
             services,
             BTreeMap::from([
+                ("RepositoryService", BTreeSet::from(REPOSITORY_METHODS)),
                 (
                     "ConnectionService",
                     BTreeSet::from([
@@ -104,6 +116,8 @@ mod tests {
                     BTreeSet::from([
                         "CreateProject",
                         "CreateWorkspace",
+                        "RenameWorkspace",
+                        "RenameProject",
                         "ListWorkspaces",
                         "ListProjects",
                         "GetAgentConfiguration",

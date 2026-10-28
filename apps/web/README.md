@@ -8,8 +8,8 @@ The duplicate example and standalone diagnostic frontend have been removed.
 Canonical APIs support workspace/project creation, manual GitHub App credentials,
 GHCR PAT connections, OpenAI key validation/model discovery and explicit workspace
 connection/model/budget selection. Historical BFF/API wiring is not restored.
-Guided App setup, the repository catalog and recoverable registry artifact probes
-remain outstanding.
+Shared GitHub repository discovery/catalog and direct project associations are available.
+Guided App setup, Ayni inspection and runtime preparation remain outstanding.
 
 Run `pnpm web:dev` with the local gateway, or `dev/ctl live` for one frontend plus
 backend rebuild/rollout. The default web URL is http://127.0.0.1:5174.
@@ -31,3 +31,26 @@ with the upstream Nova style utilities expanded into component classes and its i
 resolved to the existing Lucide dependency. Other controls use the same compact
 shadcn styling. Update shared components and tokens instead of adding page-specific
 field borders or raw form controls.
+
+Repository catalog UI: `/repositories`. Project cards link to
+`/projects/:id/repositories?workspace=:workspaceId`. Repository connect and project
+association requests retain their exact non-secret bytes and idempotency key across
+reload; scope changes create a fresh component instance. **Connected** describes
+historical source access and never authorizes task execution.
+
+### Workspace and project navigation
+
+The sidebar provides a workspace dropdown with a separate create button, and an
+always-visible workspace settings link that is disabled without a selection.
+The home page lists workspace cards; opening one lists its project cards. Both
+use a whole-card link and a separate top-right three-dot menu for repositories
+and rename. Workspace menus also open workspace settings. The sidebar groups
+Repositories and Configuration under Settings at the bottom. Sidebar items share
+one component for hover, focus, selected and disabled states. A single Projects
+parent opens the project list, with indented links to each workspace project below
+it and a More projects link when another page is available.
+
+Renames retain an exact request in session storage until acknowledged. The server
+checks the displayed resource version, records an immutable receipt, and rejects
+stale edits. Retrying an acknowledged rename returns its original receipt without
+reapplying the old name over a later edit.

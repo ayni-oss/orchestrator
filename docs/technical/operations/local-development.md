@@ -536,3 +536,18 @@ serving against its own disposable PostgreSQL fixture. The fixture is removed
 after the gate. It does not use a
 live GitHub App or establish registry, provider or runtime readiness. See
 [connection authority](../architecture/integration-connections.md).
+
+## Repository catalog development
+
+Use **Repositories** to discover installations and repositories through a validated
+GitHub App source connection. The App requires repository Contents read permission;
+its installation must include the selected repository. Connect the repository once,
+then use a project card's **Repositories** action to attach it in each workspace.
+Source access status remains separate from the planned Ayni/runtime gates.
+
+Migration 32 adds the shared catalog and operation/association receipts. Stop the
+live loop, run `dev/ctl live migrate`, then restart `dev/ctl live`; retain existing
+configuration and stores. Test the authority and browser journey separately with
+`AYNI_REPOSITORIES_ONLY=1 scripts/ci/check-workflow-postgres-feasibility.sh`.
+The test uses synthetic credentials and a disposable database; it does not prove
+live GitHub installation access.

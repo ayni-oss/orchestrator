@@ -7,8 +7,7 @@ components, fonts and original light/dark tokens. It provides Workspaces and Con
 It creates and discovers workspaces/projects through canonical v1 APIs and manages
 multiple named GitHub App source-control, GitHub Container Registry and OpenAI
 connections. Workspace settings selects an OpenAI connection, discovered model,
-instructions and budgets. Repository catalog and associations remain later delivery;
-placeholder pages are not exposed. The duplicate example and diagnostic frontend
+instructions and budgets. Repositories provides shared source discovery and catalog admission. Project cards link to their repository associations. Runtime preparation remains later delivery. The duplicate example and diagnostic frontend
 are removed. All future journeys extend this application.
 
 `ConnectionService` admits manual App credentials, changes enabled state, validates
@@ -75,10 +74,8 @@ GHCR configuration requires an explicit `ghcr.io/owner/package` destination and
 separate push/pull usernames and classic PAT inputs. Destination and account
 identities are immutable; create another named connection to change them. Candidate
 validation independently authenticates both credentials using scoped token requests.
-It does not yet exercise an artifact push/pull/cleanup probe or establish package
-permissions; those recoverable external stages remain outstanding. Guided GitHub
-App setup, installation/repository discovery and shared catalog associations also
-remain outstanding.
+It does not establish package permissions. Runtime operations must report authentication,
+push and pull failures at their actual stage; no disposable test image is required. Guided GitHub App setup remains outstanding. Saved source connections support installation/repository discovery and shared project associations through the repository catalog.
 
 Source access, registry validation, task execution and publication remain separate
 authorities. No operation in this foundation creates GitHub branches, PRs or images.
@@ -96,3 +93,42 @@ and same-origin rejection. It uses synthetic credential material.
 Live successful GitHub, GHCR and OpenAI evidence requires maintainer-provided
 credentials through the UI and is reported separately from deterministic fixtures.
 The current UI is a trusted local-operator surface, not a remote multi-user service.
+
+## Shared repository catalog
+
+Open **Repositories**, choose a validated source connection, and discover its GitHub
+installations. Select an installation, discover its repositories, then connect one.
+Projects attach catalog entries directly through their **Repositories** action;
+projects in several workspaces can use the same entry.
+
+`RepositoryService` provides bounded v1 discovery, connect/recovery/history,
+catalog reads and project associations. PostgreSQL migration 32 stores immutable
+provider repository identity, the source connection and installation, connect intent,
+accepted metadata and exact association receipts. Catalog records are append-only;
+removal and source rebinding require a later explicit lifecycle contract.
+
+GitHub requests use the fixed API origin, bounded response bodies and timeouts.
+The saved App credential creates read-only installation tokens with Contents and
+Metadata read permissions. Connecting restricts that token to the selected repository
+ID and checks GitHub's returned identity; browser names and branch values grant no authority.
+Tokens and provider response text never enter catalog receipts or diagnostics.
+
+Connect intent freezes the connection revision and credential reference before
+external reads. Disabling or rotating that source fences acceptance; an outage or
+rate limit retains a resumable operation. Exact retries recover one receipt,
+including after a lost response or process restart. History includes safe reasons,
+source-access stage and accepted/update times; structured logs retain operation IDs.
+
+An existing provider repository cannot silently move to another source connection.
+Association commands validate workspace/project ownership, reject disabled sources
+for new use, and retain exact retry receipts. Associations expose no credentials or
+conversation history and confer no execution or publication grant.
+
+**Connected** means source access was observed at connection time. It does not
+establish current availability, committed Ayni compatibility or runtime readiness.
+Task source verification and runtime artifact selection remain separate future work.
+
+`AYNI_REPOSITORIES_ONLY=1 scripts/ci/check-workflow-postgres-feasibility.sh`
+checks real PostgreSQL, gRPC, gateway and browser recovery using synthetic source
+credentials. It qualifies catalog authority and UI behavior, not live GitHub
+credentials, registry permissions or runtime preparation.

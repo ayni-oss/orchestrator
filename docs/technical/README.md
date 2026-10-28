@@ -1,7 +1,7 @@
 # Technical documentation
 
 > UI status: the new local product provides workspace/project creation and manual
-> GitHub App configuration. See [integration connections](architecture/integration-connections.md).
+> GitHub App configuration, shared source discovery/catalog and project associations. See [integration connections](architecture/integration-connections.md).
 > Historical conversation/task browser acceptance still describes the retired UI;
 > those profiles remain unavailable until their replacement coverage exists.
 
@@ -12,7 +12,7 @@ The runtime combines the M1 durable foundation with shared immutable agent confi
 Shared repository onboarding and verified runtime preparation ship alongside a new
 UI in the [active roadmap](../../ROADMAP.md#next-focus-repository-preparation-with-a-usable-ui).
 Projects select catalog repositories directly and can reuse them across workspaces.
-These documents specify planned behavior, not delivered support:
+These documents distinguish the implemented source catalog from planned Ayni/runtime preparation:
 
 - [Repository preparation](architecture/repository-preparation.md): ownership, Ayni gates, credentials, immutable artifacts and task handoff.
 - [Repository/runtime workspace delivery](research/repository-runtime-workspace-delivery.md): UI increments, failure/recovery matrix and cumulative qualification.

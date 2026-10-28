@@ -31,7 +31,7 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   const workspaceResult=await createdWorkspace.json();
   assert.equal(workspaceResult.workspace.displayName,workspace);
   const workspaceId=workspaceResult.workspace.id;
-  await page.getByRole('button',{name:workspace,exact:false}).waitFor();
+  await page.getByRole('heading',{name:'Projects',exact:true}).waitFor();
   await page.getByRole('button',{name:'New project',exact:true}).click();
   await page.getByLabel('Project name',{exact:true}).fill('Product acceptance');
   await page.getByLabel('Goal',{exact:true}).fill('Verify retained hierarchy through the product');
@@ -39,7 +39,7 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   await page.getByText('Verify retained hierarchy through the product',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Configuration',exact:true}).click();
   await page.getByRole('link',{name:'Source control',exact:true}).click();
-  await page.getByRole('link',{name:'Configure GitHub',exact:true}).click();
+  await page.getByRole('link',{name:'GitHub',exact:true}).click();
   await page.getByRole('button',{name:'Add GitHub App',exact:true}).click();
   const connection=`GitHub ${randomUUID()}`;const sentinel=`private-key-sentinel-${randomUUID()}`;
   await page.getByLabel('Connection name',{exact:true}).fill(connection);

@@ -9,6 +9,8 @@ import "google/protobuf/timestamp.proto";
 service ProjectService {
   rpc CreateWorkspace(CreateWorkspaceRequest) returns (CreateWorkspaceResponse);
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
+  rpc RenameWorkspace(RenameWorkspaceRequest) returns (RenameWorkspaceResponse);
+  rpc RenameProject(RenameProjectRequest) returns (RenameProjectResponse);
   rpc ListWorkspaces(ListWorkspacesRequest) returns (ListWorkspacesResponse);
   rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
   rpc GetAgentConfiguration(GetAgentConfigurationRequest) returns (GetAgentConfigurationResponse);
@@ -154,4 +156,25 @@ message GetTurnContextInputsResponse {
   uint64 record_count = 3;
   repeated ContextInputRecord records = 4;
   uint64 next_after_ordinal = 5;
+}
+
+// Fenced renames retain an immutable command receipt. Exact retries never rename twice.
+message RenameWorkspaceRequest {
+  string idempotency_key = 1;
+  string workspace_id = 2;
+  uint64 expected_resource_version = 3;
+  string display_name = 4;
+}
+message RenameWorkspaceResponse {
+  string command_id = 1;
+}
+message RenameProjectRequest {
+  string idempotency_key = 1;
+  string workspace_id = 2;
+  string project_id = 3;
+  uint64 expected_resource_version = 4;
+  string display_name = 5;
+}
+message RenameProjectResponse {
+  string command_id = 1;
 }

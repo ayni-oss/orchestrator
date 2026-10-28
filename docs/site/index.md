@@ -27,3 +27,5 @@ The prior browser and SQLite workflow were removed in a clean cutover. The curre
 Current evidence covers PostgreSQL 17.6 migrations, scoped idempotency, FIFO admission and promotion, authenticated retained streams, signed executor ownership, accepted scripted responses, snapshots/history, restart recovery, and the private-v1 boundary.
 
 See the repository's [technical documentation](https://github.com/ayni-oss/orchestrator/tree/alpha/docs/technical) for architecture and local operations.
+
+Read [Connect a repository](repositories.md) for shared GitHub source access and project association.
