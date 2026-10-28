@@ -46,7 +46,9 @@ The home page lists workspace cards; opening one lists its project cards. Both
 use a whole-card link and a separate top-right three-dot menu for repositories
 and rename. Workspace menus also open workspace settings. The sidebar groups
 Repositories and Configuration under Settings at the bottom. Sidebar items share
-one component for hover, focus, selected and disabled states.
+one component for hover, focus, selected and disabled states. A single Projects
+parent opens the project list, with indented links to each workspace project below
+it and a More projects link when another page is available.
 
 Renames retain an exact request in session storage until acknowledged. The server
 checks the displayed resource version, records an immutable receipt, and rejects

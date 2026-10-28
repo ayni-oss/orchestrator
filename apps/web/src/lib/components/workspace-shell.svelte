@@ -45,8 +45,17 @@
       </Dropdown.Root>
     </div>
     <SidebarItem href={data.workspace ? `/workspace/settings?workspace=${data.workspace.id}` : '/'} disabled={!data.workspace} active={title==='Workspace settings'}><Settings2 />Workspace settings</SidebarItem>
-    <p class="section-label">Projects</p>
-    <SidebarItem href={data.workspace ? `/?workspace=${data.workspace.id}` : '/'} disabled={!data.workspace} active={title==='Projects'}><Layers />Projects</SidebarItem>
+    <nav aria-label="Projects" class="mt-7 min-h-0 overflow-y-auto">
+      <SidebarItem href={data.workspace ? `/?workspace=${data.workspace.id}` : '/'} disabled={!data.workspace} active={title==='Projects'}><Layers />Projects</SidebarItem>
+      {#if data.workspace && data.projects.length}
+        <ul class="ml-5 mt-1 space-y-1 border-l border-border pl-2">
+          {#each data.projects as project (project.id)}
+            <li><SidebarItem href={`/projects/${project.id}/repositories?workspace=${data.workspace.id}`} active={page.params.id===project.id}><span class="min-w-0 truncate">{project.displayName}</span></SidebarItem></li>
+          {/each}
+          {#if data.nextProject}<li><SidebarItem href={`/?workspace=${data.workspace.id}&afterProject=${data.nextProject}`}>More projects</SidebarItem></li>{/if}
+        </ul>
+      {/if}
+    </nav>
     <div class="sidebar-bottom">
       <p class="section-label">Settings</p>
       <SidebarItem href="/repositories" active={title==='Repositories'}><GitBranch />Repositories</SidebarItem>
