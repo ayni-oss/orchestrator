@@ -1,0 +1,23 @@
+[package]
+name = "ayni-orchestrator-runtime-verifier"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+ayni-core = { git = "https://github.com/ayni-oss/ayni.git", rev = "8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc" }
+ayni-environment = { git = "https://github.com/ayni-oss/ayni.git", rev = "8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+libc = "=0.2.189"
+
+[dev-dependencies]
+tempfile.workspace = true
+ed25519-dalek.workspace = true
+
+[lints]
+workspace = true

@@ -19,7 +19,7 @@ test('repository catalog and project associations use retained canonical receipt
   browser=await chromium.launch({headless:true});const page=await browser.newPage();
   await page.goto(`${origin}/repositories`);await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
   await page.getByRole('region',{name:'fixture/browser-repository',exact:true}).first().waitFor();
-  const inspectionCard = page.getByRole('region',{name:'fixture/browser-repository',exact:true}).first();
+  const inspectionCard = page.locator(`[data-repository-inspection="${fixture}"]`);
   await inspectionCard.getByRole('button',{name:'Inspect Ayni setup',exact:true}).click();
   await inspectionCard.getByText('Static inspection complete',{exact:true}).waitFor();
   await inspectionCard.getByText('Commit an Ayni policy before preparing this repository.',{exact:true}).waitFor();
@@ -47,7 +47,7 @@ test('repository catalog and project associations use retained canonical receipt
   await inspectionCard.screenshot({path:'/tmp/repository-inspection-browser.png'});
   await page.getByLabel('GitHub App connection',{exact:true}).selectOption(process.env.AYNI_REPOSITORY_SOURCE);
   await page.getByRole('button',{name:'Discover installations',exact:true}).click();
-  await page.getByText('The saved App key is invalid. Update the source connection.',{exact:true}).waitFor();
+  await page.getByRole('alert').filter({hasText:'Repository needs attention'}).getByText('The saved App key is invalid. Update the source connection.',{exact:true}).waitFor();
   // Provider fixtures exercise the selection UI; source verification still uses the real backend
   // and must reject the synthetic private key rather than connecting a false-ready repository.
   await page.route('**/api/ListGithubInstallations',route=>route.fulfill({json:{installations:[{installationId:'123',accountLogin:'fixture',suspended:false}]}}));

@@ -65,3 +65,11 @@ request and choose **Recover inspection** or **Retry same inspection**.
 
 Static inspection never enables preparation or starts work. Full adapter discovery,
 configured signer admission and runtime verification remain later gates.
+
+### Runtime signer references
+
+Configuration → Runtime signing manages public signer identities and references to
+administrator-owned immutable Secrets. Exact updates and original receipt recovery
+survive reloads. Saving a reference validates public input shapes; it does not read
+the Secret, grant signing access, enable builds or establish runtime readiness.
+The runtime preparation execution journey remains under development.

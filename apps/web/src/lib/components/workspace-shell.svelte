@@ -69,6 +69,7 @@
       <p class="configuration-group">Integrations</p>
       <SidebarItem href="/settings/source-control" active={page.url.pathname.startsWith('/settings/source-control')}><GitBranch />Source control</SidebarItem>
       <SidebarItem href="/settings/container-registries" active={page.url.pathname.startsWith('/settings/container-registries')}><Package />Container registries</SidebarItem>
+      <SidebarItem href="/settings/runtime-signing" active={page.url.pathname.startsWith('/settings/runtime-signing')}><Package />Runtime signing</SidebarItem>
       <SidebarItem href="/settings/llm-providers" active={page.url.pathname.startsWith('/settings/llm-providers')}><BrainCircuit />LLM providers</SidebarItem>
     </nav>
   {/if}

@@ -70,7 +70,7 @@
   } catch { error = 'The saved inspection request could not be read. Reload repository history before starting another.'; expanded = true; }
  });
 </script>
-<div class="space-y-4 border-t pt-4">
+<div class="space-y-4 border-t pt-4" data-repository-inspection={repo.id}>
  {#if !expanded}
   <Button variant="outline" onclick={() => perform(open)} disabled={busy}>Inspect Ayni setup</Button>
  {:else}

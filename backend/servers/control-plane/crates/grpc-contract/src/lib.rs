@@ -62,6 +62,15 @@ mod tests {
             BTreeMap::from([
                 ("RepositoryService", BTreeSet::from(REPOSITORY_METHODS)),
                 (
+                    "RuntimePreparationService",
+                    BTreeSet::from([
+                        "SaveRuntimeSigner",
+                        "SetRuntimeSignerEnabled",
+                        "ListRuntimeSigners",
+                        "GetRuntimeSignerReceipt"
+                    ])
+                ),
+                (
                     "ConnectionService",
                     BTreeSet::from([
                         "SaveGithubConnection",

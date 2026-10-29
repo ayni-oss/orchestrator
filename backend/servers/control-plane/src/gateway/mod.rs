@@ -55,6 +55,13 @@ impl Gateway {
         })
     }
 
+    fn runtime_preparation(
+        &self,
+    ) -> v1::runtime_preparation_service_client::RuntimePreparationServiceClient<Channel> {
+        v1::runtime_preparation_service_client::RuntimePreparationServiceClient::new(
+            self.channel.clone(),
+        )
+    }
     fn repositories(&self) -> v1::repository_service_client::RepositoryServiceClient<Channel> {
         v1::repository_service_client::RepositoryServiceClient::new(self.channel.clone())
             .max_decoding_message_size(3 * 1024 * 1024)
@@ -522,6 +529,40 @@ async fn repository_rpc(
             gateway.repositories(),
             list_project_repositories,
             v1::ListProjectRepositoriesRequest
+        ),
+        _ => runtime_preparation_rpc(gateway, method, body).await,
+    }
+}
+
+async fn runtime_preparation_rpc(
+    gateway: &Gateway,
+    method: &str,
+    body: Value,
+) -> Result<Json<Value>, ApiError> {
+    match method {
+        "SaveRuntimeSigner" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            save_runtime_signer,
+            v1::SaveRuntimeSignerRequest
+        ),
+        "SetRuntimeSignerEnabled" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            set_runtime_signer_enabled,
+            v1::SetRuntimeSignerEnabledRequest
+        ),
+        "ListRuntimeSigners" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            list_runtime_signers,
+            v1::ListRuntimeSignersRequest
+        ),
+        "GetRuntimeSignerReceipt" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            get_runtime_signer_receipt,
+            v1::GetRuntimeSignerReceiptRequest
         ),
         _ => Err(ApiError::from(Status::unimplemented(
             "unknown gateway method",

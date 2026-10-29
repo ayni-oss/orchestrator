@@ -35,6 +35,7 @@ for directory in owned.rglob("*"):
 
 root = Path("proto/ayni/orchestrator/v1")
 expected = {
+    "runtime_preparation.proto": {"RuntimePreparationService": ["SaveRuntimeSigner", "SetRuntimeSignerEnabled", "ListRuntimeSigners", "GetRuntimeSignerReceipt"]},
     "repositories.proto": {
         "RepositoryService": ["ListGithubInstallations", "ListGithubRepositories", "ConnectRepository", "GetRepositoryOperation", "ListRepositoryOperations", "ListRepositories", "AssociateProjectRepository", "ListProjectRepositories", "InspectRepository", "GetRepositoryInspection", "ListRepositoryInspections"],
     },

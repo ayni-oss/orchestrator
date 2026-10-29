@@ -25,6 +25,10 @@ associations, plus explicit `InspectRepository`, `GetRepositoryInspection` and
 `ListRepositoryInspections` for frozen static Ayni findings. A completed inspection
 never establishes runtime readiness or authorizes preparation or execution.
 
+`RuntimePreparationService` currently manages public signer references and exact
+configuration receipts. Saving a reference performs no Secret access or runtime
+operation. Runtime execution methods remain pending.
+
 The listener binds to pod loopback. Canonical sources and generated bindings do not imply a public endpoint, custom-client contract, published browser API, or published SDK. The local contributor gateway adapts an allowlist of canonical RPCs through Rust ProtoJSON and SSE.
 
 ## Generation and compatibility

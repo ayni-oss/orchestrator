@@ -172,3 +172,36 @@ The repository browser gate covers retained result display, exact commit input,
 response loss/reload recovery and conflicting retries against real PostgreSQL,
 gRPC and the gateway. It uses synthetic GitHub credentials and separately seeded
 static findings; it does not establish live GitHub source qualification.
+
+## Runtime preparation foundations
+
+Runtime preparation currently provides public signer-reference configuration, an immutable
+GHCR discovery client and a trusted content-verifier binary. These are preparation
+foundations; the build/sign/publication supervisor and its UI journey are not
+implemented. No runtime can be admitted as ready through these primitives alone.
+
+Runtime signing configuration stores a reviewed key ID/public key and the name
+and exact UID of an administrator-owned immutable Kubernetes Secret. The namespace
+belongs to deployment configuration. The product does not read the referenced
+object when saving metadata. Preparation must later validate immutability, UID,
+private/public key agreement and stage authority before delivering signing access.
+
+Signer changes use exact command receipts and immutable public revisions. Rotation
+and enable/disable operations fence stale versions. Read APIs and lost-response
+recovery return public configuration only. There is no signing material or signer
+credential reader in PostgreSQL. Initial administrator provisioning remains an
+external prerequisite, with the reserved `ayni-runtime-signer-` object-name prefix.
+
+The registry library distinguishes confirmed manifest absence from access failure,
+rate limiting, outage, malformed data and unsupported platform. Manifest and config
+bytes must match their immutable digests. Discovery returns a candidate, never
+verification or replacement authority. Registry publication is not implemented.
+
+`backend/workers/runtime-verifier` consumes frozen policy/lock inputs, a platform
+and an independently trusted expected Ayni executable digest. It invokes the
+pinned Ayni public verifier against the actual candidate root, including signature
+and protected content, without executing the candidate's CLI. Its `content_verified`
+result covers certification/content only. Full adapter discovery, managed execution,
+operation-generation binding, cleanup and runtime admission remain separate gates.
+The packaging Dockerfile rejects a dynamic interpreter or shared-library dependency
+before producing the trusted verifier image.

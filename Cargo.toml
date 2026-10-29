@@ -9,6 +9,7 @@ members = [
     "backend/libs/observability",
     "backend/servers/control-plane",
     "backend/workers/conversation-supervisor",
+    "backend/workers/runtime-verifier",
     "backend/tests/workflow-acceptance",
     "backend/servers/control-plane/crates/workflow-postgres",
 ]

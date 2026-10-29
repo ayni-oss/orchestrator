@@ -145,6 +145,9 @@ Its source-access checks do not establish runtime readiness. Static Ayni inspect
 locked input digests and public trust requirements using pinned Ayni APIs. Full
 adapter discovery, registry/certificate setup, trust-change PRs, runtime production
 and live GitHub qualification remain outstanding.
+Public signer references, immutable GHCR discovery and a trusted content verifier
+provide initial runtime foundations. They do not complete runtime preparation; the
+qualified build executor and build/sign/publication/recovery supervisor remain pending.
 
 Deliver shared repository integration, Ayni inspection, verified runtime images
 and project selection before expanding product analytics or event inputs. Build

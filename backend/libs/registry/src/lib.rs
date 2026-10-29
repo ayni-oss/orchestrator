@@ -1,4 +1,7 @@
 //! Private GHCR protocol primitives; callers retain operation-specific authority.
+mod discovery;
+pub use discovery::{Candidate, Discovery, DiscoveryError, GhcrClient, Platform};
+
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use std::{
     fs,
