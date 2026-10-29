@@ -111,6 +111,97 @@ The supported Ayni onboarding matrix must be qualified explicitly.
 Historical `main` admitted 0.15.0; alpha's development CLI pin alone establishes no repository-builder compatibility.
 Keep this integration in Orchestrator and consume Ayni's supported CLI/artifacts without reimplementing adapters or lock generation.
 
+## Kubernetes runtime delivery prerequisite
+
+Deliver preparation through Kubernetes supervisors with separate source, build,
+certification, publication and verification workloads. The first build profile to
+qualify is rootless Podman with an operation-local image store and `vfs` storage.
+Qualification must establish user-namespace support, engine execution under the
+selected seccomp/AppArmor policy, bounded storage/egress and reliable cleanup;
+this profile is not qualified yet. No host engine socket or privileged fallback
+is enabled when those requirements fail.
+
+The builder explicitly selects `AYNI_OCI_RUNTIME=podman`, an exact executor
+image digest and a matching Linux node architecture. Kernel and storage support
+are deployment prerequisites; a rootless engine label alone is not isolation
+evidence.
+
+### Pinned Ayni boundary
+
+Ayni 0.16.2 at
+[`8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc`](https://github.com/ayni-oss/ayni/tree/8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc)
+supports Docker and Podman engines. Its
+[build implementation](https://github.com/ayni-oss/ayni/blob/8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc/environment/src/runtime/engine.rs#L197)
+assembles an image, runs inventory/validation containers, signs certification,
+assembles the certified image and records its local image identity in one engine
+workflow. The
+[CLI build command](https://github.com/ayni-oss/ayni/blob/8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc/cli/src/environment_backend.rs#L36)
+can add a local tag; it does not publish to a registry. A BuildKit-only service
+cannot replace the engine's image execution and inspection operations.
+
+[Certificate creation and signing material](https://github.com/ayni-oss/ayni/blob/8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc/environment/src/certificate.rs)
+and the build inventory/finalization helpers are private implementation details.
+Ayni correctly
+[removes signing variables from child tools](https://github.com/ayni-oss/ayni/blob/8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc/adapters/common/src/exec.rs#L428),
+but the signing parent still shares an engine and lifecycle with repository-derived
+build work. That does not satisfy this preparation contract's separate signing
+stage. The public
+[certificate types](https://github.com/ayni-oss/ayni/blob/8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc/core/src/environment_certificate.rs)
+and [content verifier](https://github.com/ayni-oss/ayni/blob/8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc/environment/src/prebuilt.rs#L107)
+provide useful contracts, but do not expose a complete independent certify/export
+workflow. Orchestrator must not copy those private image semantics to close the gap.
+
+### Standalone Ayni prerequisite
+
+Add an independently useful staged image workflow in a separate Ayni PR, with
+public fixtures and tests for local/offline signing and external builders:
+
+- **Unsigned build/export:** preserve existing adapter discovery, lock checks,
+  dependency preparation and executor validation; export an immutable OCI layout
+  with a supported report binding the candidate to source, lock, platform, executor
+  and tooling identities. Export grants no portable trust or runtime readiness.
+- **Offline certify/finalize:** accept that immutable export and the reviewed
+  policy/lock, independently inspect actual protected bytes and the expected Ayni
+  executable, and produce the supported certificate, final OCI image and provenance
+  report. This stage runs no repository commands and shares no engine, writable
+  storage or processes with the builder. It must reject tampered exports and
+  unsupported inputs before using signing authority.
+- **Contract and recovery:** retain the ordinary local build workflow while
+  exposing staged CLI/artifact contracts. Test unsigned export round trips,
+  mismatched inputs, offline key handling, final digest readback and interrupted
+  finalization. Keep Kubernetes and provider credential management in Orchestrator.
+
+This improvement lets Ayni users build on one machine and certify offline on
+another, without giving a build executor a signing key. Its scope and compatibility
+must be accepted upstream before Orchestrator selects the resulting release.
+
+### Workload and admission contract
+
+| Workload | Authority and retained output |
+| --- | --- |
+| Source acquisition | Repository-scoped read access only; publish the complete frozen checkout and input digests before removing access. |
+| Unsigned builder | Qualified rootless engine, frozen source and bounded dependency downloads; retain an immutable export. No signing or registry push credentials. |
+| Certifier | Fresh isolated filesystem, immutable export and reviewed signer reference; independently inspect and finalize with the new Ayni contract. No repository execution, source credentials or registry push access. |
+| Publisher | Final certified export and destination-scoped push credentials only; retain the registry digest and reconcile uncertain publication by readback. |
+| Independent verifier | Separate pull capability, exact platform digest and frozen inputs; verify actual certification/protected content and applicable managed compatibility evidence. No signing or push access. |
+
+Use the existing
+[supervisor authority pattern](conversation-execution.md) and
+[task isolation boundaries](task-quality.md) for operation generations, exact pod
+UID adoption, deadlines and authenticated evidence. Implement resumable cleanup
+for pods, temporary credentials and storage, and confirm it before admission.
+The [integration foundations](integration-connections.md#runtime-preparation-foundations)
+are configuration, discovery and content-verification building blocks; they do
+not establish this executor or the staged Ayni contract.
+
+Until the upstream contract and the Kubernetes profile pass deployment acceptance,
+retain an actionable prerequisite failure and keep runtime preparation unavailable.
+Missing user-namespace support, denied engine startup, unavailable credentials,
+registry denial/outage, invalid existing images and pending cleanup cannot produce
+readiness or silently select a different execution mode. Build remains limited to
+confirmed absence under its grant; replacing an invalid image needs explicit
+replacement authority.
+
 ## Task handoff and feedback
 
 Trusted server-side preparation resolves the approved repository/ref through its project association.
