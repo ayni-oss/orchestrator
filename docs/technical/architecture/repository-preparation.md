@@ -1,6 +1,6 @@
 # Shared repository and runtime preparation
 
-Status: shared repository discovery, catalog connection and project associations are implemented for the trusted local operator. Committed Ayni inspection and runtime gates remain planned. See [integration connections](integration-connections.md) for the current source-access boundary.
+Status: shared repository discovery, catalog connection and project associations are implemented for the trusted local operator. Exact-commit static policy/lock/input/trust inspection is implemented; full adapter discovery, setup and runtime gates remain planned. See [integration connections](integration-connections.md) for the current source-access boundary.
 
 ## What this decides
 

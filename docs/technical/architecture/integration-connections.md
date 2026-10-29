@@ -132,3 +132,43 @@ Task source verification and runtime artifact selection remain separate future w
 checks real PostgreSQL, gRPC, gateway and browser recovery using synthetic source
 credentials. It qualifies catalog authority and UI behavior, not live GitHub
 credentials, registry permissions or runtime preparation.
+
+## Frozen static Ayni inspection
+
+`InspectRepository` accepts an existing catalog ID, the displayed source connection
+revision and a full lowercase commit SHA. It records intent before GitHub reads;
+repeating the exact request recovers the same operation. History and recovery reads
+never resume external access. Source rotation or disablement fences late results.
+
+The installation token is scoped to that repository with read-only Contents and
+Metadata permissions. Commit and tree identities are checked; required blobs come
+from that frozen tree, with their Git object identity and size independently
+verified. Policy and lock bytes produce retained SHA-256 digests. Repository files
+are never executed, and raw provider errors and source bytes are not returned.
+
+Static evaluation consumes `ayni-core` and `ayni-environment` from Ayni 0.16.2 at
+`8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc`. These public APIs validate policy,
+lock schema/recipe/fingerprint, locked input digests, host architecture and public
+trust fingerprint consistency. This fallback is needed because the CLI has no
+standalone read-only lock inspection command. It adds no dependency from Ayni to
+Orchestrator and accesses no private signing material.
+
+| Limit | Behavior |
+| --- | --- |
+| Source selection | Full 40-character lowercase commit SHA; branches and tags rejected |
+| GitHub responses | Bounded to 1 MiB each; truncated trees rejected |
+| Snapshot | At most 256 required regular files, 512 KiB each, 8 MiB total |
+| File paths | Repository relative; symlinks, submodules and escaping paths rejected |
+| Provider work | 25-second request deadline; transient provider/local unavailability and rate limits retain the same retry identity |
+| Static result | Bounded to 64 KiB; retained independently of browser lifetime |
+
+A completed inspection can contain blocking findings. Missing or invalid inputs
+produce corrective findings rather than runtime readiness. Every result retains
+pending adapter-discovery and runtime-verification requirements. Registry setup,
+selected signer admission, trust-change PRs, image preparation and task handoff
+remain later slices. Reading or inspecting a repository never opts it into builds.
+
+The repository browser gate covers retained result display, exact commit input,
+response loss/reload recovery and conflicting retries against real PostgreSQL,
+gRPC and the gateway. It uses synthetic GitHub credentials and separately seeded
+static findings; it does not establish live GitHub source qualification.

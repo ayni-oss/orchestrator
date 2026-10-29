@@ -457,6 +457,24 @@ async fn repository_rpc(
     body: Value,
 ) -> Result<Json<Value>, ApiError> {
     match method {
+        "InspectRepository" => forward!(
+            body,
+            gateway.repositories(),
+            inspect_repository,
+            v1::InspectRepositoryRequest
+        ),
+        "GetRepositoryInspection" => forward!(
+            body,
+            gateway.repositories(),
+            get_repository_inspection,
+            v1::GetRepositoryInspectionRequest
+        ),
+        "ListRepositoryInspections" => forward!(
+            body,
+            gateway.repositories(),
+            list_repository_inspections,
+            v1::ListRepositoryInspectionsRequest
+        ),
         "ListGithubInstallations" => forward!(
             body,
             gateway.repositories(),

@@ -38,8 +38,9 @@ promoted into [apps/web](apps/web/README.md), the sole web application. Preserve
 shell, typography, themes and components while wiring each delivery slice to
 canonical APIs. Do not introduce parallel products or alternate visual designs.
 The current UI supports workspace/project creation, manual GitHub App setup,
-GHCR/OpenAI credential configuration and workspace OpenAI model/budget selection;
-repository/runtime preparation and full delivery journeys remain planned.
+GHCR/OpenAI credential configuration, workspace OpenAI model/budget selection,
+shared repository onboarding and exact-commit static Ayni inspection. Full adapter
+discovery, runtime preparation and full delivery journeys remain planned.
 Historical browser acceptance does not qualify current source; each implemented
 journey needs its own replacement coverage.
 
@@ -140,8 +141,10 @@ connections per capability are supported. See
 
 The shared source catalog adds GitHub installation/repository discovery, retained
 connect operations and direct project associations, including reuse across workspaces.
-Its source-access checks do not establish runtime readiness. Ayni inspection,
-runtime production and live GitHub qualification remain outstanding.
+Its source-access checks do not establish runtime readiness. Static Ayni inspection now freezes an exact commit and validates policy, lock,
+locked input digests and public trust requirements using pinned Ayni APIs. Full
+adapter discovery, registry/certificate setup, trust-change PRs, runtime production
+and live GitHub qualification remain outstanding.
 
 Deliver shared repository integration, Ayni inspection, verified runtime images
 and project selection before expanding product analytics or event inputs. Build
