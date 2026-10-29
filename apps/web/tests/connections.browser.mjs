@@ -16,7 +16,7 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
  const port=await freePort();const origin=`http://127.0.0.1:${port}`;
  const production=process.env.AYNI_PRODUCT_PRODUCTION==='1';
  const child=production
-  ?spawn('node',['apps/web/build/index.js'],{stdio:'ignore',env:{...process.env,HOST:'127.0.0.1',PORT:String(port),ORIGIN:origin},detached:true})
+  ?spawn('node',['apps/web/build/index.js'],{stdio:'ignore',env:{...process.env,HOST:'127.0.0.1',PORT:String(port)},detached:true})
   :spawn('pnpm',['--dir','apps/web','exec','vite','dev','--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:'ignore',env:process.env,detached:true});
  let browser;
  try {
