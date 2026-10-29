@@ -20,7 +20,7 @@ test('the application itself retains browser state through component and theme C
  let child,browser;
  try {
   fixture.listen(0,'127.0.0.1');await once(fixture,'listening');
-  for(const name of ['src','static','package.json','svelte.config.js','vite.config.js','tsconfig.json'])await cp(join(app,name),join(directory,name),{recursive:true});
+  for(const name of ['src','static','package.json','vite.config.js','tsconfig.json'])await cp(join(app,name),join(directory,name),{recursive:true});
   await symlink(join(app,'node_modules'),join(directory,'node_modules'),'dir');
   const port=await freePort();const origin=`http://127.0.0.1:${port}`;
   child=spawn(resolve(app,'node_modules/.bin/vite'),['dev','--host','127.0.0.1','--port',String(port),'--strictPort'],{cwd:directory,stdio:'ignore',detached:true,env:{...process.env,AYNI_ORCHESTRATOR_LIVE_GATEWAY_PORT:String(fixture.address().port)}});
