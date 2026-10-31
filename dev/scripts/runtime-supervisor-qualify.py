@@ -63,12 +63,12 @@ class Qualification:
         self.forward = None
         self.created = False
         self.evidence = {'schema_version': 1, 'qualification': 'real-supervisor-cleanup-restart',
-            'context': 'docker-desktop', 'namespace': self.namespace, 'worker_image': args.worker_image,
+            'context': args.context, 'namespace': self.namespace, 'worker_image': args.worker_image,
             'authority': 'synthetic-memory-only', 'control_plane_admission_qualified': False,
             'chart_deployment_qualified': False, 'namespace_cleaned': False}
 
     def kube(self, *args, value=None):
-        result = subprocess.run(['kubectl', '--context', 'docker-desktop', '-n', self.namespace, *args],
+        result = subprocess.run(['kubectl', '--context', self.args.context, '-n', self.namespace, *args],
             input=json.dumps(value) if value is not None else None, text=True, capture_output=True, timeout=90)
         if result.returncode:
             raise RuntimeError('kubectl_' + args[0] + '_failed')
@@ -102,7 +102,7 @@ class Qualification:
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0))
             self.port = sock.getsockname()[1]
-        self.forward = subprocess.Popen(['kubectl', '--context', 'docker-desktop', '-n', self.namespace,
+        self.forward = subprocess.Popen(['kubectl', '--context', self.args.context, '-n', self.namespace,
             'port-forward', 'pod/authority', str(self.port) + ':8080'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(40):
             try:
@@ -268,6 +268,8 @@ def self_test():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--worker-image', default=DEFAULT_IMAGE)
+    parser.add_argument('--context', default=os.environ.get('AYNI_RUNTIME_KUBE_CONTEXT', 'docker-desktop'),
+        choices=('docker-desktop', 'kind-ayni-runtime-qualification'))
     parser.add_argument('--evidence', default='/tmp/ayni-runtime-supervisor-qualification.json')
     parser.add_argument('--self-test', action='store_true')
     args = parser.parse_args()
@@ -276,6 +278,8 @@ def main():
         return
     if not re.fullmatch(r'local/ayni-runtime-worker@sha256:[a-f0-9]{64}', args.worker_image):
         raise SystemExit('immutable_local_worker_image_required')
+    if args.context == 'kind-ayni-runtime-qualification' and os.environ.get('KUBECONFIG') != '/tmp/ayni-runtime-cluster/kubeconfig':
+        raise SystemExit('qualification_cluster_requires_exact_dedicated_kubeconfig')
     qualification = Qualification(args)
     try:
         qualification.setup()

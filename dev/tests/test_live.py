@@ -60,6 +60,12 @@ class LiveTests(unittest.TestCase):
                 with live.exclusive(self.path.parent):
                     self.fail('second owner acquired the lock')
 
+    def test_cluster_state_is_separate_and_desktop_retains_its_existing_path(self):
+        selected = 'ayni-orchestrator-runtime-qualification'
+        self.assertEqual(live.state_directory('docker-desktop', selected), live.ROOT / '.local/live' / selected)
+        self.assertEqual(live.state_directory('kind-ayni-runtime-qualification', selected), live.ROOT / '.local/live/kind-ayni-runtime-qualification' / selected)
+        self.assertNotEqual(live.state_directory('docker-desktop', selected), live.state_directory('kind-ayni-runtime-qualification', selected))
+
     def test_file_content_and_deletion_change_identity(self):
         source = self.path.parent / 'source.rs'
         with patch.object(live, 'ROOT', self.path.parent):

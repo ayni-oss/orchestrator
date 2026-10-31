@@ -23,6 +23,8 @@ publication, independent content/managed compatibility checks and recoverable hi
 It requires an explicitly qualified deployment profile and configured registry/signer.
 The current Docker Desktop profile remains disabled because its network policies
 failed the actual enforcement check; Node stage and supervisor lifecycle checks passed.
+The separate Cilium development cluster passes the complete Node component and
+supervisor lifecycle gates, and serves a fresh runtime-enabled UI on port 5175.
 Project-plan/task selection of verified runtimes is the next slice; current task
 source preparation still uses the trusted local helper. Full task-delivery screens remain planned.
 

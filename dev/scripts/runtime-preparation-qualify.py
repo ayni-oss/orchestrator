@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run real isolated runtime stages on a disposable Desktop namespace.
+"""Run real isolated runtime stages on an explicit local cluster's owned namespace.
 
 This is component qualification, not real GitHub/GHCR or control-plane admission.
 Only synthetic fixtures and uniquely owned pods/PVCs/Secrets are used.
@@ -37,6 +37,14 @@ def sha(data):
 class Qualification:
     def __init__(self, args):
         self.args = args
+        targets = {'docker-desktop': ('desktop-control-plane', 'desktop'),
+            'kind-ayni-runtime-qualification': ('ayni-runtime-qualification-control-plane', 'ayni-runtime-qualification')}
+        self.context = args.context
+        self.node, self.cluster = targets[self.context]
+        if args.kubeconfig:
+            os.environ['KUBECONFIG'] = str(Path(args.kubeconfig).resolve())
+        elif self.context != 'docker-desktop':
+            raise RuntimeError('dedicated_context_requires_explicit_kubeconfig')
         self.namespace = 'ayni-runtime-qual-' + uuid.uuid4().hex[:10]
         self.operation = str(uuid.uuid4())
         self.directory = Path(tempfile.mkdtemp(prefix='ayni-runtime-qual-'))
@@ -52,7 +60,7 @@ class Qualification:
         self.owned = {'ayni.build/qualification': self.namespace}
 
     def kube(self, *args, body=None):
-        command = ['kubectl', '--context', 'docker-desktop', '-n', self.namespace, *args]
+        command = ['kubectl', '--context', self.context, '-n', self.namespace, *args]
         return run(command, input=json.dumps(body) if body else None)
 
     def apply(self, value):
@@ -82,8 +90,8 @@ class Qualification:
 
     def setup(self):
         self.headroom()
-        node = self.docker('inspect', 'desktop-control-plane', '--format', '{{index .Config.Labels "io.x-k8s.kind.cluster"}} {{index .Config.Labels "io.x-k8s.kind.role"}}').strip()
-        if node != 'desktop control-plane':
+        node = self.docker('inspect', self.node, '--format', '{{index .Config.Labels "io.x-k8s.kind.cluster"}} {{index .Config.Labels "io.x-k8s.kind.role"}}').strip()
+        if node != self.cluster + ' control-plane':
             raise RuntimeError('Docker_Desktop_node_identity_mismatch')
         self.kube('create', '-f', '-', body={'apiVersion': 'v1', 'kind': 'Namespace', 'metadata': {'name': self.namespace, 'labels': self.owned}})
         self.created_namespace = True
@@ -110,7 +118,7 @@ class Qualification:
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0))
             self.port = sock.getsockname()[1]
-        self.forward = subprocess.Popen(['kubectl', '--context', 'docker-desktop', '-n', self.namespace,
+        self.forward = subprocess.Popen(['kubectl', '--context', self.context, '-n', self.namespace,
             'port-forward', 'pod/authority', str(self.port) + ':8080'], stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL)
         for _ in range(30):
@@ -379,7 +387,7 @@ PYJSON
         self.apply(self.pod('load-baseline', 'candidate', [], ['/bin/sh', '-ec', 'mkdir -p /outputs/layout; exec sleep 300']))
         self.kube('wait', '--for=condition=Ready', 'pod/load-baseline', '--timeout=90s')
         with archive_path.open('rb') as source:
-            subprocess.run(['kubectl', '--context', 'docker-desktop', '-n', self.namespace,
+            subprocess.run(['kubectl', '--context', self.context, '-n', self.namespace,
                 'exec', '-i', 'load-baseline', '--', 'tar', '--no-same-owner', '-C', '/outputs/layout', '-xf', '-'],
                 stdin=source, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         self.kube('delete', 'pod', 'load-baseline', '--wait=true')
@@ -412,7 +420,7 @@ PYJSON
         lower, count = int(mapping[1]), int(mapping[2])
         observed = []
         for _ in range(60):
-            rows = self.docker('exec', 'desktop-control-plane', 'ps', '-eo', 'pid,uid,comm').splitlines()[1:]
+            rows = self.docker('exec', self.node, 'ps', '-eo', 'pid,uid,comm').splitlines()[1:]
             # Desktop's procps renders high user-namespace UIDs as signed i32.
             observed = [row for row in rows if lower <= (int(row.split()[1]) & 0xffffffff) < lower + count]
             if any(row.split()[-1] == 'conmon' for row in observed) and any(row.split()[-1] == 'sleep' for row in observed):
@@ -423,14 +431,14 @@ PYJSON
             (self.directory / 'cancel-builder.log').write_text(self.kube('logs', 'cancel-builder'))
             raise RuntimeError('nested_cancellation_probe_did_not_start')
         self.kube('delete', 'pod', 'cancel-builder', '--wait=true', '--timeout=60s')
-        rows = self.docker('exec', 'desktop-control-plane', 'ps', '-eo', 'pid,uid,comm').splitlines()[1:]
+        rows = self.docker('exec', self.node, 'ps', '-eo', 'pid,uid,comm').splitlines()[1:]
         retained = [row for row in rows if lower <= (int(row.split()[1]) & 0xffffffff) < lower + count]
         if retained:
             raise RuntimeError('nested_cancellation_process_retained')
         path = '/var/lib/kubelet/pods/' + uid + '/volumes/kubernetes.io~empty-dir/scratch'
         for _ in range(20):
             try:
-                self.docker('exec', 'desktop-control-plane', 'sh', '-c', 'test ! -e "$1"', 'sh', path)
+                self.docker('exec', self.node, 'sh', '-c', 'test ! -e "$1"', 'sh', path)
                 break
             except subprocess.CalledProcessError:
                 time.sleep(1)
@@ -453,7 +461,7 @@ PYJSON
         self.kube('wait', '--for=condition=Ready', 'pod/export-final', '--timeout=90s')
         archive_path = self.directory / 'final.tar'
         with archive_path.open('wb') as output:
-            subprocess.run(['kubectl', '--context', 'docker-desktop', '-n', self.namespace, 'exec',
+            subprocess.run(['kubectl', '--context', self.context, '-n', self.namespace, 'exec',
                 'export-final', '--', 'tar', '-C', '/inputs/final/layout', '-cf', '-', '.'],
                 check=True, stdout=output, stderr=subprocess.PIPE)
         self.kube('delete', 'pod', 'export-final', '--wait=true')
@@ -535,12 +543,12 @@ PYJSON
             'DOCKER_HOST': 'unix://' + str(Path.home() / '.docker/run/docker.sock')}
         env.pop('DOCKER_CONTEXT', None)
         with archive_path.open('rb') as source:
-            subprocess.run(['docker', 'exec', '-i', 'desktop-control-plane', 'ctr', '--namespace',
+            subprocess.run(['docker', 'exec', '-i', self.node, 'ctr', '--namespace',
                 'k8s.io', 'images', 'import', '--platform', 'linux/arm64', '-'], stdin=source,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, env=env)
         self.imported_images.append(tag)
         immutable = 'docker.io/local/' + self.namespace + '@' + digest
-        self.docker('exec', 'desktop-control-plane', 'ctr', '--namespace', 'k8s.io', 'images', 'tag', tag, immutable)
+        self.docker('exec', self.node, 'ctr', '--namespace', 'k8s.io', 'images', 'tag', tag, immutable)
         self.imported_images.append(immutable)
         return immutable
 
@@ -711,7 +719,7 @@ PYJSON
             if owner == self.namespace:
                 self.docker('rm', '-f', '-v', self.registry_name)
         for image in self.imported_images:
-            self.docker('exec', 'desktop-control-plane', 'ctr', '--namespace', 'k8s.io', 'images', 'remove', image)
+            self.docker('exec', self.node, 'ctr', '--namespace', 'k8s.io', 'images', 'remove', image)
         if self.created_namespace:
             self.kube('delete', 'namespace', self.namespace, '--wait=true', '--timeout=90s')
         (self.directory / 'private.pem').unlink(missing_ok=True)
@@ -722,10 +730,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ['worker-image', 'probe-image', 'cli', 'mise', 'docker-config']:
         parser.add_argument('--' + name, required=True)
+    parser.add_argument('--context', choices=['docker-desktop', 'kind-ayni-runtime-qualification'], default='docker-desktop')
+    parser.add_argument('--kubeconfig', help='Explicit dedicated kubeconfig; required for the separate qualification cluster')
     parser.add_argument('--diagnose-quality', action='store_true', help='Observe bounded stderr only for these synthetic fixtures; no production pod changes')
     parser.add_argument('--reuse-public-evidence', help='Reprobe the retained public OCI/source only; this does not rerun build/certification')
     parser.add_argument('--probes-only', action='store_true', help='Reprobe public baseline without repeating worker freeze, wrong-signer or cancellation checks')
     parser.add_argument('--network-only', action='store_true', help='Test actual candidate network-policy enforcement using a retained public baseline')
+    parser.add_argument('--engine-only', action='store_true', help='Test actual nested rootless execution and cancellation cleanup only')
     parser.add_argument('--registry-denial-only', action='store_true', help='Read-only real GHCR denial with deliberately invalid synthetic credentials; never publishes')
     parser.add_argument('--cli-sha256', default='3b69c9da769daa0a36f42163870101daeca2ef227a90bb208d69dda476294949')
     parser.add_argument('--executor-image', default='ghcr.io/ayni-oss/ayni-builder@sha256:663a4af8c4e2b5a0b11f2c4333e4b6a0c5600dc7b3e73e5f05b09ffa7e9094e1')
@@ -738,16 +749,31 @@ def main():
     q = Qualification(args)
     print('namespace=' + q.namespace, flush=True)
     summary = {'kind': 'runtime_component_qualification', 'namespace': q.namespace,
+        'context': q.context, 'cluster': q.cluster, 'node': q.node,
         'worker_image': args.worker_image, 'probe_image': args.probe_image, 'passed': False,
         'excluded': ['control_plane_admission', 'github_acquisition', 'ghcr_publication', 'supervisor_restart', 'production_stage_authority_fencing']}
     try:
         q.setup()
+        summary['node_image'] = q.docker('inspect', q.node, '--format', '{{.Config.Image}}').strip()
+        node_info = json.loads(q.kube('get', 'node', q.node, '-o', 'json'))['status']['nodeInfo']
+        summary['node_runtime'] = {key: node_info[key] for key in ['architecture', 'operatingSystem',
+            'osImage', 'kernelVersion', 'containerRuntimeVersion', 'kubeletVersion']}
+        if q.context == 'kind-ayni-runtime-qualification':
+            summary['cilium_image'] = q.kube('get', 'daemonset', 'cilium', '-n', 'kube-system',
+                '-o', 'jsonpath={.spec.template.spec.containers[0].image}')
+            for name in ['kind', 'cilium']:
+                summary[name + '_config_sha256'] = sha((ROOT / ('dev/fixtures/runtime-preparation/cluster/' + name + '.yaml')).read_bytes())
         q.make_source()
         if args.registry_denial_only:
             q.registry_denial()
             summary['passed'] = True
             summary['covered'] = ['real_worker_ghcr_access_denied']
             print('REGISTRY_DENIAL_QUALIFICATION_PASSED', flush=True)
+            return
+        if args.engine_only:
+            q.cancellation()
+            summary['passed'] = True
+            summary['covered'] = ['nested_rootless_execution', 'nested_cancellation_cleanup']
             return
         if args.network_only:
             if not args.reuse_public_evidence:

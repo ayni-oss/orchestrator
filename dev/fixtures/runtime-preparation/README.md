@@ -1,11 +1,13 @@
 # Runtime component qualification
 
-`dev/scripts/runtime-preparation-qualify.py` exercises actual worker binaries and independent static probes in a uniquely created Docker Desktop Kubernetes namespace. It creates only disposable fixture pods, PVCs, ConfigMaps and synthetic Secrets, then removes its namespace and imported candidate image aliases. It uses an empty Docker configuration and the current user's explicit Desktop socket. It does not use saved provider connections.
+`dev/scripts/runtime-preparation-qualify.py` exercises actual worker binaries and independent static probes in a uniquely created namespace on an explicit local cluster. Docker Desktop is the default; the separate policy-enforcing cluster requires `--context kind-ayni-runtime-qualification --kubeconfig /absolute/state/kubeconfig`. Only those targets are accepted, with exact Docker node identity checks. It creates only disposable fixture pods, PVCs, ConfigMaps and synthetic Secrets, then removes its namespace and imported candidate image aliases. It uses an empty Docker configuration and the current user's explicit Desktop socket. It does not use saved provider connections. See the [separate cluster setup](cluster/README.md).
 
 Build and import the local worker/probe images first with `dev/scripts/runtime-preparation-images.sh`. Supply the reviewed Linux arm64 Ayni CLI and its SHA256 explicitly. Then run:
 
 ```sh
 python3 dev/scripts/runtime-preparation-qualify.py \
+  --context kind-ayni-runtime-qualification \
+  --kubeconfig /tmp/ayni-runtime-cluster/kubeconfig \
   --worker-image local/ayni-runtime-worker:<tag> \
   --probe-image local/ayni-runtime-probes:<tag> \
   --cli /absolute/path/to/ayni-linux-arm64 \
@@ -21,4 +23,4 @@ The final log prints an evidence directory containing `gate.json`, safe stage re
 
 `--registry-denial-only --reuse-public-evidence <directory>` invokes the real worker's read-only GHCR discovery transport using deliberately invalid synthetic credentials. It requires an `unavailable` report with `registry_access_denied`. It neither reads a real credential nor publishes an image.
 
-These are component checks. They do not establish real GitHub acquisition, production control-plane admission, live GHCR publication or supervisor restart/authority fencing. The deployment remains disabled until its separate acceptance gates pass. Arbitrary Rust repositories have not been qualified within the tested eight GiB builder allowance.
+These are component checks. They do not establish real GitHub acquisition, production control-plane admission, live GHCR publication or supervisor restart/authority fencing. The default Desktop runtime remains disabled because its policy negative failed. The separate Kubernetes 1.36.4/Cilium 1.20.4 cluster passed the complete fresh Node component pipeline, all listed negative checks, and the independent supervisor restart/cleanup fixture. A public cold CRI GHCR pull and real-worker invalid-credential GHCR denial also passed there. Only that measured local profile is enabled for operator/UI acceptance; real provider acquisition and private publication remain untested by this fixture. Arbitrary Rust repositories have not been qualified within the tested eight GiB builder allowance.

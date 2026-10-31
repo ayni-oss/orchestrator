@@ -9,6 +9,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 MODULE = Path(__file__).resolve().parents[1] / 'lib/gateway.py'
 spec = importlib.util.spec_from_file_location('gateway', MODULE)
@@ -17,6 +18,18 @@ spec.loader.exec_module(gateway)
 
 
 class GatewayTests(unittest.TestCase):
+    def test_gateway_context_and_namespace_cannot_fall_back_to_desktop(self):
+        env = dict(AYNI_ORCHESTRATOR_CONTEXT='kind-ayni-runtime-qualification',
+            KUBECONFIG='/tmp/ayni-runtime-cluster/kubeconfig',
+            AYNI_ORCHESTRATOR_NAMESPACE='ayni-orchestrator-runtime-qualification')
+        with patch.dict(gateway.os.environ, env, clear=True):
+            self.assertEqual(gateway.kubectl_command(env['AYNI_ORCHESTRATOR_NAMESPACE']),
+                ['kubectl', '--context', env['AYNI_ORCHESTRATOR_CONTEXT'], '--namespace', env['AYNI_ORCHESTRATOR_NAMESPACE']])
+            with self.assertRaises(ValueError):
+                gateway.kubectl_command('ayni-orchestrator-live')
+        with patch.dict(gateway.os.environ, env | {'KUBECONFIG': '/tmp/other'}, clear=True), self.assertRaises(ValueError):
+            gateway.kubectl_command(env['AYNI_ORCHESTRATOR_NAMESPACE'])
+
     def test_ready_selection_excludes_terminating_and_unready_pods(self):
         def pod(name, timestamp, ready='True', deleting=False):
             metadata = {'name': name, 'creationTimestamp': timestamp}
@@ -39,7 +52,9 @@ class GatewayTests(unittest.TestCase):
             kubectl.write_text(f'''#!{sys.executable}
 import json, os, pathlib, sys, time
 root = pathlib.Path({directory!r})
-if 'get' in sys.argv:
+if 'current-context' in sys.argv:
+    print('docker-desktop')
+elif 'get' in sys.argv:
     print(json.dumps({{'items': [{{'metadata': {{'name': 'control', 'creationTimestamp': '1'}}, 'status': {{'conditions': [{{'type': 'Ready', 'status': 'True'}}]}}}}]}}))
 else:
     with (root / 'record').open('a') as out: out.write('forward\\n')
@@ -63,7 +78,7 @@ time.sleep(30)
 ''')
             kubectl.chmod(0o755)
             binary.chmod(0o755)
-            environment = dict(os.environ, PATH=f'{directory}:{os.environ["PATH"]}')
+            environment = dict(os.environ, PATH=f'{directory}:{os.environ["PATH"]}', AYNI_ORCHESTRATOR_CONTEXT='docker-desktop')
             process = subprocess.Popen([sys.executable, str(MODULE), 'ayni-orchestrator-test', str(binary)],
                                        env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:

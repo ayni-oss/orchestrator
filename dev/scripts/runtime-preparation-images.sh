@@ -11,7 +11,6 @@ cli_digest="${2#sha256:}"
 [[ -f "$cli_path" ]] || { echo "CLI artifact unavailable" >&2; exit 2; }
 DEV_REPOSITORY_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 export DEV_REPOSITORY_ROOT
-source "$DEV_REPOSITORY_ROOT/dev/lib/images.sh"
 context="$(mktemp -d "${TMPDIR:-/tmp}/ayni-runtime-images.XXXXXX")"
 build_pid=""
 cleanup() {
@@ -24,6 +23,18 @@ mkdir "$context/docker-config"
 printf '%s\n' '{"auths":{},"cliPluginsExtraDirs":["/Applications/Docker.app/Contents/Resources/cli-plugins"]}' > "$context/docker-config/config.json"
 unset DOCKER_CONTEXT
 export DOCKER_CONFIG="$context/docker-config" DOCKER_HOST="unix://${HOME}/.docker/run/docker.sock"
+case "${AYNI_RUNTIME_KUBE_CONTEXT:-docker-desktop}" in
+  docker-desktop) node_name=desktop-control-plane; cluster_name=desktop ;;
+  kind-ayni-runtime-qualification) node_name=ayni-runtime-qualification-control-plane; cluster_name=ayni-runtime-qualification ;;
+  *) echo "unsupported explicit runtime cluster context" >&2; exit 2 ;;
+esac
+load_runtime_image() {
+  local reference="$1" labels
+  labels="$(docker inspect "$node_name" --format '{{index .Config.Labels "io.x-k8s.kind.cluster"}} {{index .Config.Labels "io.x-k8s.kind.role"}}')"
+  [[ "$labels" == "$cluster_name control-plane" ]] || { echo "runtime node identity mismatch" >&2; return 1; }
+  docker save --platform linux/arm64 "$reference" \
+    | docker exec -i "$node_name" ctr --namespace k8s.io images import --platform linux/arm64 - >&2
+}
 # Ten GiB is a conservative cancellation threshold, preserving eight GiB while
 # BuildKit responds to cancellation. This is a host guard, not a workload quota.
 headroom() {
@@ -68,17 +79,17 @@ for kind in worker probes; do
   [[ "$kind" != probes ]] || dockerfile="$dockerfile.probes"
   image="local/ayni-runtime-$kind:qualification-$(date +%s)-$$"
   guarded docker build --platform linux/arm64 --file "$dockerfile" --build-arg "AYNI_CLI_SHA256=$cli_digest" --tag "$image" "$context"
-  dev_load_image "$image"
-  node_manifest="$(docker exec desktop-control-plane ctr --namespace k8s.io images list | awk -v reference="docker.io/$image" '$1 == reference { print $3 }')"
+  load_runtime_image "$image"
+  node_manifest="$(docker exec "$node_name" ctr --namespace k8s.io images list | awk -v reference="docker.io/$image" '$1 == reference { print $3 }')"
   [[ "$node_manifest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "imported node manifest unavailable" >&2; exit 2; }
   immutable="docker.io/${image%:*}@$node_manifest"
-  existing_manifest="$(docker exec desktop-control-plane ctr --namespace k8s.io images list | awk -v reference="$immutable" '$1 == reference { print $3 }')"
+  existing_manifest="$(docker exec "$node_name" ctr --namespace k8s.io images list | awk -v reference="$immutable" '$1 == reference { print $3 }')"
   if [[ -n "$existing_manifest" && "$existing_manifest" != "$node_manifest" ]]; then
     echo "immutable node alias conflicts with imported manifest" >&2
     exit 2
   fi
   if [[ -z "$existing_manifest" ]]; then
-    docker exec desktop-control-plane ctr --namespace k8s.io images tag "docker.io/$image" "$immutable" >/dev/null
+    docker exec "$node_name" ctr --namespace k8s.io images tag "docker.io/$image" "$immutable" >/dev/null
   fi
   echo "$kind=$image"
   echo "${kind}_immutable=$immutable"

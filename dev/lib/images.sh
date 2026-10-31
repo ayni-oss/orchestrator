@@ -56,23 +56,26 @@ dev_build_image() {
   printf '%s\n' "$image_ref"
 }
 
-# Import a host image into Docker Desktop Kubernetes' containerd store.
+# Import a host image into the explicitly selected local node's containerd store.
 dev_load_image() {
   local image_ref="${1:?image reference is required}"
-  local node_name=desktop-control-plane runtime_image_ref="docker.io/$image_ref"
-  local node_id node_labels platform
-  node_id="$(docker inspect "$node_name" --format '{{.Id}}')"
-  node_labels="$(docker inspect "$node_name" --format '{{index .Config.Labels "io.x-k8s.kind.cluster"}} {{index .Config.Labels "io.x-k8s.kind.role"}}')"
-  if [[ "$node_labels" != "desktop control-plane" ]]; then
-    echo "Docker Desktop node $node_name is not the expected kind control-plane node" >&2
+  local runtime_image_ref="docker.io/$image_ref"
+  local node_name expected_cluster node_id node_labels platform
+  dev_context >/dev/null || return
+  node_name="$(dev_node_name)" || return
+  expected_cluster="$(dev_node_cluster)" || return
+  node_id="$(docker inspect "$node_name" --format '{{.Id}}')" || return
+  node_labels="$(docker inspect "$node_name" --format '{{index .Config.Labels "io.x-k8s.kind.cluster"}} {{index .Config.Labels "io.x-k8s.kind.role"}}')" || return
+  if [[ "$node_labels" != "$expected_cluster control-plane" ]]; then
+    echo "Local node $node_name is not the selected kind control-plane node" >&2
     return 1
   fi
-  platform="$(docker image inspect "$image_ref" --format '{{.Os}}/{{.Architecture}}')"
+  platform="$(docker image inspect "$image_ref" --format '{{.Os}}/{{.Architecture}}')" || return
   docker save --platform "$platform" "$image_ref" \
-    | docker exec -i "$node_id" ctr --namespace k8s.io images import --platform "$platform" - >&2
+    | docker exec -i "$node_id" ctr --namespace k8s.io images import --platform "$platform" - >&2 || return
   docker exec "$node_id" ctr --namespace k8s.io images list --quiet \
     | grep -Fxq "$runtime_image_ref" || {
-      echo "Docker Desktop node did not retain image $image_ref" >&2
+      echo "Selected local node did not retain image $image_ref" >&2
       return 1
     }
   echo "loaded image=$image_ref node=$node_name" >&2
@@ -80,6 +83,12 @@ dev_load_image() {
 
 # Remove only obsolete tags for one project workload, never caches or volumes.
 dev_prune_images() (
+  local context
+  context="$(dev_context)" || return
+  if [[ "$context" != docker-desktop ]]; then
+    echo 'parallel runtime qualification skips automatic image pruning' >&2
+    return 0
+  fi
   local component="${1:?component is required}"
   local current_image_ref="${2:?current image is required}"
   local repository

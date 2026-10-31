@@ -7,8 +7,12 @@ from pathlib import Path
 import re
 import signal
 import subprocess
+import sys
 import tempfile
 import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from local_context import QUALIFICATION_CONTEXT, QUALIFICATION_NAMESPACE, checked_context, selected_context
 
 STOP = False
 
@@ -42,8 +46,15 @@ def ready_pod(document):
     return max(pods, key=lambda pod: pod['metadata']['creationTimestamp'])['metadata']['name']
 
 
+def kubectl_command(namespace):
+    context = selected_context()
+    if context == QUALIFICATION_CONTEXT and namespace != QUALIFICATION_NAMESPACE:
+        raise ValueError('Gateway namespace must match the isolated qualification environment')
+    return ['kubectl', '--context', context, '--namespace', namespace]
+
+
 def run(namespace, binary, port=3000):
-    kubectl = ['kubectl', '--context', 'docker-desktop', '--namespace', namespace]
+    kubectl = kubectl_command(namespace)
     while not STOP:
         forward = gateway = None
         try:
@@ -97,6 +108,7 @@ def main():
     args = parser.parse_args()
     if not re.fullmatch(r'[a-z0-9]([-a-z0-9]*[a-z0-9])?', args.namespace) or len(args.namespace) > 54:
         parser.error('Invalid local namespace')
+    checked_context()
     signal.signal(signal.SIGINT, stop_requested)
     signal.signal(signal.SIGTERM, stop_requested)
     port = int(os.environ.get('AYNI_ORCHESTRATOR_LIVE_GATEWAY_PORT', '3000'))

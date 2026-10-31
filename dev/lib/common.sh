@@ -5,15 +5,17 @@ readonly DEV_REPOSITORY_ROOT="$(cd "$DEV_DIRECTORY/.." && pwd)"
 readonly DEV_CHART="$DEV_DIRECTORY/charts/ayni-orchestrator-local"
 readonly DEV_RELEASE_NAME="ayni-orchestrator"
 
-# Print the only Kubernetes context supported by local tooling.
+# Validate an explicit supported local context without changing global configuration.
 dev_context() {
-  local context
-  context="$(kubectl config current-context)"
-  if [[ "$context" != docker-desktop ]]; then
-    echo "refusing to operate on Kubernetes context '$context'; switch to docker-desktop explicitly" >&2
-    return 1
-  fi
-  printf '%s\n' "$context"
+  python3 "$DEV_DIRECTORY/lib/local_context.py" check
+}
+
+dev_node_name() {
+  python3 "$DEV_DIRECTORY/lib/local_context.py" node
+}
+
+dev_node_cluster() {
+  python3 "$DEV_DIRECTORY/lib/local_context.py" cluster
 }
 
 # Print the bounded namespace selected for this local environment.
@@ -58,15 +60,21 @@ dev_check_capacity() {
       return 1
     fi
   done
-  node_id="$(docker inspect desktop-control-plane --format '{{.Id}}')"
+  dev_context >/dev/null || return
+  local node_name node_labels expected_cluster
+  node_name="$(dev_node_name)" || return
+  expected_cluster="$(dev_node_cluster)" || return
+  node_labels="$(docker inspect "$node_name" --format '{{index .Config.Labels "io.x-k8s.kind.cluster"}} {{index .Config.Labels "io.x-k8s.kind.role"}}')" || return
+  [[ "$node_labels" == "$expected_cluster control-plane" ]] || { echo 'local node identity mismatch' >&2; return 1; }
+  node_id="$(docker inspect "$node_name" --format '{{.Id}}')" || return
   available_kib="$(docker exec "$node_id" df -Pk /var | awk 'NR==2 {print $4}')"
   if (( available_kib < required_kib )); then
-    printf 'Docker Desktop has less than %s GiB free; refusing a build/deploy that could strand managed Jobs\n' "$minimum_gib" >&2
+    printf 'Selected local node has less than %s GiB free; refusing a build/deploy that could strand managed Jobs\n' "$minimum_gib" >&2
     docker exec "$node_id" df -h /var >&2
     echo 'Expand Docker Desktop storage or explicitly remove unused project images/build cache; never prune PVC volumes implicitly.' >&2
     return 1
   fi
-  printf 'Docker Desktop capacity check passed: %s GiB minimum\n' "$minimum_gib" >&2
+  printf 'Selected local node capacity check passed: %s GiB minimum\n' "$minimum_gib" >&2
 }
 
 # A StatefulSet rename also changes generated PVC names. Refuse an implicit

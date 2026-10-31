@@ -551,3 +551,20 @@ configuration and stores. Test the authority and browser journey separately with
 `AYNI_REPOSITORIES_ONLY=1 scripts/ci/check-workflow-postgres-feasibility.sh`.
 The test uses synthetic credentials and a disposable database; it does not prove
 live GitHub installation access.
+
+## Parallel runtime qualification UI
+
+The ordinary live environment keeps its Desktop context, data, ports and state directory. A separately authorized policy-enforcing cluster can host a fresh stack with these explicit settings:
+
+```sh
+export AYNI_ORCHESTRATOR_CONTEXT=kind-ayni-runtime-qualification
+export KUBECONFIG=/tmp/ayni-runtime-cluster/kubeconfig
+export AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-runtime-qualification
+export AYNI_ORCHESTRATOR_LIVE_UI_PORT=5175
+export AYNI_ORCHESTRATOR_LIVE_GATEWAY_PORT=3001
+dev/ctl live
+```
+
+Wait for that cluster's CNI health, network allow/deny checks and runtime qualification before deploying or enabling its preparation profile. The helper accepts only this exact context, kubeconfig and namespace combination; it never switches global context or falls back to Desktop. Image imports verify the selected node's kind cluster/role labels. The normal local chart creates fresh PostgreSQL, broker and internal authority credentials in the new namespace; existing Desktop credentials and user data are not copied. External connections must be configured independently in the new UI.
+
+The parallel watcher retains state under `.local/live/kind-ayni-runtime-qualification/ayni-orchestrator-runtime-qualification`; Desktop retains its existing `.local/live/<namespace>` path. Automatic image pruning is disabled for the parallel environment. The [supervisor lifecycle fixture](../../../dev/scripts/runtime-supervisor-qualify.py) also accepts `--context kind-ayni-runtime-qualification` with that dedicated kubeconfig and uses its own disposable namespace. Its synthetic authority does not qualify control-plane admission or the complete runtime profile.

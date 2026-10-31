@@ -155,7 +155,10 @@ Profile qualification and administrator signer provisioning remain deployment
 prerequisites. Connecting these verified artifacts to project plans/tasks is next.
 The local Node pipeline and supervisor restart/cleanup gates pass, but the tested
 Docker Desktop cluster does not enforce default-deny NetworkPolicy. Its runtime
-profile remains disabled pending a policy-enforcing deployment.
+profile remains disabled. A separate, explicitly selected Cilium cluster now passes
+the full native arm64 Node component pipeline, network enforcement and supervisor
+restart/cleanup gates. Its parallel development UI uses fresh configuration; live
+GitHub acquisition and private GHCR publication remain operator/UI acceptance.
 
 Deliver shared repository integration, Ayni inspection, verified runtime images
 and project selection before expanding product analytics or event inputs. Build

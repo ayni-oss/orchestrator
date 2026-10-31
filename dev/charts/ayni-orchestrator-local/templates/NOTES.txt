@@ -1,4 +1,9 @@
-The local PostgreSQL-authoritative Slice 3 stack is installed.
+The local PostgreSQL-authoritative development stack is installed.
+
+Run these commands from the checkout root, preserving the installation's
+KUBECONFIG, AYNI_ORCHESTRATOR_CONTEXT, AYNI_ORCHESTRATOR_NAMESPACE and live
+UI/gateway port settings. Validate the selected local context before diagnostics:
+  CONTEXT=$(python3 dev/lib/local_context.py check) || exit 1
 
 Verify dependencies and workloads:
   dev/ctl check
@@ -7,15 +12,15 @@ Run the message-to-scripted-response scenario:
   dev/ctl scenario
 
 Local JSON/SSE API adapter (no browser UI):
-  dev/ctl gateway
-  Open http://127.0.0.1:3000 while the command runs.
+  dev/ctl gateway "${AYNI_ORCHESTRATOR_LIVE_GATEWAY_PORT:-3000}"
+  Open http://127.0.0.1:${AYNI_ORCHESTRATOR_LIVE_GATEWAY_PORT:-3000} while the command runs.
 
 Health:
-  kubectl --context docker-desktop --namespace {{ .Release.Namespace }} port-forward service/control-plane 8080:8080
+  kubectl --context "$CONTEXT" --namespace {{ .Release.Namespace }} port-forward service/control-plane 8080:8080
 
 Trusted private-v1 diagnostics:
-  POD=$(kubectl --context docker-desktop --namespace {{ .Release.Namespace }} get pod -l app.kubernetes.io/name=ayni-orchestrator-control-plane -o jsonpath='{.items[0].metadata.name}')
-  kubectl --context docker-desktop --namespace {{ .Release.Namespace }} port-forward pod/$POD 50051:50051
+  POD=$(kubectl --context "$CONTEXT" --namespace {{ .Release.Namespace }} get pod -l app.kubernetes.io/name=ayni-orchestrator-control-plane -o jsonpath='{.items[0].metadata.name}')
+  kubectl --context "$CONTEXT" --namespace {{ .Release.Namespace }} port-forward pod/$POD 50051:50051
 
 PostgreSQL, JetStream, and executor-ledger PVCs are retained when the Helm
 release is removed. Use the explicit `dev/ctl purge` confirmation flow to
