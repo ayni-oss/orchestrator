@@ -300,7 +300,9 @@ dependencies = [
  "ayni-orchestrator-observability",
  "ayni-orchestrator-workflow-postgres",
  "base64 0.22.1",
+ "ed25519-dalek",
  "futures-util",
+ "getrandom 0.3.4",
  "http-body-util",
  "jsonwebtoken",
  "prost",
@@ -321,6 +323,7 @@ dependencies = [
  "tower",
  "tracing",
  "uuid",
+ "zeroize",
 ]
 
 [[package]]

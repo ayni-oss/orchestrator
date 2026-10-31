@@ -188,17 +188,25 @@ public signer references and a durable Kubernetes supervisor. See the
 requirements and recovery. A configured connection is a capability; successful
 publication/pull evidence comes only from actual execution.
 
-Runtime signing configuration stores a reviewed key ID/public key and the name
-and exact UID of an administrator-owned immutable Kubernetes Secret. The namespace
-belongs to deployment configuration. Configuration saves public metadata only.
-The supervisor checks Secret immutability/UID before and after certification;
-the independent certifier checks private/public key agreement before signing.
+Runtime signing supports deployment-gated server generation or raw Ed25519 seed
+import. Public durable setup intents retain idempotency, name, Key ID, mode and
+public identity. The service creates an immutable Kubernetes Secret and records
+its name and exact UID; PostgreSQL, receipts and browser storage contain no
+signing seed. Generated private keys are not returned to the browser. Import
+fields are cleared after submission. Lost responses recover the same setup;
+missing imported material requires re-entry of the same seed, not a replacement.
+
+The advanced editor also accepts an administrator-provisioned immutable Secret
+reference with the reserved `ayni-runtime-signer-` name prefix. The namespace
+belongs to deployment configuration. The supervisor checks Secret immutability
+and UID before and after certification; the independent certifier checks
+private/public key agreement before signing.
 
 Signer changes use exact command receipts and immutable public revisions. Rotation
 and enable/disable operations fence stale versions. Reads and lost-response
-recovery return public configuration only. PostgreSQL stores no signing seed.
-Initial administrator provisioning remains external, with the reserved
-`ayni-runtime-signer-` object-name prefix.
+recovery return public configuration only. Disabling signer setup or uninstalling
+Helm retains the signing namespace and keys. Disabling a signer prevents new use
+without deleting its key; permanent cleanup is a separate operator decision.
 
 Registry failures distinguish absence from access denial, rate limiting, outage,
 malformed data and unsupported platform. Manifest/config bytes must match their

@@ -1,5 +1,7 @@
 ayni-orchestrator:
   enabled: true
+  signerProvisioning:
+    enabled: true
   images:
     controlPlane: local/ayni-orchestrator-control-plane:replace-me
     conversationSupervisor: local/ayni-orchestrator-conversation-supervisor:replace-me

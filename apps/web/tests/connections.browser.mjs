@@ -124,6 +124,7 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   for(const secret of providerSecrets)assert.equal(await page.evaluate(secret=>[...Object.values(localStorage),...Object.values(sessionStorage)].some(value=>value.includes(secret)),secret),false);
   await page.goto(`${origin}/settings/runtime-signing`);
   await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
+  await page.getByRole('radio',{name:'Advanced: existing Secret reference'}).check();
   const signerName=`Runtime signer ${randomUUID()}`;
   await page.getByLabel('Name',{exact:true}).fill(signerName);
   await page.getByLabel('Key ID',{exact:true}).fill('fixture-runtime');

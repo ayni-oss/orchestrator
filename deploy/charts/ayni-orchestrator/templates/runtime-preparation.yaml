@@ -1,9 +1,6 @@
 {{- $runtimePreparation := .Values.runtimePreparation | default dict }}
 {{- if and .Values.enabled $runtimePreparation.enabled }}
-{{- $runtime := printf "%s-runtime" .Release.Namespace }}
-{{- if gt (len $runtime) 63 }}
-{{- $runtime = printf "%s-%s-runtime" (.Release.Namespace | trunc 45 | trimSuffix "-") (.Release.Namespace | sha256sum | trunc 8) }}
-{{- end }}
+{{- $runtime := include "ayni-orchestrator.runtimeNamespace" . }}
 {{- if not .Values.runtimePreparation.profile.qualified }}{{ fail "runtime preparation requires an explicitly qualified profile" }}{{ end }}
 {{- range $image := list .Values.runtimePreparation.profile.worker_image .Values.runtimePreparation.profile.executor_image .Values.runtimePreparation.profile.verifier_image }}
 {{- if not (regexMatch "@sha256:[a-f0-9]{64}$" $image) }}{{ fail "runtime preparation images must use immutable digests" }}{{ end }}
@@ -12,6 +9,8 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: {{ $runtime }}
+  annotations:
+    helm.sh/resource-policy: keep
   labels:
     # The builder needs unmasked proc and setuid helpers inside a user namespace.
     pod-security.kubernetes.io/enforce: privileged

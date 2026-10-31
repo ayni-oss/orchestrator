@@ -1,0 +1,46 @@
+{{- $provisioning := .Values.signerProvisioning | default dict }}
+{{- $runtimePreparation := .Values.runtimePreparation | default dict }}
+{{- if and .Values.enabled $provisioning.enabled }}
+{{- $runtime := include "ayni-orchestrator.runtimeNamespace" . }}
+{{- if not $runtimePreparation.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $runtime }}
+  annotations:
+    helm.sh/resource-policy: keep
+---
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: runtime-signer-provisioner
+  namespace: {{ .Release.Namespace }}
+automountServiceAccountToken: false
+---
+# Kubernetes cannot restrict Secret create by name prefix, and get authorizes a
+# full Secret read even though the application negotiates metadata responses only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: runtime-signer-provisioner
+  namespace: {{ $runtime }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create, get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: runtime-signer-provisioner
+  namespace: {{ $runtime }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: runtime-signer-provisioner
+subjects:
+  - kind: ServiceAccount
+    name: runtime-signer-provisioner
+    namespace: {{ .Release.Namespace }}
+{{- end }}

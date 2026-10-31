@@ -576,6 +576,18 @@ async fn runtime_preparation_rpc(
             retry_runtime_preparation,
             v1::RetryRuntimePreparationRequest
         ),
+        "ProvisionRuntimeSigner" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            provision_runtime_signer,
+            v1::ProvisionRuntimeSignerRequest
+        ),
+        "RecoverRuntimeSignerProvisioning" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            recover_runtime_signer_provisioning,
+            v1::RecoverRuntimeSignerProvisioningRequest
+        ),
         "SaveRuntimeSigner" => forward!(
             body,
             gateway.runtime_preparation(),

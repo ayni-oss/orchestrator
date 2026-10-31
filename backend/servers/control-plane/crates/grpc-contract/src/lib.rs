@@ -10,6 +10,13 @@ pub mod v1 {
     include!(concat!(env!("OUT_DIR"), "/ayni.orchestrator.v1.serde.rs"));
 }
 
+// Upload payloads never reveal private material through request diagnostics.
+impl std::fmt::Debug for v1::ProvisionRuntimeSignerRequest {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("ProvisionRuntimeSignerRequest { private_upload: [REDACTED] }")
+    }
+}
+
 pub use pbjson_types::Timestamp;
 
 /// Transport-level validation shared by the trusted workflow adapter.
@@ -39,7 +46,9 @@ mod tests {
         "ListRepositoryInspections",
     ];
 
-    const RUNTIME_PREPARATION_METHODS: [&str; 10] = [
+    const RUNTIME_PREPARATION_METHODS: [&str; 12] = [
+        "ProvisionRuntimeSigner",
+        "RecoverRuntimeSignerProvisioning",
         "SaveRuntimeSigner",
         "StartRuntimePreparation",
         "GetRuntimePreparation",

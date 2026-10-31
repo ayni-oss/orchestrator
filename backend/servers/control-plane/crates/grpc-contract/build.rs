@@ -36,6 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .join("ayni_orchestrator_v1_descriptor.bin");
 
     let mut prost = prost_build::Config::new();
+    prost.skip_debug([".ayni.orchestrator.v1.ProvisionRuntimeSignerRequest"]);
     prost
         .protoc_executable(protoc_bin_vendored::protoc_bin_path()?)
         .compile_well_known_types()

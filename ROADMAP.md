@@ -151,8 +151,10 @@ existing immutable artifacts, build, separate offline certification, publication
 readback, independent content/managed checks and cleanup. Registry permission and
 outage findings come from actual operations. The UI retains receipts and offers
 explicit cancellation/recovery; builds and replacement require separate grants.
-Profile qualification and administrator signer provisioning remain deployment
-prerequisites. Connecting these verified artifacts to project plans/tasks is next.
+Signer setup now supports generated/imported immutable keys, public metadata and
+recovery without retaining private material in browser storage. Committed repository
+trust remains explicit. Profile qualification and enabling signer setup remain
+deployment prerequisites; administrator-provisioned references remain supported. Connecting these verified artifacts to project plans/tasks is next.
 The local Node pipeline and supervisor restart/cleanup gates pass, but the tested
 Docker Desktop cluster does not enforce default-deny NetworkPolicy. Its runtime
 profile remains disabled. A separate, explicitly selected Cilium cluster now passes

@@ -1,6 +1,7 @@
 //! Public signer configuration; private material stays in administrator-owned Secrets.
 mod operations;
 mod profile;
+mod provisioning;
 use super::{RequestContext, WorkflowGrpc, v1};
 use ayni_orchestrator_workflow_postgres::store::runtime_signers::{SaveSigner, Signer};
 use std::collections::BTreeMap;
@@ -20,6 +21,29 @@ fn signer(value: Signer) -> v1::RuntimeSigner {
 }
 #[tonic::async_trait]
 impl v1::runtime_preparation_service_server::RuntimePreparationService for WorkflowGrpc {
+    async fn provision_runtime_signer(
+        &self,
+        request: Request<v1::ProvisionRuntimeSignerRequest>,
+    ) -> Result<Response<v1::ProvisionRuntimeSignerResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let result = provisioning::provision(&self.store, &context, request.into_inner()).await?;
+        Ok(context.response(result))
+    }
+    async fn recover_runtime_signer_provisioning(
+        &self,
+        request: Request<v1::RecoverRuntimeSignerProvisioningRequest>,
+    ) -> Result<Response<v1::RecoverRuntimeSignerProvisioningResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let result =
+            provisioning::recover(&self.store, &context, &request.into_inner().idempotency_key)
+                .await?;
+        Ok(
+            context.response(v1::RecoverRuntimeSignerProvisioningResponse {
+                operation: result.operation,
+                signer: result.signer,
+            }),
+        )
+    }
     async fn start_runtime_preparation(
         &self,
         request: Request<v1::StartRuntimePreparationRequest>,

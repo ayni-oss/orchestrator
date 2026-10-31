@@ -328,3 +328,5 @@ deployment = document(sys.argv[1], "task-publisher", "Deployment")
 assert 'value: "http://workflow-traces.test.svc:4318/v1/traces"' in deployment
 PYTHON
 done
+
+python3 "$repository_root/scripts/ci/check-signer-provisioning-chart.py"

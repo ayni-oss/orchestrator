@@ -3,6 +3,8 @@ package ayni.orchestrator.v1;
 
 // Trusted local-operator setup for separate runtime preparation capabilities.
 service RuntimePreparationService {
+  rpc ProvisionRuntimeSigner(ProvisionRuntimeSignerRequest) returns (ProvisionRuntimeSignerResponse);
+  rpc RecoverRuntimeSignerProvisioning(RecoverRuntimeSignerProvisioningRequest) returns (RecoverRuntimeSignerProvisioningResponse);
   rpc SaveRuntimeSigner(SaveRuntimeSignerRequest) returns (SaveRuntimeSignerResponse);
   rpc SetRuntimeSignerEnabled(SetRuntimeSignerEnabledRequest) returns (SetRuntimeSignerEnabledResponse);
   rpc ListRuntimeSigners(ListRuntimeSignersRequest) returns (ListRuntimeSignersResponse);
@@ -153,4 +155,40 @@ message RetryRuntimePreparationRequest {
 }
 message RetryRuntimePreparationResponse {
   RuntimePreparation operation = 1;
+}
+
+// Private seed is an upload only; responses and retained intents contain public identity.
+message ProvisionRuntimeSignerRequest {
+  string idempotency_key = 1;
+  string display_name = 2;
+  string key_id = 3;
+  string mode = 4;
+  string signing_seed = 5;
+}
+message RecoverRuntimeSignerProvisioningRequest {
+  string idempotency_key = 1;
+}
+message RuntimeSignerProvisioningOperation {
+  string id = 1;
+  string idempotency_key = 2;
+  string display_name = 3;
+  string key_id = 4;
+  string mode = 5;
+  string state = 6;
+  string safe_reason = 7;
+  string public_key = 8;
+  string secret_name = 9;
+  string secret_uid = 10;
+  string signer_id = 11;
+  uint64 accepted_at_unix_ms = 12;
+  uint64 updated_at_unix_ms = 13;
+}
+message ProvisionRuntimeSignerResponse {
+  RuntimeSignerProvisioningOperation operation = 1;
+  RuntimeSigner signer = 2;
+}
+
+message RecoverRuntimeSignerProvisioningResponse {
+  RuntimeSignerProvisioningOperation operation = 1;
+  RuntimeSigner signer = 2;
 }

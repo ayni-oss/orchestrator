@@ -180,6 +180,45 @@ export interface RetryRuntimePreparationResponse {
   operation?: RuntimePreparation | undefined;
 }
 
+/** Private seed is an upload only; responses and retained intents contain public identity. */
+export interface ProvisionRuntimeSignerRequest {
+  idempotencyKey: string;
+  displayName: string;
+  keyId: string;
+  mode: string;
+  signingSeed: string;
+}
+
+export interface RecoverRuntimeSignerProvisioningRequest {
+  idempotencyKey: string;
+}
+
+export interface RuntimeSignerProvisioningOperation {
+  id: string;
+  idempotencyKey: string;
+  displayName: string;
+  keyId: string;
+  mode: string;
+  state: string;
+  safeReason: string;
+  publicKey: string;
+  secretName: string;
+  secretUid: string;
+  signerId: string;
+  acceptedAtUnixMs: string;
+  updatedAtUnixMs: string;
+}
+
+export interface ProvisionRuntimeSignerResponse {
+  operation?: RuntimeSignerProvisioningOperation | undefined;
+  signer?: RuntimeSigner | undefined;
+}
+
+export interface RecoverRuntimeSignerProvisioningResponse {
+  operation?: RuntimeSignerProvisioningOperation | undefined;
+  signer?: RuntimeSigner | undefined;
+}
+
 function createBaseRuntimeSigner(): RuntimeSigner {
   return {
     id: "",
@@ -3167,9 +3206,749 @@ export const RetryRuntimePreparationResponse: MessageFns<RetryRuntimePreparation
   },
 };
 
+function createBaseProvisionRuntimeSignerRequest(): ProvisionRuntimeSignerRequest {
+  return { idempotencyKey: "", displayName: "", keyId: "", mode: "", signingSeed: "" };
+}
+
+export const ProvisionRuntimeSignerRequest: MessageFns<ProvisionRuntimeSignerRequest> = {
+  encode(message: ProvisionRuntimeSignerRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.displayName !== "") {
+      writer.uint32(18).string(message.displayName);
+    }
+    if (message.keyId !== "") {
+      writer.uint32(26).string(message.keyId);
+    }
+    if (message.mode !== "") {
+      writer.uint32(34).string(message.mode);
+    }
+    if (message.signingSeed !== "") {
+      writer.uint32(42).string(message.signingSeed);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProvisionRuntimeSignerRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProvisionRuntimeSignerRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.displayName = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.keyId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.mode = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.signingSeed = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ProvisionRuntimeSignerRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      displayName: isSet(object.displayName)
+        ? globalThis.String(object.displayName)
+        : isSet(object.display_name)
+        ? globalThis.String(object.display_name)
+        : "",
+      keyId: isSet(object.keyId)
+        ? globalThis.String(object.keyId)
+        : isSet(object.key_id)
+        ? globalThis.String(object.key_id)
+        : "",
+      mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
+      signingSeed: isSet(object.signingSeed)
+        ? globalThis.String(object.signingSeed)
+        : isSet(object.signing_seed)
+        ? globalThis.String(object.signing_seed)
+        : "",
+    };
+  },
+
+  toJSON(message: ProvisionRuntimeSignerRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.displayName !== "") {
+      obj.displayName = message.displayName;
+    }
+    if (message.keyId !== "") {
+      obj.keyId = message.keyId;
+    }
+    if (message.mode !== "") {
+      obj.mode = message.mode;
+    }
+    if (message.signingSeed !== "") {
+      obj.signingSeed = message.signingSeed;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ProvisionRuntimeSignerRequest>): ProvisionRuntimeSignerRequest {
+    return ProvisionRuntimeSignerRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ProvisionRuntimeSignerRequest>): ProvisionRuntimeSignerRequest {
+    const message = createBaseProvisionRuntimeSignerRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.displayName = object.displayName ?? "";
+    message.keyId = object.keyId ?? "";
+    message.mode = object.mode ?? "";
+    message.signingSeed = object.signingSeed ?? "";
+    return message;
+  },
+};
+
+function createBaseRecoverRuntimeSignerProvisioningRequest(): RecoverRuntimeSignerProvisioningRequest {
+  return { idempotencyKey: "" };
+}
+
+export const RecoverRuntimeSignerProvisioningRequest: MessageFns<RecoverRuntimeSignerProvisioningRequest> = {
+  encode(message: RecoverRuntimeSignerProvisioningRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RecoverRuntimeSignerProvisioningRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRecoverRuntimeSignerProvisioningRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RecoverRuntimeSignerProvisioningRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+    };
+  },
+
+  toJSON(message: RecoverRuntimeSignerProvisioningRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RecoverRuntimeSignerProvisioningRequest>): RecoverRuntimeSignerProvisioningRequest {
+    return RecoverRuntimeSignerProvisioningRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RecoverRuntimeSignerProvisioningRequest>): RecoverRuntimeSignerProvisioningRequest {
+    const message = createBaseRecoverRuntimeSignerProvisioningRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    return message;
+  },
+};
+
+function createBaseRuntimeSignerProvisioningOperation(): RuntimeSignerProvisioningOperation {
+  return {
+    id: "",
+    idempotencyKey: "",
+    displayName: "",
+    keyId: "",
+    mode: "",
+    state: "",
+    safeReason: "",
+    publicKey: "",
+    secretName: "",
+    secretUid: "",
+    signerId: "",
+    acceptedAtUnixMs: "0",
+    updatedAtUnixMs: "0",
+  };
+}
+
+export const RuntimeSignerProvisioningOperation: MessageFns<RuntimeSignerProvisioningOperation> = {
+  encode(message: RuntimeSignerProvisioningOperation, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(18).string(message.idempotencyKey);
+    }
+    if (message.displayName !== "") {
+      writer.uint32(26).string(message.displayName);
+    }
+    if (message.keyId !== "") {
+      writer.uint32(34).string(message.keyId);
+    }
+    if (message.mode !== "") {
+      writer.uint32(42).string(message.mode);
+    }
+    if (message.state !== "") {
+      writer.uint32(50).string(message.state);
+    }
+    if (message.safeReason !== "") {
+      writer.uint32(58).string(message.safeReason);
+    }
+    if (message.publicKey !== "") {
+      writer.uint32(66).string(message.publicKey);
+    }
+    if (message.secretName !== "") {
+      writer.uint32(74).string(message.secretName);
+    }
+    if (message.secretUid !== "") {
+      writer.uint32(82).string(message.secretUid);
+    }
+    if (message.signerId !== "") {
+      writer.uint32(90).string(message.signerId);
+    }
+    if (message.acceptedAtUnixMs !== "0") {
+      writer.uint32(96).uint64(message.acceptedAtUnixMs);
+    }
+    if (message.updatedAtUnixMs !== "0") {
+      writer.uint32(104).uint64(message.updatedAtUnixMs);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RuntimeSignerProvisioningOperation {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRuntimeSignerProvisioningOperation();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.displayName = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.keyId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.mode = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.safeReason = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.publicKey = reader.string();
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.secretName = reader.string();
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.secretUid = reader.string();
+            continue;
+          }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.signerId = reader.string();
+            continue;
+          }
+          case 12: {
+            if (tag !== 96) {
+              break;
+            }
+
+            message.acceptedAtUnixMs = reader.uint64().toString();
+            continue;
+          }
+          case 13: {
+            if (tag !== 104) {
+              break;
+            }
+
+            message.updatedAtUnixMs = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RuntimeSignerProvisioningOperation {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      displayName: isSet(object.displayName)
+        ? globalThis.String(object.displayName)
+        : isSet(object.display_name)
+        ? globalThis.String(object.display_name)
+        : "",
+      keyId: isSet(object.keyId)
+        ? globalThis.String(object.keyId)
+        : isSet(object.key_id)
+        ? globalThis.String(object.key_id)
+        : "",
+      mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+      safeReason: isSet(object.safeReason)
+        ? globalThis.String(object.safeReason)
+        : isSet(object.safe_reason)
+        ? globalThis.String(object.safe_reason)
+        : "",
+      publicKey: isSet(object.publicKey)
+        ? globalThis.String(object.publicKey)
+        : isSet(object.public_key)
+        ? globalThis.String(object.public_key)
+        : "",
+      secretName: isSet(object.secretName)
+        ? globalThis.String(object.secretName)
+        : isSet(object.secret_name)
+        ? globalThis.String(object.secret_name)
+        : "",
+      secretUid: isSet(object.secretUid)
+        ? globalThis.String(object.secretUid)
+        : isSet(object.secret_uid)
+        ? globalThis.String(object.secret_uid)
+        : "",
+      signerId: isSet(object.signerId)
+        ? globalThis.String(object.signerId)
+        : isSet(object.signer_id)
+        ? globalThis.String(object.signer_id)
+        : "",
+      acceptedAtUnixMs: isSet(object.acceptedAtUnixMs)
+        ? globalThis.String(object.acceptedAtUnixMs)
+        : isSet(object.accepted_at_unix_ms)
+        ? globalThis.String(object.accepted_at_unix_ms)
+        : "0",
+      updatedAtUnixMs: isSet(object.updatedAtUnixMs)
+        ? globalThis.String(object.updatedAtUnixMs)
+        : isSet(object.updated_at_unix_ms)
+        ? globalThis.String(object.updated_at_unix_ms)
+        : "0",
+    };
+  },
+
+  toJSON(message: RuntimeSignerProvisioningOperation): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.displayName !== "") {
+      obj.displayName = message.displayName;
+    }
+    if (message.keyId !== "") {
+      obj.keyId = message.keyId;
+    }
+    if (message.mode !== "") {
+      obj.mode = message.mode;
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    if (message.safeReason !== "") {
+      obj.safeReason = message.safeReason;
+    }
+    if (message.publicKey !== "") {
+      obj.publicKey = message.publicKey;
+    }
+    if (message.secretName !== "") {
+      obj.secretName = message.secretName;
+    }
+    if (message.secretUid !== "") {
+      obj.secretUid = message.secretUid;
+    }
+    if (message.signerId !== "") {
+      obj.signerId = message.signerId;
+    }
+    if (message.acceptedAtUnixMs !== "0") {
+      obj.acceptedAtUnixMs = message.acceptedAtUnixMs;
+    }
+    if (message.updatedAtUnixMs !== "0") {
+      obj.updatedAtUnixMs = message.updatedAtUnixMs;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RuntimeSignerProvisioningOperation>): RuntimeSignerProvisioningOperation {
+    return RuntimeSignerProvisioningOperation.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RuntimeSignerProvisioningOperation>): RuntimeSignerProvisioningOperation {
+    const message = createBaseRuntimeSignerProvisioningOperation();
+    message.id = object.id ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.displayName = object.displayName ?? "";
+    message.keyId = object.keyId ?? "";
+    message.mode = object.mode ?? "";
+    message.state = object.state ?? "";
+    message.safeReason = object.safeReason ?? "";
+    message.publicKey = object.publicKey ?? "";
+    message.secretName = object.secretName ?? "";
+    message.secretUid = object.secretUid ?? "";
+    message.signerId = object.signerId ?? "";
+    message.acceptedAtUnixMs = object.acceptedAtUnixMs ?? "0";
+    message.updatedAtUnixMs = object.updatedAtUnixMs ?? "0";
+    return message;
+  },
+};
+
+function createBaseProvisionRuntimeSignerResponse(): ProvisionRuntimeSignerResponse {
+  return { operation: undefined, signer: undefined };
+}
+
+export const ProvisionRuntimeSignerResponse: MessageFns<ProvisionRuntimeSignerResponse> = {
+  encode(message: ProvisionRuntimeSignerResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operation !== undefined) {
+      RuntimeSignerProvisioningOperation.encode(message.operation, writer.uint32(10).fork()).join();
+    }
+    if (message.signer !== undefined) {
+      RuntimeSigner.encode(message.signer, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProvisionRuntimeSignerResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProvisionRuntimeSignerResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operation = RuntimeSignerProvisioningOperation.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.signer = RuntimeSigner.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ProvisionRuntimeSignerResponse {
+    return {
+      operation: isSet(object.operation) ? RuntimeSignerProvisioningOperation.fromJSON(object.operation) : undefined,
+      signer: isSet(object.signer) ? RuntimeSigner.fromJSON(object.signer) : undefined,
+    };
+  },
+
+  toJSON(message: ProvisionRuntimeSignerResponse): unknown {
+    const obj: any = {};
+    if (message.operation !== undefined) {
+      obj.operation = RuntimeSignerProvisioningOperation.toJSON(message.operation);
+    }
+    if (message.signer !== undefined) {
+      obj.signer = RuntimeSigner.toJSON(message.signer);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ProvisionRuntimeSignerResponse>): ProvisionRuntimeSignerResponse {
+    return ProvisionRuntimeSignerResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ProvisionRuntimeSignerResponse>): ProvisionRuntimeSignerResponse {
+    const message = createBaseProvisionRuntimeSignerResponse();
+    message.operation = (object.operation !== undefined && object.operation !== null)
+      ? RuntimeSignerProvisioningOperation.fromPartial(object.operation)
+      : undefined;
+    message.signer = (object.signer !== undefined && object.signer !== null)
+      ? RuntimeSigner.fromPartial(object.signer)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseRecoverRuntimeSignerProvisioningResponse(): RecoverRuntimeSignerProvisioningResponse {
+  return { operation: undefined, signer: undefined };
+}
+
+export const RecoverRuntimeSignerProvisioningResponse: MessageFns<RecoverRuntimeSignerProvisioningResponse> = {
+  encode(message: RecoverRuntimeSignerProvisioningResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operation !== undefined) {
+      RuntimeSignerProvisioningOperation.encode(message.operation, writer.uint32(10).fork()).join();
+    }
+    if (message.signer !== undefined) {
+      RuntimeSigner.encode(message.signer, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RecoverRuntimeSignerProvisioningResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRecoverRuntimeSignerProvisioningResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operation = RuntimeSignerProvisioningOperation.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.signer = RuntimeSigner.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RecoverRuntimeSignerProvisioningResponse {
+    return {
+      operation: isSet(object.operation) ? RuntimeSignerProvisioningOperation.fromJSON(object.operation) : undefined,
+      signer: isSet(object.signer) ? RuntimeSigner.fromJSON(object.signer) : undefined,
+    };
+  },
+
+  toJSON(message: RecoverRuntimeSignerProvisioningResponse): unknown {
+    const obj: any = {};
+    if (message.operation !== undefined) {
+      obj.operation = RuntimeSignerProvisioningOperation.toJSON(message.operation);
+    }
+    if (message.signer !== undefined) {
+      obj.signer = RuntimeSigner.toJSON(message.signer);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RecoverRuntimeSignerProvisioningResponse>): RecoverRuntimeSignerProvisioningResponse {
+    return RecoverRuntimeSignerProvisioningResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RecoverRuntimeSignerProvisioningResponse>): RecoverRuntimeSignerProvisioningResponse {
+    const message = createBaseRecoverRuntimeSignerProvisioningResponse();
+    message.operation = (object.operation !== undefined && object.operation !== null)
+      ? RuntimeSignerProvisioningOperation.fromPartial(object.operation)
+      : undefined;
+    message.signer = (object.signer !== undefined && object.signer !== null)
+      ? RuntimeSigner.fromPartial(object.signer)
+      : undefined;
+    return message;
+  },
+};
+
 /** Trusted local-operator setup for separate runtime preparation capabilities. */
 export type RuntimePreparationServiceService = typeof RuntimePreparationServiceService;
 export const RuntimePreparationServiceService = {
+  provisionRuntimeSigner: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/ProvisionRuntimeSigner" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ProvisionRuntimeSignerRequest): Buffer =>
+      Buffer.from(ProvisionRuntimeSignerRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ProvisionRuntimeSignerRequest => ProvisionRuntimeSignerRequest.decode(value),
+    responseSerialize: (value: ProvisionRuntimeSignerResponse): Buffer =>
+      Buffer.from(ProvisionRuntimeSignerResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ProvisionRuntimeSignerResponse =>
+      ProvisionRuntimeSignerResponse.decode(value),
+  },
+  recoverRuntimeSignerProvisioning: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/RecoverRuntimeSignerProvisioning" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RecoverRuntimeSignerProvisioningRequest): Buffer =>
+      Buffer.from(RecoverRuntimeSignerProvisioningRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RecoverRuntimeSignerProvisioningRequest =>
+      RecoverRuntimeSignerProvisioningRequest.decode(value),
+    responseSerialize: (value: RecoverRuntimeSignerProvisioningResponse): Buffer =>
+      Buffer.from(RecoverRuntimeSignerProvisioningResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): RecoverRuntimeSignerProvisioningResponse =>
+      RecoverRuntimeSignerProvisioningResponse.decode(value),
+  },
   saveRuntimeSigner: {
     path: "/ayni.orchestrator.v1.RuntimePreparationService/SaveRuntimeSigner" as const,
     requestStream: false as const,
@@ -3292,6 +4071,11 @@ export const RuntimePreparationServiceService = {
 } as const;
 
 export interface RuntimePreparationServiceServer extends UntypedServiceImplementation {
+  provisionRuntimeSigner: handleUnaryCall<ProvisionRuntimeSignerRequest, ProvisionRuntimeSignerResponse>;
+  recoverRuntimeSignerProvisioning: handleUnaryCall<
+    RecoverRuntimeSignerProvisioningRequest,
+    RecoverRuntimeSignerProvisioningResponse
+  >;
   saveRuntimeSigner: handleUnaryCall<SaveRuntimeSignerRequest, SaveRuntimeSignerResponse>;
   setRuntimeSignerEnabled: handleUnaryCall<SetRuntimeSignerEnabledRequest, SetRuntimeSignerEnabledResponse>;
   listRuntimeSigners: handleUnaryCall<ListRuntimeSignersRequest, ListRuntimeSignersResponse>;
@@ -3308,6 +4092,36 @@ export interface RuntimePreparationServiceServer extends UntypedServiceImplement
 }
 
 export interface RuntimePreparationServiceClient extends Client {
+  provisionRuntimeSigner(
+    request: ProvisionRuntimeSignerRequest,
+    callback: (error: ServiceError | null, response: ProvisionRuntimeSignerResponse) => void,
+  ): ClientUnaryCall;
+  provisionRuntimeSigner(
+    request: ProvisionRuntimeSignerRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ProvisionRuntimeSignerResponse) => void,
+  ): ClientUnaryCall;
+  provisionRuntimeSigner(
+    request: ProvisionRuntimeSignerRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ProvisionRuntimeSignerResponse) => void,
+  ): ClientUnaryCall;
+  recoverRuntimeSignerProvisioning(
+    request: RecoverRuntimeSignerProvisioningRequest,
+    callback: (error: ServiceError | null, response: RecoverRuntimeSignerProvisioningResponse) => void,
+  ): ClientUnaryCall;
+  recoverRuntimeSignerProvisioning(
+    request: RecoverRuntimeSignerProvisioningRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: RecoverRuntimeSignerProvisioningResponse) => void,
+  ): ClientUnaryCall;
+  recoverRuntimeSignerProvisioning(
+    request: RecoverRuntimeSignerProvisioningRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: RecoverRuntimeSignerProvisioningResponse) => void,
+  ): ClientUnaryCall;
   saveRuntimeSigner(
     request: SaveRuntimeSignerRequest,
     callback: (error: ServiceError | null, response: SaveRuntimeSignerResponse) => void,

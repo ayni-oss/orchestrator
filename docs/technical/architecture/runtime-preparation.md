@@ -5,6 +5,36 @@ repository commit. It does not approve plans, start tasks or change task runtime
 selection. The [repository preparation contract](repository-preparation.md) owns
 those later handoffs.
 
+## Signer setup and recovery
+
+`ProvisionRuntimeSigner` accepts a public idempotency key, name, Key ID and
+`generate` or `import` mode. Import accepts only a raw 32-byte Ed25519 seed encoded
+as 64 lowercase hexadecimal characters, optionally followed by one LF. Generate
+creates material on the server. The deployment-gated service creates an immutable
+Kubernetes Secret in its signing namespace and registers its public metadata;
+responses contain no private seed. Private material is not stored in PostgreSQL,
+request receipts, browser storage or public operation history.
+
+The browser retains only the public setup intent and clears its password/file
+inputs before awaiting submission and again on completion. Recovery uses
+`RecoverRuntimeSignerProvisioning` with the original idempotency key. Generated
+setup adopts the winning Secret rather than creating a replacement. If an imported
+Secret is absent, the retained public identity requires the same seed again;
+re-entry cannot replace it with a different key. Pending and blocked operations
+remain recoverable across reloads. Disabled deployment and permission failures
+produce closed, actionable findings without echoing private request data.
+
+The advanced reference editor remains available for administrator-provisioned
+Secrets. Neither flow edits repository policy, grants build authority, nor changes
+a selected runtime. Operators must review the public trust entry, commit it with a
+regenerated lock and obtain a new exact-commit inspection.
+
+Generated/imported signing Secrets and their namespace are retained when signer
+setup is disabled or Helm is uninstalled, including deployments where runtime
+preparation is off. Disabling a signer prevents new use; it does not delete its
+private key. Deleting retained keys or the signing namespace is a separate manual
+operator cleanup decision. There is no key-deletion API.
+
 ## Admission and evidence
 
 `StartRuntimePreparation` freezes the completed inspection, repository/connection
@@ -92,8 +122,9 @@ only evidence matching the current selections can become ready.
 
 The chart defaults runtime preparation off. Enabling it requires immutable worker,
 executor and probe image digests, a trusted CLI hash, an explicit `qualified` profile,
-resource ceilings, a supervisor authority Secret and administrator-provisioned
-immutable signer Secrets in the dedicated runtime namespace. See
+resource ceilings, a supervisor authority Secret and immutable signer Secrets in
+the dedicated runtime namespace. Signer setup is independently deployment-gated;
+it can generate/import those Secrets or an administrator can provision them. See
 [image packaging](../../../deploy/images/runtime-preparation/README.md).
 
 The initial profile is native Linux arm64, rootless Podman/vfs in Kubernetes pod

@@ -568,3 +568,32 @@ dev/ctl live
 Wait for that cluster's CNI health, network allow/deny checks and runtime qualification before deploying or enabling its preparation profile. The helper accepts only this exact context, kubeconfig and namespace combination; it never switches global context or falls back to Desktop. Image imports verify the selected node's kind cluster/role labels. The normal local chart creates fresh PostgreSQL, broker and internal authority credentials in the new namespace; existing Desktop credentials and user data are not copied. External connections must be configured independently in the new UI.
 
 The parallel watcher retains state under `.local/live/kind-ayni-runtime-qualification/ayni-orchestrator-runtime-qualification`; Desktop retains its existing `.local/live/<namespace>` path. Automatic image pruning is disabled for the parallel environment. The [supervisor lifecycle fixture](../../../dev/scripts/runtime-supervisor-qualify.py) also accepts `--context kind-ayni-runtime-qualification` with that dedicated kubeconfig and uses its own disposable namespace. Its synthetic authority does not qualify control-plane admission or the complete runtime profile.
+
+
+### Signer setup acceptance
+
+New local deployments enable the independently gated signer-setup service. Reused
+Helm releases retain their existing values; explicitly enable
+`orchestrator.signerProvisioning.enabled` when upgrading an older local deployment.
+The production chart defaults this feature off. Setup does not require enabling
+runtime builds or adding repository trust.
+
+Use a separate disposable deployment and UI port for synthetic signer acceptance;
+never create fixture keys in an operator's live configuration. With that local UI
+running, exercise the actual UI, gateway and control plane without RPC mocks:
+
+```sh
+AYNI_SIGNER_SETUP_UI_ORIGIN=http://127.0.0.1:5176 \
+  node apps/web/tests/runtime-signing-live.mjs
+```
+
+The driver generates one fresh synthetic identity, imports the public RFC8032
+fixture seed, simulates lost responses, reloads and recovers the same public
+identity/Secret UID. Its output contains public identifiers only. Check the exact
+owned namespace's immutable Secret UID separately. These checks are distinct from
+`runtime-signing.browser.mjs`, which tests UI error/re-entry/privacy behavior
+against a synthetic HTTP authority in both dev and production modes.
+
+Signing keys and their namespace survive feature disablement and Helm uninstall.
+Disabling a signer prevents new use but does not delete material. Permanent key
+or namespace removal requires a separate operator cleanup decision.
