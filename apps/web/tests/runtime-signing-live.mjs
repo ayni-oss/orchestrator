@@ -23,7 +23,7 @@ try{
  await page.goto(`${origin}/settings/runtime-signing`);await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
  for(const mode of ['generate','import']){
   activeMode=mode;checkpoint('fill_public_intent');
-  if(results.length)await page.getByRole('button',{name:'Add another signer',exact:true}).click();
+  await page.getByRole('button',{name:'Add signing key',exact:true}).click();
   const keyId=`qualification-${mode}-${randomUUID().slice(0,8)}`;const displayName=`Synthetic signer ${keyId}`;
   await page.getByLabel('Name',{exact:true}).fill(displayName);await page.getByLabel('Key ID',{exact:true}).fill(keyId);
   if(mode==='import'){
@@ -57,7 +57,7 @@ try{
   // ListRuntimeSigners can display the saved card before onMount recovery has
   // completed. Wait for the recovery's state transition, not merely its list row.
   await page.waitForFunction(()=>sessionStorage.getItem('ayni.runtime.signer.provisioning.pending')===null);
-  await page.getByRole('button',{name:'Add another signer',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Add signing key',exact:true}).waitFor();
   checkpoint('recovery_accepted');
   assert.equal(calls,1);assert.equal(await page.getByRole('button',{name:'Generate signer',exact:true}).count(),0);
   assert.equal(await page.evaluate(()=>sessionStorage.getItem('ayni.runtime.signer.provisioning.pending')),null);

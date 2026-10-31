@@ -12,7 +12,7 @@ const otherSeed='2'.repeat(64);
 const publicKey='d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a';
 // Synthetic HTTP authority: this test establishes UI recovery and privacy only.
 // Real immutable Secret creation is qualified separately against Kubernetes.
-test('signer setup generates, imports and recovers without retaining private material',{timeout:180000},async()=>{
+test('multiple named signers survive reload, edit independently and recover without private material',{timeout:180000},async()=>{
  const signers=[];const operations=new Map();const requests=[];let generated=0;let imported=0;let disabled=false;let failList=false;let failedList=false;let releaseImport;let rejectNext=false;
  function complete(operation){
   if(operation.state!=='completed'){
@@ -63,7 +63,7 @@ test('signer setup generates, imports and recovers without retaining private mat
    for(const value of [seed,otherSeed]){assert.equal(inputValues.some(input=>input.includes(value)),false);assert.equal(stored.includes(value),false);assert.equal((await page.locator('body').innerText()).includes(value),false);}
    for(const request of requests.filter(value=>value.method==='/api/RecoverRuntimeSignerProvisioning'))assert.deepEqual(Object.keys(request.data),['idempotencyKey']);
   };
-  await visit();assert.equal(await page.getByRole('radio',{name:'Generate a new key',exact:true}).isChecked(),true);
+  await visit();assert.equal(await page.getByLabel('Name',{exact:true}).count(),0);await page.getByRole('button',{name:'Add signing key',exact:true}).click();assert.equal(await page.getByRole('radio',{name:'Generate a new key',exact:true}).isChecked(),true);
   await fill('Generated signer','generated.fixture');
   await page.route('**/api/ProvisionRuntimeSigner',async route=>{await route.fetch();await route.abort('failed');});
   await page.getByRole('button',{name:'Generate signer',exact:true}).click();
@@ -76,12 +76,12 @@ test('signer setup generates, imports and recovers without retaining private mat
   const generatedCard=page.getByRole('region',{name:'Generated signer',exact:true});await generatedCard.waitFor();
   // The list card can precede receipt acceptance; wait for recovery to commit.
   await page.waitForFunction(()=>sessionStorage.getItem('ayni.runtime.signer.provisioning.pending')===null);
-  await page.getByRole('button',{name:'Add another signer',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Add signing key',exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'Generate signer',exact:true}).count(),0);
   assert.equal(generated,1);assert.equal(requests.filter(value=>value.method==='/api/ProvisionRuntimeSigner').length,1);
   await generatedCard.locator('summary').click();await generatedCard.getByText('"generated.fixture" = "'+publicKey+'"',{exact:false}).waitFor();
   assert.equal(await page.evaluate(()=>sessionStorage.getItem('ayni.runtime.signer.provisioning.pending')),null);
-  await page.getByRole('button',{name:'Add another signer',exact:true}).click();await page.getByRole('radio',{name:'Import an existing key',exact:true}).check();await fill('Imported signer','imported.fixture');
+  await page.getByRole('button',{name:'Add signing key',exact:true}).click();await page.getByRole('radio',{name:'Import an existing key',exact:true}).check();await fill('Imported signer','imported.fixture');
   await page.getByLabel('Private signing seed',{exact:true}).fill(seed);
   const importPending=once(gateway,'import-pending');
   await page.getByRole('button',{name:'Import signer',exact:true}).click();await importPending;
@@ -98,8 +98,11 @@ test('signer setup generates, imports and recovers without retaining private mat
   await page.waitForFunction(expected=>document.querySelector('#signer-seed')?.value===expected,seed);
   await page.getByRole('button',{name:'Resume signer setup',exact:true}).click();
   const importedCard=page.getByRole('region',{name:'Imported signer',exact:true});await importedCard.waitFor();assert.equal(imported,1);await privateAbsent();
+  await page.reload();await generatedCard.waitFor();await importedCard.waitFor();
+  await page.getByRole('button',{name:'Edit Generated signer',exact:true}).click();assert.equal(await page.getByLabel('Name',{exact:true}).inputValue(),'Generated signer');
+  await page.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(await page.getByLabel('Name',{exact:true}).count(),0);
   assert.equal(await page.evaluate(()=>sessionStorage.getItem('ayni.runtime.signer.provisioning.pending')),null);
-  await page.getByRole('button',{name:'Add another signer',exact:true}).click();
+  await page.getByRole('button',{name:'Add signing key',exact:true}).click();
   const beforeValidation=requests.filter(value=>value.method==='/api/ProvisionRuntimeSigner').length;
   await fill('Reserved key','unsigned');await page.getByRole('button',{name:'Generate signer',exact:true}).click();await page.getByText(/Key ID unsigned is reserved/).waitFor();
   await fill('   ','valid.fixture');await page.getByRole('button',{name:'Generate signer',exact:true}).click();await page.getByText(/Enter a shorter name/).waitFor();
@@ -111,7 +114,7 @@ test('signer setup generates, imports and recovers without retaining private mat
   await page.getByRole('button',{name:'Recover signer setup',exact:true}).click();await page.getByText(/rejected setup has no receipt/).waitFor();
   await fill('Corrected signer','corrected.fixture');await page.getByRole('button',{name:'Resume signer setup',exact:true}).click();await page.getByRole('region',{name:'Corrected signer',exact:true}).waitFor();
   const correctedRequest=requests.filter(value=>value.method==='/api/ProvisionRuntimeSigner').at(-1).data;assert.equal(correctedRequest.idempotencyKey,rejectedIntent.idempotencyKey);assert.equal(correctedRequest.keyId,'corrected.fixture');
-  await page.getByRole('button',{name:'Add another signer',exact:true}).click();await fill('Disabled setup','disabled.fixture');disabled=true;
+  await page.getByRole('button',{name:'Add signing key',exact:true}).click();await fill('Disabled setup','disabled.fixture');disabled=true;
   await page.getByRole('button',{name:'Generate signer',exact:true}).click();await page.getByText('Signer setup is disabled in this deployment. Ask the administrator to enable it, then recover this setup.',{exact:true}).waitFor();
   assert.equal(generated,2);assert.equal(imported,1);await privateAbsent();
   assert.equal(requests.some(value=>/RuntimePreparation|StartTask/.test(value.method)),false);

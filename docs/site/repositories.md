@@ -62,7 +62,9 @@ Static inspection does not start tasks or build images.
 
 ## Set up a signer
 
-Open **Configuration → Runtime signing** and enter a name and Key ID. Choose
+Open **Configuration → Runtime signing** and choose **Add signing key**. Enter a
+name and Key ID. You can add multiple named keys and manage each one from the
+list. Choose
 **Generate a new key** to let the server create and store a private key, or
 **Import an existing key** to paste or select a file containing the raw value of
 `AYNI_ENV_CERTIFICATE_SIGNING_KEY`: 64 lowercase hexadecimal characters, with an
