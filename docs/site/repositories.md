@@ -2,7 +2,8 @@
 
 Connect a GitHub repository once, then attach it to projects in any workspace.
 This local operator flow establishes source access and supports exact-commit static
-Ayni inspection. Runtime preparation remains planned.
+Ayni inspection. With a configured Kubernetes runtime profile, you can also
+prepare and verify an immutable runtime image.
 
 ```mermaid
 ---
@@ -57,5 +58,31 @@ If the response is interrupted, reload and choose **Recover inspection**. Use
 **Retry same inspection** when GitHub becomes available again. A new commit needs
 a new inspection; earlier results remain in history.
 
-Static inspection does not start tasks or build images. Full environment discovery
-and runtime verification follow in later delivery slices.
+Static inspection does not start tasks or build images.
+
+## Prepare a runtime
+
+Your deployment administrator must first enable a qualified Kubernetes runtime
+profile and provision a signer. In **Configuration**, select a registry connection
+and save the corresponding public signer reference. The repository policy must
+trust that signer, and its committed lock must use the supported Ayni version.
+
+On the repository, open **Runtime preparation**, select a completed inspection,
+registry, signer and platform, and set the time/build allowance. Leave building
+disabled to check an existing image. Enable building for a confirmed missing image;
+replacing an invalid image requires the separate replacement choice.
+
+The operation shows source, build, certification, publication, verification and
+cleanup progress. **Ready** requires independent content and managed compatibility
+checks plus completed cleanup. A connected repository or a successful build alone
+does not establish readiness. Runtime compatibility is separate from whether the
+repository's quality checks pass.
+
+Reload to recover retained operations and exact save receipts. Cancel stops the
+workload and cleans its resources. Retry preserves the original inputs and
+allowance; change the inputs or allowance by starting a new operation. If publication
+was interrupted, recovery reads back the intended image before trying another action.
+Registry access failures are reported when registry operations execute; correct the
+configured connection before starting a new operation when its credentials changed.
+
+Verified runtime selection for project plans and tasks follows in the next slice.

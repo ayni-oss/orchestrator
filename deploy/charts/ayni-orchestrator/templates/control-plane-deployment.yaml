@@ -99,12 +99,25 @@ spec:
             - name: session-authority
               mountPath: /var/run/secrets/ayni/session-authority
               readOnly: true
+            {{- $runtimePreparation := default (dict "enabled" false) .Values.runtimePreparation }}
+            {{- if $runtimePreparation.enabled }}
+            - name: runtime-authority
+              mountPath: /var/run/secrets/ayni/runtime-authority
+              readOnly: true
+            {{- end }}
             {{- if .Values.publication.enabled }}
             - name: publication-authority
               mountPath: /var/run/secrets/ayni/publication-authority
               readOnly: true
             {{- end }}
       volumes:
+        {{- $runtimePreparation := default (dict "enabled" false) .Values.runtimePreparation }}
+        {{- if $runtimePreparation.enabled }}
+        - name: runtime-authority
+          secret:
+            secretName: {{ required "runtimePreparation.authoritySecretName is required" $runtimePreparation.authoritySecretName | quote }}
+            items: [{ key: token, path: token }]
+        {{- end }}
         {{- if .Values.publication.enabled }}
         - name: publication-authority
           secret:

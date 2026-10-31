@@ -5,6 +5,7 @@ import {once} from 'node:events';
 import {createServer} from 'node:net';
 import {setTimeout as delay} from 'node:timers/promises';
 import {chromium} from 'playwright';
+import {exerciseRuntimePreparation} from './runtime-preparation-ui.mjs';
 
 test('repository catalog and project associations use retained canonical receipts', {timeout:120000}, async()=>{
  const fixture=process.env.AYNI_REPOSITORY_FIXTURE;
@@ -118,6 +119,7 @@ test('repository catalog and project associations use retained canonical receipt
   const original=await page.request.post(`${origin}/api/AssociateProjectRepository`,{headers:{'x-console-request':'1'},data:associationRequest});assert.equal((await original.json()).commandId,firstReceipt);
   assert.equal((await page.locator('body').innerText()).includes('synthetic-repository-browser-key'),false);
   await page.screenshot({path:'/tmp/repository-project-browser.png',fullPage:true});
+  await exerciseRuntimePreparation(page,origin,fixture);
   console.log('repository-browser: real PostgreSQL/gRPC/gateway catalog, exact loss/reload recovery, rejected false readiness, shared cross-workspace associations and scope rejection passed; GitHub provider discovery uses fixtures.');
  } finally {await browser?.close();try{process.kill(-child.pid,'SIGTERM');}catch{}}
 });

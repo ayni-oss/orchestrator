@@ -14,7 +14,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const VERSION: &str = "0.16.2";
+const VERSION: &str = "0.17.0";
 const SOURCE_FILE_BYTES: u64 = 512 * 1024;
 const SOURCE_TOTAL_BYTES: u64 = 8 * 1024 * 1024;
 const EXECUTABLE_BYTES: u64 = 256 * 1024 * 1024;

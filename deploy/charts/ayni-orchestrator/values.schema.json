@@ -459,6 +459,93 @@
           }
         }
       }
+    },
+    "runtimePreparation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "authoritySecretName",
+        "storageClassName",
+        "publicEgress",
+        "profile"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "authoritySecretName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "storageClassName": {
+          "type": "string"
+        },
+        "publicEgress": {
+          "type": "boolean"
+        },
+        "profile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "profile_id",
+            "platform",
+            "worker_image",
+            "executor_image",
+            "verifier_image",
+            "trusted_cli_sha256",
+            "qualified",
+            "max_cpu_millis",
+            "max_memory_mib",
+            "max_storage_mib",
+            "max_seconds",
+            "max_builds"
+          ],
+          "properties": {
+            "profile_id": {
+              "type": "string"
+            },
+            "platform": {
+              "type": "string"
+            },
+            "worker_image": {
+              "type": "string"
+            },
+            "executor_image": {
+              "type": "string"
+            },
+            "verifier_image": {
+              "type": "string"
+            },
+            "trusted_cli_sha256": {
+              "type": "string"
+            },
+            "qualified": {
+              "type": "boolean"
+            },
+            "max_cpu_millis": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_memory_mib": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_storage_mib": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_seconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_builds": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
     }
   },
   "$defs": {

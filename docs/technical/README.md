@@ -12,8 +12,10 @@ The runtime combines the M1 durable foundation with shared immutable agent confi
 Shared repository onboarding and verified runtime preparation ship alongside a new
 UI in the [active roadmap](../../ROADMAP.md#next-focus-repository-preparation-with-a-usable-ui).
 Projects select catalog repositories directly and can reuse them across workspaces.
-These documents distinguish the implemented source catalog from planned Ayni/runtime preparation:
+These documents describe the source catalog, gated Kubernetes runtime preparation
+and the remaining project/task handoff:
 
+- [Kubernetes runtime preparation](architecture/runtime-preparation.md): stage authority, isolation, publication recovery and profile qualification.
 - [Repository preparation](architecture/repository-preparation.md): ownership, Ayni gates, credentials, immutable artifacts and task handoff.
 - [Repository/runtime workspace delivery](research/repository-runtime-workspace-delivery.md): UI increments, failure/recovery matrix and cumulative qualification.
 

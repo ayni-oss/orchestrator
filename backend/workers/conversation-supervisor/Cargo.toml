@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 ayni-orchestrator-observability = { path = "../../libs/observability" }
+ayni-orchestrator-worker-sandbox = { path = "../../libs/worker-sandbox" }
 tracing.workspace = true
 base64.workspace = true
 axum.workspace = true
@@ -29,11 +30,6 @@ subtle.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "time"] }
 uuid.workspace = true
-
-[target.'cfg(target_os = "linux")'.dependencies]
-libc = "=0.2.189"
-landlock = "=0.4.7"
-seccompiler = { version = "=0.5.0", default-features = false }
 
 [dev-dependencies]
 async-nats.workspace = true

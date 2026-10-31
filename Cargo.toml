@@ -7,9 +7,11 @@ members = [
     "backend/libs/registry",
     "backend/libs/oci",
     "backend/libs/observability",
+    "backend/libs/worker-sandbox",
     "backend/servers/control-plane",
     "backend/workers/conversation-supervisor",
     "backend/workers/runtime-verifier",
+    "backend/workers/runtime-preparation",
     "backend/tests/workflow-acceptance",
     "backend/servers/control-plane/crates/workflow-postgres",
 ]

@@ -1,0 +1,4 @@
+FROM scratch
+COPY --chmod=0555 runtime-worker /runtime-worker
+COPY --chmod=0555 runtime-verifier /ayni-runtime-verifier
+ENTRYPOINT ["/runtime-worker", "--install-probes"]

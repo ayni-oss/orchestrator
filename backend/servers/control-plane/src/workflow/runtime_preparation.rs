@@ -1,4 +1,6 @@
 //! Public signer configuration; private material stays in administrator-owned Secrets.
+mod operations;
+mod profile;
 use super::{RequestContext, WorkflowGrpc, v1};
 use ayni_orchestrator_workflow_postgres::store::runtime_signers::{SaveSigner, Signer};
 use std::collections::BTreeMap;
@@ -18,6 +20,95 @@ fn signer(value: Signer) -> v1::RuntimeSigner {
 }
 #[tonic::async_trait]
 impl v1::runtime_preparation_service_server::RuntimePreparationService for WorkflowGrpc {
+    async fn start_runtime_preparation(
+        &self,
+        request: Request<v1::StartRuntimePreparationRequest>,
+    ) -> Result<Response<v1::StartRuntimePreparationResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let operation = operations::start(self, &context, &value).await?;
+        Ok(context.response(v1::StartRuntimePreparationResponse {
+            operation: Some(operations::public(operation)),
+        }))
+    }
+    async fn get_runtime_preparation(
+        &self,
+        request: Request<v1::GetRuntimePreparationRequest>,
+    ) -> Result<Response<v1::GetRuntimePreparationResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let operation = self
+            .store
+            .get_runtime_preparation(&request.into_inner().id)
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::GetRuntimePreparationResponse {
+            operation: Some(operations::public(operation)),
+        }))
+    }
+    async fn list_runtime_preparations(
+        &self,
+        request: Request<v1::ListRuntimePreparationsRequest>,
+    ) -> Result<Response<v1::ListRuntimePreparationsResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let (items, next) = self
+            .store
+            .list_runtime_preparations(&value.repository_id, &value.after_id, value.limit)
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::ListRuntimePreparationsResponse {
+            operations: items.into_iter().map(operations::public).collect(),
+            next_after_id: next,
+        }))
+    }
+    async fn get_runtime_preparation_receipt(
+        &self,
+        request: Request<v1::GetRuntimePreparationReceiptRequest>,
+    ) -> Result<Response<v1::GetRuntimePreparationReceiptResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let operation = self
+            .store
+            .get_runtime_preparation_receipt(&request.into_inner().idempotency_key)
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::GetRuntimePreparationReceiptResponse {
+            operation: Some(operations::public(operation)),
+        }))
+    }
+    async fn cancel_runtime_preparation(
+        &self,
+        request: Request<v1::CancelRuntimePreparationRequest>,
+    ) -> Result<Response<v1::CancelRuntimePreparationResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let operation = self
+            .store
+            .cancel_runtime_preparation(
+                &value.idempotency_key,
+                &value.id,
+                value.expected_generation,
+            )
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::CancelRuntimePreparationResponse {
+            operation: Some(operations::public(operation)),
+        }))
+    }
+    async fn retry_runtime_preparation(
+        &self,
+        request: Request<v1::RetryRuntimePreparationRequest>,
+    ) -> Result<Response<v1::RetryRuntimePreparationResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let operation = self
+            .store
+            .retry_runtime_preparation(&value.idempotency_key, &value.id, value.expected_generation)
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::RetryRuntimePreparationResponse {
+            operation: Some(operations::public(operation)),
+        }))
+    }
     async fn save_runtime_signer(
         &self,
         request: Request<v1::SaveRuntimeSignerRequest>,

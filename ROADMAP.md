@@ -40,7 +40,8 @@ canonical APIs. Do not introduce parallel products or alternate visual designs.
 The current UI supports workspace/project creation, manual GitHub App setup,
 GHCR/OpenAI credential configuration, workspace OpenAI model/budget selection,
 shared repository onboarding and exact-commit static Ayni inspection. Full adapter
-discovery, runtime preparation and full delivery journeys remain planned.
+discovery and full delivery journeys remain planned. Runtime preparation has a
+qualified-profile-gated Kubernetes implementation; project/task handoff remains planned.
 Historical browser acceptance does not qualify current source; each implemented
 journey needs its own replacement coverage.
 
@@ -143,11 +144,18 @@ The shared source catalog adds GitHub installation/repository discovery, retaine
 connect operations and direct project associations, including reuse across workspaces.
 Its source-access checks do not establish runtime readiness. Static Ayni inspection now freezes an exact commit and validates policy, lock,
 locked input digests and public trust requirements using pinned Ayni APIs. Full
-adapter discovery, registry/certificate setup, trust-change PRs, runtime production
-and live GitHub qualification remain outstanding.
-Public signer references, immutable GHCR discovery and a trusted content verifier
-provide initial runtime foundations. They do not complete runtime preparation; the
-qualified build executor and build/sign/publication/recovery supervisor remain pending.
+adapter setup assistance, trust-change PRs and cumulative live GitHub qualification
+remain outstanding. Runtime preparation now freezes an exact inspected source,
+registry, signer and qualified Kubernetes profile. Its bounded supervisor handles
+existing immutable artifacts, build, separate offline certification, publication
+readback, independent content/managed checks and cleanup. Registry permission and
+outage findings come from actual operations. The UI retains receipts and offers
+explicit cancellation/recovery; builds and replacement require separate grants.
+Profile qualification and administrator signer provisioning remain deployment
+prerequisites. Connecting these verified artifacts to project plans/tasks is next.
+The local Node pipeline and supervisor restart/cleanup gates pass, but the tested
+Docker Desktop cluster does not enforce default-deny NetworkPolicy. Its runtime
+profile remains disabled pending a policy-enforcing deployment.
 
 Deliver shared repository integration, Ayni inspection, verified runtime images
 and project selection before expanding product analytics or event inputs. Build

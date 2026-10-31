@@ -1,0 +1,37 @@
+[package]
+name = "ayni-orchestrator-runtime-preparation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+ayni-core = { git = "https://github.com/ayni-oss/ayni.git", rev = "996180ad3c561d903bf967ee772405100a276e9e" }
+ayni-environment = { git = "https://github.com/ayni-oss/ayni.git", rev = "996180ad3c561d903bf967ee772405100a276e9e" }
+ayni-orchestrator-events = { path = "../../libs/events" }
+ayni-orchestrator-oci = { path = "../../libs/oci" }
+ayni-orchestrator-registry = { path = "../../libs/registry" }
+ayni-orchestrator-worker-sandbox = { path = "../../libs/worker-sandbox" }
+base64.workspace = true
+ed25519-dalek.workspace = true
+futures-util.workspace = true
+flate2 = "=1.1.10"
+kube.workspace = true
+k8s-openapi.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
+tar = "=0.4.46"
+tokio.workspace = true
+uuid.workspace = true
+zstd = "=0.13.3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { workspace = true, features = ["thread"] }
+
+[lints]
+workspace = true

@@ -39,6 +39,19 @@ mod tests {
         "ListRepositoryInspections",
     ];
 
+    const RUNTIME_PREPARATION_METHODS: [&str; 10] = [
+        "SaveRuntimeSigner",
+        "StartRuntimePreparation",
+        "GetRuntimePreparation",
+        "ListRuntimePreparations",
+        "GetRuntimePreparationReceipt",
+        "CancelRuntimePreparation",
+        "RetryRuntimePreparation",
+        "SetRuntimeSignerEnabled",
+        "ListRuntimeSigners",
+        "GetRuntimeSignerReceipt",
+    ];
+
     #[test]
     fn descriptor_exposes_only_the_canonical_workflow_services() -> Result<(), prost::DecodeError> {
         let descriptor = FileDescriptorSet::decode(super::FILE_DESCRIPTOR_SET)?;
@@ -63,12 +76,7 @@ mod tests {
                 ("RepositoryService", BTreeSet::from(REPOSITORY_METHODS)),
                 (
                     "RuntimePreparationService",
-                    BTreeSet::from([
-                        "SaveRuntimeSigner",
-                        "SetRuntimeSignerEnabled",
-                        "ListRuntimeSigners",
-                        "GetRuntimeSignerReceipt"
-                    ])
+                    BTreeSet::from(RUNTIME_PREPARATION_METHODS),
                 ),
                 (
                     "ConnectionService",

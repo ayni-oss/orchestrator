@@ -128,6 +128,31 @@ impl GhcrClient {
         .await
         .map_err(|_| DiscoveryError::Unavailable)?
     }
+    /// Discover one exact previously admitted platform manifest before reusing it.
+    /// # Errors
+    /// Only an authenticated initial manifest 404 means absence; authorization,
+    /// transport, malformed bytes and changed platform identities fail closed.
+    pub async fn discover_digest(
+        &self,
+        repository: &str,
+        digest: &str,
+        platform: Platform,
+        credentials: &Credentials,
+    ) -> Result<Discovery, DiscoveryError> {
+        validate_digest_input(repository, digest, credentials)?;
+        let result = tokio::time::timeout(
+            Duration::from_secs(20),
+            self.resolve(repository, digest, platform, credentials),
+        )
+        .await
+        .map_err(|_| DiscoveryError::Unavailable)??;
+        match &result {
+            Discovery::Candidate(candidate) if candidate.manifest_digest != digest => {
+                Err(DiscoveryError::ResponseInvalid)
+            }
+            _ => Ok(result),
+        }
+    }
     async fn resolve(
         &self,
         repository: &str,
@@ -311,8 +336,22 @@ fn validate_input(
     tag: &str,
     credentials: &Credentials,
 ) -> Result<(), DiscoveryError> {
-    ImageRepository::parse(repository).map_err(|_| DiscoveryError::InvalidInput)?;
     ImageTag::parse(tag).map_err(|_| DiscoveryError::InvalidInput)?;
+    validate_repository_credentials(repository, credentials)
+}
+fn validate_digest_input(
+    repository: &str,
+    digest: &str,
+    credentials: &Credentials,
+) -> Result<(), DiscoveryError> {
+    Sha256Digest::parse(digest).map_err(|_| DiscoveryError::InvalidInput)?;
+    validate_repository_credentials(repository, credentials)
+}
+fn validate_repository_credentials(
+    repository: &str,
+    credentials: &Credentials,
+) -> Result<(), DiscoveryError> {
+    ImageRepository::parse(repository).map_err(|_| DiscoveryError::InvalidInput)?;
     let path = repository
         .strip_prefix("ghcr.io/")
         .ok_or(DiscoveryError::InvalidInput)?;
@@ -751,5 +790,38 @@ mod tests {
         changed["schemaVersion"] = 1.into();
         assert!(parse_manifest(&serde_json::to_vec(&changed)?, OCI_MANIFEST, None, None).is_err());
         Ok(())
+    }
+    #[test]
+    fn retained_manifest_lookup_rejects_tags_queries_and_noncanonical_digests() {
+        let credentials = Credentials {
+            username: "fixture-pull".into(),
+            password: "synthetic-fixture".into(),
+        };
+        let digest = format!("sha256:{}", "a".repeat(64));
+        assert!(validate_digest_input("ghcr.io/fixture/runtime", &digest, &credentials).is_ok());
+        for invalid in [
+            "latest".to_owned(),
+            format!("{digest}?secret=x"),
+            format!("sha256:{}", "A".repeat(64)),
+            format!("{digest}/other"),
+        ] {
+            assert_eq!(
+                validate_digest_input("ghcr.io/fixture/runtime", &invalid, &credentials),
+                Err(DiscoveryError::InvalidInput)
+            );
+        }
+        assert_eq!(status(StatusCode::NOT_FOUND, true), Ok(false));
+        assert_eq!(
+            status(StatusCode::UNAUTHORIZED, true),
+            Err(DiscoveryError::AccessDenied)
+        );
+        assert_eq!(
+            status(StatusCode::FORBIDDEN, true),
+            Err(DiscoveryError::AccessDenied)
+        );
+        assert_eq!(
+            status(StatusCode::SERVICE_UNAVAILABLE, true),
+            Err(DiscoveryError::Unavailable)
+        );
     }
 }

@@ -7,6 +7,12 @@ service RuntimePreparationService {
   rpc SetRuntimeSignerEnabled(SetRuntimeSignerEnabledRequest) returns (SetRuntimeSignerEnabledResponse);
   rpc ListRuntimeSigners(ListRuntimeSignersRequest) returns (ListRuntimeSignersResponse);
   rpc GetRuntimeSignerReceipt(GetRuntimeSignerReceiptRequest) returns (GetRuntimeSignerReceiptResponse);
+  rpc StartRuntimePreparation(StartRuntimePreparationRequest) returns (StartRuntimePreparationResponse);
+  rpc GetRuntimePreparation(GetRuntimePreparationRequest) returns (GetRuntimePreparationResponse);
+  rpc ListRuntimePreparations(ListRuntimePreparationsRequest) returns (ListRuntimePreparationsResponse);
+  rpc GetRuntimePreparationReceipt(GetRuntimePreparationReceiptRequest) returns (GetRuntimePreparationReceiptResponse);
+  rpc CancelRuntimePreparation(CancelRuntimePreparationRequest) returns (CancelRuntimePreparationResponse);
+  rpc RetryRuntimePreparation(RetryRuntimePreparationRequest) returns (RetryRuntimePreparationResponse);
 }
 // Public configuration only. The referenced immutable Secret is administrator-owned.
 message RuntimeSigner {
@@ -55,4 +61,96 @@ message GetRuntimeSignerReceiptRequest {
 }
 message GetRuntimeSignerReceiptResponse {
   RuntimeSigner signer = 1;
+}
+
+// Public metadata/evidence only; source bytes and credential values never appear here.
+message RuntimePreparation {
+  string id = 1;
+  string idempotency_key = 2;
+  string repository_id = 3;
+  string inspection_id = 4;
+  string registry_connection_id = 5;
+  string signer_id = 6;
+  string platform = 7;
+  string state = 8;
+  string stage = 9;
+  string safe_reason = 10;
+  uint64 generation = 11;
+  bool allow_build = 12;
+  bool allow_replace = 13;
+  uint32 max_builds = 14;
+  uint32 builds_started = 15;
+  uint64 deadline_unix_ms = 16;
+  string frozen_input_digest = 17;
+  string image_digest = 18;
+  string candidate_image = 19;
+  string protected_content_root = 20;
+  string certificate_digest = 21;
+  bool content_verified = 22;
+  bool managed_compatible = 23;
+  bool cleanup_complete = 24;
+  uint64 accepted_at_unix_ms = 25;
+  uint64 updated_at_unix_ms = 26;
+  string expected_manifest_digest = 27;
+  string source_commit = 28;
+  string source_tree = 29;
+  string policy_digest = 30;
+  string lock_digest = 31;
+  string lock_fingerprint = 32;
+  string registry_destination = 33;
+  string managed_check_digest = 34;
+  string unsigned_manifest_digest = 35;
+  string certification_layer_digest = 36;
+}
+message StartRuntimePreparationRequest {
+  string idempotency_key = 1;
+  string repository_id = 2;
+  string inspection_id = 3;
+  string registry_connection_id = 4;
+  string signer_id = 5;
+  string platform = 6;
+  uint32 max_seconds = 7;
+  uint32 max_builds = 8;
+  bool allow_build = 9;
+  bool allow_replace = 10;
+}
+message StartRuntimePreparationResponse {
+  RuntimePreparation operation = 1;
+}
+message GetRuntimePreparationRequest {
+  string id = 1;
+}
+message GetRuntimePreparationResponse {
+  RuntimePreparation operation = 1;
+}
+message ListRuntimePreparationsRequest {
+  string repository_id = 1;
+  string after_id = 2;
+  uint32 limit = 3;
+}
+message ListRuntimePreparationsResponse {
+  repeated RuntimePreparation operations = 1;
+  string next_after_id = 2;
+}
+message GetRuntimePreparationReceiptRequest {
+  string idempotency_key = 1;
+}
+message GetRuntimePreparationReceiptResponse {
+  RuntimePreparation operation = 1;
+}
+message CancelRuntimePreparationRequest {
+  string idempotency_key = 1;
+  string id = 2;
+  uint64 expected_generation = 3;
+}
+message CancelRuntimePreparationResponse {
+  RuntimePreparation operation = 1;
+}
+message RetryRuntimePreparationRequest {
+  string idempotency_key = 1;
+  string id = 2;
+  uint64 expected_generation = 3;
+}
+message RetryRuntimePreparationResponse {
+  RuntimePreparation operation = 1;
 }

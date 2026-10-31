@@ -8,6 +8,89 @@ use ayni_orchestrator_workflow_postgres::{
 };
 use std::time::Duration;
 use tonic::{Request, Response, Status};
+
+/// Mint only a repository-scoped, read-only installation token for a source worker.
+/// The App key remains inside the control plane and never enters worker reports.
+pub async fn installation_read_token(
+    source: &repositories::SourceCredential,
+    installation: u64,
+    repository: u64,
+) -> Result<String, &'static str> {
+    identity(installation).map_err(|_| "github_response_invalid")?;
+    identity(repository).map_err(|_| "github_response_invalid")?;
+    github::Github::new(source)?
+        .installation_token(installation, Some(repository))
+        .await
+}
+
+pub struct RuntimeSourceInputs {
+    pub tree_sha: String,
+    pub policy: Vec<u8>,
+    pub lock: Vec<u8>,
+    pub files: std::collections::BTreeMap<String, Vec<u8>>,
+}
+
+/// Retrieve bounded committed headers through the same immutable-object boundary
+/// as static inspection. Complete checkout acquisition remains the source stage.
+pub async fn runtime_source_inputs(
+    source: &repositories::SourceCredential,
+    repository: &repositories::Repository,
+    commit: &str,
+) -> Result<RuntimeSourceInputs, &'static str> {
+    let client = github::Github::new(source)?;
+    let frozen = client
+        .frozen_source(
+            repository.installation_id,
+            repository.provider_repository_id,
+            commit,
+        )
+        .await?;
+    let policy = client
+        .frozen_blob(&frozen, ".ayni.toml")
+        .await?
+        .ok_or("source_policy_missing")?;
+    let lock = client
+        .frozen_blob(&frozen, ".ayni.lock")
+        .await?
+        .ok_or("source_lock_missing")?;
+    let parsed: ayni_core::EnvironmentLock =
+        serde_json::from_slice(&lock).map_err(|_| "source_lock_invalid")?;
+    let mut files = std::collections::BTreeMap::from([
+        (".ayni.toml".into(), policy.clone()),
+        (".ayni.lock".into(), lock.clone()),
+    ]);
+    let mut total = policy.len() + lock.len();
+    for path in inspection::locked_paths(&parsed)? {
+        if files.contains_key(&path) {
+            continue;
+        }
+        let bytes = client
+            .frozen_blob(&frozen, &path)
+            .await?
+            .ok_or("source_input_missing")?;
+        total = total.saturating_add(bytes.len());
+        if total > 8 * 1024 * 1024 {
+            return Err("source_bounds_exceeded");
+        }
+        files.insert(path, bytes);
+    }
+    let mut result = inspection::empty_result();
+    inspection::validate_inputs(&mut result, &files)?;
+    if result.findings.iter().any(|finding| {
+        matches!(
+            finding.code.as_str(),
+            "locked_input_digest_mismatch" | "lock_inputs_or_platform_invalid"
+        )
+    }) {
+        return Err("source_inputs_invalid");
+    }
+    Ok(RuntimeSourceInputs {
+        tree_sha: frozen.tree_sha,
+        policy,
+        lock,
+        files,
+    })
+}
 fn repository(value: repositories::Repository) -> v1::Repository {
     v1::Repository {
         id: value.id,
