@@ -11,6 +11,9 @@ service RepositoryService {
   rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse);
   rpc AssociateProjectRepository(AssociateProjectRepositoryRequest) returns (AssociateProjectRepositoryResponse);
   rpc ListProjectRepositories(ListProjectRepositoriesRequest) returns (ListProjectRepositoriesResponse);
+  rpc InspectRepository(InspectRepositoryRequest) returns (InspectRepositoryResponse);
+  rpc GetRepositoryInspection(GetRepositoryInspectionRequest) returns (GetRepositoryInspectionResponse);
+  rpc ListRepositoryInspections(ListRepositoryInspectionsRequest) returns (ListRepositoryInspectionsResponse);
 }
 message GithubInstallation {
   uint64 installation_id = 1;
@@ -118,5 +121,60 @@ message ListProjectRepositoriesRequest {
 }
 message ListProjectRepositoriesResponse {
   repeated Repository repositories = 1;
+  string next_after_id = 2;
+}
+
+// Explicit, read-only static inspection. This never enables preparation or execution.
+message InspectRepositoryRequest {
+  string idempotency_key = 1;
+  string repository_id = 2;
+  uint64 expected_connection_revision = 3;
+  // Full lowercase Git SHA-1 commit identity; branches and tags are not accepted.
+  string commit_sha = 4;
+}
+message RepositoryInspectionFinding {
+  string code = 1;
+  string path = 2;
+  string action = 3;
+}
+message RepositoryInspectionResult {
+  string policy_digest = 1;
+  string lock_digest = 2;
+  string lock_fingerprint = 3;
+  string ayni_version = 4;
+  string lock_schema = 5;
+  repeated string tools = 6;
+  repeated string trust_key_ids = 7;
+  repeated RepositoryInspectionFinding findings = 8;
+}
+message RepositoryInspection {
+  string id = 1;
+  string idempotency_key = 2;
+  string repository_id = 3;
+  uint64 connection_revision = 4;
+  string commit_sha = 5;
+  // completed means static inspection finished, not runtime readiness.
+  string state = 6;
+  string safe_reason = 7;
+  RepositoryInspectionResult result = 8;
+  uint64 accepted_at_unix_ms = 9;
+  uint64 updated_at_unix_ms = 10;
+}
+message InspectRepositoryResponse {
+  RepositoryInspection inspection = 1;
+}
+message GetRepositoryInspectionRequest {
+  string idempotency_key = 1;
+}
+message GetRepositoryInspectionResponse {
+  RepositoryInspection inspection = 1;
+}
+message ListRepositoryInspectionsRequest {
+  string repository_id = 1;
+  string after_id = 2;
+  uint32 limit = 3;
+}
+message ListRepositoryInspectionsResponse {
+  repeated RepositoryInspection inspections = 1;
   string next_after_id = 2;
 }

@@ -3,8 +3,11 @@ use super::super::connections::github::{app_jwt, classify_status};
 use ayni_orchestrator_workflow_postgres::store::repositories::{
     ObservedRepository, SourceCredential,
 };
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use reqwest::{Client, Method};
 use serde_json::{Value, json};
+use sha1::{Digest as _, Sha1};
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 pub(super) struct Github {
@@ -73,11 +76,90 @@ impl Github {
         let mut bytes = Vec::new();
         while let Some(chunk) = response.chunk().await.map_err(|_| "github_unavailable")? {
             if chunk.len() > 1_048_576_usize.saturating_sub(bytes.len()) {
-                return Err("github_response_invalid");
+                return Err(if path.contains("/git/") {
+                    "source_bounds_exceeded"
+                } else {
+                    "github_response_invalid"
+                });
             }
             bytes.extend_from_slice(&chunk);
         }
         serde_json::from_slice(&bytes).map_err(|_| "github_response_invalid")
+    }
+    /// All subsequent reads are addressed by immutable tree/blob IDs, never a branch.
+    pub async fn frozen_source(
+        &self,
+        installation: u64,
+        repo: u64,
+        commit: &str,
+    ) -> Result<FrozenSource, &'static str> {
+        if !object_id(commit) {
+            return Err("github_response_invalid");
+        }
+        let token = self.installation_token(installation, Some(repo)).await?;
+        let value = self
+            .request(
+                Method::GET,
+                &format!("/repositories/{repo}/git/commits/{commit}"),
+                &token,
+                None,
+            )
+            .await
+            .map_err(|reason| {
+                if reason == "github_repository_unavailable" {
+                    "github_commit_unavailable"
+                } else {
+                    reason
+                }
+            })?;
+        if value["sha"].as_str() != Some(commit) {
+            return Err("github_response_invalid");
+        }
+        let tree = value["tree"]["sha"]
+            .as_str()
+            .filter(|v| object_id(v))
+            .ok_or("github_response_invalid")?;
+        let value = self
+            .request(
+                Method::GET,
+                &format!("/repositories/{repo}/git/trees/{tree}?recursive=1"),
+                &token,
+                None,
+            )
+            .await?;
+        let entries = parse_tree(&value, tree)?;
+        Ok(FrozenSource {
+            repo,
+            token,
+            entries,
+        })
+    }
+    pub async fn frozen_blob(
+        &self,
+        source: &FrozenSource,
+        path: &str,
+    ) -> Result<Option<Vec<u8>>, &'static str> {
+        let Some(entry) = source.entries.get(path) else {
+            return Ok(None);
+        };
+        if !safe_path(path)
+            || entry.mode != "100644" && entry.mode != "100755"
+            || entry.kind != "blob"
+        {
+            return Err("source_path_unsupported");
+        }
+        if entry.size > MAX_FILE_BYTES {
+            return Err("source_bounds_exceeded");
+        }
+        let value = self
+            .request(
+                Method::GET,
+                &format!("/repositories/{}/git/blobs/{}", source.repo, entry.sha),
+                &source.token,
+                None,
+            )
+            .await?;
+        parse_blob(&value, entry).map(Some)
     }
     pub async fn installations(&self, page: u32) -> Result<Vec<Installation>, &'static str> {
         let value = self
@@ -176,6 +258,93 @@ impl Github {
         Ok(result)
     }
 }
+pub(super) const MAX_FILE_BYTES: usize = 512 * 1024;
+pub(super) struct FrozenSource {
+    repo: u64,
+    token: String,
+    entries: BTreeMap<String, TreeEntry>,
+}
+struct TreeEntry {
+    mode: String,
+    kind: String,
+    sha: String,
+    size: usize,
+}
+fn object_id(value: &str) -> bool {
+    value.len() == 40
+        && value
+            .bytes()
+            .all(|v| v.is_ascii_digit() || (b'a'..=b'f').contains(&v))
+}
+pub(super) fn safe_path(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 4096
+        && !value.contains('\\')
+        && !value.chars().any(char::is_control)
+        && value
+            .split('/')
+            .all(|v| !v.is_empty() && v != "." && v != ".." && !v.contains(':'))
+}
+fn parse_tree(value: &Value, expected: &str) -> Result<BTreeMap<String, TreeEntry>, &'static str> {
+    if value["sha"].as_str() != Some(expected) {
+        return Err("github_response_invalid");
+    }
+    if value["truncated"].as_bool() != Some(false) {
+        return Err("source_bounds_exceeded");
+    }
+    let items = value["tree"].as_array().ok_or("github_response_invalid")?;
+    if items.len() > 20_000 {
+        return Err("source_bounds_exceeded");
+    }
+    let mut entries = BTreeMap::new();
+    for item in items {
+        let path = text(item, "path", 4096)?;
+        let sha = text(item, "sha", 40)?;
+        if !object_id(&sha) {
+            return Err("github_response_invalid");
+        }
+        let entry = TreeEntry {
+            mode: text(item, "mode", 6)?,
+            kind: text(item, "type", 10)?,
+            sha,
+            size: item["size"]
+                .as_u64()
+                .and_then(|n| usize::try_from(n).ok())
+                .unwrap_or(usize::MAX),
+        };
+        if entries.insert(path, entry).is_some() {
+            return Err("github_response_invalid");
+        }
+    }
+    Ok(entries)
+}
+fn parse_blob(value: &Value, entry: &TreeEntry) -> Result<Vec<u8>, &'static str> {
+    if value["sha"].as_str() != Some(&entry.sha)
+        || value["encoding"] != "base64"
+        || value["size"].as_u64() != Some(entry.size as u64)
+    {
+        return Err("github_response_invalid");
+    }
+    let encoded = value["content"].as_str().ok_or("github_response_invalid")?;
+    let bytes = STANDARD
+        .decode(
+            encoded
+                .bytes()
+                .filter(|v| *v != b'\n' && *v != b'\r')
+                .collect::<Vec<_>>(),
+        )
+        .map_err(|_| "github_response_invalid")?;
+    if bytes.len() != entry.size || bytes.len() > MAX_FILE_BYTES {
+        return Err("source_bounds_exceeded");
+    }
+    let mut hash = Sha1::new();
+    hash.update(format!("blob {}\0", bytes.len()));
+    hash.update(&bytes);
+    if format!("{:x}", hash.finalize()) != entry.sha {
+        return Err("github_response_invalid");
+    }
+    Ok(bytes)
+}
 fn id(value: &Value, field: &str) -> Result<u64, &'static str> {
     value[field]
         .as_u64()
@@ -232,5 +401,59 @@ mod tests {
             .err(),
             Some("github_key_invalid")
         );
+    }
+}
+
+#[cfg(test)]
+mod frozen_tests {
+    use super::*;
+    #[test]
+    fn frozen_objects_reject_moved_identity_truncation_symlinks_and_bad_content() {
+        let sha = "a".repeat(40);
+        assert!(parse_tree(&json!({"sha":sha,"truncated":true,"tree":[]}), &sha).is_err());
+        assert!(
+            parse_tree(
+                &json!({"sha":"b".repeat(40),"truncated":false,"tree":[]}),
+                &sha
+            )
+            .is_err()
+        );
+        assert!(
+            parse_tree(
+                &json!({"sha":sha,"truncated":false,"tree":[
+                    {"path":"a","sha":sha,"mode":"100644","type":"blob","size":0},
+                    {"path":"a","sha":sha,"mode":"100644","type":"blob","size":0}
+                ]}),
+                &sha
+            )
+            .is_err()
+        );
+        let entry = TreeEntry {
+            mode: "100644".into(),
+            kind: "blob".into(),
+            sha: "ce013625030ba8dba906f756967f9e9ca394464a".into(),
+            size: 6,
+        };
+        let mut blob = json!({"sha":entry.sha,"size":6,"encoding":"base64","content":"aGVsbG8K"});
+        assert_eq!(parse_blob(&blob, &entry), Ok(b"hello\n".to_vec()));
+        blob["content"] = json!("aGVsbG8h");
+        assert_eq!(parse_blob(&blob, &entry), Err("github_response_invalid"));
+        blob["sha"] = json!("b".repeat(40));
+        assert!(parse_blob(&blob, &entry).is_err());
+        for path in [
+            "../secret",
+            "/etc/passwd",
+            "foo/../bar",
+            "./a",
+            "a//b",
+            "C:/file",
+            "a\\b",
+            "a\nb",
+        ] {
+            assert!(!safe_path(path), "{path:?}");
+        }
+        assert!(safe_path("nested/Cargo.lock"));
+        assert!(!object_id(&"A".repeat(40)));
+        assert!(!object_id("main"));
     }
 }

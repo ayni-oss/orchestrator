@@ -9,7 +9,8 @@ Canonical APIs support workspace/project creation, manual GitHub App credentials
 GHCR PAT connections, OpenAI key validation/model discovery and explicit workspace
 connection/model/budget selection. Historical BFF/API wiring is not restored.
 Shared GitHub repository discovery/catalog and direct project associations are available.
-Guided App setup, Ayni inspection and runtime preparation remain outstanding.
+Exact-commit static Ayni inspection provides retained findings and retry recovery.
+Guided App setup, full adapter discovery and runtime preparation remain outstanding.
 
 Run `pnpm web:dev` with the local gateway, or `dev/ctl live` for one frontend plus
 backend rebuild/rollout. The default web URL is http://127.0.0.1:5174.
@@ -54,3 +55,21 @@ Renames retain an exact request in session storage until acknowledged. The serve
 checks the displayed resource version, records an immutable receipt, and rejects
 stale edits. Retrying an acknowledged rename returns its original receipt without
 reapplying the old name over a later edit.
+
+### Inspect committed Ayni setup
+
+In Repositories, open **Inspect Ayni setup** on a connected repository and enter a
+full lowercase commit SHA. The retained result shows policy/lock digests, locked
+tools, public trust key IDs and corrective findings. Reload after an interrupted
+request and choose **Recover inspection** or **Retry same inspection**.
+
+Static inspection never enables preparation or starts work. Full adapter discovery,
+configured signer admission and runtime verification remain later gates.
+
+### Runtime signer references
+
+Configuration → Runtime signing manages public signer identities and references to
+administrator-owned immutable Secrets. Exact updates and original receipt recovery
+survive reloads. Saving a reference validates public input shapes; it does not read
+the Secret, grant signing access, enable builds or establish runtime readiness.
+The runtime preparation execution journey remains under development.

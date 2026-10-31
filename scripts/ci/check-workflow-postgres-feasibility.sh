@@ -64,8 +64,15 @@ connection_browser() {
   AYNI_PRODUCT_PRODUCTION=1 cargo test --locked -p ayni-orchestrator-control-plane --test repositories_browser -- --ignored --nocapture
 }
 
+if [[ "${AYNI_RUNTIME_SIGNERS_ONLY:-0}" == 1 ]]; then
+  cargo test --locked -p ayni-orchestrator-workflow-postgres --test runtime_signers -- --ignored --nocapture
+  connection_browser
+  exit 0
+fi
+
 if [[ "${AYNI_REPOSITORIES_ONLY:-0}" == 1 ]]; then
   cargo test --locked -p ayni-orchestrator-workflow-postgres --test repositories -- --ignored --nocapture
+  cargo test --locked -p ayni-orchestrator-workflow-postgres --test repository_inspections -- --ignored --nocapture
   cargo test --locked -p ayni-orchestrator-control-plane --test repositories_browser -- --ignored --nocapture
   exit 0
 fi
@@ -89,6 +96,8 @@ cargo test --locked -p ayni-orchestrator-workflow-postgres --test plan_proposals
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test project_continuity -- --ignored --nocapture --test-threads=1
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test connections -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test repositories -- --ignored --nocapture
+cargo test --locked -p ayni-orchestrator-workflow-postgres --test repository_inspections -- --ignored --nocapture
+cargo test --locked -p ayni-orchestrator-workflow-postgres --test runtime_signers -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test configuration -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test sessions -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test provider_calls -- --ignored --nocapture

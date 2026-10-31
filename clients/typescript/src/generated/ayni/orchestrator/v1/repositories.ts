@@ -147,6 +147,69 @@ export interface ListProjectRepositoriesResponse {
   nextAfterId: string;
 }
 
+/** Explicit, read-only static inspection. This never enables preparation or execution. */
+export interface InspectRepositoryRequest {
+  idempotencyKey: string;
+  repositoryId: string;
+  expectedConnectionRevision: string;
+  /** Full lowercase Git SHA-1 commit identity; branches and tags are not accepted. */
+  commitSha: string;
+}
+
+export interface RepositoryInspectionFinding {
+  code: string;
+  path: string;
+  action: string;
+}
+
+export interface RepositoryInspectionResult {
+  policyDigest: string;
+  lockDigest: string;
+  lockFingerprint: string;
+  ayniVersion: string;
+  lockSchema: string;
+  tools: string[];
+  trustKeyIds: string[];
+  findings: RepositoryInspectionFinding[];
+}
+
+export interface RepositoryInspection {
+  id: string;
+  idempotencyKey: string;
+  repositoryId: string;
+  connectionRevision: string;
+  commitSha: string;
+  /** completed means static inspection finished, not runtime readiness. */
+  state: string;
+  safeReason: string;
+  result?: RepositoryInspectionResult | undefined;
+  acceptedAtUnixMs: string;
+  updatedAtUnixMs: string;
+}
+
+export interface InspectRepositoryResponse {
+  inspection?: RepositoryInspection | undefined;
+}
+
+export interface GetRepositoryInspectionRequest {
+  idempotencyKey: string;
+}
+
+export interface GetRepositoryInspectionResponse {
+  inspection?: RepositoryInspection | undefined;
+}
+
+export interface ListRepositoryInspectionsRequest {
+  repositoryId: string;
+  afterId: string;
+  limit: number;
+}
+
+export interface ListRepositoryInspectionsResponse {
+  inspections: RepositoryInspection[];
+  nextAfterId: string;
+}
+
 function createBaseGithubInstallation(): GithubInstallation {
   return { installationId: "0", accountLogin: "", suspended: false };
 }
@@ -2508,6 +2571,1123 @@ export const ListProjectRepositoriesResponse: MessageFns<ListProjectRepositories
   },
 };
 
+function createBaseInspectRepositoryRequest(): InspectRepositoryRequest {
+  return { idempotencyKey: "", repositoryId: "", expectedConnectionRevision: "0", commitSha: "" };
+}
+
+export const InspectRepositoryRequest: MessageFns<InspectRepositoryRequest> = {
+  encode(message: InspectRepositoryRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.repositoryId !== "") {
+      writer.uint32(18).string(message.repositoryId);
+    }
+    if (message.expectedConnectionRevision !== "0") {
+      writer.uint32(24).uint64(message.expectedConnectionRevision);
+    }
+    if (message.commitSha !== "") {
+      writer.uint32(34).string(message.commitSha);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InspectRepositoryRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseInspectRepositoryRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.repositoryId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.expectedConnectionRevision = reader.uint64().toString();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.commitSha = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): InspectRepositoryRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      repositoryId: isSet(object.repositoryId)
+        ? globalThis.String(object.repositoryId)
+        : isSet(object.repository_id)
+        ? globalThis.String(object.repository_id)
+        : "",
+      expectedConnectionRevision: isSet(object.expectedConnectionRevision)
+        ? globalThis.String(object.expectedConnectionRevision)
+        : isSet(object.expected_connection_revision)
+        ? globalThis.String(object.expected_connection_revision)
+        : "0",
+      commitSha: isSet(object.commitSha)
+        ? globalThis.String(object.commitSha)
+        : isSet(object.commit_sha)
+        ? globalThis.String(object.commit_sha)
+        : "",
+    };
+  },
+
+  toJSON(message: InspectRepositoryRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.repositoryId !== "") {
+      obj.repositoryId = message.repositoryId;
+    }
+    if (message.expectedConnectionRevision !== "0") {
+      obj.expectedConnectionRevision = message.expectedConnectionRevision;
+    }
+    if (message.commitSha !== "") {
+      obj.commitSha = message.commitSha;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<InspectRepositoryRequest>): InspectRepositoryRequest {
+    return InspectRepositoryRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<InspectRepositoryRequest>): InspectRepositoryRequest {
+    const message = createBaseInspectRepositoryRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.repositoryId = object.repositoryId ?? "";
+    message.expectedConnectionRevision = object.expectedConnectionRevision ?? "0";
+    message.commitSha = object.commitSha ?? "";
+    return message;
+  },
+};
+
+function createBaseRepositoryInspectionFinding(): RepositoryInspectionFinding {
+  return { code: "", path: "", action: "" };
+}
+
+export const RepositoryInspectionFinding: MessageFns<RepositoryInspectionFinding> = {
+  encode(message: RepositoryInspectionFinding, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.code !== "") {
+      writer.uint32(10).string(message.code);
+    }
+    if (message.path !== "") {
+      writer.uint32(18).string(message.path);
+    }
+    if (message.action !== "") {
+      writer.uint32(26).string(message.action);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RepositoryInspectionFinding {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRepositoryInspectionFinding();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.code = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.path = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.action = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RepositoryInspectionFinding {
+    return {
+      code: isSet(object.code) ? globalThis.String(object.code) : "",
+      path: isSet(object.path) ? globalThis.String(object.path) : "",
+      action: isSet(object.action) ? globalThis.String(object.action) : "",
+    };
+  },
+
+  toJSON(message: RepositoryInspectionFinding): unknown {
+    const obj: any = {};
+    if (message.code !== "") {
+      obj.code = message.code;
+    }
+    if (message.path !== "") {
+      obj.path = message.path;
+    }
+    if (message.action !== "") {
+      obj.action = message.action;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RepositoryInspectionFinding>): RepositoryInspectionFinding {
+    return RepositoryInspectionFinding.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RepositoryInspectionFinding>): RepositoryInspectionFinding {
+    const message = createBaseRepositoryInspectionFinding();
+    message.code = object.code ?? "";
+    message.path = object.path ?? "";
+    message.action = object.action ?? "";
+    return message;
+  },
+};
+
+function createBaseRepositoryInspectionResult(): RepositoryInspectionResult {
+  return {
+    policyDigest: "",
+    lockDigest: "",
+    lockFingerprint: "",
+    ayniVersion: "",
+    lockSchema: "",
+    tools: [],
+    trustKeyIds: [],
+    findings: [],
+  };
+}
+
+export const RepositoryInspectionResult: MessageFns<RepositoryInspectionResult> = {
+  encode(message: RepositoryInspectionResult, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.policyDigest !== "") {
+      writer.uint32(10).string(message.policyDigest);
+    }
+    if (message.lockDigest !== "") {
+      writer.uint32(18).string(message.lockDigest);
+    }
+    if (message.lockFingerprint !== "") {
+      writer.uint32(26).string(message.lockFingerprint);
+    }
+    if (message.ayniVersion !== "") {
+      writer.uint32(34).string(message.ayniVersion);
+    }
+    if (message.lockSchema !== "") {
+      writer.uint32(42).string(message.lockSchema);
+    }
+    for (const v of message.tools) {
+      writer.uint32(50).string(v!);
+    }
+    for (const v of message.trustKeyIds) {
+      writer.uint32(58).string(v!);
+    }
+    for (const v of message.findings) {
+      RepositoryInspectionFinding.encode(v!, writer.uint32(66).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RepositoryInspectionResult {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRepositoryInspectionResult();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.policyDigest = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.lockDigest = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.lockFingerprint = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.ayniVersion = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.lockSchema = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.tools.push(reader.string());
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.trustKeyIds.push(reader.string());
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.findings.push(RepositoryInspectionFinding.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RepositoryInspectionResult {
+    return {
+      policyDigest: isSet(object.policyDigest)
+        ? globalThis.String(object.policyDigest)
+        : isSet(object.policy_digest)
+        ? globalThis.String(object.policy_digest)
+        : "",
+      lockDigest: isSet(object.lockDigest)
+        ? globalThis.String(object.lockDigest)
+        : isSet(object.lock_digest)
+        ? globalThis.String(object.lock_digest)
+        : "",
+      lockFingerprint: isSet(object.lockFingerprint)
+        ? globalThis.String(object.lockFingerprint)
+        : isSet(object.lock_fingerprint)
+        ? globalThis.String(object.lock_fingerprint)
+        : "",
+      ayniVersion: isSet(object.ayniVersion)
+        ? globalThis.String(object.ayniVersion)
+        : isSet(object.ayni_version)
+        ? globalThis.String(object.ayni_version)
+        : "",
+      lockSchema: isSet(object.lockSchema)
+        ? globalThis.String(object.lockSchema)
+        : isSet(object.lock_schema)
+        ? globalThis.String(object.lock_schema)
+        : "",
+      tools: globalThis.Array.isArray(object?.tools)
+        ? object.tools.map((e: any) => globalThis.String(e))
+        : [],
+      trustKeyIds: globalThis.Array.isArray(object?.trustKeyIds)
+        ? object.trustKeyIds.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.trust_key_ids)
+        ? object.trust_key_ids.map((e: any) => globalThis.String(e))
+        : [],
+      findings: globalThis.Array.isArray(object?.findings)
+        ? object.findings.map((e: any) => RepositoryInspectionFinding.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: RepositoryInspectionResult): unknown {
+    const obj: any = {};
+    if (message.policyDigest !== "") {
+      obj.policyDigest = message.policyDigest;
+    }
+    if (message.lockDigest !== "") {
+      obj.lockDigest = message.lockDigest;
+    }
+    if (message.lockFingerprint !== "") {
+      obj.lockFingerprint = message.lockFingerprint;
+    }
+    if (message.ayniVersion !== "") {
+      obj.ayniVersion = message.ayniVersion;
+    }
+    if (message.lockSchema !== "") {
+      obj.lockSchema = message.lockSchema;
+    }
+    if (message.tools?.length) {
+      obj.tools = message.tools;
+    }
+    if (message.trustKeyIds?.length) {
+      obj.trustKeyIds = message.trustKeyIds;
+    }
+    if (message.findings?.length) {
+      obj.findings = message.findings.map((e) => RepositoryInspectionFinding.toJSON(e));
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RepositoryInspectionResult>): RepositoryInspectionResult {
+    return RepositoryInspectionResult.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RepositoryInspectionResult>): RepositoryInspectionResult {
+    const message = createBaseRepositoryInspectionResult();
+    message.policyDigest = object.policyDigest ?? "";
+    message.lockDigest = object.lockDigest ?? "";
+    message.lockFingerprint = object.lockFingerprint ?? "";
+    message.ayniVersion = object.ayniVersion ?? "";
+    message.lockSchema = object.lockSchema ?? "";
+    message.tools = object.tools?.map((e) => e) || [];
+    message.trustKeyIds = object.trustKeyIds?.map((e) => e) || [];
+    message.findings = object.findings?.map((e) => RepositoryInspectionFinding.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseRepositoryInspection(): RepositoryInspection {
+  return {
+    id: "",
+    idempotencyKey: "",
+    repositoryId: "",
+    connectionRevision: "0",
+    commitSha: "",
+    state: "",
+    safeReason: "",
+    result: undefined,
+    acceptedAtUnixMs: "0",
+    updatedAtUnixMs: "0",
+  };
+}
+
+export const RepositoryInspection: MessageFns<RepositoryInspection> = {
+  encode(message: RepositoryInspection, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(18).string(message.idempotencyKey);
+    }
+    if (message.repositoryId !== "") {
+      writer.uint32(26).string(message.repositoryId);
+    }
+    if (message.connectionRevision !== "0") {
+      writer.uint32(32).uint64(message.connectionRevision);
+    }
+    if (message.commitSha !== "") {
+      writer.uint32(42).string(message.commitSha);
+    }
+    if (message.state !== "") {
+      writer.uint32(50).string(message.state);
+    }
+    if (message.safeReason !== "") {
+      writer.uint32(58).string(message.safeReason);
+    }
+    if (message.result !== undefined) {
+      RepositoryInspectionResult.encode(message.result, writer.uint32(66).fork()).join();
+    }
+    if (message.acceptedAtUnixMs !== "0") {
+      writer.uint32(72).uint64(message.acceptedAtUnixMs);
+    }
+    if (message.updatedAtUnixMs !== "0") {
+      writer.uint32(80).uint64(message.updatedAtUnixMs);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RepositoryInspection {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRepositoryInspection();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.repositoryId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.connectionRevision = reader.uint64().toString();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.commitSha = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.safeReason = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.result = RepositoryInspectionResult.decode(reader, reader.uint32());
+            continue;
+          }
+          case 9: {
+            if (tag !== 72) {
+              break;
+            }
+
+            message.acceptedAtUnixMs = reader.uint64().toString();
+            continue;
+          }
+          case 10: {
+            if (tag !== 80) {
+              break;
+            }
+
+            message.updatedAtUnixMs = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RepositoryInspection {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      repositoryId: isSet(object.repositoryId)
+        ? globalThis.String(object.repositoryId)
+        : isSet(object.repository_id)
+        ? globalThis.String(object.repository_id)
+        : "",
+      connectionRevision: isSet(object.connectionRevision)
+        ? globalThis.String(object.connectionRevision)
+        : isSet(object.connection_revision)
+        ? globalThis.String(object.connection_revision)
+        : "0",
+      commitSha: isSet(object.commitSha)
+        ? globalThis.String(object.commitSha)
+        : isSet(object.commit_sha)
+        ? globalThis.String(object.commit_sha)
+        : "",
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+      safeReason: isSet(object.safeReason)
+        ? globalThis.String(object.safeReason)
+        : isSet(object.safe_reason)
+        ? globalThis.String(object.safe_reason)
+        : "",
+      result: isSet(object.result) ? RepositoryInspectionResult.fromJSON(object.result) : undefined,
+      acceptedAtUnixMs: isSet(object.acceptedAtUnixMs)
+        ? globalThis.String(object.acceptedAtUnixMs)
+        : isSet(object.accepted_at_unix_ms)
+        ? globalThis.String(object.accepted_at_unix_ms)
+        : "0",
+      updatedAtUnixMs: isSet(object.updatedAtUnixMs)
+        ? globalThis.String(object.updatedAtUnixMs)
+        : isSet(object.updated_at_unix_ms)
+        ? globalThis.String(object.updated_at_unix_ms)
+        : "0",
+    };
+  },
+
+  toJSON(message: RepositoryInspection): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.repositoryId !== "") {
+      obj.repositoryId = message.repositoryId;
+    }
+    if (message.connectionRevision !== "0") {
+      obj.connectionRevision = message.connectionRevision;
+    }
+    if (message.commitSha !== "") {
+      obj.commitSha = message.commitSha;
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    if (message.safeReason !== "") {
+      obj.safeReason = message.safeReason;
+    }
+    if (message.result !== undefined) {
+      obj.result = RepositoryInspectionResult.toJSON(message.result);
+    }
+    if (message.acceptedAtUnixMs !== "0") {
+      obj.acceptedAtUnixMs = message.acceptedAtUnixMs;
+    }
+    if (message.updatedAtUnixMs !== "0") {
+      obj.updatedAtUnixMs = message.updatedAtUnixMs;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RepositoryInspection>): RepositoryInspection {
+    return RepositoryInspection.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RepositoryInspection>): RepositoryInspection {
+    const message = createBaseRepositoryInspection();
+    message.id = object.id ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.repositoryId = object.repositoryId ?? "";
+    message.connectionRevision = object.connectionRevision ?? "0";
+    message.commitSha = object.commitSha ?? "";
+    message.state = object.state ?? "";
+    message.safeReason = object.safeReason ?? "";
+    message.result = (object.result !== undefined && object.result !== null)
+      ? RepositoryInspectionResult.fromPartial(object.result)
+      : undefined;
+    message.acceptedAtUnixMs = object.acceptedAtUnixMs ?? "0";
+    message.updatedAtUnixMs = object.updatedAtUnixMs ?? "0";
+    return message;
+  },
+};
+
+function createBaseInspectRepositoryResponse(): InspectRepositoryResponse {
+  return { inspection: undefined };
+}
+
+export const InspectRepositoryResponse: MessageFns<InspectRepositoryResponse> = {
+  encode(message: InspectRepositoryResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.inspection !== undefined) {
+      RepositoryInspection.encode(message.inspection, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InspectRepositoryResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseInspectRepositoryResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.inspection = RepositoryInspection.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): InspectRepositoryResponse {
+    return { inspection: isSet(object.inspection) ? RepositoryInspection.fromJSON(object.inspection) : undefined };
+  },
+
+  toJSON(message: InspectRepositoryResponse): unknown {
+    const obj: any = {};
+    if (message.inspection !== undefined) {
+      obj.inspection = RepositoryInspection.toJSON(message.inspection);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<InspectRepositoryResponse>): InspectRepositoryResponse {
+    return InspectRepositoryResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<InspectRepositoryResponse>): InspectRepositoryResponse {
+    const message = createBaseInspectRepositoryResponse();
+    message.inspection = (object.inspection !== undefined && object.inspection !== null)
+      ? RepositoryInspection.fromPartial(object.inspection)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetRepositoryInspectionRequest(): GetRepositoryInspectionRequest {
+  return { idempotencyKey: "" };
+}
+
+export const GetRepositoryInspectionRequest: MessageFns<GetRepositoryInspectionRequest> = {
+  encode(message: GetRepositoryInspectionRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRepositoryInspectionRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRepositoryInspectionRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRepositoryInspectionRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+    };
+  },
+
+  toJSON(message: GetRepositoryInspectionRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRepositoryInspectionRequest>): GetRepositoryInspectionRequest {
+    return GetRepositoryInspectionRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRepositoryInspectionRequest>): GetRepositoryInspectionRequest {
+    const message = createBaseGetRepositoryInspectionRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    return message;
+  },
+};
+
+function createBaseGetRepositoryInspectionResponse(): GetRepositoryInspectionResponse {
+  return { inspection: undefined };
+}
+
+export const GetRepositoryInspectionResponse: MessageFns<GetRepositoryInspectionResponse> = {
+  encode(message: GetRepositoryInspectionResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.inspection !== undefined) {
+      RepositoryInspection.encode(message.inspection, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRepositoryInspectionResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRepositoryInspectionResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.inspection = RepositoryInspection.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRepositoryInspectionResponse {
+    return { inspection: isSet(object.inspection) ? RepositoryInspection.fromJSON(object.inspection) : undefined };
+  },
+
+  toJSON(message: GetRepositoryInspectionResponse): unknown {
+    const obj: any = {};
+    if (message.inspection !== undefined) {
+      obj.inspection = RepositoryInspection.toJSON(message.inspection);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRepositoryInspectionResponse>): GetRepositoryInspectionResponse {
+    return GetRepositoryInspectionResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRepositoryInspectionResponse>): GetRepositoryInspectionResponse {
+    const message = createBaseGetRepositoryInspectionResponse();
+    message.inspection = (object.inspection !== undefined && object.inspection !== null)
+      ? RepositoryInspection.fromPartial(object.inspection)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseListRepositoryInspectionsRequest(): ListRepositoryInspectionsRequest {
+  return { repositoryId: "", afterId: "", limit: 0 };
+}
+
+export const ListRepositoryInspectionsRequest: MessageFns<ListRepositoryInspectionsRequest> = {
+  encode(message: ListRepositoryInspectionsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repositoryId !== "") {
+      writer.uint32(10).string(message.repositoryId);
+    }
+    if (message.afterId !== "") {
+      writer.uint32(18).string(message.afterId);
+    }
+    if (message.limit !== 0) {
+      writer.uint32(24).uint32(message.limit);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListRepositoryInspectionsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListRepositoryInspectionsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositoryId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.afterId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.limit = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListRepositoryInspectionsRequest {
+    return {
+      repositoryId: isSet(object.repositoryId)
+        ? globalThis.String(object.repositoryId)
+        : isSet(object.repository_id)
+        ? globalThis.String(object.repository_id)
+        : "",
+      afterId: isSet(object.afterId)
+        ? globalThis.String(object.afterId)
+        : isSet(object.after_id)
+        ? globalThis.String(object.after_id)
+        : "",
+      limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
+    };
+  },
+
+  toJSON(message: ListRepositoryInspectionsRequest): unknown {
+    const obj: any = {};
+    if (message.repositoryId !== "") {
+      obj.repositoryId = message.repositoryId;
+    }
+    if (message.afterId !== "") {
+      obj.afterId = message.afterId;
+    }
+    if (message.limit !== 0) {
+      obj.limit = Math.round(message.limit);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListRepositoryInspectionsRequest>): ListRepositoryInspectionsRequest {
+    return ListRepositoryInspectionsRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListRepositoryInspectionsRequest>): ListRepositoryInspectionsRequest {
+    const message = createBaseListRepositoryInspectionsRequest();
+    message.repositoryId = object.repositoryId ?? "";
+    message.afterId = object.afterId ?? "";
+    message.limit = object.limit ?? 0;
+    return message;
+  },
+};
+
+function createBaseListRepositoryInspectionsResponse(): ListRepositoryInspectionsResponse {
+  return { inspections: [], nextAfterId: "" };
+}
+
+export const ListRepositoryInspectionsResponse: MessageFns<ListRepositoryInspectionsResponse> = {
+  encode(message: ListRepositoryInspectionsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.inspections) {
+      RepositoryInspection.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.nextAfterId !== "") {
+      writer.uint32(18).string(message.nextAfterId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListRepositoryInspectionsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListRepositoryInspectionsResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.inspections.push(RepositoryInspection.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.nextAfterId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListRepositoryInspectionsResponse {
+    return {
+      inspections: globalThis.Array.isArray(object?.inspections)
+        ? object.inspections.map((e: any) => RepositoryInspection.fromJSON(e))
+        : [],
+      nextAfterId: isSet(object.nextAfterId)
+        ? globalThis.String(object.nextAfterId)
+        : isSet(object.next_after_id)
+        ? globalThis.String(object.next_after_id)
+        : "",
+    };
+  },
+
+  toJSON(message: ListRepositoryInspectionsResponse): unknown {
+    const obj: any = {};
+    if (message.inspections?.length) {
+      obj.inspections = message.inspections.map((e) => RepositoryInspection.toJSON(e));
+    }
+    if (message.nextAfterId !== "") {
+      obj.nextAfterId = message.nextAfterId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListRepositoryInspectionsResponse>): ListRepositoryInspectionsResponse {
+    return ListRepositoryInspectionsResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListRepositoryInspectionsResponse>): ListRepositoryInspectionsResponse {
+    const message = createBaseListRepositoryInspectionsResponse();
+    message.inspections = object.inspections?.map((e) => RepositoryInspection.fromPartial(e)) || [];
+    message.nextAfterId = object.nextAfterId ?? "";
+    return message;
+  },
+};
+
 /** Shared catalog in the trusted local-operator scope. Source access is not runtime readiness. */
 export type RepositoryServiceService = typeof RepositoryServiceService;
 export const RepositoryServiceService = {
@@ -2607,6 +3787,42 @@ export const RepositoryServiceService = {
     responseDeserialize: (value: Buffer): ListProjectRepositoriesResponse =>
       ListProjectRepositoriesResponse.decode(value),
   },
+  inspectRepository: {
+    path: "/ayni.orchestrator.v1.RepositoryService/InspectRepository" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: InspectRepositoryRequest): Buffer =>
+      Buffer.from(InspectRepositoryRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): InspectRepositoryRequest => InspectRepositoryRequest.decode(value),
+    responseSerialize: (value: InspectRepositoryResponse): Buffer =>
+      Buffer.from(InspectRepositoryResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): InspectRepositoryResponse => InspectRepositoryResponse.decode(value),
+  },
+  getRepositoryInspection: {
+    path: "/ayni.orchestrator.v1.RepositoryService/GetRepositoryInspection" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetRepositoryInspectionRequest): Buffer =>
+      Buffer.from(GetRepositoryInspectionRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetRepositoryInspectionRequest => GetRepositoryInspectionRequest.decode(value),
+    responseSerialize: (value: GetRepositoryInspectionResponse): Buffer =>
+      Buffer.from(GetRepositoryInspectionResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetRepositoryInspectionResponse =>
+      GetRepositoryInspectionResponse.decode(value),
+  },
+  listRepositoryInspections: {
+    path: "/ayni.orchestrator.v1.RepositoryService/ListRepositoryInspections" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListRepositoryInspectionsRequest): Buffer =>
+      Buffer.from(ListRepositoryInspectionsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListRepositoryInspectionsRequest =>
+      ListRepositoryInspectionsRequest.decode(value),
+    responseSerialize: (value: ListRepositoryInspectionsResponse): Buffer =>
+      Buffer.from(ListRepositoryInspectionsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListRepositoryInspectionsResponse =>
+      ListRepositoryInspectionsResponse.decode(value),
+  },
 } as const;
 
 export interface RepositoryServiceServer extends UntypedServiceImplementation {
@@ -2618,6 +3834,9 @@ export interface RepositoryServiceServer extends UntypedServiceImplementation {
   listRepositories: handleUnaryCall<ListRepositoriesRequest, ListRepositoriesResponse>;
   associateProjectRepository: handleUnaryCall<AssociateProjectRepositoryRequest, AssociateProjectRepositoryResponse>;
   listProjectRepositories: handleUnaryCall<ListProjectRepositoriesRequest, ListProjectRepositoriesResponse>;
+  inspectRepository: handleUnaryCall<InspectRepositoryRequest, InspectRepositoryResponse>;
+  getRepositoryInspection: handleUnaryCall<GetRepositoryInspectionRequest, GetRepositoryInspectionResponse>;
+  listRepositoryInspections: handleUnaryCall<ListRepositoryInspectionsRequest, ListRepositoryInspectionsResponse>;
 }
 
 export interface RepositoryServiceClient extends Client {
@@ -2740,6 +3959,51 @@ export interface RepositoryServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListProjectRepositoriesResponse) => void,
+  ): ClientUnaryCall;
+  inspectRepository(
+    request: InspectRepositoryRequest,
+    callback: (error: ServiceError | null, response: InspectRepositoryResponse) => void,
+  ): ClientUnaryCall;
+  inspectRepository(
+    request: InspectRepositoryRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: InspectRepositoryResponse) => void,
+  ): ClientUnaryCall;
+  inspectRepository(
+    request: InspectRepositoryRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: InspectRepositoryResponse) => void,
+  ): ClientUnaryCall;
+  getRepositoryInspection(
+    request: GetRepositoryInspectionRequest,
+    callback: (error: ServiceError | null, response: GetRepositoryInspectionResponse) => void,
+  ): ClientUnaryCall;
+  getRepositoryInspection(
+    request: GetRepositoryInspectionRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetRepositoryInspectionResponse) => void,
+  ): ClientUnaryCall;
+  getRepositoryInspection(
+    request: GetRepositoryInspectionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetRepositoryInspectionResponse) => void,
+  ): ClientUnaryCall;
+  listRepositoryInspections(
+    request: ListRepositoryInspectionsRequest,
+    callback: (error: ServiceError | null, response: ListRepositoryInspectionsResponse) => void,
+  ): ClientUnaryCall;
+  listRepositoryInspections(
+    request: ListRepositoryInspectionsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListRepositoryInspectionsResponse) => void,
+  ): ClientUnaryCall;
+  listRepositoryInspections(
+    request: ListRepositoryInspectionsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListRepositoryInspectionsResponse) => void,
   ): ClientUnaryCall;
 }
 

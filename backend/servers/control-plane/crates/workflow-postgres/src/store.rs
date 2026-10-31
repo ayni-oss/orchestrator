@@ -15,6 +15,8 @@ mod project_continuity;
 pub mod provider_calls;
 pub mod publications;
 pub mod repositories;
+pub mod repository_inspections;
+pub mod runtime_signers;
 pub mod task_feedback;
 pub mod task_recovery;
 pub mod task_runs;

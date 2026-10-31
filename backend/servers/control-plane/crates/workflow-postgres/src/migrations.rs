@@ -3,7 +3,7 @@ use thiserror::Error;
 use tokio_postgres::{Client, Transaction};
 
 pub const MIGRATION_LOCK_ID: i64 = 4_702_199_126_064_921;
-pub const CURRENT_SCHEMA_VERSION: i64 = 33;
+pub const CURRENT_SCHEMA_VERSION: i64 = 35;
 
 const MIGRATION_1: &str = include_str!("../migrations/0001_durable_foundation.sql");
 const MIGRATION_2: &str = include_str!("../migrations/0002_report_acceptance.sql");
@@ -14,6 +14,8 @@ const MIGRATION_6: &str = include_str!("../migrations/0006_transport_rejections.
 const MIGRATION_7: &str = include_str!("../migrations/0007_broker_capacity.sql");
 const MIGRATION_8: &str = include_str!("../migrations/0008_agent_configuration.sql");
 const MIGRATION_24: &str = include_str!("../migrations/0024_task_source_retention.sql");
+const MIGRATION_35: &str = include_str!("../migrations/0035_runtime_signers.sql");
+const MIGRATION_34: &str = include_str!("../migrations/0034_repository_inspections.sql");
 const MIGRATION_33: &str = include_str!("../migrations/0033_hierarchy_renames.sql");
 const MIGRATION_32: &str = include_str!("../migrations/0032_repository_catalog.sql");
 const MIGRATION_31: &str = include_str!("../migrations/0031_provider_connections.sql");
@@ -228,6 +230,8 @@ async fn apply_pending_migrations(
             "Shared repository catalog and project association",
         ),
         (33_i64, MIGRATION_33, "Fenced workspace and project renames"),
+        (34_i64, MIGRATION_34, "Frozen repository source inspection"),
+        (35_i64, MIGRATION_35, "Public runtime signer configuration"),
     ] {
         if current < version {
             transaction.batch_execute(source).await?;
@@ -314,6 +318,8 @@ async fn validate_inner(client: &Client) -> Result<(), MigrationError> {
         (31_i64, MIGRATION_31),
         (32_i64, MIGRATION_32),
         (33_i64, MIGRATION_33),
+        (34_i64, MIGRATION_34),
+        (35_i64, MIGRATION_35),
     ];
     if rows.len() != migrations.len() {
         return Err(MigrationError::InvalidHistory);
@@ -384,6 +390,8 @@ async fn validate_checksum(transaction: &Transaction<'_>) -> Result<(), Migratio
         (31_i64, MIGRATION_31),
         (32_i64, MIGRATION_32),
         (33_i64, MIGRATION_33),
+        (34_i64, MIGRATION_34),
+        (35_i64, MIGRATION_35),
     ] {
         let checksum: String = transaction
             .query_one(
@@ -446,6 +454,12 @@ async fn apply_runtime_privileges(
              REVOKE ALL ON workflow_hierarchy_rename_receipts FROM PUBLIC, {role};\
              GRANT SELECT, INSERT ON workflow_hierarchy_rename_receipts TO {role};\
              GRANT UPDATE (display_name,updated_at,resource_version) ON workflow_workspaces,workflow_projects TO {role};\
+             REVOKE ALL ON workflow_runtime_signers,workflow_runtime_signer_revisions,workflow_runtime_signer_receipts FROM PUBLIC, {role};\
+             GRANT SELECT, INSERT ON workflow_runtime_signers,workflow_runtime_signer_revisions,workflow_runtime_signer_receipts TO {role};\
+             GRANT UPDATE (display_name,public_key,secret_name,secret_uid,active_revision,revision,enabled) ON workflow_runtime_signers TO {role};\
+             REVOKE ALL ON workflow_repository_inspections FROM PUBLIC, {role};\
+             GRANT SELECT, INSERT ON workflow_repository_inspections TO {role};\
+             GRANT UPDATE (state,safe_reason,result,updated_at_unix_ms) ON workflow_repository_inspections TO {role};\
              REVOKE ALL ON workflow_repositories,workflow_repository_operations,workflow_project_repositories,workflow_repository_association_receipts FROM PUBLIC, {role};\
              GRANT SELECT, INSERT ON workflow_repositories,workflow_repository_operations,workflow_project_repositories,workflow_repository_association_receipts TO {role};\
              GRANT UPDATE (state,safe_reason,result,updated_at_unix_ms) ON workflow_repository_operations TO {role};\
@@ -501,7 +515,7 @@ fn validate_role_name(runtime_role: &str) -> Result<(), MigrationError> {
 }
 
 const SCHEMA_MANIFEST_CHECKSUM: &str =
-    "sha256:0f064ae451d77169bdc6d353235a2d12fe21044f60651792049987e4fc3e377c";
+    "sha256:7d4303b209ad0efc02b6d926a8b27132c8e81ada38463e0f19d0cf3d75a7baf5";
 
 async fn validate_schema(transaction: &Transaction<'_>) -> Result<(), MigrationError> {
     let manifest: String = transaction
@@ -608,7 +622,7 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                            = (table_name IN ('public.workflow_execution_progress','public.workflow_history_snapshots','public.workflow_transport_quarantine','public.workflow_updates','public.workflow_activities','public.workflow_pending_reports')) \
                    ) \
                    FROM unnest(ARRAY[ \
-                       'public.workflow_hierarchy_rename_receipts','public.workflow_repositories','public.workflow_repository_operations','public.workflow_project_repositories','public.workflow_repository_association_receipts','public.workflow_connection_credentials', 'public.workflow_connections', 'public.workflow_connection_operations', 'public.workflow_workspaces', 'public.workflow_projects', \
+                       'public.workflow_hierarchy_rename_receipts','public.workflow_repositories','public.workflow_repository_operations','public.workflow_repository_inspections','public.workflow_runtime_signers','public.workflow_runtime_signer_revisions','public.workflow_runtime_signer_receipts','public.workflow_project_repositories','public.workflow_repository_association_receipts','public.workflow_connection_credentials', 'public.workflow_connections', 'public.workflow_connection_operations', 'public.workflow_workspaces', 'public.workflow_projects', \
                        'public.workflow_conversations', 'public.workflow_command_receipts', \
                        'public.workflow_messages', 'public.workflow_turns', \
                        'public.workflow_activities', 'public.workflow_updates', 'public.workflow_execution_timeline', 'public.workflow_execution_progress', \
@@ -623,7 +637,7 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                        required.column_name, 'UPDATE' \
                    )) \
                    FROM (VALUES \
-                       ('workflow_workspaces','display_name'),('workflow_workspaces','updated_at'),('workflow_workspaces','resource_version'),('workflow_projects','display_name'),('workflow_projects','updated_at'),('workflow_projects','resource_version'),('workflow_repository_operations','state'),('workflow_repository_operations','safe_reason'),('workflow_repository_operations','result'),('workflow_repository_operations','updated_at_unix_ms'),('workflow_connections','display_name'),('workflow_connections','revision'),('workflow_connections','enabled'),('workflow_connections','app_id'),('workflow_connections','active_credential_revision'),('workflow_connections','candidate_credential_revision'),('workflow_connections','status'),('workflow_connections','safe_reason'),('workflow_connections','settings'),('workflow_connections','models'),('workflow_connection_operations','state'),('workflow_connection_operations','safe_reason'),('workflow_connection_operations','result'),('workflow_execution_progress','sequence'),('workflow_execution_progress','round'),('workflow_execution_progress','call_id'),('workflow_execution_progress','stage'),('workflow_execution_progress','tool_name'),('workflow_execution_progress','tool_invocation_id'),('workflow_execution_progress','provisional_text'),('workflow_execution_progress','stage_observed_at'),('workflow_execution_progress','observed_at'), \
+                       ('workflow_workspaces','display_name'),('workflow_workspaces','updated_at'),('workflow_workspaces','resource_version'),('workflow_projects','display_name'),('workflow_projects','updated_at'),('workflow_projects','resource_version'),('workflow_runtime_signers','display_name'),('workflow_runtime_signers','public_key'),('workflow_runtime_signers','secret_name'),('workflow_runtime_signers','secret_uid'),('workflow_runtime_signers','active_revision'),('workflow_runtime_signers','revision'),('workflow_runtime_signers','enabled'),('workflow_repository_inspections','state'),('workflow_repository_inspections','safe_reason'),('workflow_repository_inspections','result'),('workflow_repository_inspections','updated_at_unix_ms'),('workflow_repository_operations','state'),('workflow_repository_operations','safe_reason'),('workflow_repository_operations','result'),('workflow_repository_operations','updated_at_unix_ms'),('workflow_connections','display_name'),('workflow_connections','revision'),('workflow_connections','enabled'),('workflow_connections','app_id'),('workflow_connections','active_credential_revision'),('workflow_connections','candidate_credential_revision'),('workflow_connections','status'),('workflow_connections','safe_reason'),('workflow_connections','settings'),('workflow_connections','models'),('workflow_connection_operations','state'),('workflow_connection_operations','safe_reason'),('workflow_connection_operations','result'),('workflow_execution_progress','sequence'),('workflow_execution_progress','round'),('workflow_execution_progress','call_id'),('workflow_execution_progress','stage'),('workflow_execution_progress','tool_name'),('workflow_execution_progress','tool_invocation_id'),('workflow_execution_progress','provisional_text'),('workflow_execution_progress','stage_observed_at'),('workflow_execution_progress','observed_at'), \
                        ('workflow_task_runs','reconciled_at'),('workflow_task_runs','source_reclaim_after'),('workflow_task_runs','source_retired_at'),('workflow_task_runs','source_retired_bytes'),('workflow_task_runs','source_pack'),('workflow_task_runs','assessment_outcome_at'),('workflow_task_runs','state'),('workflow_task_runs','generation'),('workflow_task_runs','pod_uid'),('workflow_task_runs','deadline_at'),('workflow_task_runs','provider_state'),('workflow_task_runs','request_digest'),('workflow_task_runs','outcome'),('workflow_plans','current_version_id'),('workflow_provider_calls','state'),('workflow_provider_calls','evidence'),('workflow_provider_calls','safe_reason'),('workflow_provider_calls','reservation_settled'),('workflow_turns','execution_binding_revision'),
                        ('workflow_sessions','state'),('workflow_sessions','idle_timeout_seconds'),('workflow_sessions','last_active_at'), \
                        ('workflow_agent_configuration_heads','revision_id'), \
@@ -665,7 +679,7 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                          candidate.column_name, 'UPDATE' \
                      ) \
                      AND NOT ( \
-                         (candidate.table_name IN ('workflow_workspaces','workflow_projects') AND candidate.column_name IN ('display_name','updated_at','resource_version')) OR (candidate.table_name='workflow_repository_operations' AND candidate.column_name IN ('state','safe_reason','result','updated_at_unix_ms')) OR (candidate.table_name='workflow_connections' AND candidate.column_name IN ('display_name','revision','enabled','app_id','active_credential_revision','candidate_credential_revision','status','safe_reason','settings','models')) OR (candidate.table_name='workflow_connection_operations' AND candidate.column_name IN ('state','safe_reason','result')) OR (candidate.table_name='workflow_execution_progress' AND candidate.column_name IN ('sequence','round','call_id','stage','tool_name','tool_invocation_id','provisional_text','stage_observed_at','observed_at')) \
+                         (candidate.table_name IN ('workflow_workspaces','workflow_projects') AND candidate.column_name IN ('display_name','updated_at','resource_version')) OR (candidate.table_name='workflow_runtime_signers' AND candidate.column_name IN ('display_name','public_key','secret_name','secret_uid','active_revision','revision','enabled')) OR (candidate.table_name IN ('workflow_repository_operations','workflow_repository_inspections') AND candidate.column_name IN ('state','safe_reason','result','updated_at_unix_ms')) OR (candidate.table_name='workflow_connections' AND candidate.column_name IN ('display_name','revision','enabled','app_id','active_credential_revision','candidate_credential_revision','status','safe_reason','settings','models')) OR (candidate.table_name='workflow_connection_operations' AND candidate.column_name IN ('state','safe_reason','result')) OR (candidate.table_name='workflow_execution_progress' AND candidate.column_name IN ('sequence','round','call_id','stage','tool_name','tool_invocation_id','provisional_text','stage_observed_at','observed_at')) \
                          OR (candidate.table_name='workflow_task_publications' AND candidate.column_name IN ('state','generation','pod_uid','lease_until','commit_sha','tree_sha','outcome')) \
                          OR (candidate.table_name='workflow_task_runs' AND candidate.column_name IN ('assessment_outcome_at','reconciled_at','source_reclaim_after','source_retired_at','source_retired_bytes','source_pack','state','generation','pod_uid','deadline_at','provider_state','request_digest','outcome')) \
                          OR (candidate.table_name='workflow_plans' AND candidate.column_name='current_version_id') \

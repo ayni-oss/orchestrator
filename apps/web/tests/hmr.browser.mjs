@@ -20,7 +20,7 @@ test('the application itself retains browser state through component and theme C
  let child,browser;
  try {
   fixture.listen(0,'127.0.0.1');await once(fixture,'listening');
-  for(const name of ['src','static','package.json','svelte.config.js','vite.config.js','tsconfig.json'])await cp(join(app,name),join(directory,name),{recursive:true});
+  for(const name of ['src','static','package.json','vite.config.js','tsconfig.json'])await cp(join(app,name),join(directory,name),{recursive:true});
   await symlink(join(app,'node_modules'),join(directory,'node_modules'),'dir');
   const port=await freePort();const origin=`http://127.0.0.1:${port}`;
   child=spawn(resolve(app,'node_modules/.bin/vite'),['dev','--host','127.0.0.1','--port',String(port),'--strictPort'],{cwd:directory,stdio:'ignore',detached:true,env:{...process.env,AYNI_ORCHESTRATOR_LIVE_GATEWAY_PORT:String(fixture.address().port)}});
@@ -30,7 +30,9 @@ test('the application itself retains browser state through component and theme C
   await page.goto(origin);await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
   await page.evaluate(()=>{window.hmrSentinel='retained';});
   const source=join(directory,'src/routes/+page.svelte');
-  await writeFile(source,(await readFile(source,'utf8')).replace('title="Projects"','title="Updated projects"'));
+  const originalSource=await readFile(source,'utf8');
+  assert.ok(originalSource.includes('title={label}'),'home page title binding must be found before testing HMR');
+  await writeFile(source,originalSource.replace('title={label}','title="Updated projects"'));
   await page.getByRole('heading',{name:'Updated projects',exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>window.hmrSentinel),'retained');
   const css=join(directory,'src/app.css');await writeFile(css,(await readFile(css,'utf8'))+'\n:root { --primary: rgb(12, 34, 56); }\n');

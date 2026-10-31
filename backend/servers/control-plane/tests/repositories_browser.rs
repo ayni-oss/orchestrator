@@ -53,6 +53,7 @@ async fn repository_browser_preserves_catalog_and_project_receipts() -> Result<(
         .await?
         .repository
         .ok_or("fixture repository missing")?;
+    seed_static_inspection(&store, &repo.id).await?;
     let a = store
         .create_workspace(&key(), "Repository browser A")
         .await?
@@ -97,5 +98,35 @@ async fn repository_browser_preserves_catalog_and_project_receipts() -> Result<(
     if !result?.success() {
         return Err("repository browser acceptance failed".into());
     }
+    Ok(())
+}
+
+async fn seed_static_inspection(
+    store: &WorkflowStore,
+    repository_id: &str,
+) -> Result<(), Box<dyn Error>> {
+    let inspection_key = uuid::Uuid::now_v7().to_string();
+    store
+        .begin_repository_inspection(
+            ayni_orchestrator_workflow_postgres::store::repository_inspections::Inspect {
+                key: &inspection_key,
+                repository_id,
+                expected_connection_revision: 1,
+                commit_sha: &"a".repeat(40),
+            },
+        )
+        .await?;
+    store.finish_repository_inspection(&inspection_key, Ok(
+        ayni_orchestrator_workflow_postgres::store::repository_inspections::InspectionResult {
+            policy_digest: "sha256:fixture-policy".into(), lock_digest: "sha256:fixture-lock".into(),
+            lock_fingerprint: String::new(), ayni_version: String::new(), lock_schema: String::new(),
+            tools: vec![], trust_key_ids: vec![], findings: vec![
+                ayni_orchestrator_workflow_postgres::store::repository_inspections::Finding {
+                    code: "policy_missing".into(), path: ".ayni.toml".into(),
+                    action: "Commit an Ayni policy before preparing this repository.".into(),
+                }
+            ],
+        }
+    )).await?;
     Ok(())
 }

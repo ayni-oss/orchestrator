@@ -17,7 +17,8 @@ catalog repositories directly, including reuse across workspaces. See the
 [UI delivery plan](docs/technical/research/repository-runtime-workspace-delivery.md).
 The local UI provides workspace/project creation, named integration configuration,
 GitHub repository discovery, a shared catalog and direct project associations.
-Committed Ayni inspection and runtime preparation remain planned; current task
+Exact-commit static Ayni inspection is available with retained findings and recovery.
+Full adapter compatibility and runtime preparation remain planned; current task
 source preparation still uses the trusted local helper. Full task-delivery screens remain planned.
 
 The [backend foundation roadmap](docs/technical/history/backend-foundation-roadmap.md)

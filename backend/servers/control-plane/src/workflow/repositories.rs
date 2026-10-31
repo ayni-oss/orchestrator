@@ -1,5 +1,6 @@
 //! Local-operator source discovery, durable catalog admission and project association.
 mod github;
+mod inspection;
 use super::{RequestContext, WorkflowGrpc, v1};
 use ayni_orchestrator_workflow_postgres::{
     StoreError,
@@ -48,8 +49,122 @@ fn identity(value: u64) -> Result<(), Status> {
     }
     Ok(())
 }
+fn inspected(
+    value: ayni_orchestrator_workflow_postgres::store::repository_inspections::Inspection,
+) -> v1::RepositoryInspection {
+    v1::RepositoryInspection {
+        id: value.id,
+        idempotency_key: value.idempotency_key,
+        repository_id: value.repository_id,
+        connection_revision: value.connection_revision,
+        commit_sha: value.commit_sha,
+        state: value.state,
+        safe_reason: value.safe_reason,
+        result: value.result.map(|r| v1::RepositoryInspectionResult {
+            policy_digest: r.policy_digest,
+            lock_digest: r.lock_digest,
+            lock_fingerprint: r.lock_fingerprint,
+            ayni_version: r.ayni_version,
+            lock_schema: r.lock_schema,
+            tools: r.tools,
+            trust_key_ids: r.trust_key_ids,
+            findings: r
+                .findings
+                .into_iter()
+                .map(|f| v1::RepositoryInspectionFinding {
+                    code: f.code,
+                    path: f.path,
+                    action: f.action,
+                })
+                .collect(),
+        }),
+        accepted_at_unix_ms: value.accepted_at_unix_ms,
+        updated_at_unix_ms: value.updated_at_unix_ms,
+    }
+}
 #[tonic::async_trait]
 impl v1::repository_service_server::RepositoryService for WorkflowGrpc {
+    async fn inspect_repository(
+        &self,
+        request: Request<v1::InspectRepositoryRequest>,
+    ) -> Result<Response<v1::InspectRepositoryResponse>, Status> {
+        use ayni_orchestrator_workflow_postgres::store::repository_inspections::Inspect;
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let mut op = self
+            .store
+            .begin_repository_inspection(Inspect {
+                key: &value.idempotency_key,
+                repository_id: &value.repository_id,
+                expected_connection_revision: value.expected_connection_revision,
+                commit_sha: &value.commit_sha,
+            })
+            .await
+            .map_err(|e| context.store(&e))?;
+        if op.state == "accepted" {
+            let repo = self
+                .store
+                .inspection_repository(&op.repository_id)
+                .await
+                .map_err(|e| context.store(&e))?;
+            let observed = match self
+                .store
+                .repository_source(&repo.connection_id, op.connection_revision)
+                .await
+            {
+                Ok(source) => match github::Github::new(&source) {
+                    Ok(client) => tokio::time::timeout(
+                        Duration::from_secs(25),
+                        inspection::inspect(&client, &repo, &op.commit_sha),
+                    )
+                    .await
+                    .unwrap_or(Err("github_unavailable")),
+                    Err(reason) => Err(reason),
+                },
+                Err(StoreError::ConfigurationRevisionConflict) => Err("github_source_changed"),
+                Err(error) => return Err(context.store(&error)),
+            };
+            op = self
+                .store
+                .finish_repository_inspection(&op.idempotency_key, observed)
+                .await
+                .map_err(|e| context.store(&e))?;
+        }
+        tracing::info!(operation_id=%op.id,repository_id=%op.repository_id,commit=%op.commit_sha,state=%op.state,reason=%op.safe_reason,"Repository static inspection observed");
+        Ok(context.response(v1::InspectRepositoryResponse {
+            inspection: Some(inspected(op)),
+        }))
+    }
+    async fn get_repository_inspection(
+        &self,
+        request: Request<v1::GetRepositoryInspectionRequest>,
+    ) -> Result<Response<v1::GetRepositoryInspectionResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let op = self
+            .store
+            .get_repository_inspection(&request.into_inner().idempotency_key)
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::GetRepositoryInspectionResponse {
+            inspection: Some(inspected(op)),
+        }))
+    }
+    async fn list_repository_inspections(
+        &self,
+        request: Request<v1::ListRepositoryInspectionsRequest>,
+    ) -> Result<Response<v1::ListRepositoryInspectionsResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let (items, next) = self
+            .store
+            .list_repository_inspections(&value.repository_id, &value.after_id, value.limit)
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::ListRepositoryInspectionsResponse {
+            inspections: items.into_iter().map(inspected).collect(),
+            next_after_id: next,
+        }))
+    }
     async fn list_github_installations(
         &self,
         request: Request<v1::ListGithubInstallationsRequest>,

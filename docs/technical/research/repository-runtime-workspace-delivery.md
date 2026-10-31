@@ -1,6 +1,6 @@
 # Repository preparation and workspace delivery
 
-Status: connection foundation, shared source catalog and project associations are implemented. Ayni/runtime preparation and cumulative live-GitHub qualification remain pending. See [integration connections](../architecture/integration-connections.md) for the implemented boundary.
+Status: connection foundation, shared source catalog and project associations are implemented. Exact-commit static Ayni inspection is implemented. Full adapter discovery, setup, runtime preparation and cumulative live-GitHub qualification remain pending. See [integration connections](../architecture/integration-connections.md) for the implemented boundary.
 
 Deliver the [roadmap focus](../../../ROADMAP.md#next-focus-repository-preparation-with-a-usable-ui)
 through the [shared repository preparation contract](../architecture/repository-preparation.md).

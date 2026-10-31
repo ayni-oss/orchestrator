@@ -1,8 +1,8 @@
 # Connect a repository
 
 Connect a GitHub repository once, then attach it to projects in any workspace.
-This local operator flow establishes source access. Ayni inspection and runtime
-preparation are still planned.
+This local operator flow establishes source access and supports exact-commit static
+Ayni inspection. Runtime preparation remains planned.
 
 ```mermaid
 ---
@@ -45,3 +45,17 @@ reads its retained result; **Retry same connection** retries the exact selection
 If you change or disable the source connection during a check, refresh and connect
 again using the current configuration. Failed authentication requires correcting
 the saved App connection or its installation access.
+
+## Inspect Ayni setup
+
+Open **Inspect Ayni setup** on a connected repository, paste the full lowercase
+commit SHA from GitHub, and choose **Inspect commit**. The result shows the exact
+commit, policy and lock digests, locked tools, trusted public key IDs and next
+steps for missing or invalid inputs.
+
+If the response is interrupted, reload and choose **Recover inspection**. Use
+**Retry same inspection** when GitHub becomes available again. A new commit needs
+a new inspection; earlier results remain in history.
+
+Static inspection does not start tasks or build images. Full environment discovery
+and runtime verification follow in later delivery slices.

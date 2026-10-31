@@ -132,3 +132,76 @@ Task source verification and runtime artifact selection remain separate future w
 checks real PostgreSQL, gRPC, gateway and browser recovery using synthetic source
 credentials. It qualifies catalog authority and UI behavior, not live GitHub
 credentials, registry permissions or runtime preparation.
+
+## Frozen static Ayni inspection
+
+`InspectRepository` accepts an existing catalog ID, the displayed source connection
+revision and a full lowercase commit SHA. It records intent before GitHub reads;
+repeating the exact request recovers the same operation. History and recovery reads
+never resume external access. Source rotation or disablement fences late results.
+
+The installation token is scoped to that repository with read-only Contents and
+Metadata permissions. Commit and tree identities are checked; required blobs come
+from that frozen tree, with their Git object identity and size independently
+verified. Policy and lock bytes produce retained SHA-256 digests. Repository files
+are never executed, and raw provider errors and source bytes are not returned.
+
+Static evaluation consumes `ayni-core` and `ayni-environment` from Ayni 0.16.2 at
+`8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc`. These public APIs validate policy,
+lock schema/recipe/fingerprint, locked input digests, host architecture and public
+trust fingerprint consistency. This fallback is needed because the CLI has no
+standalone read-only lock inspection command. It adds no dependency from Ayni to
+Orchestrator and accesses no private signing material.
+
+| Limit | Behavior |
+| --- | --- |
+| Source selection | Full 40-character lowercase commit SHA; branches and tags rejected |
+| GitHub responses | Bounded to 1 MiB each; truncated trees rejected |
+| Snapshot | At most 256 required regular files, 512 KiB each, 8 MiB total |
+| File paths | Repository relative; symlinks, submodules and escaping paths rejected |
+| Provider work | 25-second request deadline; transient provider/local unavailability and rate limits retain the same retry identity |
+| Static result | Bounded to 64 KiB; retained independently of browser lifetime |
+
+A completed inspection can contain blocking findings. Missing or invalid inputs
+produce corrective findings rather than runtime readiness. Every result retains
+pending adapter-discovery and runtime-verification requirements. Registry setup,
+selected signer admission, trust-change PRs, image preparation and task handoff
+remain later slices. Reading or inspecting a repository never opts it into builds.
+
+The repository browser gate covers retained result display, exact commit input,
+response loss/reload recovery and conflicting retries against real PostgreSQL,
+gRPC and the gateway. It uses synthetic GitHub credentials and separately seeded
+static findings; it does not establish live GitHub source qualification.
+
+## Runtime preparation foundations
+
+Runtime preparation currently provides public signer-reference configuration, an immutable
+GHCR discovery client and a trusted content-verifier binary. These are preparation
+foundations; the build/sign/publication supervisor and its UI journey are not
+implemented. No runtime can be admitted as ready through these primitives alone.
+
+Runtime signing configuration stores a reviewed key ID/public key and the name
+and exact UID of an administrator-owned immutable Kubernetes Secret. The namespace
+belongs to deployment configuration. The product does not read the referenced
+object when saving metadata. Preparation must later validate immutability, UID,
+private/public key agreement and stage authority before delivering signing access.
+
+Signer changes use exact command receipts and immutable public revisions. Rotation
+and enable/disable operations fence stale versions. Read APIs and lost-response
+recovery return public configuration only. There is no signing material or signer
+credential reader in PostgreSQL. Initial administrator provisioning remains an
+external prerequisite, with the reserved `ayni-runtime-signer-` object-name prefix.
+
+The registry library distinguishes confirmed manifest absence from access failure,
+rate limiting, outage, malformed data and unsupported platform. Manifest and config
+bytes must match their immutable digests. Discovery returns a candidate, never
+verification or replacement authority. Registry publication is not implemented.
+
+`backend/workers/runtime-verifier` consumes frozen policy/lock inputs, a platform
+and an independently trusted expected Ayni executable digest. It invokes the
+pinned Ayni public verifier against the actual candidate root, including signature
+and protected content, without executing the candidate's CLI. Its `content_verified`
+result covers certification/content only. Full adapter discovery, managed execution,
+operation-generation binding, cleanup and runtime admission remain separate gates.
+The packaging Dockerfile rejects a dynamic interpreter or shared-library dependency
+before producing the trusted verifier image.

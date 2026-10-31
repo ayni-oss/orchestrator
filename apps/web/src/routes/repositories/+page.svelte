@@ -1,4 +1,5 @@
 <script lang="ts">
+ import RepositoryInspection from '$lib/components/repository-inspection.svelte';
  import { onMount } from 'svelte';
  import PageHeader from '$lib/components/page-header.svelte';
  import InformationCard from '$lib/components/information-card.svelte';
@@ -47,7 +48,7 @@
  </InformationCard>
  <div class="flex items-center justify-between"><h2 class="text-lg font-semibold">Shared catalog</h2><Button variant="outline" disabled={busy} onclick={()=>perform(load)}>Refresh repositories</Button></div>
  {#if !catalog.length}<p class="text-sm text-muted-foreground">No repositories connected yet.</p>{/if}
- {#each catalog as repo (repo.id)}<InformationCard title={repo.fullName} status="connected"><InformationTable rows={[{label:'Access',value:repo.private?'Private':'Public'},{label:'Default branch',value:repo.defaultBranch},{label:'Provider repository',value:repo.providerRepositoryId},{label:'Installation',value:repo.installationId},{label:'Connected',value:new Date(Number(repo.connectedAtUnixMs)).toLocaleString()}]}/><p class="text-sm text-muted-foreground">Source access was checked at connection time. Ayni inspection and runtime preparation are not available yet. Select this repository from a project's Repositories page.</p></InformationCard>{/each}
+ {#each catalog as repo (repo.id)}<InformationCard title={repo.fullName} status="connected"><InformationTable rows={[{label:'Access',value:repo.private?'Private':'Public'},{label:'Default branch',value:repo.defaultBranch},{label:'Provider repository',value:repo.providerRepositoryId},{label:'Installation',value:repo.installationId},{label:'Connected',value:new Date(Number(repo.connectedAtUnixMs)).toLocaleString()}]}/><p class="text-sm text-muted-foreground">Source access was checked at connection time. Inspect committed Ayni inputs below; runtime preparation remains a separate step. Select this repository from a project's Repositories page.</p><RepositoryInspection {repo} connection={connections.find(c=>c.id===repo.connectionId)} /></InformationCard>{/each}
  {#if nextCatalog}<Button variant="outline" disabled={busy} onclick={()=>perform(()=>loadCatalog(true))}>More catalog repositories</Button>{/if}
  <h2 class="text-lg font-semibold">Connection history</h2>
  {#each operations as op (op.id)}<InformationCard title={op.repository?.fullName||`Repository ${op.providerRepositoryId}`} status={op.state}><InformationTable rows={[{label:'Stage',value:'Source access'},{label:'Operation',value:op.id,monospace:true},{label:'Connection revision',value:op.connectionRevision},{label:'Updated',value:new Date(Number(op.updatedAtUnixMs)).toLocaleString()}]}/>{#if op.safeReason}<p class="text-sm">{repositoryReasons[op.safeReason]||'Source access needs attention.'}</p>{/if}{#if op.state==='accepted'}<Button disabled={busy||!!pending} onclick={()=>perform(async()=>{persist(request(op));await resume();})}>Resume source check</Button>{/if}</InformationCard>{/each}

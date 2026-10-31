@@ -9,6 +9,11 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+ayni-core = { git = "https://github.com/ayni-oss/ayni.git", rev = "8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc" }
+ayni-environment = { git = "https://github.com/ayni-oss/ayni.git", rev = "8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc" }
+base64.workspace = true
+tempfile.workspace = true
+sha1 = "=0.10.7"
 reqwest.workspace = true
 jsonwebtoken.workspace = true
 async-nats.workspace = true
@@ -35,7 +40,6 @@ tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
 http-body-util.workspace = true
 tower.workspace = true
 

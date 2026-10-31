@@ -12,16 +12,42 @@ test('repository catalog and project associations use retained canonical receipt
  const server=createServer();server.listen(0,'127.0.0.1');await once(server,'listening');const port=server.address().port;await new Promise(resolve=>server.close(resolve));
  const origin=`http://127.0.0.1:${port}`;
  const production=process.env.AYNI_PRODUCT_PRODUCTION==='1';
- const child=production?spawn('node',['apps/web/build/index.js'],{stdio:'ignore',env:{...process.env,HOST:'127.0.0.1',PORT:String(port),ORIGIN:origin},detached:true}):spawn('pnpm',['--dir','apps/web','exec','vite','dev','--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:'ignore',env:process.env,detached:true});
+ const child=production?spawn('node',['apps/web/build/index.js'],{stdio:'ignore',env:{...process.env,HOST:'127.0.0.1',PORT:String(port)},detached:true}):spawn('pnpm',['--dir','apps/web','exec','vite','dev','--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:'ignore',env:process.env,detached:true});
  let browser;
  try {
   let ready=false;for(let i=0;i<120;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await delay(250);}assert.ok(ready,'product did not start');
   browser=await chromium.launch({headless:true});const page=await browser.newPage();
   await page.goto(`${origin}/repositories`);await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
   await page.getByRole('region',{name:'fixture/browser-repository',exact:true}).first().waitFor();
+  const inspectionCard = page.locator(`[data-repository-inspection="${fixture}"]`);
+  await inspectionCard.getByRole('button',{name:'Inspect Ayni setup',exact:true}).click();
+  await inspectionCard.getByText('Static inspection complete',{exact:true}).waitFor();
+  await inspectionCard.getByText('Commit an Ayni policy before preparing this repository.',{exact:true}).waitFor();
+  const commitInput = inspectionCard.getByLabel('Commit SHA',{exact:true});
+  await commitInput.fill('main');
+  assert.equal(await inspectionCard.getByRole('button',{name:'Inspect commit',exact:true}).isDisabled(),true);
+  await commitInput.fill('b'.repeat(40));
+  let inspectionRequest,inspectionAcknowledge;
+  const lostInspection = new Promise(resolve=>{inspectionAcknowledge=resolve;});
+  await page.route('**/api/InspectRepository',async route=>{
+   inspectionRequest=route.request().postDataJSON();
+   const response=await route.fetch();assert.equal(response.status(),200);
+   assert.equal((await response.json()).inspection.state,'failed');
+   await route.abort('failed');inspectionAcknowledge();
+  });
+  await inspectionCard.getByRole('button',{name:'Inspect commit',exact:true}).click();
+  await lostInspection;await page.unroute('**/api/InspectRepository');await page.reload();
+  await inspectionCard.getByRole('button',{name:'Recover inspection',exact:true}).click();
+  await inspectionCard.getByText('The saved App key is invalid. Update the source connection.',{exact:true}).waitFor();
+  await page.waitForFunction(id=>sessionStorage.getItem(`ayni.repository.inspection.pending.${id}`)===null,fixture);
+  const retainedInspection=await page.request.post(`${origin}/api/GetRepositoryInspection`,{headers:{'x-console-request':'1'},data:{idempotencyKey:inspectionRequest.idempotencyKey}});
+  assert.equal(retainedInspection.status(),200);assert.equal((await retainedInspection.json()).inspection.commitSha,'b'.repeat(40));
+  const inspectionConflict=await page.request.post(`${origin}/api/InspectRepository`,{headers:{'x-console-request':'1'},data:{...inspectionRequest,commitSha:'c'.repeat(40)}});
+  assert.equal(inspectionConflict.status(),409);
+  await inspectionCard.screenshot({path:'/tmp/repository-inspection-browser.png'});
   await page.getByLabel('GitHub App connection',{exact:true}).selectOption(process.env.AYNI_REPOSITORY_SOURCE);
   await page.getByRole('button',{name:'Discover installations',exact:true}).click();
-  await page.getByText('The saved App key is invalid. Update the source connection.',{exact:true}).waitFor();
+  await page.getByRole('alert').filter({hasText:'Repository needs attention'}).getByText('The saved App key is invalid. Update the source connection.',{exact:true}).waitFor();
   // Provider fixtures exercise the selection UI; source verification still uses the real backend
   // and must reject the synthetic private key rather than connecting a false-ready repository.
   await page.route('**/api/ListGithubInstallations',route=>route.fulfill({json:{installations:[{installationId:'123',accountLogin:'fixture',suspended:false}]}}));

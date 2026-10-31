@@ -16,7 +16,7 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
  const port=await freePort();const origin=`http://127.0.0.1:${port}`;
  const production=process.env.AYNI_PRODUCT_PRODUCTION==='1';
  const child=production
-  ?spawn('node',['apps/web/build/index.js'],{stdio:'ignore',env:{...process.env,HOST:'127.0.0.1',PORT:String(port),ORIGIN:origin},detached:true})
+  ?spawn('node',['apps/web/build/index.js'],{stdio:'ignore',env:{...process.env,HOST:'127.0.0.1',PORT:String(port)},detached:true})
   :spawn('pnpm',['--dir','apps/web','exec','vite','dev','--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:'ignore',env:process.env,detached:true});
  let browser;
  try {
@@ -24,7 +24,7 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   assert.equal(ready,true,'product server did not become ready');
   browser=await chromium.launch({headless:true});const page=await browser.newPage();
   await page.goto(origin);await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
-  await page.getByRole('button',{name:'Create workspace',exact:true}).click();const workspace=`Browser ${randomUUID()}`;
+  await page.getByRole('main').getByRole('button',{name:'Create workspace',exact:true}).click();const workspace=`Browser ${randomUUID()}`;
   await page.getByLabel('Workspace name',{exact:true}).fill(workspace);
   const [createdWorkspace]=await Promise.all([page.waitForResponse(response=>response.url().endsWith('/api/CreateWorkspace')),page.getByRole('dialog').getByRole('button',{name:'Create workspace',exact:true}).click()]);
   assert.equal(createdWorkspace.status(),200);
@@ -122,6 +122,29 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   assert.equal(await page.getByLabel('OpenAI connection',{exact:true}).inputValue(),process.env.AYNI_BROWSER_CONNECTION_ID);
   assert.equal(await page.getByLabel('Model',{exact:true}).inputValue(),'fixture-model');
   for(const secret of providerSecrets)assert.equal(await page.evaluate(secret=>[...Object.values(localStorage),...Object.values(sessionStorage)].some(value=>value.includes(secret)),secret),false);
+  await page.goto(`${origin}/settings/runtime-signing`);
+  await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
+  const signerName=`Runtime signer ${randomUUID()}`;
+  await page.getByLabel('Name',{exact:true}).fill(signerName);
+  await page.getByLabel('Key ID',{exact:true}).fill('fixture-runtime');
+  await page.getByLabel('Public key',{exact:true}).fill('503e65851ff2ac80d18ef4a5aafeeaa4664e816be09138662c1723a75f611c3a');
+  await page.getByLabel('Immutable Secret name',{exact:true}).fill('ayni-runtime-signer-browser-fixture');
+  await page.getByLabel('Secret UID',{exact:true}).fill(randomUUID());
+  assert.deepEqual(await page.locator('form input').evaluateAll(inputs=>inputs.filter(input=>!input.checkValidity()).map(input=>({id:input.id,message:input.validationMessage}))),[]);
+  let signerRequest,signerAcknowledge,signerReject;const signerLost=new Promise((resolve,reject)=>{signerAcknowledge=resolve;signerReject=reject;});
+  await page.route('**/api/SaveRuntimeSigner',async route=>{try{signerRequest=route.request().postDataJSON();const response=await route.fetch();const status=response.status();const body=await response.json();await route.abort('failed');signerAcknowledge({status,body});}catch(error){await route.abort('failed').catch(()=>{});signerReject(error);}});
+  const signerSubmitted=page.waitForRequest(request=>request.url().endsWith('/api/SaveRuntimeSigner'),{timeout:10000});
+  await page.getByRole('button',{name:'Save signer reference',exact:true}).click();await signerSubmitted;
+  const signerResponse=await signerLost;assert.equal(signerResponse.status,200,JSON.stringify(signerResponse.body));
+  await page.unroute('**/api/SaveRuntimeSigner');await page.reload();
+  await page.getByRole('button',{name:'Recover signer update',exact:true}).click();
+  const signerCard=page.getByRole('region',{name:signerName,exact:true});await signerCard.waitFor();
+  await signerCard.getByText('fixture-runtime',{exact:true}).waitFor();
+  const signerConflict=await page.request.post(`${origin}/api/SaveRuntimeSigner`,{headers:{'x-console-request':'1'},data:{...signerRequest,secretUid:randomUUID()}});assert.equal(signerConflict.status(),409);
+  await signerCard.getByRole('button',{name:'Disable signer',exact:true}).click();
+  await signerCard.getByRole('button',{name:'Enable signer',exact:true}).waitFor();
+  await page.reload();await signerCard.getByRole('button',{name:'Enable signer',exact:true}).waitFor();
+  await page.screenshot({path:'/tmp/runtime-signing-browser.png',fullPage:true});
   await page.evaluate(()=>window.scrollTo(0,0));
   await page.screenshot({path:'/tmp/integrations-product.png',fullPage:true});
   console.log('product-browser: hierarchy, lost-response recovery, reload, redaction, validation, concurrent stale-write rejection and origin boundary, GHCR/OpenAI credential recovery and workspace model selection passed');

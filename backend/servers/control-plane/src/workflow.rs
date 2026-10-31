@@ -7,6 +7,7 @@ mod projects;
 mod publications;
 mod recovery;
 mod repositories;
+mod runtime_preparation;
 mod tasks;
 mod timeline;
 use projections::{
@@ -78,12 +79,20 @@ pub async fn serve(
     health_reporter
         .set_serving::<v1::repository_service_server::RepositoryServiceServer<WorkflowGrpc>>()
         .await;
+    health_reporter.set_serving::<v1::runtime_preparation_service_server::RuntimePreparationServiceServer<WorkflowGrpc>>().await;
     let reflection = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(FILE_DESCRIPTOR_SET)
         .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
         .build_v1()
         .map_err(io::Error::other)?;
     Server::builder()
+        .add_service(
+            v1::runtime_preparation_service_server::RuntimePreparationServiceServer::new(
+                api.clone(),
+            )
+            .max_decoding_message_size(65536)
+            .max_encoding_message_size(MAX_RESPONSE_BYTES),
+        )
         .add_service(
             v1::repository_service_server::RepositoryServiceServer::new(api.clone())
                 .max_decoding_message_size(MAX_REQUEST_BYTES)
