@@ -180,7 +180,10 @@ impl AdmissionSnapshot {
             registry_connection_id: registry.id,
             registry_connection_revision: registry.revision,
             registry_credential_revision: registry.active_credential_revision,
-            registry_destination: registry.settings.registry_destination,
+            registry_destination: registry_destination(
+                &registry.settings.registry_destination,
+                repository.get("full_name"),
+            )?,
             discovery_tag,
             reusable_image,
             publication_tag: format!("ayni-preparation-{}", id.replace('-', "")),
@@ -269,7 +272,11 @@ async fn load_snapshot(
         serde_json::from_str(inspection.get("result")).map_err(|_| StoreError::CorruptState)?;
     let key_id: String = signer.get("key_id");
     validate_inspection(&result, &freeze, &key_id)?;
-    let reusable=tx.query_opt("SELECT evidence FROM workflow_runtime_preparations WHERE repository_id=$1 AND state='ready' AND platform=$2 AND frozen::jsonb->>'lock_fingerprint'=$3 AND frozen::jsonb->>'registry_destination'=$4 ORDER BY id DESC LIMIT 1",&[&input.repository_id,&input.platform,&result.lock_fingerprint,&registry.settings.registry_destination]).await?;
+    let destination = registry_destination(
+        &registry.settings.registry_destination,
+        repository.get("full_name"),
+    )?;
+    let reusable=tx.query_opt("SELECT evidence FROM workflow_runtime_preparations WHERE repository_id=$1 AND state='ready' AND platform=$2 AND frozen::jsonb->>'lock_fingerprint'=$3 AND frozen::jsonb->>'registry_destination'=$4 ORDER BY id DESC LIMIT 1",&[&input.repository_id,&input.platform,&result.lock_fingerprint,&destination]).await?;
     let reusable_image = match reusable {
         Some(row) => {
             serde_json::from_str::<Evidence>(row.get("evidence"))
@@ -310,4 +317,50 @@ fn validate_capabilities(
         return Err(StoreError::ConfigurationRevisionConflict);
     }
     Ok(())
+}
+
+/// Freeze the repository package beneath the selected organization.
+fn registry_destination(namespace: &str, full_name: &str) -> Result<String, StoreError> {
+    connections::registry_namespace(namespace)?;
+    let (owner, name) = full_name
+        .split_once('/')
+        .ok_or(StoreError::InvalidInput("repository_full_name"))?;
+    if owner.is_empty()
+        || name.is_empty()
+        || name.len() > 100
+        || !name.as_bytes()[0].is_ascii_alphanumeric()
+        || !name.as_bytes()[name.len() - 1].is_ascii_alphanumeric()
+        || !name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+    {
+        return Err(StoreError::InvalidInput("repository image package"));
+    }
+    Ok(format!("{namespace}/{}", name.to_ascii_lowercase()))
+}
+
+#[cfg(test)]
+mod destination_tests {
+    #[test]
+    fn package_comes_from_the_repository_not_the_connection() -> Result<(), crate::StoreError> {
+        assert_eq!(
+            super::registry_destination("ghcr.io/ayni-oss", "source-team/Sandbox")?,
+            "ghcr.io/ayni-oss/sandbox"
+        );
+        assert_eq!(
+            super::registry_destination("ghcr.io/ayni-oss", "source-team/Another-Repo")?,
+            "ghcr.io/ayni-oss/another-repo"
+        );
+        for name in [
+            "sandbox",
+            "owner/",
+            "owner/../escape",
+            "owner/repo:tag",
+            "owner/repo@digest",
+        ] {
+            assert!(super::registry_destination("ghcr.io/ayni-oss", name).is_err());
+        }
+        assert!(super::registry_destination("ghcr.io/ayni-oss/package", "owner/repo").is_err());
+        Ok(())
+    }
 }

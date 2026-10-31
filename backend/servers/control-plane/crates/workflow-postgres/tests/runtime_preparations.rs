@@ -86,7 +86,7 @@ impl Fixture {
                 provider: "github",
                 capability: "container_registry",
                 settings: ProviderSettings {
-                    registry_destination: "ghcr.io/fixture/runtime".into(),
+                    registry_destination: "ghcr.io/fixture".into(),
                     push_username: "fixture-push".into(),
                     pull_username: "fixture-pull".into(),
                 },
@@ -269,6 +269,10 @@ async fn starts_reports_pod_deletion_and_cleanup_are_durable_fenced_and_idempote
             .await,
         Err(StoreError::IdempotencyConflict)
     ));
+    assert_eq!(
+        original.frozen.registry_destination,
+        "ghcr.io/fixture/runtime"
+    );
     assert_eq!(original.frozen.source_tree, f.freeze.source_tree);
     assert_eq!(original.frozen.profile_json, f.freeze.profile_json);
     assert_eq!(

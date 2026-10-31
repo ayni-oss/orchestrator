@@ -2,6 +2,7 @@
 use super::{StoreError, WorkflowStore, new_id, validate_id, validate_key, validate_name};
 use serde::{Deserialize, Serialize};
 mod providers;
+pub(crate) use providers::registry_namespace;
 pub use providers::{ProviderCandidate, SaveProvider};
 use tokio_postgres::{Row, Transaction};
 

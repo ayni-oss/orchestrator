@@ -8,7 +8,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  const inspection={id:inspectionId,idempotencyKey:randomUUID(),repositoryId,connectionRevision:'1',commitSha:'d'.repeat(40),state:'completed',updatedAtUnixMs:String(Date.now()),result:{policyDigest:hash,lockDigest:hash,lockFingerprint:hash,trustKeyIds:['fixture-signer'],findings:[{code:'adapter_discovery_pending',path:'.ayni.lock',action:'Managed discovery remains required.'},{code:'runtime_verification_pending',path:'.ayni.lock',action:'Runtime verification remains required.'}]}};
  let operation,originalReceipt,startRequest,retryRequest,cancelRequest;
  await page.route('**/api/ListRepositoryInspections',route=>route.fulfill({json:{inspections:[inspection]}}));
- await page.route('**/api/ListConnections',route=>route.fulfill({json:{connections:[{id:registryId,displayName:'Fixture runtime registry',provider:'github',capability:'container_registry',revision:'1',enabled:true,activeCredentialRevision:randomUUID(),registryDestination:'ghcr.io/fixture/runtime'}]}}));
+ await page.route('**/api/ListConnections',route=>route.fulfill({json:{connections:[{id:registryId,displayName:'Fixture runtime registry',provider:'github',capability:'container_registry',revision:'1',enabled:true,activeCredentialRevision:randomUUID(),registryDestination:'ghcr.io/fixture'}]}}));
  await page.route('**/api/ListRuntimeSigners',route=>route.fulfill({json:{signers:[{id:signerId,displayName:'Fixture reviewed signer',keyId:'fixture-signer',enabled:true,revision:'1'}]}}));
  await page.route('**/api/ListRuntimePreparations',route=>route.fulfill({json:{operations:operation?[operation]:[]}}));
  await page.route('**/api/GetRuntimePreparation',route=>route.fulfill({json:{operation}}));

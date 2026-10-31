@@ -39,23 +39,7 @@ fn validate(input: &SaveProvider<'_>) -> Result<String, StoreError> {
             }
         }
         ("github", "container_registry") => {
-            let repo = input
-                .settings
-                .registry_destination
-                .strip_prefix("ghcr.io/")
-                .ok_or(StoreError::InvalidInput("registry_destination"))?;
-            if repo.len() > 200
-                || repo.split('/').count() < 2
-                || repo.split('/').any(|p| {
-                    p.is_empty()
-                        || p.starts_with(['.', '-', '_'])
-                        || !p.bytes().all(|b| {
-                            b.is_ascii_lowercase() || b.is_ascii_digit() || b"._-".contains(&b)
-                        })
-                })
-            {
-                return Err(StoreError::InvalidInput("registry_destination"));
-            }
+            registry_namespace(&input.settings.registry_destination)?;
             for name in [&input.settings.push_username, &input.settings.pull_username] {
                 if name.is_empty()
                     || name.len() > 100
@@ -240,5 +224,49 @@ impl WorkflowStore {
         let value = row.get(0);
         driver.abort();
         Ok(value)
+    }
+}
+
+/// A connection selects one GHCR organization; packages belong to repositories.
+/// # Errors
+/// Reject hosts, packages, tags and invalid organization names.
+pub fn registry_namespace(value: &str) -> Result<&str, StoreError> {
+    let owner = value
+        .strip_prefix("ghcr.io/")
+        .ok_or(StoreError::InvalidInput("registry_destination"))?;
+    if owner.is_empty()
+        || owner.len() > 39
+        || owner.starts_with('-')
+        || owner.ends_with('-')
+        || !owner
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    {
+        return Err(StoreError::InvalidInput("registry_destination"));
+    }
+    Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn registry_connections_accept_only_an_organization_path() -> Result<(), crate::StoreError> {
+        for value in ["ghcr.io/ayni-oss", "ghcr.io/team123"] {
+            assert_eq!(super::registry_namespace(value)?, value);
+        }
+        for value in [
+            "ghcr.io/ayni-oss/sandbox",
+            "ghcr.io/ayni-oss/",
+            "ghcr.io/",
+            "ghcr.io/Team",
+            "ghcr.io/-team",
+            "ghcr.io/team:tag",
+            "ghcr.io/team@sha256:abc",
+            "https://ghcr.io/team",
+            "ghcr.io/team_name",
+        ] {
+            assert!(super::registry_namespace(value).is_err(), "{value}");
+        }
+        Ok(())
     }
 }

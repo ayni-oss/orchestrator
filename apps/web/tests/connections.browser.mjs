@@ -82,16 +82,16 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
    const displayName=`${provider} ${randomUUID()}`;
    await page.getByLabel('Connection name',{exact:true}).fill(displayName);
    if(registry) {
-    await page.getByLabel('Destination',{exact:true}).fill('ghcr.io/fixture/browser-validation');
+    await page.getByLabel('Organization destination',{exact:true}).fill('ghcr.io/fixture');
     await page.getByLabel('Push username',{exact:true}).fill('fixture-push');
     await page.getByLabel('Pull username',{exact:true}).fill('fixture-pull');
     for(const label of ['Push PAT','Pull PAT']){const value=`fixture-token-${randomUUID()}`;providerSecrets.push(value);await page.getByLabel(label,{exact:true}).fill(value);}
    } else {const value=`fixture-openai-${randomUUID()}`;providerSecrets.push(value);await page.getByLabel('API key',{exact:true}).fill(value);}
    const dialog=page.getByRole('dialog');
    if(registry) {
-    await page.getByLabel('Destination',{exact:true}).fill('ghcr.io/fixture');
-    assert.equal(await page.getByLabel('Destination',{exact:true}).evaluate(input=>input.checkValidity()),false);
-    await page.getByLabel('Destination',{exact:true}).fill('ghcr.io/fixture/browser-validation');
+    await page.getByLabel('Organization destination',{exact:true}).fill('ghcr.io/fixture/browser-validation');
+    assert.equal(await page.getByLabel('Organization destination',{exact:true}).evaluate(input=>input.checkValidity()),false);
+    await page.getByLabel('Organization destination',{exact:true}).fill('ghcr.io/fixture');
    }
    await page.route('**/api/SaveProviderConnection',route=>route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({message:'Rejected configuration'})}));
    await dialog.getByRole('button',{name:'Save connection',exact:true}).click();

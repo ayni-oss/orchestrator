@@ -3,7 +3,7 @@ use thiserror::Error;
 use tokio_postgres::{Client, Transaction};
 
 pub const MIGRATION_LOCK_ID: i64 = 4_702_199_126_064_921;
-pub const CURRENT_SCHEMA_VERSION: i64 = 36;
+pub const CURRENT_SCHEMA_VERSION: i64 = 37;
 
 const MIGRATION_1: &str = include_str!("../migrations/0001_durable_foundation.sql");
 const MIGRATION_2: &str = include_str!("../migrations/0002_report_acceptance.sql");
@@ -14,6 +14,7 @@ const MIGRATION_6: &str = include_str!("../migrations/0006_transport_rejections.
 const MIGRATION_7: &str = include_str!("../migrations/0007_broker_capacity.sql");
 const MIGRATION_8: &str = include_str!("../migrations/0008_agent_configuration.sql");
 const MIGRATION_24: &str = include_str!("../migrations/0024_task_source_retention.sql");
+const MIGRATION_37: &str = include_str!("../migrations/0037_registry_organizations.sql");
 const MIGRATION_36: &str = include_str!("../migrations/0036_runtime_preparations.sql");
 const MIGRATION_35: &str = include_str!("../migrations/0035_runtime_signers.sql");
 const MIGRATION_34: &str = include_str!("../migrations/0034_repository_inspections.sql");
@@ -234,6 +235,11 @@ async fn apply_pending_migrations(
         (34_i64, MIGRATION_34, "Frozen repository source inspection"),
         (35_i64, MIGRATION_35, "Public runtime signer configuration"),
         (36_i64, MIGRATION_36, "Durable fenced runtime preparation"),
+        (
+            37_i64,
+            MIGRATION_37,
+            "Organization-scoped registry connections",
+        ),
     ] {
         if current < version {
             transaction.batch_execute(source).await?;
@@ -323,6 +329,7 @@ async fn validate_inner(client: &Client) -> Result<(), MigrationError> {
         (34_i64, MIGRATION_34),
         (35_i64, MIGRATION_35),
         (36_i64, MIGRATION_36),
+        (37_i64, MIGRATION_37),
     ];
     if rows.len() != migrations.len() {
         return Err(MigrationError::InvalidHistory);
@@ -396,6 +403,7 @@ async fn validate_checksum(transaction: &Transaction<'_>) -> Result<(), Migratio
         (34_i64, MIGRATION_34),
         (35_i64, MIGRATION_35),
         (36_i64, MIGRATION_36),
+        (37_i64, MIGRATION_37),
     ] {
         let checksum: String = transaction
             .query_one(

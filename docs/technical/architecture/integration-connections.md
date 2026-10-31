@@ -70,10 +70,17 @@ not establish compatibility with the conversation execution API. Custom endpoint
 are not accepted by the configuration UI. Selected connection sessions always use
 the standard OpenAI endpoint; existing isolated provider fixtures remain separate.
 
-GHCR configuration requires an explicit `ghcr.io/owner/package` destination and
+GHCR configuration requires an explicit `ghcr.io/organization` destination and
 separate push/pull usernames and classic PAT inputs. Destination and account
 identities are immutable; create another named connection to change them. Candidate
-validation independently authenticates both credentials using scoped token requests.
+validation independently checks each credential against its configured GitHub
+account at `/user`, then makes an unscoped GHCR token request. An anonymous
+registry token cannot substitute for authenticated account identity.
+Runtime preparation appends the lowercase repository name: `ayni-oss/sandbox`
+with `ghcr.io/ayni-oss` selects `ghcr.io/ayni-oss/sandbox`.
+Existing package-level connections are normalized to their organization with a
+revision increment; frozen operations and history keep their original destinations.
+Pending credential candidates must be saved again before validation.
 It does not establish package permissions. Runtime operations must report authentication,
 push and pull failures at their actual stage; no disposable test image is required. Guided GitHub App setup remains outstanding. Saved source connections support installation/repository discovery and shared project associations through the repository catalog.
 

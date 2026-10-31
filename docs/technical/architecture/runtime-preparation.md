@@ -115,3 +115,11 @@ proof that every language/toolchain fits.
 The packaging README records measured qualification and limits. Live GitHub/GHCR
 access, actual publication and repository-specific capacity must be reported as
 separate evidence; mocked UI or PostgreSQL tests do not establish them.
+
+### Registry destination
+
+A registry connection selects only `ghcr.io/<organization>`. Admission derives the
+lowercase package from the catalog repository name and freezes the complete image
+destination before discovery or publication. For `ayni-oss/sandbox`, a connection
+at `ghcr.io/ayni-oss` yields `ghcr.io/ayni-oss/sandbox`. Reuse and verification bind
+to that complete destination; a connection never supplies a package override.
