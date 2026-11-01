@@ -201,19 +201,13 @@ async fn discover(client: &WorkerClient, claim: &StageClaim) -> Result<StageResu
     // A missing retained manifest falls through only after an authenticated 404.
     // Denial and outage already returned an unavailable failure.
     let tag = if op.evidence.expected_manifest_digest.is_empty() {
-        format!(
-            "ayni-{}-{}",
-            op.frozen.lock_fingerprint.trim_start_matches("sha256:"),
-            op.platform
-                .strip_prefix("linux/")
-                .ok_or(Failure::PlatformMismatch)?
-        )
+        &op.frozen.discovery_tag
     } else {
-        op.frozen.publication_tag.clone()
+        &op.frozen.publication_tag
     };
     let candidate = transport::discover(
         &op.frozen.registry_destination,
-        &tag,
+        tag,
         &op.platform,
         &credential,
     )

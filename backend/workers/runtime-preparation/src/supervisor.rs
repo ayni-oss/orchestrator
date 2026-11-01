@@ -9,7 +9,12 @@ use kube::{
     api::{DeleteParams, PostParams, Preconditions},
 };
 use serde::{Deserialize, de::DeserializeOwned};
-use std::{env, fs, time::Duration};
+use std::{
+    collections::BTreeMap,
+    env, fs,
+    sync::Mutex,
+    time::{Duration, Instant},
+};
 
 mod evidence;
 mod pods;
@@ -24,6 +29,7 @@ pub struct Supervisor {
     authority: String,
     storage_class: Option<String>,
     pull_policy: String,
+    last_failure: Mutex<BTreeMap<String, Instant>>,
 }
 impl Supervisor {
     /// # Errors
@@ -53,6 +59,7 @@ impl Supervisor {
             return Err(Failure::InvalidInput);
         }
         Ok(Self {
+            last_failure: Mutex::new(BTreeMap::new()),
             client: Client::try_default()
                 .await
                 .map_err(|_| Failure::ExecutionFailed)?,
@@ -71,6 +78,30 @@ impl Supervisor {
                 .unwrap_or_else(|_| "IfNotPresent".into()),
         })
     }
+    // Only caller-created context is allowed here: never raw HTTP bodies or library errors.
+    fn diagnostic(&self, message: String) {
+        if let Ok(mut previous) = self.last_failure.lock()
+            && previous
+                .get(&message)
+                .is_none_or(|at| at.elapsed() >= Duration::from_secs(30))
+        {
+            eprintln!("{message}; retrying retained operation");
+            if previous.len() >= 32 {
+                previous.clear();
+            }
+            previous.insert(message, Instant::now());
+        }
+    }
+    fn kubernetes_failure(&self, action: &str, error: &kube::Error) -> Failure {
+        let status = match error {
+            kube::Error::Api(error) => error.code,
+            _ => 0,
+        };
+        self.diagnostic(format!(
+            "runtime Kubernetes request failed: action={action} status={status}"
+        ));
+        Failure::ExecutionFailed
+    }
     async fn request<T: DeserializeOwned>(
         &self,
         path: &str,
@@ -83,8 +114,17 @@ impl Supervisor {
             .json(body)
             .send()
             .await
-            .map_err(|_| Failure::ExecutionFailed)?;
+            .map_err(|_| {
+                self.diagnostic(format!(
+                    "runtime authority request failed: endpoint={path} reason=transport"
+                ));
+                Failure::ExecutionFailed
+            })?;
         if !response.status().is_success() {
+            self.diagnostic(format!(
+                "runtime authority request failed: endpoint={path} status={}",
+                response.status().as_u16()
+            ));
             return Err(Failure::ExecutionFailed);
         }
         let bytes = ayni_orchestrator_registry::bounded_body(
@@ -92,8 +132,18 @@ impl Supervisor {
             ayni_orchestrator_events::runtime_preparation::MAX_SUPERVISOR_RESPONSE_BYTES,
         )
         .await
-        .map_err(|_| Failure::ExecutionFailed)?;
-        serde_json::from_slice(&bytes).map_err(|_| Failure::ExecutionFailed)
+        .map_err(|_| {
+            self.diagnostic(format!(
+                "runtime authority request failed: endpoint={path} reason=response_body"
+            ));
+            Failure::ExecutionFailed
+        })?;
+        serde_json::from_slice(&bytes).map_err(|_| {
+            self.diagnostic(format!(
+                "runtime authority request failed: endpoint={path} reason=response_schema"
+            ));
+            Failure::ExecutionFailed
+        })
     }
     async fn call(&self, request: &SupervisorRequest) -> Result<Option<StageClaim>, Failure> {
         self.request("/v1/runtime-supervisor", request).await
@@ -130,7 +180,15 @@ impl Supervisor {
         let Some(claim) = self.call(&SupervisorRequest::Poll).await? else {
             return Ok(());
         };
-        self.reconcile(&claim).await
+        self.reconcile(&claim).await.inspect_err(|reason| {
+            self.diagnostic(format!(
+                "runtime reconciliation failed: operation={} stage={} generation={} reason={}",
+                claim.operation.id,
+                claim.attempt.stage,
+                claim.attempt.generation,
+                reason.reason()
+            ));
+        })
     }
     async fn reconcile(&self, claim: &StageClaim) -> Result<(), Failure> {
         let api: Api<Pod> = Api::namespaced(self.client.clone(), &self.namespace);
@@ -138,7 +196,7 @@ impl Supervisor {
         let pod = api
             .get_opt(&name)
             .await
-            .map_err(|_| Failure::ExecutionFailed)?;
+            .map_err(|error| self.kubernetes_failure("get_pod", &error))?;
         if let Some(pod) = pod {
             pods::verify(&pod, claim)?;
             return self.existing(&api, claim, &pod).await;

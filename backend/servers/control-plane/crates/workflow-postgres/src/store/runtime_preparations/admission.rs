@@ -51,7 +51,7 @@ impl WorkflowStore {
         connections::serialize_key(&tx, input.repository_id).await?;
         let id = new_id();
         let at = now(&tx).await?;
-        let frozen = load_snapshot(&tx, &input, freeze, &id).await?;
+        let frozen = load_snapshot(&tx, &input, freeze).await?;
         if reviewed.is_some_and(|(registry, signer)| {
             frozen.registry_connection_revision != registry || frozen.signer_revision != signer
         }) {
@@ -162,12 +162,7 @@ struct AdmissionSnapshot {
     reusable_image: String,
 }
 impl AdmissionSnapshot {
-    fn freeze(
-        self,
-        input: &Start<'_>,
-        freeze: FreezeInputs,
-        id: &str,
-    ) -> Result<FrozenInputs, StoreError> {
+    fn freeze(self, input: &Start<'_>, freeze: FreezeInputs) -> Result<FrozenInputs, StoreError> {
         let Self {
             repository,
             source,
@@ -180,8 +175,8 @@ impl AdmissionSnapshot {
         let key_id: String = signer.get("key_id");
         let discovery_tag = format!(
             "ayni-{}-{}",
-            result.lock_fingerprint.trim_start_matches("sha256:"),
-            input.platform.trim_start_matches("linux/")
+            input.platform.trim_start_matches("linux/"),
+            result.lock_fingerprint.trim_start_matches("sha256:")
         );
         Ok(FrozenInputs {
             repository_id: input.repository_id.into(),
@@ -201,9 +196,9 @@ impl AdmissionSnapshot {
                 &registry.settings.registry_destination,
                 repository.get("full_name"),
             )?,
+            publication_tag: discovery_tag.clone(),
             discovery_tag,
             reusable_image,
-            publication_tag: format!("ayni-preparation-{}", id.replace('-', "")),
             signer_id: input.signer_id.into(),
             signer_revision: unsigned(&signer, "revision")?,
             signer_active_revision: signer.get("active_revision"),
@@ -250,7 +245,6 @@ async fn load_snapshot(
     tx: &Transaction<'_>,
     input: &Start<'_>,
     freeze: FreezeInputs,
-    id: &str,
 ) -> Result<FrozenInputs, StoreError> {
     let repository = tx
         .query_opt(
@@ -311,7 +305,7 @@ async fn load_snapshot(
         result,
         reusable_image,
     }
-    .freeze(input, freeze, id)
+    .freeze(input, freeze)
 }
 
 fn validate_capabilities(

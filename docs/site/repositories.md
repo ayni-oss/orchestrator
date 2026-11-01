@@ -161,7 +161,9 @@ started merely by opening a repository, and there is no recurring build permissi
 or automatic rebuild on every push in this flow.
 
 For `ayni-oss/sandbox`, a registry connection at `ghcr.io/ayni-oss` produces
-`ghcr.io/ayni-oss/sandbox`. The runtime status shows the destination and an **Open
+`ghcr.io/ayni-oss/sandbox`. Published images use
+`ayni-<arch>-<lock fingerprint>` tags, such as `ayni-arm64-<lock fingerprint>`.
+The lock fingerprint identifies the committed `.ayni.lock`. The runtime status shows the destination and an **Open
 registry package** link. It shows an immutable image reference after publication
 is confirmed by retained evidence. An intended digest or uncertain push does not
 establish publication. Verification and cleanup must still finish before **Runtime

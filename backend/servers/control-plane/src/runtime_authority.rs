@@ -1,8 +1,10 @@
 //! Runtime workers hold one stage capability; only supervisors adopt and retire Pods.
 use axum::{
     Json, Router,
+    extract::Request,
     extract::{DefaultBodyLimit, Path, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::post,
 };
@@ -10,7 +12,9 @@ use ayni_orchestrator_events::runtime_preparation::{
     Binding, MAX_WORKER_REQUEST_BYTES, STAGES, StageClaim, StageReport, SupervisorRequest,
     WorkerRequest, WorkerResponse, worker_token,
 };
-use ayni_orchestrator_workflow_postgres::{WorkflowStore, store::runtime_preparations::Credential};
+use ayni_orchestrator_workflow_postgres::{
+    StoreError, WorkflowStore, store::runtime_preparations::Credential,
+};
 use sha2::{Digest as _, Sha256};
 use std::{io, sync::Arc};
 use subtle::ConstantTimeEq as _;
@@ -55,10 +59,22 @@ pub fn router(store: WorkflowStore) -> Result<Router, io::Error> {
             post(credential),
         )
         .layer(DefaultBodyLimit::max(MAX_WORKER_REQUEST_BYTES))
+        .layer(middleware::from_fn(authority_status))
         .with_state(Authority {
             store,
             token: Arc::from(token),
         }))
+}
+
+async fn authority_status(request: Request, next: Next) -> Response {
+    let response = next.run(request).await;
+    if !response.status().is_success() {
+        tracing::warn!(
+            status = response.status().as_u16(),
+            "Runtime authority request rejected"
+        );
+    }
+    response
 }
 
 fn authorized(headers: &HeaderMap, expected: &str) -> Result<(), StatusCode> {
@@ -117,6 +133,19 @@ async fn supervisor_certification(
     }))
 }
 
+fn supervisor_store_failure(
+    action: &'static str,
+    operation_id: &str,
+    error: &StoreError,
+) -> StatusCode {
+    let sql_state = match error {
+        StoreError::Database(source) => source.code().map_or("", |code| code.code()),
+        _ => "",
+    };
+    tracing::warn!(action, operation_id, reason=%error, sql_state, "Runtime supervisor authority request failed");
+    StatusCode::CONFLICT
+}
+
 async fn supervisor(
     State(authority): State<Authority>,
     headers: HeaderMap,
@@ -129,14 +158,16 @@ async fn supervisor(
                 .store
                 .pending_runtime_preparations(1)
                 .await
-                .map_err(|_| StatusCode::CONFLICT)?;
+                .map_err(|error| supervisor_store_failure("poll", "", &error))?;
             match pending.first() {
                 Some(operation) => Some(
                     authority
                         .store
                         .claim_runtime_stage(&operation.id)
                         .await
-                        .map_err(|_| StatusCode::CONFLICT)?,
+                        .map_err(|error| {
+                            supervisor_store_failure("claim", &operation.id, &error)
+                        })?,
                 ),
                 None => None,
             }
