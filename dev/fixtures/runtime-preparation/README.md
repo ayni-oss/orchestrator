@@ -8,12 +8,15 @@ Build and import the local worker/probe images first with `dev/scripts/runtime-p
 python3 dev/scripts/runtime-preparation-qualify.py \
   --context kind-ayni-runtime-qualification \
   --kubeconfig /tmp/ayni-runtime-cluster/kubeconfig \
-  --worker-image local/ayni-runtime-worker:<tag> \
-  --probe-image local/ayni-runtime-probes:<tag> \
+  --worker-image docker.io/local/ayni-runtime-worker@sha256:<node-manifest> \
+  --probe-image docker.io/local/ayni-runtime-probes@sha256:<node-manifest> \
+  --worker-host-image local/ayni-runtime-worker:<tag> \
   --cli /absolute/path/to/ayni-linux-arm64 \
   --mise /absolute/path/to/verified-mise \
   --docker-config /absolute/path/to/empty-docker-config
 ```
+
+The packaging script emits separate local tags and immutable node manifest references. Docker does not necessarily register the node digest as a local image name. The driver freezes `--worker-host-image` to its local Docker image ID for credential-free registry/tampering helpers and records that identity separately from the Kubernetes worker. It never pulls a replacement helper under a moving tag.
 
 The driver verifies the pinned CLI and Mise checksums before creating resources. Keep enough free host space for the VFS build and the nine GiB guard; this is independent of PVC requests and asynchronous kubelet eviction limits. The fixture uses Node 22.14.0 with no external package dependencies and a real configured size check. Its committed policy contains only a public test key. Each fresh run creates a new ephemeral signing key, regenerates the lock through Ayni, and places the seed only in its own immutable Kubernetes Secret. It never publishes externally.
 

@@ -61,6 +61,8 @@ spec:
             - configMapRef:
                 name: control-plane-config
           env:
+            - name: TMPDIR
+              value: /tmp
             - name: ORCHESTRATOR_SESSION_AUTHORITY_TOKEN_PATH
               value: /var/run/secrets/ayni/session-authority/token
           ports:
@@ -99,6 +101,8 @@ spec:
               drop: ["ALL"]
             readOnlyRootFilesystem: true
           volumeMounts:
+            - name: inspection-scratch
+              mountPath: /tmp
             {{- if $signerProvisioning.enabled }}
             - name: signer-provisioning
               mountPath: /var/run/secrets/ayni/signer-provisioning
@@ -125,6 +129,9 @@ spec:
               readOnly: true
             {{- end }}
       volumes:
+        - name: inspection-scratch
+          emptyDir:
+            sizeLimit: 256Mi
         {{- if $signerProvisioning.enabled }}
         - name: signer-provisioning
           projected:

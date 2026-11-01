@@ -81,6 +81,14 @@ grep -q 'workflow-postgres-migrator' <<<"$migration_container"
 ! grep -q 'workflow-postgres-runtime' <<<"$migration_container"
 ! grep -q 'jetstream' <<<"$migration_container"
 grep -q 'name: control-plane' <<<"$control_container"
+# Frozen policy/lock validation must materialize bounded files while the root
+# filesystem stays read-only. Migration has no source-inspection scratch access.
+grep -q 'readOnlyRootFilesystem: true' <<<"$control_container"
+grep -q 'name: inspection-scratch' <<<"$control_container"
+grep -q 'mountPath: /tmp' <<<"$control_container"
+grep -q 'name: TMPDIR' <<<"$control_container"
+! grep -q 'inspection-scratch' <<<"$migration_container"
+grep -A2 'name: inspection-scratch' "$reusable_render" | grep -q 'sizeLimit: 256Mi'
 grep -q 'workflow-postgres-runtime' <<<"$control_container"
 grep -q 'workflow-jetstream-application' <<<"$control_container"
 ! grep -q 'workflow-postgres-migrator' <<<"$control_container"

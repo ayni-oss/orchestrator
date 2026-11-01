@@ -158,6 +158,13 @@ image digest and a matching Linux node architecture. Kernel and storage support
 are deployment prerequisites; a rootless engine label alone is not isolation
 evidence.
 
+The control plane materializes bounded frozen input bytes in per-inspection
+temporary directories. Its chart mounts a 256 MiB `emptyDir` at `/tmp` and sets
+`TMPDIR` there while retaining a read-only root filesystem. Migration and runtime
+workers do not share this source-inspection volume. The kubelet storage limit is
+an eviction bound rather than a hard filesystem quota; unavailable scratch keeps
+inspection recoverable and cannot establish readiness.
+
 ### Pinned Ayni boundary
 
 Ayni 0.17.1 provides supported public policy, lock, certificate, protected-content
