@@ -2,7 +2,7 @@
 
 `dev/scripts/runtime-preparation-qualify.py` exercises actual worker binaries and independent static probes in a uniquely created namespace on an explicit local cluster. Docker Desktop is the default; the separate policy-enforcing cluster requires `--context kind-ayni-runtime-qualification --kubeconfig /absolute/state/kubeconfig`. Only those targets are accepted, with exact Docker node identity checks. It creates only disposable fixture pods, PVCs, ConfigMaps and synthetic Secrets, then removes its namespace and imported candidate image aliases. It uses an empty Docker configuration and the current user's explicit Desktop socket. It does not use saved provider connections. See the [separate cluster setup](cluster/README.md).
 
-Build and import the local worker/probe images first with `dev/scripts/runtime-preparation-images.sh`. Supply the reviewed Linux arm64 Ayni CLI and its SHA256 explicitly. Then run:
+Build and import the local worker/probe images first with `dev/scripts/runtime-preparation-images.sh`. Supply the released Linux arm64 Ayni 0.17.1 CLI and its executable SHA256 explicitly. `scripts/ci/ayni-tool.json` pins the release archive, executable and official executor identities; the driver uses those defaults. Then run:
 
 ```sh
 python3 dev/scripts/runtime-preparation-qualify.py \

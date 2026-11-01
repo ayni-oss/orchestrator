@@ -43,7 +43,7 @@ arm64 Cilium profile has Node component and supervisor lifecycle evidence; live
 GitHub acquisition, private GHCR happy-path publication and the broader Rust
 workload envelope still need qualification. See
 [runtime packaging](deploy/images/runtime-preparation/README.md) for measured limits
-and exact artifact prerequisites, including the reviewed Ayni Podman fix.
+and exact artifact prerequisites, including the admitted Ayni 0.17.1 release with the Podman identity fix.
 
 The [M1–M8 foundation roadmap](docs/technical/history/backend-foundation-roadmap.md)
 is historical provenance. Its archival closes a planning phase, not product

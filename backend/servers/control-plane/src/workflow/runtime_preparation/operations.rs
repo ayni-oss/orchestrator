@@ -165,9 +165,9 @@ fn validate_inspection(
     let result = inspection.result.as_ref().ok_or_else(|| {
         Status::failed_precondition("completed frozen repository inspection required")
     })?;
-    if result.ayni_version != "0.17.0" {
+    if result.ayni_version != "0.17.1" {
         return Err(Status::failed_precondition(
-            "regenerate and commit the lock with Ayni 0.17.0, then inspect that commit before runtime preparation",
+            "regenerate and commit the lock with Ayni 0.17.1, then inspect that commit before runtime preparation",
         ));
     }
     if result.findings.iter().any(|finding| {
@@ -197,9 +197,9 @@ fn validate_trust(policy: &str, lock: &str, signer: &Signer) -> Result<(), Statu
         .environment_certificate_trust_policy()
         .map_err(|_| invalid())?;
     let lock: EnvironmentLock = serde_json::from_str(lock).map_err(|_| invalid())?;
-    if lock.ayni_version() != "0.17.0" {
+    if lock.ayni_version() != "0.17.1" {
         return Err(Status::failed_precondition(
-            "regenerate and commit the lock with Ayni 0.17.0, then inspect that commit",
+            "regenerate and commit the lock with Ayni 0.17.1, then inspect that commit",
         ));
     }
     let key = decode_public_key(&signer.public_key).ok_or_else(invalid)?;
@@ -271,7 +271,7 @@ mod tests {
                 policy_digest: String::new(),
                 lock_digest: String::new(),
                 lock_fingerprint: String::new(),
-                ayni_version: "0.17.0".into(),
+                ayni_version: "0.17.1".into(),
                 lock_schema: String::new(),
                 tools: vec![],
                 trust_key_ids: vec![],
@@ -286,17 +286,19 @@ mod tests {
         };
         assert!(validate_inspection(&inspection, "repository").is_ok());
         assert!(validate_inspection(&inspection, "another-repository").is_err());
+        for unsupported in ["0.16.2", "0.17.0", "0.18.0"] {
+            inspection
+                .result
+                .as_mut()
+                .unwrap_or_else(|| panic!("fixture result"))
+                .ayni_version = unsupported.into();
+            assert!(validate_inspection(&inspection, "repository").is_err());
+        }
         inspection
             .result
             .as_mut()
             .unwrap_or_else(|| panic!("fixture result"))
-            .ayni_version = "0.16.2".into();
-        assert!(validate_inspection(&inspection, "repository").is_err());
-        inspection
-            .result
-            .as_mut()
-            .unwrap_or_else(|| panic!("fixture result"))
-            .ayni_version = "0.17.0".into();
+            .ayni_version = "0.17.1".into();
         inspection
             .result
             .as_mut()

@@ -160,7 +160,7 @@ evidence.
 
 ### Pinned Ayni boundary
 
-Ayni 0.17.0 provides supported public policy, lock, certificate, protected-content
+Ayni 0.17.1 provides supported public policy, lock, certificate, protected-content
 verification and offline filesystem certification contracts. Orchestrator consumes
 these contracts rather than copying private image inventory/signature semantics.
 The exact source revision is pinned in Cargo manifests and the executable/image

@@ -47,7 +47,7 @@ history. It requires an explicitly qualified profile, registry and trusted signe
 The default Docker Desktop profile remains disabled after failed network-policy
 enforcement; a separate native-arm64 Cilium topology has Node component and
 supervisor lifecycle evidence. See [runtime packaging](deploy/images/runtime-preparation/README.md)
-for the exact tested envelope, patched CLI prerequisites and live integration gaps.
+for the exact tested envelope, released CLI prerequisites and live integration gaps.
 
 Canonical v1 backend APIs implement durable conversations, isolated sessions,
 immutable plan approval, frozen task attempts, managed quality, recovery,

@@ -1,5 +1,8 @@
 {
-  "cli_version": "0.17.0",
-  "linux_amd64_archive_sha256": "d04b5b1b8717074642469969163cf6d8ca2a02b7bf3a66841cf29501a34d8710",
-  "linux_arm64_archive_sha256": "a9f2c52c795b85afa6124f2d94b5710fee132a0531fdb260d41d1e7510f30b6b"
+  "cli_version": "0.17.1",
+  "linux_amd64_archive_sha256": "612dc943b6718d887ce8e35f8162fd8f69687ddadef7e5ef83e159bca8e91394",
+  "linux_arm64_archive_sha256": "7e0e1cb77e40c8fc49fbac746c14dc4bd1caeb95b5d4db50774194c048d7f128",
+  "source_revision": "639ace4c180bfaef8e5d222bcd5ce7f4b0480b07",
+  "linux_arm64_cli_sha256": "f92a59d38173c8021fdc49fecd3c2bb420eacc9d7ceef98838e19b1ae4018d72",
+  "linux_arm64_executor_image": "ghcr.io/ayni-oss/ayni-builder@sha256:3f72c7292ea8c094b1a6f47ebabbb8aa077f1c25b65cbbce5393e678d748f8c8"
 }

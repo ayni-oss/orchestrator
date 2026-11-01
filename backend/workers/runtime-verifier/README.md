@@ -17,7 +17,7 @@ independent executable identity. The platform defaults to the compiled host
 architecture; only Linux amd64 and arm64 are admitted.
 
 The verifier reads and hashes the candidate's Ayni executable without executing it.
-Pinned Ayni 0.17.0 APIs validate committed policy and lock, trust, certificate
+Pinned Ayni 0.17.1 APIs validate committed policy and lock, trust, certificate
 signature and claims, protected manifest and actual protected content. Every
 response is bounded JSON. Exit 0 with `state: content_verified` establishes only
 certification and protected-content integrity. Environment discovery, registry

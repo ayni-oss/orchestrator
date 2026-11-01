@@ -24,6 +24,7 @@ import urllib.request
 import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
+RELEASE = json.loads((ROOT / 'scripts/ci/ayni-tool.json').read_text())
 
 
 def run(args, **kwargs):
@@ -184,10 +185,10 @@ class Qualification:
             env.pop('DOCKER_CONTEXT', None)
             run(['docker', 'run', '--rm', '--user', str(os.getuid()) + ':' + str(os.getgid()),
                 '--mount', f'type=bind,src={source},dst=/source',
-                '--mount', f'type=bind,src={self.args.cli},dst=/patched-ayni,readonly',
+                '--mount', f'type=bind,src={self.args.cli},dst=/tools/ayni,readonly',
                 '--mount', f'type=bind,src={self.args.mise},dst=/tools/mise,readonly',
                 '--entrypoint', '/bin/sh', self.args.executor_image,
-                '-c', 'export PATH=/tools:$PATH HOME=/tmp; /patched-ayni env lock --repo-root /source'], env=env)
+                '-c', 'export PATH=/tools:$PATH HOME=/tmp; /tools/ayni env lock --repo-root /source'], env=env)
         self.source = source
         self.apply({'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': self.signer_name},
             'immutable': True, 'stringData': {'seed': seed}})
@@ -738,9 +739,9 @@ def main():
     parser.add_argument('--network-only', action='store_true', help='Test actual candidate network-policy enforcement using a retained public baseline')
     parser.add_argument('--engine-only', action='store_true', help='Test actual nested rootless execution and cancellation cleanup only')
     parser.add_argument('--registry-denial-only', action='store_true', help='Read-only real GHCR denial with deliberately invalid synthetic credentials; never publishes')
-    parser.add_argument('--cli-sha256', default='3b69c9da769daa0a36f42163870101daeca2ef227a90bb208d69dda476294949')
-    parser.add_argument('--executor-image', default='ghcr.io/ayni-oss/ayni-builder@sha256:663a4af8c4e2b5a0b11f2c4333e4b6a0c5600dc7b3e73e5f05b09ffa7e9094e1')
-    parser.add_argument('--executor-cli-sha256', default='sha256:fbb9b9bd7a957c7741cd2c171d5ee13e951950df3226c431d6c0dd9078b4a48b')
+    parser.add_argument('--cli-sha256', default=RELEASE['linux_arm64_cli_sha256'])
+    parser.add_argument('--executor-image', default=RELEASE['linux_arm64_executor_image'])
+    parser.add_argument('--executor-cli-sha256', default='sha256:' + RELEASE['linux_arm64_cli_sha256'])
     args = parser.parse_args()
     if sha(Path(args.cli).read_bytes()) != 'sha256:' + args.cli_sha256.removeprefix('sha256:'):
         raise RuntimeError('CLI_checksum_mismatch')
@@ -751,6 +752,9 @@ def main():
     summary = {'kind': 'runtime_component_qualification', 'namespace': q.namespace,
         'context': q.context, 'cluster': q.cluster, 'node': q.node,
         'worker_image': args.worker_image, 'probe_image': args.probe_image, 'passed': False,
+        'ayni_version': RELEASE['cli_version'], 'ayni_source_revision': RELEASE['source_revision'],
+        'cli_sha256': args.cli_sha256, 'executor_image': args.executor_image,
+        'executor_cli_sha256': args.executor_cli_sha256,
         'excluded': ['control_plane_admission', 'github_acquisition', 'ghcr_publication', 'supervisor_restart', 'production_stage_authority_fencing']}
     try:
         q.setup()

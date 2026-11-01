@@ -2,7 +2,7 @@
 # Local Desktop packaging. Never installs a release or marks a profile qualified.
 set -euo pipefail
 if [[ $# -lt 2 || $# -gt 3 ]]; then
-  echo "usage: $0 <patched-ayni-linux-arm64> <expected-cli-sha256> [static-binaries-directory]" >&2
+  echo "usage: $0 <ayni-linux-arm64> <expected-cli-sha256> [static-binaries-directory]" >&2
   exit 2
 fi
 cli_path="$1"
