@@ -21,7 +21,7 @@ async fn ensure_secret(
     if let Some(existing) = api
         .get_opt(&name)
         .await
-        .map_err(|_| Failure::ExecutionFailed)?
+        .map_err(|error| s.kubernetes_failure("get_stage_secret", &error))?
     {
         if existing.immutable != Some(true)
             || existing.type_.as_deref() != Some(kind)
@@ -52,7 +52,7 @@ async fn ensure_secret(
     };
     api.create(&PostParams::default(), &secret)
         .await
-        .map_err(|_| Failure::ExecutionFailed)?;
+        .map_err(|error| s.kubernetes_failure("create_stage_secret", &error))?;
     Ok(())
 }
 pub(super) async fn prepare(s: &Supervisor, c: &StageClaim) -> Result<(), Failure> {
@@ -101,7 +101,7 @@ pub(super) async fn prepare(s: &Supervisor, c: &StageClaim) -> Result<(), Failur
     if let Some(existing) = api
         .get_opt(&name)
         .await
-        .map_err(|_| Failure::ExecutionFailed)?
+        .map_err(|error| s.kubernetes_failure("get_stage_volume", &error))?
     {
         if existing
             .metadata
@@ -124,7 +124,7 @@ pub(super) async fn prepare(s: &Supervisor, c: &StageClaim) -> Result<(), Failur
     let pvc = serde_json::from_value(object).map_err(|_| Failure::InvalidInput)?;
     api.create(&PostParams::default(), &pvc)
         .await
-        .map_err(|_| Failure::ExecutionFailed)?;
+        .map_err(|error| s.kubernetes_failure("create_stage_volume", &error))?;
     Ok(())
 }
 fn selector(c: &StageClaim) -> ListParams {

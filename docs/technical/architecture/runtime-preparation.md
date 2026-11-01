@@ -35,6 +35,28 @@ preparation is off. Disabling a signer prevents new use; it does not delete its
 private key. Deleting retained keys or the signing namespace is a separate manual
 operator cleanup decision. There is no key-deletion API.
 
+## Repository onboarding
+
+`StartRepositoryRuntime` retains one reviewed, bounded default-branch preparation
+intent and its original receipt in PostgreSQL. Source revision, registry/signer
+revisions, platform and build/replacement allowances are captured. The control
+plane claims a leased step, resolves the latest default branch once, persists the
+exact SHA, runs canonical inspection and admits canonical runtime preparation.
+The run has separate deterministic inspection/preparation keys. Restart, lost
+responses and expired claims recover those commands; stale claims cannot advance
+state. Admission checks the reviewed registry/signer revisions inside the same
+transaction that freezes the preparation. Only public settings and references are
+retained; this adds no new credential capability.
+
+`GetRepositoryRuntime` reads current progress and last reviewed settings;
+`GetRepositoryRuntimeReceipt` reads the immutable original acknowledgement.
+Onboarding `completed` means the preparation has been admitted and linked, not
+that an image was published or verified. Actual progress, cancellation, publication
+reconciliation and readiness belong to the linked preparation. Blocking source,
+setup, trust, configuration and deployment issues remain explicit. A failed step
+cannot grant additional builds. New source or allowance requires a new reviewed
+run; this feature does not install a push listener or recurring build schedule.
+
 ## Admission and evidence
 
 `StartRuntimePreparation` freezes the completed inspection, repository/connection
@@ -104,10 +126,14 @@ their quality result remains separate from environment readiness.
 
 ## Publication and recovery
 
-Writes target an operation-specific tag, avoiding an unsupported registry tag-CAS
-claim. Before pushing, the authority retains the intended manifest digest. A lost
+Discovery and publication use `ayni-<arch>-<lock fingerprint>`, for example
+`ayni-arm64-<64 lowercase hex characters>`. The fingerprint comes from `.ayni.lock`
+without its `sha256:` prefix. Tags contain no operation IDs or orchestration metadata.
+A tag locates an image; it is not immutable identity or a registry compare-and-swap
+guarantee. Before pushing, the authority retains the intended manifest digest. A lost
 response or failed push after intent is `publication_uncertain`; retry reads back
-that exact tag/digest rather than rebuilding or spending a new build allowance.
+the frozen tag and requires that exact digest rather than rebuilding or spending a
+new build allowance. A conflicting digest cannot establish readiness.
 A previously ready artifact can be selected by immutable digest, then pulled and
 verified again under current inputs. A discovered invalid artifact is never
 replaced without both build and replacement grants.
@@ -154,3 +180,26 @@ lowercase package from the catalog repository name and freezes the complete imag
 destination before discovery or publication. For `ayni-oss/sandbox`, a connection
 at `ghcr.io/ayni-oss` yields `ghcr.io/ayni-oss/sandbox`. Reuse and verification bind
 to that complete destination; a connection never supplies a package override.
+
+### Local development exception
+
+An operator may explicitly enable `runtimePreparation.localDevelopment: true`
+with profile ID `rootless-podman-vfs-userns-local-development-v1` and
+`qualified: false` for local development testing. The immutable tooling, source,
+signing, allowance, verification and cleanup gates still apply. This exception
+permits testing on a cluster whose NetworkPolicy enforcement is not qualified;
+it does not establish network isolation. The canonical profile still requires
+`qualified: true`, and the development profile rejects that qualification claim.
+The frozen operation records this identity, its API exposes `development_only`,
+and the UI labels its successful result **Development runtime ready**.
+
+### Supervisor diagnostics
+
+A reconciliation failure retries the retained operation and generation; it does
+not grant another build or extend its deadline. Supervisor diagnostics identify
+failed authority requests by endpoint and HTTP status or response category, and
+failed Kubernetes requests by action and API status. Stage failures include the
+operation, stage, generation and closed failure reason. Identical diagnostics are
+limited to once every 30 seconds. Response bodies, credentials and raw client
+errors are never logged. Authority-side store failures include the closed store
+reason and SQLSTATE when available.

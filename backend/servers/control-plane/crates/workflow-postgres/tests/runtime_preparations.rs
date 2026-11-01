@@ -273,6 +273,18 @@ async fn starts_reports_pod_deletion_and_cleanup_are_durable_fenced_and_idempote
         original.frozen.registry_destination,
         "ghcr.io/fixture/runtime"
     );
+    let expected_tag = format!(
+        "ayni-arm64-{}",
+        hash("fingerprint").trim_start_matches("sha256:")
+    );
+    assert_eq!(original.frozen.discovery_tag, expected_tag);
+    assert_eq!(original.frozen.publication_tag, expected_tag);
+    assert!(
+        !original
+            .frozen
+            .publication_tag
+            .contains(&original.id.replace('-', ""))
+    );
     assert_eq!(original.frozen.source_tree, f.freeze.source_tree);
     assert_eq!(original.frozen.profile_json, f.freeze.profile_json);
     assert_eq!(
@@ -944,3 +956,9 @@ async fn local_immutable_tooling_is_admitted_but_registry_artifacts_remain_desti
     assert_eq!(f.cleanup(&op).await?.state, "cancelled");
     Ok(())
 }
+
+#[path = "runtime_preparations/onboarding.rs"]
+mod onboarding;
+
+#[path = "runtime_preparations/tags.rs"]
+mod tags;

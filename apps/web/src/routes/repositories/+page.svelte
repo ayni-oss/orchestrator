@@ -1,11 +1,12 @@
 <script lang="ts">
- import RepositoryInspection from '$lib/components/repository-inspection.svelte';
+ import RepositoryCard from '$lib/components/repository-card.svelte';
  import { onMount } from 'svelte';
  import PageHeader from '$lib/components/page-header.svelte';
  import InformationCard from '$lib/components/information-card.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
  import Feedback from '$lib/components/feedback.svelte';
  import { Button } from '$lib/components/ui/button/index.js';
+ import { Input } from '$lib/components/ui/input/index.js';
  import { Label } from '$lib/components/ui/label/index.js';
  import * as NativeSelect from '$lib/components/ui/native-select/index.js';
  import { rpc, RpcError, type Connection } from '$lib/api';
@@ -15,6 +16,9 @@
  let connectionId=$state('');let installationId=$state('');let busy=$state(true);let error=$state('');let notice=$state('');
  let nextCatalog=$state('');let nextHistory=$state('');let nextInstallations=$state(0);let nextRepositories=$state(0);
  let pending=$state<ConnectRequest|null>(null);
+ let search=$state('');let discoveryOpen=$state(false);
+ const matchingCatalog=$derived(catalog.filter(repo=>repo.fullName.toLowerCase().includes(search.toLowerCase())));
+ const available=$derived(discovered.filter(repo=>!catalog.some(c=>c.providerRepositoryId===repo.providerRepositoryId)&&repo.fullName.toLowerCase().includes(search.toLowerCase())));
  const source=$derived(connections.find(c=>c.id===connectionId));
  const storageKey='ayni.repository.connect.pending';
  function persist(value:ConnectRequest|null){pending=value;if(value)sessionStorage.setItem(storageKey,JSON.stringify(value));else sessionStorage.removeItem(storageKey);}
@@ -30,27 +34,37 @@
  async function resume(){if(!pending)return;try{const result=await rpc('ConnectRepository',pending);await accept(result.operation);}catch(e){if(e instanceof RpcError&&e.status===400)persist(null);throw e;}}
  async function connect(repo:GithubRepository){if(!source||pending)return;persist({idempotencyKey:crypto.randomUUID(),connectionId,expectedConnectionRevision:source.revision,installationId,providerRepositoryId:repo.providerRepositoryId});await resume();}
  async function recover(){if(!pending)return;const result=await rpc('GetRepositoryOperation',{idempotencyKey:pending.idempotencyKey});await accept(result.operation);}
- onMount(()=>{void perform(async()=>{const saved=sessionStorage.getItem(storageKey);if(saved)pending=JSON.parse(saved);await load();});});
+ onMount(()=>{void perform(async()=>{const saved=sessionStorage.getItem(storageKey);if(saved)pending=JSON.parse(saved);await load();if(!catalog.length)discoveryOpen=true;});});
 </script>
 <PageHeader title="Repositories" description="Connect a repository once and use it from projects across workspaces." />
-<div class="mx-auto max-w-5xl space-y-6">
+<div class="space-y-6">
  {#if error}<Feedback kind="error" title="Repository needs attention" message={error}/>{/if}
  {#if notice}<Feedback title="Repository update" message={notice}/>{/if}
  {#if busy}<p role="status" class="text-sm text-muted-foreground">Loading repository access…</p>{/if}
  {#if pending}<InformationCard title="Recover repository connection"><p>The request is retained with its original source and repository selection. Recover its status or retry the same request.</p><code class="break-all text-xs">{pending.idempotencyKey}</code><div class="flex flex-wrap gap-3"><Button disabled={busy} onclick={()=>perform(recover)}>Recover status</Button><Button variant="outline" disabled={busy} onclick={()=>perform(resume)}>Retry same connection</Button><Button variant="outline" disabled={busy} onclick={()=>persist(null)}>Dismiss recovery</Button></div></InformationCard>{/if}
- <InformationCard title="Connect a repository">
+ <details bind:open={discoveryOpen} class="rounded-xl border bg-card p-5"><summary class="cursor-pointer font-semibold">Find repositories on GitHub</summary><div class="space-y-4 pt-4">
   <div class="space-y-2"><Label for="repository-source">GitHub App connection</Label><NativeSelect.Root id="repository-source" class="w-full" bind:value={connectionId} onchange={changeSource} disabled={busy||!!pending}><NativeSelect.Option value="">Choose a source connection</NativeSelect.Option>{#each connections as c (c.id)}<NativeSelect.Option value={c.id} disabled={!c.enabled||!c.activeCredentialRevision}>{c.displayName}{!c.enabled?' (disabled)':!c.activeCredentialRevision?' (validation required)':''}</NativeSelect.Option>{/each}</NativeSelect.Root></div>
   <Button disabled={busy||!source||!!pending} onclick={()=>perform(()=>findInstallations())}>Discover installations</Button><Button variant="link" href="/settings/source-control/github">Manage source connections</Button>
   {#if installations.length}<div class="space-y-2"><Label for="repository-installation">GitHub installation</Label><NativeSelect.Root id="repository-installation" class="w-full" bind:value={installationId} onchange={()=>{discovered=[];nextRepositories=0;}} disabled={busy||!!pending}><NativeSelect.Option value="">Choose an installation</NativeSelect.Option>{#each installations as installation (installation.installationId)}<NativeSelect.Option value={installation.installationId} disabled={installation.suspended}>{installation.accountLogin} · {installation.installationId}{installation.suspended?' (suspended)':''}</NativeSelect.Option>{/each}</NativeSelect.Root></div><Button disabled={busy||!installationId||!!pending} onclick={()=>perform(()=>findRepositories())}>Discover repositories</Button>{/if}
   {#if nextInstallations}<Button variant="outline" disabled={busy||!!pending} onclick={()=>perform(()=>findInstallations(true))}>More installations</Button>{/if}
-  {#each discovered as repo (repo.providerRepositoryId)}<div class="flex flex-wrap items-center justify-between gap-3 border-t pt-4"><div><p class="font-medium">{repo.fullName}</p><p class="text-sm text-muted-foreground">{repo.private?'Private':'Public'} · {repo.defaultBranch}</p></div><Button disabled={busy||!!pending||catalog.some(c=>c.providerRepositoryId===repo.providerRepositoryId)} onclick={()=>perform(()=>connect(repo))}>{catalog.some(c=>c.providerRepositoryId===repo.providerRepositoryId)?'Connected':'Connect repository'}</Button></div>{/each}
   {#if nextRepositories}<Button variant="outline" disabled={busy||!!pending} onclick={()=>perform(()=>findRepositories(true))}>More repositories</Button>{/if}
- </InformationCard>
- <div class="flex items-center justify-between"><h2 class="text-lg font-semibold">Shared catalog</h2><Button variant="outline" disabled={busy} onclick={()=>perform(load)}>Refresh repositories</Button></div>
+ </div></details>
+ <div class="flex items-center justify-between"><h2 class="text-lg font-semibold">Available repositories</h2><Button variant="outline" disabled={busy} onclick={()=>perform(load)}>Refresh repositories</Button></div>
  {#if !catalog.length}<p class="text-sm text-muted-foreground">No repositories connected yet.</p>{/if}
- {#each catalog as repo (repo.id)}<InformationCard title={repo.fullName} status="connected"><InformationTable rows={[{label:'Access',value:repo.private?'Private':'Public'},{label:'Default branch',value:repo.defaultBranch},{label:'Provider repository',value:repo.providerRepositoryId},{label:'Installation',value:repo.installationId},{label:'Connected',value:new Date(Number(repo.connectedAtUnixMs)).toLocaleString()}]}/><p class="text-sm text-muted-foreground">Source access was checked at connection time. Inspect committed Ayni inputs below; runtime preparation remains a separate step. Select this repository from a project's Repositories page.</p><RepositoryInspection {repo} connection={connections.find(c=>c.id===repo.connectionId)} /></InformationCard>{/each}
+ <div class="flex flex-wrap items-center justify-between gap-4"><p class="text-sm text-muted-foreground">{catalog.length} connected {catalog.length===1?'repository':'repositories'}</p><Input class="max-w-xs" bind:value={search} aria-label="Search repositories" placeholder="Search repositories…"/></div>
+ <div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+ {#each matchingCatalog as repo (repo.id)}<RepositoryCard {repo}/>{/each}
+ {#each available as repo (repo.providerRepositoryId)}
+  <InformationCard title={repo.fullName} headingLevel={2}>
+   <p class="min-h-16 text-sm leading-relaxed text-muted-foreground">{repo.private?'Private repository':'Public repository'}<br/>Default branch: {repo.defaultBranch}</p>
+   <Button disabled={busy||!!pending} onclick={()=>perform(()=>connect(repo))}>Connect repository</Button>
+  </InformationCard>
+ {/each}
+ </div>
+ {#if search&&!matchingCatalog.length&&!available.length}<p class="text-sm text-muted-foreground">No matching repositories.</p>{/if}
  {#if nextCatalog}<Button variant="outline" disabled={busy} onclick={()=>perform(()=>loadCatalog(true))}>More catalog repositories</Button>{/if}
- <h2 class="text-lg font-semibold">Connection history</h2>
+ <details class="rounded-xl border p-5"><summary class="cursor-pointer font-semibold">Connection history</summary><div class="space-y-4 pt-4">
  {#each operations as op (op.id)}<InformationCard title={op.repository?.fullName||`Repository ${op.providerRepositoryId}`} status={op.state}><InformationTable rows={[{label:'Stage',value:'Source access'},{label:'Operation',value:op.id,monospace:true},{label:'Connection revision',value:op.connectionRevision},{label:'Updated',value:new Date(Number(op.updatedAtUnixMs)).toLocaleString()}]}/>{#if op.safeReason}<p class="text-sm">{repositoryReasons[op.safeReason]||'Source access needs attention.'}</p>{/if}{#if op.state==='accepted'}<Button disabled={busy||!!pending} onclick={()=>perform(async()=>{persist(request(op));await resume();})}>Resume source check</Button>{/if}</InformationCard>{/each}
  {#if nextHistory}<Button variant="outline" disabled={busy} onclick={()=>perform(()=>loadHistory(true))}>More connection history</Button>{/if}
+ </div></details>
 </div>

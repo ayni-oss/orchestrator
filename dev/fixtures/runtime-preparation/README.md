@@ -2,18 +2,21 @@
 
 `dev/scripts/runtime-preparation-qualify.py` exercises actual worker binaries and independent static probes in a uniquely created namespace on an explicit local cluster. Docker Desktop is the default; the separate policy-enforcing cluster requires `--context kind-ayni-runtime-qualification --kubeconfig /absolute/state/kubeconfig`. Only those targets are accepted, with exact Docker node identity checks. It creates only disposable fixture pods, PVCs, ConfigMaps and synthetic Secrets, then removes its namespace and imported candidate image aliases. It uses an empty Docker configuration and the current user's explicit Desktop socket. It does not use saved provider connections. See the [separate cluster setup](cluster/README.md).
 
-Build and import the local worker/probe images first with `dev/scripts/runtime-preparation-images.sh`. Supply the reviewed Linux arm64 Ayni CLI and its SHA256 explicitly. Then run:
+Build and import the local worker/probe images first with `dev/scripts/runtime-preparation-images.sh`. Supply the released Linux arm64 Ayni 0.17.1 CLI and its executable SHA256 explicitly. `scripts/ci/ayni-tool.json` pins the release archive, executable and official executor identities; the driver uses those defaults. Then run:
 
 ```sh
 python3 dev/scripts/runtime-preparation-qualify.py \
   --context kind-ayni-runtime-qualification \
   --kubeconfig /tmp/ayni-runtime-cluster/kubeconfig \
-  --worker-image local/ayni-runtime-worker:<tag> \
-  --probe-image local/ayni-runtime-probes:<tag> \
+  --worker-image docker.io/local/ayni-runtime-worker@sha256:<node-manifest> \
+  --probe-image docker.io/local/ayni-runtime-probes@sha256:<node-manifest> \
+  --worker-host-image local/ayni-runtime-worker:<tag> \
   --cli /absolute/path/to/ayni-linux-arm64 \
   --mise /absolute/path/to/verified-mise \
   --docker-config /absolute/path/to/empty-docker-config
 ```
+
+The packaging script emits separate local tags and immutable node manifest references. Docker does not necessarily register the node digest as a local image name. The driver freezes `--worker-host-image` to its local Docker image ID for credential-free registry/tampering helpers and records that identity separately from the Kubernetes worker. It never pulls a replacement helper under a moving tag.
 
 The driver verifies the pinned CLI and Mise checksums before creating resources. Keep enough free host space for the VFS build and the nine GiB guard; this is independent of PVC requests and asynchronous kubelet eviction limits. The fixture uses Node 22.14.0 with no external package dependencies and a real configured size check. Its committed policy contains only a public test key. Each fresh run creates a new ephemeral signing key, regenerates the lock through Ayni, and places the seed only in its own immutable Kubernetes Secret. It never publishes externally.
 

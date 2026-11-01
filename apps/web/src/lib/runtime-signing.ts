@@ -9,7 +9,7 @@ export function signingSeed(value:string):string {
 }
 export function validateSignerFields(displayName:string,keyId:string):void {
  if(!displayName.trim()||new TextEncoder().encode(displayName).length>120)throw new Error('Enter a shorter name with at least one non-space character.');
- if(!/^[A-Za-z0-9_.-]{1,128}$/.test(keyId)||keyId==='unsigned')throw new Error('Choose a Key ID using letters, numbers, dots, underscores or hyphens. The Key ID unsigned is reserved.');
+ if(!/^[A-Za-z0-9_.-]{1,128}$/.test(keyId)||keyId==='unsigned')throw new Error('Choose a key name using letters, numbers, dots, underscores or hyphens. The name unsigned is reserved.');
 }
 export function provisionIntent(value:unknown):ProvisionIntent|null {
  if(!value||typeof value!=='object')return null;

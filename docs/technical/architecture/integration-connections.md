@@ -211,8 +211,9 @@ without deleting its key; permanent cleanup is a separate operator decision.
 Registry failures distinguish absence from access denial, rate limiting, outage,
 malformed data and unsupported platform. Manifest/config bytes must match their
 digests. Discovery grants no verification or replacement authority. Publication
-uses an operation-specific tag and retains its expected digest before the push;
-uncertainty requires exact readback rather than an automatic rebuild.
+uses `ayni-<arch>-<lock fingerprint>` for discovery and publication, without
+orchestration IDs, and retains its expected digest before the push. Tags are mutable
+locators; uncertainty requires exact digest readback rather than an automatic rebuild.
 
 `backend/workers/runtime-verifier` uses pinned public Ayni contracts against the
 actual candidate root without executing its CLI. Its `content_verified` result

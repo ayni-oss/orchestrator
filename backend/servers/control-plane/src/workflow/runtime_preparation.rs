@@ -1,4 +1,5 @@
 //! Public signer configuration; private material stays in administrator-owned Secrets.
+pub(super) mod onboarding;
 mod operations;
 mod profile;
 mod provisioning;
@@ -21,6 +22,56 @@ fn signer(value: Signer) -> v1::RuntimeSigner {
 }
 #[tonic::async_trait]
 impl v1::runtime_preparation_service_server::RuntimePreparationService for WorkflowGrpc {
+    async fn start_repository_runtime(
+        &self,
+        request: Request<v1::StartRepositoryRuntimeRequest>,
+    ) -> Result<Response<v1::StartRepositoryRuntimeResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let run = self
+            .store
+            .start_repository_runtime(&value.idempotency_key, onboarding::settings(value.clone()))
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::StartRepositoryRuntimeResponse {
+            run: Some(onboarding::public(run)),
+        }))
+    }
+    async fn get_repository_runtime(
+        &self,
+        request: Request<v1::GetRepositoryRuntimeRequest>,
+    ) -> Result<Response<v1::GetRepositoryRuntimeResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let run = self
+            .store
+            .latest_repository_runtime(&request.into_inner().repository_id)
+            .await
+            .map_err(|e| context.store(&e))?;
+        let profile = profile::RuntimeConfiguration::from_environment().ok();
+        Ok(context.response(v1::GetRepositoryRuntimeResponse {
+            run: run.map(onboarding::public),
+            preparation_enabled: profile.is_some(),
+            development_only: profile.is_some_and(|value| {
+                value.profile_id
+                    == ayni_orchestrator_events::runtime_preparation::DEVELOPMENT_PROFILE_ID
+            }),
+        }))
+    }
+    async fn get_repository_runtime_receipt(
+        &self,
+        request: Request<v1::GetRepositoryRuntimeReceiptRequest>,
+    ) -> Result<Response<v1::GetRepositoryRuntimeReceiptResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let run = self
+            .store
+            .repository_runtime_receipt(&request.into_inner().idempotency_key)
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::GetRepositoryRuntimeReceiptResponse {
+            run: Some(onboarding::public(run)),
+        }))
+    }
+
     async fn provision_runtime_signer(
         &self,
         request: Request<v1::ProvisionRuntimeSignerRequest>,

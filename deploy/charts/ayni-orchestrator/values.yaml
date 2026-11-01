@@ -87,6 +87,8 @@ observability:
 
 runtimePreparation:
   enabled: false
+  # Explicit local-only exception for a cluster without proven NetworkPolicy enforcement.
+  localDevelopment: false
   authoritySecretName: workflow-runtime-authority
   storageClassName: ""
   # Public Internet access is explicit. Private destinations require reviewed CIDRs.

@@ -24,6 +24,7 @@ import urllib.request
 import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
+RELEASE = json.loads((ROOT / 'scripts/ci/ayni-tool.json').read_text())
 
 
 def run(args, **kwargs):
@@ -93,6 +94,10 @@ class Qualification:
         node = self.docker('inspect', self.node, '--format', '{{index .Config.Labels "io.x-k8s.kind.cluster"}} {{index .Config.Labels "io.x-k8s.kind.role"}}').strip()
         if node != self.cluster + ' control-plane':
             raise RuntimeError('Docker_Desktop_node_identity_mismatch')
+        host_tools = json.loads(self.docker('image', 'inspect', self.args.worker_host_image or self.args.worker_image))[0]
+        if (host_tools.get('Os'), host_tools.get('Architecture')) != ('linux', 'arm64') or not re.fullmatch(r'sha256:[a-f0-9]{64}', host_tools.get('Id', '')):
+            raise RuntimeError('host_tools_image_identity_mismatch')
+        self.worker_host_image = host_tools['Id']
         self.kube('create', '-f', '-', body={'apiVersion': 'v1', 'kind': 'Namespace', 'metadata': {'name': self.namespace, 'labels': self.owned}})
         self.created_namespace = True
         self.apply({'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': 'authority'},
@@ -184,10 +189,10 @@ class Qualification:
             env.pop('DOCKER_CONTEXT', None)
             run(['docker', 'run', '--rm', '--user', str(os.getuid()) + ':' + str(os.getgid()),
                 '--mount', f'type=bind,src={source},dst=/source',
-                '--mount', f'type=bind,src={self.args.cli},dst=/patched-ayni,readonly',
+                '--mount', f'type=bind,src={self.args.cli},dst=/tools/ayni,readonly',
                 '--mount', f'type=bind,src={self.args.mise},dst=/tools/mise,readonly',
                 '--entrypoint', '/bin/sh', self.args.executor_image,
-                '-c', 'export PATH=/tools:$PATH HOME=/tmp; /patched-ayni env lock --repo-root /source'], env=env)
+                '-c', 'export PATH=/tools:$PATH HOME=/tmp; /tools/ayni env lock --repo-root /source'], env=env)
         self.source = source
         self.apply({'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': self.signer_name},
             'immutable': True, 'stringData': {'seed': seed}})
@@ -502,13 +507,13 @@ PYJSON
         time.sleep(2)
         # This private HTTP registry has no external interface. Production transport
         # remains GHCR-only with TLS; there is no product override for this fixture.
-        prefix = ['run', '--rm', '--network', 'container:' + self.registry_name, '--user', '0:0',
+        prefix = ['run', '--pull=never', '--rm', '--network', 'container:' + self.registry_name, '--user', '0:0',
             '--read-only', '--tmpfs', '/tmp:rw,size=256m', '--cap-drop', 'ALL',
             '--security-opt', 'no-new-privileges', '--mount', f'type=bind,src={layout},dst=/layout,readonly']
         destination = '127.0.0.1:5000/runtime/fixture'
-        self.docker(*prefix, '--entrypoint', '/usr/bin/skopeo', self.args.worker_image,
+        self.docker(*prefix, '--entrypoint', '/usr/bin/skopeo', self.worker_host_image,
             'copy', '--preserve-digests', '--dest-tls-verify=false', 'oci:/layout:runtime', 'docker://' + destination + ':prepared')
-        raw = self.docker(*prefix, '--entrypoint', '/usr/bin/skopeo', self.args.worker_image,
+        raw = self.docker(*prefix, '--entrypoint', '/usr/bin/skopeo', self.worker_host_image,
             'inspect', '--tls-verify=false', '--raw', 'docker://' + destination + ':prepared')
         # subprocess text decoding preserves JSON bytes; skopeo prints one terminal LF.
         expected = self.evidence['expected_manifest_digest']
@@ -517,7 +522,7 @@ PYJSON
         pulled = self.directory / 'pulled'
         pulled.mkdir()
         self.docker(*prefix, '--mount', f'type=bind,src={pulled},dst=/pulled',
-            '--entrypoint', '/usr/bin/skopeo', self.args.worker_image, 'copy', '--preserve-digests',
+            '--entrypoint', '/usr/bin/skopeo', self.worker_host_image, 'copy', '--preserve-digests',
             '--src-tls-verify=false', 'docker://' + destination + '@' + expected, 'oci:/pulled:runtime')
         index = json.loads((pulled / 'index.json').read_text())
         if index['manifests'][0]['digest'] != expected:
@@ -663,10 +668,10 @@ PYJSON
             entry = tarfile.TarInfo('usr/local/bin/ayni')
             entry.size, entry.mode, entry.uid, entry.gid, entry.mtime = len(data), 0o555, 0, 0, 0
             archive.addfile(entry, io.BytesIO(data))
-        self.docker('run', '--rm', '--network', 'none', '--user', '0:0', '--read-only',
+        self.docker('run', '--pull=never', '--rm', '--network', 'none', '--user', '0:0', '--read-only',
             '--tmpfs', '/tmp:rw,size=64m', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
             '--mount', f'type=bind,src={tampered},dst=/layout', '--mount', f'type=bind,src={layer},dst=/tamper.tar,readonly',
-            '--entrypoint', '/usr/bin/umoci', self.args.worker_image, 'raw', 'add-layer',
+            '--entrypoint', '/usr/bin/umoci', self.worker_host_image, 'raw', 'add-layer',
             '--image', '/layout:' + original_tag, '--tag', 'tampered', '--history.created',
             '1970-01-01T00:00:00Z', '--history.created_by', 'qualification-negative', '--compress', 'none', '/tamper.tar')
         index = json.loads((tampered / 'index.json').read_text())
@@ -730,6 +735,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ['worker-image', 'probe-image', 'cli', 'mise', 'docker-config']:
         parser.add_argument('--' + name, required=True)
+    parser.add_argument('--worker-host-image', help='Local Docker tooling image; frozen to its image ID before use. Defaults to worker-image.')
     parser.add_argument('--context', choices=['docker-desktop', 'kind-ayni-runtime-qualification'], default='docker-desktop')
     parser.add_argument('--kubeconfig', help='Explicit dedicated kubeconfig; required for the separate qualification cluster')
     parser.add_argument('--diagnose-quality', action='store_true', help='Observe bounded stderr only for these synthetic fixtures; no production pod changes')
@@ -738,9 +744,9 @@ def main():
     parser.add_argument('--network-only', action='store_true', help='Test actual candidate network-policy enforcement using a retained public baseline')
     parser.add_argument('--engine-only', action='store_true', help='Test actual nested rootless execution and cancellation cleanup only')
     parser.add_argument('--registry-denial-only', action='store_true', help='Read-only real GHCR denial with deliberately invalid synthetic credentials; never publishes')
-    parser.add_argument('--cli-sha256', default='3b69c9da769daa0a36f42163870101daeca2ef227a90bb208d69dda476294949')
-    parser.add_argument('--executor-image', default='ghcr.io/ayni-oss/ayni-builder@sha256:663a4af8c4e2b5a0b11f2c4333e4b6a0c5600dc7b3e73e5f05b09ffa7e9094e1')
-    parser.add_argument('--executor-cli-sha256', default='sha256:fbb9b9bd7a957c7741cd2c171d5ee13e951950df3226c431d6c0dd9078b4a48b')
+    parser.add_argument('--cli-sha256', default=RELEASE['linux_arm64_cli_sha256'])
+    parser.add_argument('--executor-image', default=RELEASE['linux_arm64_executor_image'])
+    parser.add_argument('--executor-cli-sha256', default='sha256:' + RELEASE['linux_arm64_cli_sha256'])
     args = parser.parse_args()
     if sha(Path(args.cli).read_bytes()) != 'sha256:' + args.cli_sha256.removeprefix('sha256:'):
         raise RuntimeError('CLI_checksum_mismatch')
@@ -751,9 +757,13 @@ def main():
     summary = {'kind': 'runtime_component_qualification', 'namespace': q.namespace,
         'context': q.context, 'cluster': q.cluster, 'node': q.node,
         'worker_image': args.worker_image, 'probe_image': args.probe_image, 'passed': False,
+        'ayni_version': RELEASE['cli_version'], 'ayni_source_revision': RELEASE['source_revision'],
+        'cli_sha256': args.cli_sha256, 'executor_image': args.executor_image,
+        'executor_cli_sha256': args.executor_cli_sha256,
         'excluded': ['control_plane_admission', 'github_acquisition', 'ghcr_publication', 'supervisor_restart', 'production_stage_authority_fencing']}
     try:
         q.setup()
+        summary['worker_host_image'] = q.worker_host_image
         summary['node_image'] = q.docker('inspect', q.node, '--format', '{{.Config.Image}}').strip()
         node_info = json.loads(q.kube('get', 'node', q.node, '-o', 'json'))['status']['nodeInfo']
         summary['node_runtime'] = {key: node_info[key] for key in ['architecture', 'operatingSystem',

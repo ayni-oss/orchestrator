@@ -40,6 +40,26 @@ helm template legacy "$reusable_chart" --namespace test \
 ! grep -q 'name: runtime-preparation-supervisor' "$scratch/legacy-runtime.yaml"
 ! grep -q 'ORCHESTRATOR_RUNTIME_PROFILE_JSON' "$scratch/legacy-runtime.yaml"
 
+# Unqualified builds require an explicit development profile and opt-in. The
+# chart must not turn a local exception into a qualification claim.
+local_runtime_flags=(--set runtimePreparation.enabled=true
+  --set-string runtimePreparation.profile.profile_id=rootless-podman-vfs-userns-local-development-v1
+  --set runtimePreparation.profile.qualified=false
+  --set-string runtimePreparation.profile.worker_image=local/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  --set-string runtimePreparation.profile.executor_image=ghcr.io/ayni-oss/ayni-builder@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  --set-string runtimePreparation.profile.verifier_image=local/probe@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc)
+if helm template local "$reusable_chart" --namespace test "${local_runtime_flags[@]}" > "$scratch/unqualified.yaml" 2>/dev/null; then
+  echo 'unqualified local runtime rendered without opt-in' >&2; exit 1
+fi
+helm template local "$reusable_chart" --namespace test "${local_runtime_flags[@]}" \
+  --set runtimePreparation.localDevelopment=true > "$scratch/local-development.yaml"
+grep -q 'rootless-podman-vfs-userns-local-development-v1' "$scratch/local-development.yaml"
+grep -q 'name: runtime-preparation-supervisor' "$scratch/local-development.yaml"
+if helm template local "$reusable_chart" --namespace test "${local_runtime_flags[@]}" \
+  --set runtimePreparation.localDevelopment=true --set runtimePreparation.profile.qualified=true > "$scratch/false-qualification.yaml" 2>/dev/null; then
+  echo 'local runtime accepted a false qualification claim' >&2; exit 1
+fi
+
 # Equal release names in independent application namespaces must never share
 # builder storage, signer references, or supervisor authority.
 for runtime_namespace in runtime-live runtime-acceptance; do
@@ -81,6 +101,14 @@ grep -q 'workflow-postgres-migrator' <<<"$migration_container"
 ! grep -q 'workflow-postgres-runtime' <<<"$migration_container"
 ! grep -q 'jetstream' <<<"$migration_container"
 grep -q 'name: control-plane' <<<"$control_container"
+# Frozen policy/lock validation must materialize bounded files while the root
+# filesystem stays read-only. Migration has no source-inspection scratch access.
+grep -q 'readOnlyRootFilesystem: true' <<<"$control_container"
+grep -q 'name: inspection-scratch' <<<"$control_container"
+grep -q 'mountPath: /tmp' <<<"$control_container"
+grep -q 'name: TMPDIR' <<<"$control_container"
+! grep -q 'inspection-scratch' <<<"$migration_container"
+grep -A2 'name: inspection-scratch' "$reusable_render" | grep -q 'sizeLimit: 256Mi'
 grep -q 'workflow-postgres-runtime' <<<"$control_container"
 grep -q 'workflow-jetstream-application' <<<"$control_container"
 ! grep -q 'workflow-postgres-migrator' <<<"$control_container"

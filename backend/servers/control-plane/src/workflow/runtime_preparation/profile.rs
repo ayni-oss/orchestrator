@@ -2,7 +2,8 @@
 use serde::{Deserialize, Serialize};
 use tonic::Status;
 
-pub(super) const PROFILE_ID: &str = "rootless-podman-vfs-userns-v1";
+#[cfg(test)]
+const PROFILE_ID: &str = ayni_orchestrator_events::runtime_preparation::QUALIFIED_PROFILE_ID;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -38,7 +39,10 @@ impl RuntimeConfiguration {
     }
 
     fn validate(&self) -> Result<(), Status> {
-        if self.profile_id != PROFILE_ID || !self.qualified {
+        if !ayni_orchestrator_events::runtime_preparation::admitted_profile_identity(
+            &self.profile_id,
+            self.qualified,
+        ) {
             return Err(unavailable());
         }
         if !matches!(self.platform.as_str(), "linux/amd64" | "linux/arm64") {
@@ -118,7 +122,7 @@ mod tests {
         }
     }
     #[test]
-    fn admission_requires_the_exact_qualified_profile_and_pinned_tooling() {
+    fn admission_requires_an_explicit_profile_and_pinned_tooling() {
         let profile = fixture();
         assert!(profile.validate().is_ok());
         assert!(profile.admit("linux/amd64", 300, 1).is_ok());
@@ -141,7 +145,12 @@ mod tests {
             .unwrap_or_else(|error| panic!("fixture profile: {error}"));
         value["qualified"] = false.into();
         assert!(RuntimeConfiguration::parse(&value.to_string()).is_err());
+        value["profile_id"] =
+            ayni_orchestrator_events::runtime_preparation::DEVELOPMENT_PROFILE_ID.into();
+        assert!(RuntimeConfiguration::parse(&value.to_string()).is_ok());
         value["qualified"] = true.into();
+        assert!(RuntimeConfiguration::parse(&value.to_string()).is_err());
+        value["profile_id"] = PROFILE_ID.into();
         value["privileged_fallback"] = true.into();
         assert!(RuntimeConfiguration::parse(&value.to_string()).is_err());
     }

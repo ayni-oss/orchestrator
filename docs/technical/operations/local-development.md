@@ -376,7 +376,7 @@ establish NetworkPolicy enforcement by the cluster network plugin.
 ## Managed task quality acceptance
 
 Build and load the dependency-free [managed fixture](../../../dev/fixtures/task-quality/README.md)
-using the pinned Ayni 0.17.0 CLI:
+using the pinned Ayni 0.17.1 CLI:
 
 ```sh
 dev/ctl quality-runtime
@@ -410,7 +410,7 @@ failure boundaries. Retained acceptance state is preserved for inspection.
 
 ## Task publication acceptance
 
-Use the actual managed Ayni 0.17.0 fixture runtime and an isolated namespace:
+Use the actual managed Ayni 0.17.1 fixture runtime and an isolated namespace:
 
 ```sh
 dev/ctl quality-runtime

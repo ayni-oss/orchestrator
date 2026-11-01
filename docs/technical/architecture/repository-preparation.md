@@ -158,9 +158,16 @@ image digest and a matching Linux node architecture. Kernel and storage support
 are deployment prerequisites; a rootless engine label alone is not isolation
 evidence.
 
+The control plane materializes bounded frozen input bytes in per-inspection
+temporary directories. Its chart mounts a 256 MiB `emptyDir` at `/tmp` and sets
+`TMPDIR` there while retaining a read-only root filesystem. Migration and runtime
+workers do not share this source-inspection volume. The kubelet storage limit is
+an eviction bound rather than a hard filesystem quota; unavailable scratch keeps
+inspection recoverable and cannot establish readiness.
+
 ### Pinned Ayni boundary
 
-Ayni 0.17.0 provides supported public policy, lock, certificate, protected-content
+Ayni 0.17.1 provides supported public policy, lock, certificate, protected-content
 verification and offline filesystem certification contracts. Orchestrator consumes
 these contracts rather than copying private image inventory/signature semantics.
 The exact source revision is pinned in Cargo manifests and the executable/image
@@ -236,3 +243,19 @@ Accepted records explain authority; traces diagnose execution and metrics summar
 - [Code organization](code-organization.md) and [tracing](../operations/execution-tracing.md) define current authority and diagnostic responsibilities.
 - Historical [onboarding](https://github.com/ayni-oss/orchestrator/blob/c279a7bcdf340f5479cc292c1571bba22af04b27/docs/technical/guides/operator-onboarding.md) and [builders](https://github.com/ayni-oss/orchestrator/blob/c279a7bcdf340f5479cc292c1571bba22af04b27/docs/technical/reference/repository-builders.md) record main's behavior. Alpha's workspace availability is a new product requirement, not a requirement to restore those historical schemas or APIs.
 - Historical [activation](https://github.com/ayni-oss/orchestrator/blob/c279a7bcdf340f5479cc292c1571bba22af04b27/backend/servers/control-plane/crates/application/src/runtime_activation.rs) and [runtime evidence](https://github.com/ayni-oss/orchestrator/blob/c279a7bcdf340f5479cc292c1571bba22af04b27/backend/libs/runtime/profiles/ayni/src/managed_runtime.rs) show guarded selection and environment/quality separation.
+
+### Default-branch rechecks
+
+`ResolveRepositoryDefaultCommit` reads fresh repository metadata and resolves its
+current default-branch head through the configured, repository-scoped GitHub
+installation. It checks the expected source connection revision before and after
+provider access, bounds requests, encodes the branch as a single URL path segment,
+and returns an exact lowercase SHA or a safe failure reason. No caller-supplied
+branch, provider URL or credential enters this API.
+
+The UI resolves again for each explicit recheck, then persists a new
+`InspectRepository` command with that SHA and source revision before submission.
+It clears any prior preparation selection. Inspection retries and receipt recovery
+reuse the persisted command without resolving a newer branch head. A failed
+resolution cannot fall back to an older SHA or establish current readiness.
+Build/publication grants and immutable preparation evidence remain separate.

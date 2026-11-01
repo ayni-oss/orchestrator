@@ -9,8 +9,8 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-ayni-core = { git = "https://github.com/ayni-oss/ayni.git", rev = "996180ad3c561d903bf967ee772405100a276e9e" }
-ayni-environment = { git = "https://github.com/ayni-oss/ayni.git", rev = "996180ad3c561d903bf967ee772405100a276e9e" }
+ayni-core = { git = "https://github.com/ayni-oss/ayni.git", rev = "639ace4c180bfaef8e5d222bcd5ce7f4b0480b07" }
+ayni-environment = { git = "https://github.com/ayni-oss/ayni.git", rev = "639ace4c180bfaef8e5d222bcd5ce7f4b0480b07" }
 base64.workspace = true
 ed25519-dalek.workspace = true
 getrandom = "=0.3.4"

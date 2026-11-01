@@ -464,6 +464,12 @@ async fn repository_rpc(
     body: Value,
 ) -> Result<Json<Value>, ApiError> {
     match method {
+        "ResolveRepositoryDefaultCommit" => forward!(
+            body,
+            gateway.repositories(),
+            resolve_repository_default_commit,
+            v1::ResolveRepositoryDefaultCommitRequest
+        ),
         "InspectRepository" => forward!(
             body,
             gateway.repositories(),
@@ -540,6 +546,24 @@ async fn runtime_preparation_rpc(
     body: Value,
 ) -> Result<Json<Value>, ApiError> {
     match method {
+        "StartRepositoryRuntime" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            start_repository_runtime,
+            v1::StartRepositoryRuntimeRequest
+        ),
+        "GetRepositoryRuntime" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            get_repository_runtime,
+            v1::GetRepositoryRuntimeRequest
+        ),
+        "GetRepositoryRuntimeReceipt" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            get_repository_runtime_receipt,
+            v1::GetRepositoryRuntimeReceiptRequest
+        ),
         "StartRuntimePreparation" => forward!(
             body,
             gateway.runtime_preparation(),

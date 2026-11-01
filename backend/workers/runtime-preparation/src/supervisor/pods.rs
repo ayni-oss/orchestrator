@@ -25,7 +25,7 @@ pub(super) fn output_role(c: &StageClaim) -> Option<&'static str> {
     }
 }
 pub(super) fn resource(c: &StageClaim, role: &str) -> String {
-    format!("runtime-{}-{role}", c.operation.id)
+    format!("runtime-{}-{}", c.operation.id, role.replace('_', "-"))
 }
 pub(super) fn labels(c: &StageClaim) -> Value {
     json!({"app.kubernetes.io/managed-by":"ayni-runtime-supervisor","ayni.build/operation":c.operation.id,"ayni.build/stage":c.attempt.stage,"ayni.build/generation":c.attempt.generation.to_string()})
@@ -285,7 +285,23 @@ mod tests {
             authority: "synthetic-fixture-authority-only".into(),
             storage_class: None,
             pull_policy: "Never".into(),
+            last_failure: std::sync::Mutex::new(std::collections::BTreeMap::new()),
         })
+    }
+    #[test]
+    fn stage_capability_names_are_valid_kubernetes_secret_names()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for stage in ayni_orchestrator_events::runtime_preparation::STAGES {
+            let c = claim(stage)?;
+            let name = super::resource(&c, &format!("cap-{stage}-{}", c.attempt.generation));
+            assert!(name.len() <= 253);
+            assert!(
+                name.bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+            );
+            assert!(!name.starts_with('-') && !name.ends_with('-'));
+        }
+        Ok(())
     }
     #[tokio::test]
     async fn verifier_has_no_capability_and_fenced_identity()

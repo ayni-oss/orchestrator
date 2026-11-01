@@ -20,10 +20,15 @@ test('repository catalog and project associations use retained canonical receipt
   browser=await chromium.launch({headless:true});const page=await browser.newPage();
   await page.goto(`${origin}/repositories`);await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
   await page.getByRole('region',{name:'fixture/browser-repository',exact:true}).first().waitFor();
+  await page.locator(`main a[href="/repositories/${fixture}"]`).click();
+  await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
+  const resolved=await page.request.post(`${origin}/api/ResolveRepositoryDefaultCommit`,{headers:{'x-console-request':'1'},data:{repositoryId:fixture,expectedConnectionRevision:'1'}});
+  assert.equal(resolved.status(),200);assert.equal((await resolved.json()).safeReason,'github_key_invalid');assert.equal((await resolved.json()).commitSha || '','');
+  const staleResolve=await page.request.post(`${origin}/api/ResolveRepositoryDefaultCommit`,{headers:{'x-console-request':'1'},data:{repositoryId:fixture,expectedConnectionRevision:'999'}});
+  assert.equal(staleResolve.status(),409);
   const inspectionCard = page.locator(`[data-repository-inspection="${fixture}"]`);
-  await inspectionCard.getByRole('button',{name:'Inspect Ayni setup',exact:true}).click();
-  await inspectionCard.getByText('Static inspection complete',{exact:true}).waitFor();
-  await inspectionCard.getByText('Commit an Ayni policy before preparing this repository.',{exact:true}).waitFor();
+  await inspectionCard.getByText('Inspect a specific commit',{exact:true}).click();
+  await inspectionCard.getByText('Commit an Ayni policy before preparing this repository.',{exact:true}).first().waitFor();
   const commitInput = inspectionCard.getByLabel('Commit SHA',{exact:true});
   await commitInput.fill('main');
   assert.equal(await inspectionCard.getByRole('button',{name:'Inspect commit',exact:true}).isDisabled(),true);
@@ -38,14 +43,17 @@ test('repository catalog and project associations use retained canonical receipt
   });
   await inspectionCard.getByRole('button',{name:'Inspect commit',exact:true}).click();
   await lostInspection;await page.unroute('**/api/InspectRepository');await page.reload();
+  await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
   await inspectionCard.getByRole('button',{name:'Recover inspection',exact:true}).click();
-  await inspectionCard.getByText('The saved App key is invalid. Update the source connection.',{exact:true}).waitFor();
+  await inspectionCard.getByText('The saved App key is invalid. Update the source connection.',{exact:true}).first().waitFor();
   await page.waitForFunction(id=>sessionStorage.getItem(`ayni.repository.inspection.pending.${id}`)===null,fixture);
   const retainedInspection=await page.request.post(`${origin}/api/GetRepositoryInspection`,{headers:{'x-console-request':'1'},data:{idempotencyKey:inspectionRequest.idempotencyKey}});
   assert.equal(retainedInspection.status(),200);assert.equal((await retainedInspection.json()).inspection.commitSha,'b'.repeat(40));
   const inspectionConflict=await page.request.post(`${origin}/api/InspectRepository`,{headers:{'x-console-request':'1'},data:{...inspectionRequest,commitSha:'c'.repeat(40)}});
   assert.equal(inspectionConflict.status(),409);
   await inspectionCard.screenshot({path:'/tmp/repository-inspection-browser.png'});
+  await page.getByRole('link',{name:'Back to repositories',exact:true}).click();
+  await page.getByText('Find repositories on GitHub',{exact:true}).click();
   await page.getByLabel('GitHub App connection',{exact:true}).selectOption(process.env.AYNI_REPOSITORY_SOURCE);
   await page.getByRole('button',{name:'Discover installations',exact:true}).click();
   await page.getByRole('alert').filter({hasText:'Repository needs attention'}).getByText('The saved App key is invalid. Update the source connection.',{exact:true}).waitFor();
@@ -119,6 +127,19 @@ test('repository catalog and project associations use retained canonical receipt
   const original=await page.request.post(`${origin}/api/AssociateProjectRepository`,{headers:{'x-console-request':'1'},data:associationRequest});assert.equal((await original.json()).commandId,firstReceipt);
   assert.equal((await page.locator('body').innerText()).includes('synthetic-repository-browser-key'),false);
   await page.screenshot({path:'/tmp/repository-project-browser.png',fullPage:true});
+  // Canonical durable onboarding through real PostgreSQL/gRPC/gateway. The
+  // synthetic GitHub key fails before any provider request or build authority.
+  const runtimeSettings={idempotencyKey:crypto.randomUUID(),repositoryId:fixture,expectedConnectionRevision:'1',registryConnectionId:process.env.AYNI_REPOSITORY_REGISTRY,signerId:process.env.AYNI_REPOSITORY_SIGNER,platform:'linux/arm64',maxSeconds:1800,maxBuilds:1,allowBuild:true,allowReplace:false};
+  const startRuntime=await page.request.post(`${origin}/api/StartRepositoryRuntime`,{headers:{'x-console-request':'1'},data:runtimeSettings});
+  assert.equal(startRuntime.status(),200);const runtimeReceipt=(await startRuntime.json()).run;
+  assert.equal(runtimeReceipt.state,'resolving');
+  await page.goto(`${origin}/repositories/${fixture}?tab=runtime`);
+  await page.getByRole('heading',{name:'Runtime onboarding needs attention',exact:true}).waitFor();
+  await page.getByText('The latest default branch could not be read. Check the GitHub connection and repository access, then prepare again.',{exact:true}).waitFor();
+  const recovered=await page.request.post(`${origin}/api/GetRepositoryRuntimeReceipt`,{headers:{'x-console-request':'1'},data:{idempotencyKey:runtimeSettings.idempotencyKey}});
+  assert.equal(recovered.status(),200);assert.deepEqual((await recovered.json()).run,runtimeReceipt);
+  const currentRun=await page.request.post(`${origin}/api/GetRepositoryRuntime`,{headers:{'x-console-request':'1'},data:{repositoryId:fixture}});
+  assert.equal((await currentRun.json()).run.safeReason,'source_unavailable');
   await exerciseRuntimePreparation(page,origin,fixture);
   console.log('repository-browser: real PostgreSQL/gRPC/gateway catalog, exact loss/reload recovery, rejected false readiness, shared cross-workspace associations and scope rejection passed; GitHub provider discovery uses fixtures.');
  } finally {await browser?.close();try{process.kill(-child.pid,'SIGTERM');}catch{}}

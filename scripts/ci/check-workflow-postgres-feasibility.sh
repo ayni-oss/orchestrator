@@ -77,6 +77,7 @@ if [[ "${AYNI_RUNTIME_SIGNERS_ONLY:-0}" == 1 ]]; then
 fi
 
 if [[ "${AYNI_REPOSITORIES_ONLY:-0}" == 1 ]]; then
+  cargo test --locked -p ayni-orchestrator-workflow-postgres --test runtime_preparations repository_onboarding_ -- --ignored --nocapture --test-threads=1
   cargo test --locked -p ayni-orchestrator-workflow-postgres --test repositories -- --ignored --nocapture
   cargo test --locked -p ayni-orchestrator-workflow-postgres --test repository_inspections -- --ignored --nocapture
   cargo test --locked -p ayni-orchestrator-control-plane --test repositories_browser -- --ignored --nocapture

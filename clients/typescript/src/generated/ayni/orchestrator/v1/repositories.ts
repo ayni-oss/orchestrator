@@ -210,6 +210,21 @@ export interface ListRepositoryInspectionsResponse {
   nextAfterId: string;
 }
 
+/**
+ * Resolve fresh provider metadata and the current default-branch head without inspecting it.
+ * Inspection must freeze the returned commit through InspectRepository.
+ */
+export interface ResolveRepositoryDefaultCommitRequest {
+  repositoryId: string;
+  expectedConnectionRevision: string;
+}
+
+export interface ResolveRepositoryDefaultCommitResponse {
+  defaultBranch: string;
+  commitSha: string;
+  safeReason: string;
+}
+
 function createBaseGithubInstallation(): GithubInstallation {
   return { installationId: "0", accountLogin: "", suspended: false };
 }
@@ -3688,6 +3703,212 @@ export const ListRepositoryInspectionsResponse: MessageFns<ListRepositoryInspect
   },
 };
 
+function createBaseResolveRepositoryDefaultCommitRequest(): ResolveRepositoryDefaultCommitRequest {
+  return { repositoryId: "", expectedConnectionRevision: "0" };
+}
+
+export const ResolveRepositoryDefaultCommitRequest: MessageFns<ResolveRepositoryDefaultCommitRequest> = {
+  encode(message: ResolveRepositoryDefaultCommitRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repositoryId !== "") {
+      writer.uint32(10).string(message.repositoryId);
+    }
+    if (message.expectedConnectionRevision !== "0") {
+      writer.uint32(16).uint64(message.expectedConnectionRevision);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ResolveRepositoryDefaultCommitRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseResolveRepositoryDefaultCommitRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositoryId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.expectedConnectionRevision = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ResolveRepositoryDefaultCommitRequest {
+    return {
+      repositoryId: isSet(object.repositoryId)
+        ? globalThis.String(object.repositoryId)
+        : isSet(object.repository_id)
+        ? globalThis.String(object.repository_id)
+        : "",
+      expectedConnectionRevision: isSet(object.expectedConnectionRevision)
+        ? globalThis.String(object.expectedConnectionRevision)
+        : isSet(object.expected_connection_revision)
+        ? globalThis.String(object.expected_connection_revision)
+        : "0",
+    };
+  },
+
+  toJSON(message: ResolveRepositoryDefaultCommitRequest): unknown {
+    const obj: any = {};
+    if (message.repositoryId !== "") {
+      obj.repositoryId = message.repositoryId;
+    }
+    if (message.expectedConnectionRevision !== "0") {
+      obj.expectedConnectionRevision = message.expectedConnectionRevision;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ResolveRepositoryDefaultCommitRequest>): ResolveRepositoryDefaultCommitRequest {
+    return ResolveRepositoryDefaultCommitRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ResolveRepositoryDefaultCommitRequest>): ResolveRepositoryDefaultCommitRequest {
+    const message = createBaseResolveRepositoryDefaultCommitRequest();
+    message.repositoryId = object.repositoryId ?? "";
+    message.expectedConnectionRevision = object.expectedConnectionRevision ?? "0";
+    return message;
+  },
+};
+
+function createBaseResolveRepositoryDefaultCommitResponse(): ResolveRepositoryDefaultCommitResponse {
+  return { defaultBranch: "", commitSha: "", safeReason: "" };
+}
+
+export const ResolveRepositoryDefaultCommitResponse: MessageFns<ResolveRepositoryDefaultCommitResponse> = {
+  encode(message: ResolveRepositoryDefaultCommitResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.defaultBranch !== "") {
+      writer.uint32(10).string(message.defaultBranch);
+    }
+    if (message.commitSha !== "") {
+      writer.uint32(18).string(message.commitSha);
+    }
+    if (message.safeReason !== "") {
+      writer.uint32(26).string(message.safeReason);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ResolveRepositoryDefaultCommitResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseResolveRepositoryDefaultCommitResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.defaultBranch = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.commitSha = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.safeReason = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ResolveRepositoryDefaultCommitResponse {
+    return {
+      defaultBranch: isSet(object.defaultBranch)
+        ? globalThis.String(object.defaultBranch)
+        : isSet(object.default_branch)
+        ? globalThis.String(object.default_branch)
+        : "",
+      commitSha: isSet(object.commitSha)
+        ? globalThis.String(object.commitSha)
+        : isSet(object.commit_sha)
+        ? globalThis.String(object.commit_sha)
+        : "",
+      safeReason: isSet(object.safeReason)
+        ? globalThis.String(object.safeReason)
+        : isSet(object.safe_reason)
+        ? globalThis.String(object.safe_reason)
+        : "",
+    };
+  },
+
+  toJSON(message: ResolveRepositoryDefaultCommitResponse): unknown {
+    const obj: any = {};
+    if (message.defaultBranch !== "") {
+      obj.defaultBranch = message.defaultBranch;
+    }
+    if (message.commitSha !== "") {
+      obj.commitSha = message.commitSha;
+    }
+    if (message.safeReason !== "") {
+      obj.safeReason = message.safeReason;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ResolveRepositoryDefaultCommitResponse>): ResolveRepositoryDefaultCommitResponse {
+    return ResolveRepositoryDefaultCommitResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ResolveRepositoryDefaultCommitResponse>): ResolveRepositoryDefaultCommitResponse {
+    const message = createBaseResolveRepositoryDefaultCommitResponse();
+    message.defaultBranch = object.defaultBranch ?? "";
+    message.commitSha = object.commitSha ?? "";
+    message.safeReason = object.safeReason ?? "";
+    return message;
+  },
+};
+
 /** Shared catalog in the trusted local-operator scope. Source access is not runtime readiness. */
 export type RepositoryServiceService = typeof RepositoryServiceService;
 export const RepositoryServiceService = {
@@ -3787,6 +4008,19 @@ export const RepositoryServiceService = {
     responseDeserialize: (value: Buffer): ListProjectRepositoriesResponse =>
       ListProjectRepositoriesResponse.decode(value),
   },
+  resolveRepositoryDefaultCommit: {
+    path: "/ayni.orchestrator.v1.RepositoryService/ResolveRepositoryDefaultCommit" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ResolveRepositoryDefaultCommitRequest): Buffer =>
+      Buffer.from(ResolveRepositoryDefaultCommitRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ResolveRepositoryDefaultCommitRequest =>
+      ResolveRepositoryDefaultCommitRequest.decode(value),
+    responseSerialize: (value: ResolveRepositoryDefaultCommitResponse): Buffer =>
+      Buffer.from(ResolveRepositoryDefaultCommitResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ResolveRepositoryDefaultCommitResponse =>
+      ResolveRepositoryDefaultCommitResponse.decode(value),
+  },
   inspectRepository: {
     path: "/ayni.orchestrator.v1.RepositoryService/InspectRepository" as const,
     requestStream: false as const,
@@ -3834,6 +4068,10 @@ export interface RepositoryServiceServer extends UntypedServiceImplementation {
   listRepositories: handleUnaryCall<ListRepositoriesRequest, ListRepositoriesResponse>;
   associateProjectRepository: handleUnaryCall<AssociateProjectRepositoryRequest, AssociateProjectRepositoryResponse>;
   listProjectRepositories: handleUnaryCall<ListProjectRepositoriesRequest, ListProjectRepositoriesResponse>;
+  resolveRepositoryDefaultCommit: handleUnaryCall<
+    ResolveRepositoryDefaultCommitRequest,
+    ResolveRepositoryDefaultCommitResponse
+  >;
   inspectRepository: handleUnaryCall<InspectRepositoryRequest, InspectRepositoryResponse>;
   getRepositoryInspection: handleUnaryCall<GetRepositoryInspectionRequest, GetRepositoryInspectionResponse>;
   listRepositoryInspections: handleUnaryCall<ListRepositoryInspectionsRequest, ListRepositoryInspectionsResponse>;
@@ -3959,6 +4197,21 @@ export interface RepositoryServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListProjectRepositoriesResponse) => void,
+  ): ClientUnaryCall;
+  resolveRepositoryDefaultCommit(
+    request: ResolveRepositoryDefaultCommitRequest,
+    callback: (error: ServiceError | null, response: ResolveRepositoryDefaultCommitResponse) => void,
+  ): ClientUnaryCall;
+  resolveRepositoryDefaultCommit(
+    request: ResolveRepositoryDefaultCommitRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ResolveRepositoryDefaultCommitResponse) => void,
+  ): ClientUnaryCall;
+  resolveRepositoryDefaultCommit(
+    request: ResolveRepositoryDefaultCommitRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ResolveRepositoryDefaultCommitResponse) => void,
   ): ClientUnaryCall;
   inspectRepository(
     request: InspectRepositoryRequest,

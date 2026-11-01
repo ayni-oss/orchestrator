@@ -138,7 +138,8 @@ pub(super) async fn retain(
 impl WorkflowStore {
     /// Save or rotate public signer metadata without accessing the referenced object.
     /// # Errors
-    /// Reject malformed inputs, stale revisions, key ID changes, conflicting retries and database errors.
+    /// Reject malformed inputs, stale revisions, conflicting retries and database errors.
+    /// Key name corrections create a new revision; frozen preparations and old receipts retain their original identity.
     pub async fn save_runtime_signer(&self, input: SaveSigner<'_>) -> Result<Signer, StoreError> {
         let safe = validate(&input)?;
         let (mut client, driver) = crate::connect(&self.database_url).await?;
@@ -160,13 +161,10 @@ impl WorkflowStore {
             id
         } else {
             let current = locked(&tx, input.id).await?;
-            if current.key_id != input.key_id {
-                return Err(StoreError::InvalidInput("signer key_id is immutable"));
-            }
             if current.revision != input.expected_revision {
                 return Err(StoreError::ConfigurationRevisionConflict);
             }
-            tx.execute("UPDATE workflow_runtime_signers SET display_name=$2,public_key=$3,secret_name=$4,secret_uid=$5,active_revision=$6,revision=revision+1 WHERE id=$1",&[&input.id,&input.display_name,&input.public_key,&input.secret_name,&input.secret_uid,&revision]).await?;
+            tx.execute("UPDATE workflow_runtime_signers SET display_name=$2,public_key=$3,secret_name=$4,secret_uid=$5,active_revision=$6,key_id=$7,revision=revision+1 WHERE id=$1",&[&input.id,&input.display_name,&input.public_key,&input.secret_name,&input.secret_uid,&revision,&input.key_id]).await?;
             input.id.to_owned()
         };
         let value = locked(&tx, &id).await?;

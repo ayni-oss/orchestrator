@@ -6,9 +6,8 @@ async fn main() {
         std::process::exit(2);
     };
     loop {
-        if Box::pin(supervisor.tick()).await.is_err() {
-            eprintln!("runtime preparation reconciliation requires recovery");
-        }
+        // The supervisor reports bounded, credential-free context and throttles repeated failures.
+        let _ = Box::pin(supervisor.tick()).await;
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     }
 }

@@ -37,8 +37,29 @@ python3 - "$repository_root/scripts/ci/ayni-tool.json" <<'PY'
 import json
 import pathlib
 import sys
+import tomllib
 
 release = json.loads(pathlib.Path(sys.argv[1]).read_text())
+def exact_hex(value, length):
+    return len(value) == length and all(c in "0123456789abcdef" for c in value)
+
+if not exact_hex(release["source_revision"], 40):
+    raise SystemExit("GitHub security check: Ayni source revision is not pinned")
+repository = pathlib.Path(sys.argv[1]).resolve().parents[2]
+for manifest in ("backend/servers/control-plane/Cargo.toml",
+                 "backend/workers/runtime-preparation/Cargo.toml",
+                 "backend/workers/runtime-verifier/Cargo.toml"):
+    dependencies = tomllib.loads((repository / manifest).read_text())["dependencies"]
+    for name in ("ayni-core", "ayni-environment"):
+        dependency = dependencies[name]
+        if dependency.get("git") != "https://github.com/ayni-oss/ayni.git" or dependency.get("rev") != release["source_revision"]:
+            raise SystemExit(f"GitHub security check: {manifest} {name} differs from the admitted Ayni source")
+if not exact_hex(release["linux_arm64_cli_sha256"], 64):
+    raise SystemExit("GitHub security check: Ayni runtime CLI checksum is not pinned")
+executor_prefix = "ghcr.io/ayni-oss/ayni-builder@sha256:"
+executor = release["linux_arm64_executor_image"]
+if not executor.startswith(executor_prefix) or not exact_hex(executor.removeprefix(executor_prefix), 64):
+    raise SystemExit("GitHub security check: Ayni runtime executor is not pinned")
 if not release["cli_version"]:
     raise SystemExit("GitHub security check: Ayni CLI version is not pinned")
 for architecture in ("amd64", "arm64"):

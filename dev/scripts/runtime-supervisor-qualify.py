@@ -276,7 +276,7 @@ def main():
     if args.self_test:
         self_test()
         return
-    if not re.fullmatch(r'local/ayni-runtime-worker@sha256:[a-f0-9]{64}', args.worker_image):
+    if not re.fullmatch(r'(?:docker\.io/)?local/ayni-runtime-worker@sha256:[a-f0-9]{64}', args.worker_image):
         raise SystemExit('immutable_local_worker_image_required')
     if args.context == 'kind-ayni-runtime-qualification' and os.environ.get('KUBECONFIG') != '/tmp/ayni-runtime-cluster/kubeconfig':
         raise SystemExit('qualification_cluster_requires_exact_dedicated_kubeconfig')

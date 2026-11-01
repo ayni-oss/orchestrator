@@ -38,7 +38,11 @@ resolved to the existing Lucide dependency. Other controls use the same compact
 shadcn styling. Update shared components and tokens instead of adding page-specific
 field borders or raw form controls.
 
-Repository catalog UI: `/repositories`. Project cards link to
+Repository catalog UI: `/repositories`. Available repositories use the same compact, clickable grid cards as projects.
+Opening a connected repository shows Source code and Ayni runtime tabs. Source code covers connection status and
+GitHub integration details; Ayni runtime covers exact-commit inspection and
+preparation. Switching tabs preserves in-progress selections. Technical inspection
+metadata and connection history are collapsed by default. Project cards link to
 `/projects/:id/repositories?workspace=:workspaceId`. Repository connect and project
 association requests retain their exact non-secret bytes and idempotency key across
 reload; scope changes create a fresh component instance. **Connected** describes
@@ -63,7 +67,11 @@ reapplying the old name over a later edit.
 
 ### Inspect committed Ayni setup
 
-In Repositories, open **Inspect Ayni setup** on a connected repository and enter a
+In Repositories, open a connected repository card and choose **Ayni runtime**.
+**Recheck default branch** resolves GitHub’s current default branch and inspects
+its latest SHA on every click. Recovery retries the frozen SHA from the original
+request. For an explicit commit, choose
+**Inspect a specific commit**, and enter a
 full lowercase commit SHA. The retained result shows policy/lock digests, locked
 tools, public trust key IDs and corrective findings. Reload after an interrupted
 request and choose **Recover inspection** or **Retry same inspection**.
@@ -75,12 +83,23 @@ preparation gates. A static inspection result alone establishes neither.
 ### Runtime signing and preparation
 
 Configuration → Runtime signing supports server-generated or imported immutable
-signing keys and advanced administrator-owned Secret references. Exact setup,
+signing keys and advanced administrator-owned Secret references. The entered Name
+is the actual trust-policy key name (`keyId` in the API); it is paired with the
+public key. Correcting a name creates a new public configuration revision and
+preserves old receipts and frozen preparation inputs. Exact setup,
 updates and original receipt recovery survive reloads. Public identities and
 references do not by themselves grant builds or establish runtime readiness.
 
-Repository Runtime preparation shows frozen source/configuration, explicit build
+The repository’s Ayni runtime tab keeps current status, issues and the next action together. Choose **Configure runtime** after a successful check to review the checked commit and configuration. Current progress and recovery controls stay visible; previous preparations and inspections are collapsed by default. Preparation retains frozen source/configuration, explicit build
 and replacement grants, stage history, independent verification, cleanup and exact
 command recovery. Runtime preparation needs an admitted deployment profile. See
 [the user guide](../../docs/site/repositories.md) for setup and recovery; verified
 artifact selection for project tasks remains planned.
+
+Repository onboarding uses StartRepositoryRuntime/GetRepositoryRuntime and an
+immutable receipt API. Reviewed settings are retained server-side. The leased
+control-plane workflow freezes the current default-branch SHA, inspects it and
+starts canonical preparation without browser orchestration. The runtime status
+tracks that run, exposes deployment blockers, and links the repository package and
+confirmed immutable image. Prepare latest commit reuses reviewed settings for one
+new bounded run. Opening a page never renews a build grant.
