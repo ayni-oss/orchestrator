@@ -29,6 +29,18 @@ pub fn valid_tool_image_reference(value: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+pub const QUALIFIED_PROFILE_ID: &str = "rootless-podman-vfs-userns-v1";
+pub const DEVELOPMENT_PROFILE_ID: &str = "rootless-podman-vfs-userns-local-development-v1";
+
+/// Development is an explicit operator opt-in, never a claim of topology qualification.
+#[must_use]
+pub fn admitted_profile_identity(id: &str, qualified: bool) -> bool {
+    matches!(
+        (id, qualified),
+        (QUALIFIED_PROFILE_ID, true) | (DEVELOPMENT_PROFILE_ID, false)
+    )
+}
+
 pub const STAGES: &[&str] = &[
     "acquire_source",
     "discover",

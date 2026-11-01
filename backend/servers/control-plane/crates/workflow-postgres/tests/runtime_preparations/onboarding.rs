@@ -168,3 +168,25 @@ async fn repository_onboarding_retains_one_grant_and_recovers_fenced_steps() -> 
     runtime_driver.abort();
     Ok(())
 }
+
+#[tokio::test]
+#[ignore = "requires disposable migrated PostgreSQL with runtime-role URL"]
+async fn local_development_profile_is_explicit_and_never_marked_qualified() -> TestResult {
+    let mut fixture = Fixture::new().await?;
+    let mut profile: RuntimeProfile = serde_json::from_str(&fixture.freeze.profile_json)?;
+    profile.profile_id =
+        ayni_orchestrator_events::runtime_preparation::DEVELOPMENT_PROFILE_ID.into();
+    profile.qualified = true;
+    fixture.freeze.profile_json = serde_json::to_string(&profile)?;
+    assert!(fixture.start().await.is_err());
+    profile.qualified = false;
+    fixture.freeze.profile_json = serde_json::to_string(&profile)?;
+    let operation = fixture.start().await?;
+    let retained: RuntimeProfile = serde_json::from_str(&operation.frozen.profile_json)?;
+    assert!(!retained.qualified);
+    assert_eq!(
+        retained.profile_id,
+        ayni_orchestrator_events::runtime_preparation::DEVELOPMENT_PROFILE_ID
+    );
+    Ok(())
+}

@@ -1,6 +1,6 @@
 # Separate policy-enforcing local cluster
 
-The default Docker Desktop cluster accepted NetworkPolicy objects but failed the actual deny-connectivity test. Keep its runtime profile disabled. This separate native arm64 cluster preserves that cluster's network, retained data and UI.
+The default Docker Desktop cluster accepted NetworkPolicy objects but failed the actual deny-connectivity test. The qualified profile stays disabled there; a separately named, explicit local-development exception is available when the operator accepts development testing without qualified NetworkPolicy enforcement. This separate native arm64 cluster preserves that cluster's network, retained data and UI.
 
 The pins are kind 0.33.0, Kubernetes 1.36.4 and Cilium 1.20.4. Cilium lists Kubernetes 1.36 in its [tested compatibility matrix](https://docs.cilium.io/en/stable/network/kubernetes/compatibility/). Configuration follows the [official kind installation guide](https://docs.cilium.io/en/stable/installation/kind/): disable the default CNI, retain kube-proxy, and use Kubernetes IPAM. The chart and macOS arm64 kind binary are checksum-verified; Cilium's native image digests are verified descendants of its official release indexes.
 

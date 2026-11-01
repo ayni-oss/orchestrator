@@ -190,13 +190,13 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  const catalog=await (await page.request.post(`${origin}/api/ListRepositories`,{headers:{'x-console-request':'1'},data:{limit:100}})).json();
  const repo=catalog.repositories.find(value=>value.id===repositoryId);
  const registryId=randomUUID(),signerId=randomUUID(),inspectionId=randomUUID();
- let run,operation,starts=[],inspections=[];
+ let run,operation,starts=[],inspections=[],deploymentEnabled=false;
  const hash=`sha256:${'2'.repeat(64)}`;
  await page.route('**/api/ListConnections',route=>route.fulfill({json:{connections:[{id:repo.connectionId,displayName:'Source',capability:'source_control',enabled:true,revision:'1',activeCredentialRevision:'source'},{id:registryId,displayName:'Registry',capability:'container_registry',enabled:true,revision:'1',activeCredentialRevision:'registry',registryDestination:'ghcr.io/fixture'}]}}));
  await page.route('**/api/ListRuntimeSigners',route=>route.fulfill({json:{signers:[{id:signerId,keyId:'named-key',publicKey:'e'.repeat(64),enabled:true,revision:'1'}]}}));
  await page.route('**/api/ListRepositoryInspections',route=>route.fulfill({json:{inspections}}));
  await page.route('**/api/ListRuntimePreparations',route=>route.fulfill({json:{operations:operation?[operation]:[]}}));
- await page.route('**/api/GetRepositoryRuntime',route=>route.fulfill({json:{run}}));
+ await page.route('**/api/GetRepositoryRuntime',route=>route.fulfill({json:{run,preparationEnabled:deploymentEnabled,developmentOnly:deploymentEnabled}}));
  await page.route('**/api/StartRuntimePreparation',()=>{throw new Error('browser must not sequence or submit a separate preparation');});
  await page.route('**/api/StartRepositoryRuntime',route=>{
   const settings=route.request().postDataJSON();starts.push(settings);
@@ -218,7 +218,10 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  await preparation.getByText('Checking the committed Ayni policy, lock and build inputs…',{exact:true}).waitFor();
  run={...run,state:'blocked',safeReason:'runtime_profile_unavailable'};
  await preparation.getByText('Runtime building is not enabled on this deployment. Ask the deployment administrator to enable a qualified runtime build profile.',{exact:true}).waitFor();
+ deploymentEnabled=true;
  await page.reload();
+ await preparation.getByRole('heading',{name:'Ready to prepare runtime',exact:true}).waitFor();
+ await preparation.getByText('Local development build mode. Cluster network isolation is not qualified; this result is for local development testing.',{exact:true}).waitFor();
  await preparation.getByRole('button',{name:'Change runtime settings',exact:true}).click();
  await page.waitForFunction(({repositoryId,signerId})=>document.getElementById(`runtime-signer-${repositoryId}`)?.value===signerId,{repositoryId,signerId});
  assert.equal(await preparation.getByLabel('Runtime signer',{exact:true}).inputValue(),signerId);
@@ -227,9 +230,9 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  await preparation.getByRole('button',{name:'Prepare latest commit',exact:true}).click();
  assert.equal(starts.length,2);assert.notEqual(starts[0].idempotencyKey,starts[1].idempotencyKey);
  inspections=[{id:inspectionId,repositoryId,connectionRevision:'1',commitSha:'c'.repeat(40),state:'completed',updatedAtUnixMs:String(Date.now()),result:{ayniVersion:'0.17.1',trustKeyIds:['named-key'],findings:[]}}];
- operation={id:randomUUID(),idempotencyKey:randomUUID(),generation:'1',frozenInputDigest:hash,acceptedAtUnixMs:String(Date.now()),repositoryId,inspectionId,registryConnectionId:registryId,signerId,platform:'linux/arm64',state:'ready',stage:'cleanup',sourceCommit:'c'.repeat(40),registryDestination:'ghcr.io/fixture/sandbox',imageDigest:hash,contentVerified:true,managedCompatible:true,cleanupComplete:true,updatedAtUnixMs:String(Date.now())};
+ operation={id:randomUUID(),idempotencyKey:randomUUID(),generation:'1',frozenInputDigest:hash,acceptedAtUnixMs:String(Date.now()),repositoryId,inspectionId,registryConnectionId:registryId,signerId,platform:'linux/arm64',state:'ready',developmentOnly:true,stage:'cleanup',sourceCommit:'c'.repeat(40),registryDestination:'ghcr.io/fixture/sandbox',imageDigest:hash,contentVerified:true,managedCompatible:true,cleanupComplete:true,updatedAtUnixMs:String(Date.now())};
  run={...run,state:'completed',inspectionId,preparationId:operation.id};
- await preparation.getByRole('heading',{name:'Runtime ready',exact:true}).waitFor();
+ await preparation.getByRole('heading',{name:'Development runtime ready',exact:true}).waitFor();
  await preparation.getByText(`ghcr.io/fixture/sandbox@${hash}`,{exact:true}).waitFor();
  assert.equal(await preparation.getByRole('link',{name:'Open registry package',exact:true}).getAttribute('href'),'https://github.com/orgs/fixture/packages/container/package/sandbox');
  for(const method of ['ListConnections','ListRuntimeSigners','ListRepositoryInspections','ListRuntimePreparations','GetRepositoryRuntime','StartRepositoryRuntime','StartRuntimePreparation']) await page.unroute(`**/api/${method}`);

@@ -176,3 +176,15 @@ lowercase package from the catalog repository name and freezes the complete imag
 destination before discovery or publication. For `ayni-oss/sandbox`, a connection
 at `ghcr.io/ayni-oss` yields `ghcr.io/ayni-oss/sandbox`. Reuse and verification bind
 to that complete destination; a connection never supplies a package override.
+
+### Local development exception
+
+An operator may explicitly enable `runtimePreparation.localDevelopment: true`
+with profile ID `rootless-podman-vfs-userns-local-development-v1` and
+`qualified: false` for local development testing. The immutable tooling, source,
+signing, allowance, verification and cleanup gates still apply. This exception
+permits testing on a cluster whose NetworkPolicy enforcement is not qualified;
+it does not establish network isolation. The canonical profile still requires
+`qualified: true`, and the development profile rejects that qualification claim.
+The frozen operation records this identity, its API exposes `development_only`,
+and the UI labels its successful result **Development runtime ready**.

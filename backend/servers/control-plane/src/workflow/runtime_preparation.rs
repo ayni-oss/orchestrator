@@ -47,8 +47,14 @@ impl v1::runtime_preparation_service_server::RuntimePreparationService for Workf
             .latest_repository_runtime(&request.into_inner().repository_id)
             .await
             .map_err(|e| context.store(&e))?;
+        let profile = profile::RuntimeConfiguration::from_environment().ok();
         Ok(context.response(v1::GetRepositoryRuntimeResponse {
             run: run.map(onboarding::public),
+            preparation_enabled: profile.is_some(),
+            development_only: profile.is_some_and(|value| {
+                value.profile_id
+                    == ayni_orchestrator_events::runtime_preparation::DEVELOPMENT_PROFILE_ID
+            }),
         }))
     }
     async fn get_repository_runtime_receipt(

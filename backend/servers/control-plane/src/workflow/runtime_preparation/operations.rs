@@ -41,6 +41,13 @@ pub(super) fn public(value: Operation) -> v1::RuntimePreparation {
         lock_digest: value.frozen.lock_digest,
         lock_fingerprint: value.frozen.lock_fingerprint,
         registry_destination: value.frozen.registry_destination,
+        development_only: serde_json::from_str::<
+            ayni_orchestrator_events::runtime_preparation::RuntimeProfile,
+        >(&value.frozen.profile_json)
+        .is_ok_and(|profile| {
+            profile.profile_id
+                == ayni_orchestrator_events::runtime_preparation::DEVELOPMENT_PROFILE_ID
+        }),
         managed_check_digest: value.evidence.managed_check_digest,
         unsigned_manifest_digest: value.evidence.unsigned_manifest_digest,
         certification_layer_digest: value.evidence.certification_layer_digest,

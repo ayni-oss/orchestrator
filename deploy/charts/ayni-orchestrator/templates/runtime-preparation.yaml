@@ -1,7 +1,10 @@
 {{- $runtimePreparation := .Values.runtimePreparation | default dict }}
 {{- if and .Values.enabled $runtimePreparation.enabled }}
 {{- $runtime := include "ayni-orchestrator.runtimeNamespace" . }}
-{{- if not .Values.runtimePreparation.profile.qualified }}{{ fail "runtime preparation requires an explicitly qualified profile" }}{{ end }}
+{{- $profile := $runtimePreparation.profile }}
+{{- $qualified := and (eq $profile.profile_id "rootless-podman-vfs-userns-v1") $profile.qualified }}
+{{- $development := and ($runtimePreparation.localDevelopment | default false) (eq $profile.profile_id "rootless-podman-vfs-userns-local-development-v1") (not $profile.qualified) }}
+{{- if not (or $qualified $development) }}{{ fail "runtime preparation requires an explicitly qualified profile or an opted-in local-development profile" }}{{ end }}
 {{- range $image := list .Values.runtimePreparation.profile.worker_image .Values.runtimePreparation.profile.executor_image .Values.runtimePreparation.profile.verifier_image }}
 {{- if not (regexMatch "@sha256:[a-f0-9]{64}$" $image) }}{{ fail "runtime preparation images must use immutable digests" }}{{ end }}
 {{- end }}

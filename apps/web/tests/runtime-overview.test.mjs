@@ -18,6 +18,7 @@ test('runtime readiness stays scoped to the inspected commit and platform',()=>{
  assert.equal(runtimeOverview({...base,operations:[ready]}).title,'Runtime not prepared');
  const current=runtimeOverview({...base,operations:[{...ready,inspectionId:inspection.id}]});
  assert.equal(current.title,'Runtime ready');
+ assert.equal(runtimeOverview({...base,operations:[{...ready,inspectionId:inspection.id,developmentOnly:true}]}).title,'Development runtime ready');
  assert.match(current.description,/bbbbbbbbbbbb · linux\/arm64/);
  assert.match(current.nextAction,/exact inspection and platform/);
  const olderActive=runtimeOverview({...base,operations:[{...ready,state:'running',stage:'build'}]});

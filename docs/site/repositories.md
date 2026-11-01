@@ -130,8 +130,9 @@ ask the administrator to review any permanent cleanup separately.
 
 ## Prepare a runtime
 
-Your deployment administrator must first enable a qualified Kubernetes runtime
-profile. In **Configuration**, select a registry connection and set up a signer.
+Your deployment administrator must first enable a Kubernetes runtime profile.
+Local testing may use an explicitly enabled development profile; the UI labels
+its results **Development runtime ready**, without claiming cluster qualification. In **Configuration**, select a registry connection and set up a signer.
 The committed repository policy must trust that signer.
 
 On the repository’s **Ayni runtime** tab, choose **Configure runtime**. Review the registry, named signer, platform and time/build allowance. A single available registry and signer are selected automatically. Enable building to permit an absent image to be built and published, then choose **Build and publish runtime**. The server checks the latest default-branch commit and continues the complete pipeline without further browser actions. Leave building

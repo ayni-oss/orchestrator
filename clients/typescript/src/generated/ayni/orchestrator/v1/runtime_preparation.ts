@@ -114,6 +114,8 @@ export interface RuntimePreparation {
   managedCheckDigest: string;
   unsignedManifestDigest: string;
   certificationLayerDigest: string;
+  /** Local development opt-in; does not establish cluster/network qualification. */
+  developmentOnly: boolean;
 }
 
 export interface StartRuntimePreparationRequest {
@@ -256,7 +258,12 @@ export interface GetRepositoryRuntimeRequest {
 }
 
 export interface GetRepositoryRuntimeResponse {
-  run?: RepositoryRuntimeRun | undefined;
+  run?:
+    | RepositoryRuntimeRun
+    | undefined;
+  /** Deployment configuration, independent of the retained last-run outcome. */
+  preparationEnabled: boolean;
+  developmentOnly: boolean;
 }
 
 export interface GetRepositoryRuntimeReceiptRequest {
@@ -1339,6 +1346,7 @@ function createBaseRuntimePreparation(): RuntimePreparation {
     managedCheckDigest: "",
     unsignedManifestDigest: "",
     certificationLayerDigest: "",
+    developmentOnly: false,
   };
 }
 
@@ -1451,6 +1459,9 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
     }
     if (message.certificationLayerDigest !== "") {
       writer.uint32(290).string(message.certificationLayerDigest);
+    }
+    if (message.developmentOnly !== false) {
+      writer.uint32(296).bool(message.developmentOnly);
     }
     return writer;
   },
@@ -1756,6 +1767,14 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
             message.certificationLayerDigest = reader.string();
             continue;
           }
+          case 37: {
+            if (tag !== 296) {
+              break;
+            }
+
+            message.developmentOnly = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1930,6 +1949,11 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
         : isSet(object.certification_layer_digest)
         ? globalThis.String(object.certification_layer_digest)
         : "",
+      developmentOnly: isSet(object.developmentOnly)
+        ? globalThis.Boolean(object.developmentOnly)
+        : isSet(object.development_only)
+        ? globalThis.Boolean(object.development_only)
+        : false,
     };
   },
 
@@ -2043,6 +2067,9 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
     if (message.certificationLayerDigest !== "") {
       obj.certificationLayerDigest = message.certificationLayerDigest;
     }
+    if (message.developmentOnly !== false) {
+      obj.developmentOnly = message.developmentOnly;
+    }
     return obj;
   },
 
@@ -2087,6 +2114,7 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
     message.managedCheckDigest = object.managedCheckDigest ?? "";
     message.unsignedManifestDigest = object.unsignedManifestDigest ?? "";
     message.certificationLayerDigest = object.certificationLayerDigest ?? "";
+    message.developmentOnly = object.developmentOnly ?? false;
     return message;
   },
 };
@@ -4584,13 +4612,19 @@ export const GetRepositoryRuntimeRequest: MessageFns<GetRepositoryRuntimeRequest
 };
 
 function createBaseGetRepositoryRuntimeResponse(): GetRepositoryRuntimeResponse {
-  return { run: undefined };
+  return { run: undefined, preparationEnabled: false, developmentOnly: false };
 }
 
 export const GetRepositoryRuntimeResponse: MessageFns<GetRepositoryRuntimeResponse> = {
   encode(message: GetRepositoryRuntimeResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.run !== undefined) {
       RepositoryRuntimeRun.encode(message.run, writer.uint32(10).fork()).join();
+    }
+    if (message.preparationEnabled !== false) {
+      writer.uint32(16).bool(message.preparationEnabled);
+    }
+    if (message.developmentOnly !== false) {
+      writer.uint32(24).bool(message.developmentOnly);
     }
     return writer;
   },
@@ -4616,6 +4650,22 @@ export const GetRepositoryRuntimeResponse: MessageFns<GetRepositoryRuntimeRespon
             message.run = RepositoryRuntimeRun.decode(reader, reader.uint32());
             continue;
           }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.preparationEnabled = reader.bool();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.developmentOnly = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -4629,13 +4679,31 @@ export const GetRepositoryRuntimeResponse: MessageFns<GetRepositoryRuntimeRespon
   },
 
   fromJSON(object: any): GetRepositoryRuntimeResponse {
-    return { run: isSet(object.run) ? RepositoryRuntimeRun.fromJSON(object.run) : undefined };
+    return {
+      run: isSet(object.run) ? RepositoryRuntimeRun.fromJSON(object.run) : undefined,
+      preparationEnabled: isSet(object.preparationEnabled)
+        ? globalThis.Boolean(object.preparationEnabled)
+        : isSet(object.preparation_enabled)
+        ? globalThis.Boolean(object.preparation_enabled)
+        : false,
+      developmentOnly: isSet(object.developmentOnly)
+        ? globalThis.Boolean(object.developmentOnly)
+        : isSet(object.development_only)
+        ? globalThis.Boolean(object.development_only)
+        : false,
+    };
   },
 
   toJSON(message: GetRepositoryRuntimeResponse): unknown {
     const obj: any = {};
     if (message.run !== undefined) {
       obj.run = RepositoryRuntimeRun.toJSON(message.run);
+    }
+    if (message.preparationEnabled !== false) {
+      obj.preparationEnabled = message.preparationEnabled;
+    }
+    if (message.developmentOnly !== false) {
+      obj.developmentOnly = message.developmentOnly;
     }
     return obj;
   },
@@ -4648,6 +4716,8 @@ export const GetRepositoryRuntimeResponse: MessageFns<GetRepositoryRuntimeRespon
     message.run = (object.run !== undefined && object.run !== null)
       ? RepositoryRuntimeRun.fromPartial(object.run)
       : undefined;
+    message.preparationEnabled = object.preparationEnabled ?? false;
+    message.developmentOnly = object.developmentOnly ?? false;
     return message;
   },
 };

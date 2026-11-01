@@ -180,9 +180,10 @@ pub(super) fn report(report: &StageReport) -> Result<(), StoreError> {
 }
 
 fn qualified_profile(profile: &RuntimeProfile, start: &Start<'_>) -> Result<(), StoreError> {
-    if !profile.qualified
-        || profile.profile_id != "rootless-podman-vfs-userns-v1"
-        || profile.platform != start.platform
+    if !ayni_orchestrator_events::runtime_preparation::admitted_profile_identity(
+        &profile.profile_id,
+        profile.qualified,
+    ) || profile.platform != start.platform
         || profile.max_seconds < start.max_seconds
         || profile.max_builds < start.max_builds
         || profile.max_cpu_millis == 0

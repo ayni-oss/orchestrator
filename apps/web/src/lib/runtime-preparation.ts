@@ -1,6 +1,6 @@
 export type RuntimePreparation = {
  id: string; idempotencyKey: string; repositoryId: string; inspectionId: string;
- registryConnectionId: string; signerId: string; platform: string; state: string; stage: string;
+ developmentOnly?: boolean; registryConnectionId: string; signerId: string; platform: string; state: string; stage: string;
  safeReason?: string; generation: string; allowBuild: boolean; allowReplace: boolean;
  maxBuilds: number; buildsStarted: number; deadlineUnixMs: string; frozenInputDigest: string;
  imageDigest?: string; candidateImage?: string; protectedContentRoot?: string; certificateDigest?: string;
@@ -89,7 +89,7 @@ export function runtimeOverview(input: {
  if (operation) {
   const description = `${operation.sourceCommit ? `Commit ${operation.sourceCommit.slice(0,12)} · ` : ''}${operation.platform} · ${runtimeStages[operation.stage] || operation.stage}`;
   const titles: Record<string,string> = {ready:'Runtime ready',pending:'Runtime preparation queued',running:'Runtime preparation in progress',stopping:'Runtime preparation stopping',cancelling:'Runtime preparation cancelling',cleanup_pending:'Runtime cleanup pending',publication_uncertain:'Publication needs reconciliation',blocked:'Runtime preparation blocked',failed:'Runtime preparation failed',unavailable:'Runtime preparation unavailable',cancelled:'Runtime preparation cancelled',superseded:'Runtime preparation superseded',stopped:'Runtime preparation stopped'};
-  return {title:titles[operation.state] || `Runtime preparation: ${operation.state.replaceAll('_',' ')}`,description,operation,
+  return {title:operation.developmentOnly && operation.state === 'ready' ? 'Development runtime ready' : titles[operation.state] || `Runtime preparation: ${operation.state.replaceAll('_',' ')}`,description,operation,
    issues:operation.safeReason ? [runtimeReasons[operation.safeReason] || 'Review the retained stage evidence before retrying.'] : [],
    nextAction:operation.state === 'ready' ? 'This saved preparation is ready for this exact inspection and platform.' : operation.state === 'publication_uncertain' ? 'Reconcile publication to confirm whether the saved image was published.' : ['pending','running','stopping','cancelling','cleanup_pending'].includes(operation.state) ? 'Status updates automatically while preparation and cleanup continue.' : 'Review the issue above, then retry this preparation when it is resolved.'};
  }

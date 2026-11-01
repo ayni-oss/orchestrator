@@ -11,6 +11,7 @@
  import { runtimeOverview, runtimeStages, runtimeReasons, onboardingReasons, runtimeRegistryImage, type RepositoryRuntimeRun, type RuntimePreparation, type RuntimeSigner, type RuntimeCommand } from '$lib/runtime-preparation';
  let { repo, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections }: { repo: Repository; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void> } = $props();
  let onboarding = $state.raw<RepositoryRuntimeRun | null>(null);
+ let deploymentEnabled = $state(false), developmentOnly = $state(false);
  let loaded = $state(false);
  let expanded = $state(false), busy = $state(false), error = $state('');
  let polling = false, mounted = false, historySequence = 0;
@@ -24,6 +25,7 @@
  const candidateInspection = $derived(latestInspection);
  const onboardingActive = $derived(!!onboarding && ['resolving','inspecting','admitting'].includes(onboarding.state));
  const onboardingBlocked = $derived(onboarding?.state === 'blocked');
+ const profileRestored = $derived(onboardingBlocked && onboarding?.safeReason === 'runtime_profile_unavailable' && deploymentEnabled);
  const workActive = $derived(operations.some(value => activeStates.has(value.state) || value.state === 'publication_uncertain' || !value.cleanupComplete));
  const canConfigure = $derived(loaded && !busy && !pending && !inspectionPending && !checkingDefault && !onboardingActive && !workActive && !!connection?.enabled && !!connection?.activeCredentialRevision);
  const savedSettingsAvailable = $derived(!!onboarding?.settings && registries.some(value => value.id === onboarding?.settings.registryConnectionId && value.enabled && value.activeCredentialRevision) && signers.some(value => value.id === onboarding?.settings.signerId && value.enabled));
@@ -60,6 +62,7 @@
   if (!mounted) return;
   const changed = result.run && (result.run.id !== onboarding?.id || result.run.state !== onboarding?.state);
   onboarding = result.run || null;
+  deploymentEnabled = result.preparationEnabled === true; developmentOnly = result.developmentOnly === true;
   if (changed && onboarding?.inspectionId) await refreshInspections?.();
  }
  async function refresh() { await Promise.all([configuration(), loadOnboarding()]); await history(); loaded = true; }
@@ -163,9 +166,10 @@
 {/snippet}
 <section class="space-y-5" data-runtime-preparation={repo.id} aria-label={`Runtime preparation for ${repo.fullName}`}>
  <section class="space-y-4 rounded-xl border bg-card p-5" aria-label="Runtime status" aria-live="polite">
-  <div class="space-y-2"><h3 class="text-lg font-semibold">{onboardingActive ? 'Preparing repository runtime' : onboardingBlocked ? 'Runtime onboarding needs attention' : checkingDefault ? 'Checking latest default branch' : overview.title}</h3><p class="text-sm text-muted-foreground">{onboardingActive ? ({resolving:'Reading the latest default branch…',inspecting:'Checking the committed Ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') : onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' : checkingDefault ? "Resolving GitHub’s current default branch and inspecting its latest commit…" : overview.description}</p></div>
+  <div class="space-y-2"><h3 class="text-lg font-semibold">{onboardingActive ? 'Preparing repository runtime' : profileRestored ? 'Ready to prepare runtime' : onboardingBlocked ? 'Runtime onboarding needs attention' : checkingDefault ? 'Checking latest default branch' : overview.title}</h3><p class="text-sm text-muted-foreground">{onboardingActive ? ({resolving:'Reading the latest default branch…',inspecting:'Checking the committed Ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') : profileRestored ? 'Runtime building is now enabled. Prepare the latest commit to start a new run.' : onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' : checkingDefault ? "Resolving GitHub’s current default branch and inspecting its latest commit…" : overview.description}</p></div>
   {#if candidateInspection}<p class="text-xs text-muted-foreground">Last check: {new Date(Number(candidateInspection.updatedAtUnixMs)).toLocaleString()}{candidateInspection.result?.ayniVersion ? ` · Ayni ${candidateInspection.result.ayniVersion}` : ''}</p>{/if}
   {#if overview.issues.length && !checkingDefault && !onboardingActive}<div class="space-y-2"><h4 class="font-medium">What needs attention</h4><ul class="list-disc space-y-2 break-words pl-5 text-sm">{#each overview.issues as issue (issue)}<li>{issue}</li>{/each}</ul></div>{/if}
+  {#if developmentOnly || overview.operation?.developmentOnly}<p class="rounded-md border p-3 text-sm">Local development build mode. Cluster network isolation is not qualified; this result is for local development testing.</p>{/if}
   {#if overview.operation}<InformationTable rows={[{label:'Content verification',value:overview.operation.contentVerified ? 'Verified' : 'Not verified'},{label:'Managed compatibility',value:overview.operation.managedCompatible ? 'Verified' : 'Not verified'},{label:'Cleanup',value:overview.operation.cleanupComplete ? 'Complete' : 'Not complete'}]}/>{/if}
   {#if overview.nextAction && !checkingDefault && !onboardingActive && !onboardingBlocked}<p class="text-sm"><span class="font-medium">Next step:</span> {expanded && !pending ? 'Review the configuration below, then prepare the latest default-branch commit.' : canConfigure ? 'Prepare the latest commit using the reviewed registry and signing settings.' : overview.nextAction}</p>{/if}
   <div class="flex flex-wrap gap-2">
