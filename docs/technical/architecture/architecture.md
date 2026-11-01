@@ -10,12 +10,18 @@ The M1 runtime extends the PostgreSQL application authority with authenticated d
 
 The complete M1 contract and later-slice boundary are defined in the [durable foundation contract](../research/project-workflow-m1-durable-foundation.md).
 
-The next planned extension is [shared repository preparation](repository-preparation.md),
-with a UI delivered alongside its backend slices. It introduces a catalog beside
-workspaces, direct project associations and verified runtime artifacts feeding
-existing task preparation. It preserves PostgreSQL authority, frozen attempts
-and separate quality/publication boundaries. The [delivery plan](../research/repository-runtime-workspace-delivery.md)
-defines qualification; these capabilities are not part of the current runtime.
+[Shared repository preparation](repository-preparation.md) provides the catalog,
+project associations, exact-commit inspection and profile-gated runtime
+preparation. Automatic project/task runtime handoff remains planned. The
+[delivery plan](../research/repository-runtime-workspace-delivery.md) defines
+qualification and remaining journey coverage. PostgreSQL authority, frozen
+attempts and separate quality/publication boundaries remain in effect.
+
+Ayni owns code-quality measurement and locked environment semantics. Orchestrator
+owns agent workflow, execution authority, isolation and retained delivery
+evidence. The [compatibility and acceptance boundary](repository-preparation.md#compatibility-and-product-acceptance)
+separates upstream tool qualification, Orchestrator integration qualification
+and evidence that requested product behavior works.
 
 ## Runtime boundary
 

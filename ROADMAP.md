@@ -45,6 +45,24 @@ qualified-profile-gated Kubernetes implementation; project/task handoff remains 
 Historical browser acceptance does not qualify current source; each implemented
 journey needs its own replacement coverage.
 
+### Product and Ayni responsibilities
+
+Orchestrator connects intent and context, reviewed planning, authorized agent
+execution, verification, delivery and feedback. Models, skills and MCP tools
+are execution capabilities within those responsibilities. The software-factory
+ambition includes product acceptance and outcome feedback; current code-quality
+checks alone do not establish that ambition.
+
+Ayni owns language/tool integrations, exact environment locks and code-quality
+evaluation. Its planned exact-combination support policy belongs upstream.
+Orchestrator separately qualifies the Ayni release, public contracts, worker
+profile and deployment it admits; a CLI dependency pin alone is insufficient.
+See [repository preparation](docs/technical/architecture/repository-preparation.md#compatibility-and-product-acceptance).
+
+Keep acceptance criteria and their evidence distinct from code-quality results
+in delivery reviews. Broader product-outcome measurement remains planned and
+must define its observations before advertising success.
+
 ### Product surfaces
 
 | Surface | User outcome |

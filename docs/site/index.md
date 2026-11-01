@@ -2,30 +2,49 @@
 layout: home
 hero:
   name: Ayni Orchestrator
-  text: Durable workflow foundations
-  tagline: A contributor preview of isolated conversations, opt-in OpenAI responses, scoped read tools and resumable updates.
+  text: From intent to reviewed delivery
+  tagline: A local contributor preview for project setup, repository inspection and controlled agent workflows.
   actions:
     - theme: brand
       text: View source
       link: https://github.com/ayni-oss/orchestrator
     - theme: alt
-      text: Read the milestone
-      link: https://github.com/ayni-oss/orchestrator/blob/alpha/docs/technical/research/project-workflow-m1-durable-foundation.md
+      text: Read the roadmap
+      link: https://github.com/ayni-oss/orchestrator/blob/alpha/ROADMAP.md
 features:
-  - title: PostgreSQL authority
-    details: Forward migrations, scoped idempotency, FIFO admission, exact outbox bytes, and bounded projections share one durable transaction boundary.
-  - title: Durable handoff
-    details: Authenticated JetStream and retained conversation sessions keep broker storage, ownership claims, decisions, and accepted results distinct.
-  - title: Private by construction
-    details: Canonical workflow gRPC binds to pod loopback. Contributors can resume updates; the local contributor console supports scripted and explicitly enabled OpenAI conversations, reported usage, cancellation and explicit uncertainty acknowledgement. Shared access remains deferred.
+  - title: Project setup
+    details: Create workspaces and projects, configure integrations, connect repositories and inspect committed Ayni inputs.
+  - title: Controlled preparation
+    details: Inspect runtime stages, evidence and recovery. Runtime preparation requires an explicitly qualified deployment profile.
+  - title: Separate outcomes
+    details: Keep coding completion, managed quality and authorized draft publication visible as distinct results.
 ---
 
 ## Contributor preview
 
-The prior browser and SQLite workflow were removed in a clean cutover. The current runnable slice is intended for contributors validating the replacement foundation on Docker Desktop Kubernetes. It is not an adopted-user migration or shared-environment release.
+Orchestrator coordinates software work through reviewed plans, bounded agent
+execution and retained evidence. The local UI supports configuration, projects,
+shared repository connections and exact-commit Ayni inspection.
 
-Current evidence covers PostgreSQL 17.6 migrations, scoped idempotency, FIFO admission and promotion, authenticated retained streams, signed executor ownership, accepted scripted responses, snapshots/history, restart recovery, and the private-v1 boundary.
+Runtime preparation includes Kubernetes build, separate certification,
+publication and independent verification. It requires a qualified deployment
+profile and configured registry/signer. The Docker Desktop profile remains
+disabled after its network-policy enforcement check failed; qualification on
+another profile does not enable it.
 
-See the repository's [technical documentation](https://github.com/ayni-oss/orchestrator/tree/alpha/docs/technical) for architecture and local operations.
+Automatic project/task runtime handoff and complete task-delivery browser
+journeys remain planned. Current task preparation still uses a trusted local
+helper. Additional-provider qualification and sustained production capacity
+remain separate acceptance work.
 
-Read [Connect a repository](repositories.md) for shared GitHub source access and project association.
+## Ayni and Orchestrator
+
+Ayni measures repository code against explicit quality policy and builds locked
+development environments. Orchestrator coordinates intent, plans, execution,
+verification, delivery and feedback. Passing code-quality checks is one part of
+acceptance; requested behavior needs its own evidence.
+
+Read [Connect a repository](repositories.md) for source setup and inspection.
+See the [source README](https://github.com/ayni-oss/orchestrator/blob/alpha/README.md)
+for the delivered API/runtime boundary and the
+[roadmap](https://github.com/ayni-oss/orchestrator/blob/alpha/ROADMAP.md) for remaining work.

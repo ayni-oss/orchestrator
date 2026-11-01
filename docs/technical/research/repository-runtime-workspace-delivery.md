@@ -7,6 +7,18 @@ through the [shared repository preparation contract](../architecture/repository-
 Each slice includes canonical v1 APIs, PostgreSQL authority, UI, safe diagnostics
 and local acceptance. Each PR records its own delivery status and evidence.
 
+## Compatibility and acceptance boundaries
+
+Use the [repository preparation contract](../architecture/repository-preparation.md#compatibility-and-product-acceptance)
+for the split between Ayni tool qualification and Orchestrator release/profile
+qualification. Preserve each operation's exact admitted inputs; never infer
+readiness from a version pin or an upstream feature alone.
+
+Each delivery review records separate evidence for environment verification,
+managed quality and the task's requested behavior. Source-quality failures may
+coexist with environment compatibility. Broader user/business outcome
+measurement remains planned and is not implied by a successful quality gate.
+
 ## Usable increments
 
 | Slice and prerequisite | Browser outcome | Required acceptance |
