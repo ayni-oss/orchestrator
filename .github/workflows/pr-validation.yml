@@ -83,16 +83,6 @@ jobs:
           pnpm --filter @ayni-orchestrator/web check
           pnpm --filter @ayni-orchestrator/web test
           pnpm web:build
-      - name: Install application browser
-        run: pnpm exec playwright install --with-deps chromium
-      - name: Test application HMR
-        run: pnpm --filter @ayni-orchestrator/web test:hmr
-      - name: Test signer setup privacy and recovery
-        run: node --test apps/web/tests/runtime-signing.browser.mjs
-      - name: Test production signer setup privacy and recovery
-        env:
-          AYNI_PRODUCT_PRODUCTION: "1"
-        run: node --test apps/web/tests/runtime-signing.browser.mjs
       - run: pnpm docs:check
 
   deployment:
@@ -180,11 +170,10 @@ jobs:
       - name: Validate canonical private-v1 cutover
         run: scripts/ci/check-workflow-private-v1-feasibility.sh
 
-      - name: Compile and test Rust bindings
-        run: cargo test -p ayni-orchestrator-api -p ayni-orchestrator-events
-
-  integration:
-    name: Rust and PostgreSQL
+  # Ordinary Rust tests run once through the Ayni quality contract.
+  # Browser, PostgreSQL, JetStream and loopback acceptance remain local-only.
+  rust:
+    name: Rust checks
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -199,24 +188,11 @@ jobs:
         run: cargo fmt --all --check
       - name: Test acceptance report integrity
         run: python3 -m unittest discover -s dev/lib -p 'test_*.py'
-      - name: Test live reload and gateway recovery
+      - name: Test development tooling
         run: |
           python3 -m unittest discover -s dev/tests -v
-      - name: Test workspace
-        run: cargo test --workspace --all-targets
-      - name: Test required loopback fixtures
-        run: scripts/ci/check-workflow-loopback.sh
       - name: Lint workspace
         run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Set up product browser dependencies
-        uses: ayni-oss/ayni/.github/actions/node-project@82966446499f11f5668dd314a432c8ab74788c3d # shared CI
-        with:
-          package-manager: pnpm
-          node-version: 24.14.0
-      - name: Install product browser
-        run: pnpm exec playwright install --with-deps chromium
-      - name: Test cumulative M1 authority, transport, recovery and product browser
-        run: AYNI_CONNECTION_BROWSER=1 scripts/ci/check-workflow-m1.sh
 
   ayni:
     name: Ayni quality

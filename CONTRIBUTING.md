@@ -90,12 +90,12 @@ Run affected protocol, Helm and repository quality checks described by
 also require the explicit Docker Desktop Kubernetes topology.
 
 Tests that bind real TCP fixtures declare a loopback prerequisite with an
-explicit ignore reason and a `_requires_loopback` suffix. The mandatory host
-loopback gate checks socket capability, reconciles the declared source inventory
+explicit ignore reason and a `_requires_loopback` suffix. The local host loopback
+gate checks socket capability, reconciles the declared source inventory
 with Cargo's ignored-test inventory, and executes every listed fixture. It fails
-when networking is unavailable or an inventory differs. The Rust and PostgreSQL
-CI job runs this gate after workspace tests. PostgreSQL and JetStream retain their
-separate required integration gates.
+when networking is unavailable or an inventory differs. Run it locally for affected
+networking behavior. PostgreSQL, JetStream and browser acceptance also remain
+local checks; they do not run in pull-request CI.
 
 ## Shared CI
 
@@ -103,8 +103,22 @@ CI consumes the public composite actions from `ayni-oss/ayni/.github/actions/`,
 pinned to an immutable source revision with a `shared CI` comment. They provide
 locked Node installs, public project file checks, title classification, managed
 Ayni execution and PR quality feedback. Metadata and report jobs do not check out
-PR code; only those jobs receive write permissions. Protocol, Helm, security and
-integration checks remain specific to this repository.
+PR code; only those jobs receive write permissions. Protocol, Helm and security
+checks remain specific to this repository.
+
+PR CI runs ordinary Rust tests once through the managed Ayni quality contract in
+`.ayni.toml`. The separate Rust job runs formatting, Clippy and Python unit tests
+for development tooling and acceptance reports. Frontend checks retain type
+checking, unit tests and the production build; documentation retains its checks
+and site build. Ayni currently enables Rust signals only, so these other checks
+remain explicit.
+
+End-to-end tests are disabled in PR CI for now. CI does not install a browser,
+start PostgreSQL or JetStream fixtures, or invoke the cumulative acceptance or
+loopback suites. The scripts remain available for focused local validation and
+product qualification. Passing CI does not establish end-to-end product
+acceptance. Reintroducing automated acceptance requires a separate decision about
+scope and runtime; do not append milestone gates to the PR workflow.
 
 ## Documentation
 
