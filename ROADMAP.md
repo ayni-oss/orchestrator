@@ -258,6 +258,7 @@ concurrent actions and interrupted-command retries against canonical APIs.
 - Maintain one example-derived frontend; qualify each new journey against canonical APIs before advertising support.
 - Keep system operation and project analytics scoped to the same workspace/project authority as their underlying records.
 - Keep deployment choices explicit and self-hosting practical. Document dependencies, configuration, export and recovery without requiring a proprietary observability service.
+- Keep PR CI lean: Ayni owns ordinary Rust test execution; end-to-end browser, PostgreSQL, JetStream and loopback acceptance stays local for now. Retain local qualification evidence before claiming product behavior.
 - Record actual evidence and blocked checks in each PR. Release publication, merges and destructive cleanup retain their existing authorization boundaries.
 
 ## Further scope
