@@ -41,6 +41,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.equal(await page.getByRole('button',{name:'Inspect Ayni setup',exact:true}).isVisible(),false);
  await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
  const inspectionCard=page.locator(`[data-repository-inspection="${repositoryId}"]`);
+ await inspectionCard.getByRole('region',{name:'Runtime status',exact:true}).getByText('No preparation is saved for inspected commit dddddddddddd.',{exact:true}).waitFor();
  await inspectionCard.getByRole('button',{name:'Inspect Ayni setup',exact:true}).click();
  await inspectionCard.getByRole('button',{name:'Select for runtime preparation',exact:true}).click();
  const preparation=page.locator(`[data-runtime-preparation="${repositoryId}"]`);
@@ -72,7 +73,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
   originalReceipt=operation;await route.fulfill({json:{operation}});
  });
  await preparation.getByRole('button',{name:'Reconcile publication',exact:true}).click();
- await preparation.getByText('Cleanup is incomplete. The supervisor will keep trying; refresh history to check progress. This runtime cannot become ready until cleanup is confirmed.',{exact:true}).waitFor();
+ await preparation.getByRole('region',{name:'Runtime status',exact:true}).getByText('Cleanup is incomplete. The supervisor will keep trying; refresh history to check progress. This runtime cannot become ready until cleanup is confirmed.',{exact:true}).waitFor();
  assert.equal(await preparation.getByRole('button',{name:'Retry cleanup',exact:true}).count(),0);
  assert.equal(await preparation.getByText('Runtime ready',{exact:true}).count(),0);
  await preparation.getByText('Not complete',{exact:true}).waitFor();

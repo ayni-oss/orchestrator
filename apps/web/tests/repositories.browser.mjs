@@ -25,7 +25,7 @@ test('repository catalog and project associations use retained canonical receipt
   const inspectionCard = page.locator(`[data-repository-inspection="${fixture}"]`);
   await inspectionCard.getByRole('button',{name:'Inspect Ayni setup',exact:true}).click();
   await inspectionCard.getByText('Static inspection complete',{exact:true}).waitFor();
-  await inspectionCard.getByText('Commit an Ayni policy before preparing this repository.',{exact:true}).waitFor();
+  await inspectionCard.getByText('Commit an Ayni policy before preparing this repository.',{exact:true}).first().waitFor();
   const commitInput = inspectionCard.getByLabel('Commit SHA',{exact:true});
   await commitInput.fill('main');
   assert.equal(await inspectionCard.getByRole('button',{name:'Inspect commit',exact:true}).isDisabled(),true);
@@ -42,7 +42,7 @@ test('repository catalog and project associations use retained canonical receipt
   await lostInspection;await page.unroute('**/api/InspectRepository');await page.reload();
   await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
   await inspectionCard.getByRole('button',{name:'Recover inspection',exact:true}).click();
-  await inspectionCard.getByText('The saved App key is invalid. Update the source connection.',{exact:true}).waitFor();
+  await inspectionCard.getByText('The saved App key is invalid. Update the source connection.',{exact:true}).first().waitFor();
   await page.waitForFunction(id=>sessionStorage.getItem(`ayni.repository.inspection.pending.${id}`)===null,fixture);
   const retainedInspection=await page.request.post(`${origin}/api/GetRepositoryInspection`,{headers:{'x-console-request':'1'},data:{idempotencyKey:inspectionRequest.idempotencyKey}});
   assert.equal(retainedInspection.status(),200);assert.equal((await retainedInspection.json()).inspection.commitSha,'b'.repeat(40));

@@ -70,3 +70,41 @@ export const runtimeReasons: Record<string, string> = {
  github_rate_limited: 'GitHub is rate limiting source access. Wait before retrying.',
  github_unavailable: 'GitHub could not be reached. Retry when source access is restored.',
 };
+
+export function runtimeOverview(input: {
+ loaded: boolean; error: string; pending: boolean; rejected?: boolean;
+ inspectionLoading: boolean; inspectionError: string; inspectionReason?: string;
+ inspection: import('./repositories').RepositoryInspection | null;
+ operations: RuntimePreparation[]; registries: import('./api').Connection[]; signers: RuntimeSigner[];
+ sourceReady: boolean; sourceRevision?: string; moreHistory?: boolean;
+}): { title: string; description: string; issues: string[]; nextAction: string; operation?: RuntimePreparation } {
+ const candidate = input.inspection;
+ const operation = candidate ? input.operations.find(value => value.inspectionId === candidate.id) : input.operations[0];
+ if (input.rejected) return {title:'Preparation request rejected',description:input.error,issues:[],nextAction:'Review the rejected command below, dismiss it and correct the selection before trying again.'};
+ if (input.pending) return {title:'Preparation response needs recovery',description:'The last command has an uncertain response. Its retained receipt determines whether work started.',issues:[],nextAction:'Recover the preparation receipt below before starting another command.'};
+ if (input.error || input.inspectionError) return {title:'Runtime status unavailable',description:input.error || input.inspectionError,issues:[],nextAction:'Refresh runtime status to reload retained evidence.'};
+ if (!input.loaded || input.inspectionLoading) return {title:'Checking runtime status',description:'Loading saved preparations, inspection results and configuration.',issues:[],nextAction:''};
+ if (operation) {
+  const description = `${operation.sourceCommit ? `Commit ${operation.sourceCommit.slice(0,12)} · ` : ''}${operation.platform} · ${runtimeStages[operation.stage] || operation.stage}`;
+  const titles: Record<string,string> = {ready:'Runtime ready',pending:'Runtime preparation queued',running:'Runtime preparation in progress',stopping:'Runtime preparation stopping',cancelling:'Runtime preparation cancelling',cleanup_pending:'Runtime cleanup pending',publication_uncertain:'Publication needs reconciliation',blocked:'Runtime preparation blocked',failed:'Runtime preparation failed',unavailable:'Runtime preparation unavailable',cancelled:'Runtime preparation cancelled',superseded:'Runtime preparation superseded',stopped:'Runtime preparation stopped'};
+  return {title:titles[operation.state] || `Runtime preparation: ${operation.state.replaceAll('_',' ')}`,description,operation,
+   issues:operation.safeReason ? [runtimeReasons[operation.safeReason] || 'Review the retained stage evidence before retrying.'] : [],
+   nextAction:operation.state === 'ready' ? 'This saved preparation is ready for this exact inspection and platform.' : operation.state === 'publication_uncertain' ? 'Open preparation details and reconcile publication using the retained request.' : ['pending','running','stopping','cancelling','cleanup_pending'].includes(operation.state) ? 'Status updates automatically while preparation and cleanup continue.' : 'Open preparation details to review the failure and available recovery actions.'};
+ }
+ if (input.moreHistory) return {title:'More runtime history available',description:'No preparation for this inspection appears in the loaded history. Earlier preparations have not been checked yet.',issues:[],nextAction:'Open preparation details and load more preparations to check earlier results.'};
+ const issues: string[] = [];
+ if (!input.sourceReady) issues.push('The source connection is unavailable, disabled or needs validation. Enable and validate it before inspecting a commit.');
+ if (!candidate) issues.push('No saved Ayni inspection is available. Inspect an exact commit to check its policy, lock and trust requirements.');
+ else {
+  if (candidate.connectionRevision !== input.sourceRevision) issues.push('The source connection changed after this inspection. Inspect the commit again using the current connection.');
+  if (candidate.state !== 'completed') issues.push(input.inspectionReason || 'The latest inspection did not complete. Recover or retry it before preparing this commit.');
+  else if (!candidate.result) issues.push('The inspection has no retained inputs. Inspect the commit again.');
+  else issues.push(...(candidate.result.findings || []).filter(value => !['adapter_discovery_pending','runtime_verification_pending'].includes(value.code)).map(value => value.action));
+ }
+ if (!input.registries.some(value => value.enabled && value.activeCredentialRevision)) issues.push('No enabled, validated runtime registry is available. Configure a registry connection.');
+ const enabledSigners = input.signers.filter(value => value.enabled);
+ if (!enabledSigners.length) issues.push('No enabled runtime signer is available. Configure a signer and commit its public trust entry.');
+ else if (candidate?.result?.trustKeyIds?.length && !enabledSigners.some(value => candidate.result!.trustKeyIds!.includes(value.keyId))) issues.push('No enabled signer matches this inspection’s trusted key IDs. Review signer trust in the committed Ayni policy and inspect the updated commit.');
+ return {title:issues.length ? 'Runtime setup needs attention' : 'Runtime not prepared',description:candidate ? `No preparation is saved for inspected commit ${candidate.commitSha.slice(0,12)}.` : 'No runtime preparation has been started for this repository.',issues:[...new Set(issues)],
+ nextAction:issues.length ? 'Resolve the setup issues, inspect the updated commit and select its completed inspection below.' : 'Select the inspection below, then choose a registry and signer to verify or prepare its runtime.'};
+}

@@ -56,6 +56,20 @@ If you change or disable the source connection during a check, refresh and conne
 again using the current configuration. Failed authentication requires correcting
 the saved App connection or its installation access.
 
+## Check runtime status
+
+Open a repository card and choose **Ayni runtime**. The tab loads saved status
+without starting a preparation. It shows the inspected commit, known setup issues
+and the next step before the preparation form. Inspection findings include their
+saved date and Ayni version. Choose **Refresh runtime status** to reload the saved
+inspection, preparation history and configuration.
+
+A ready result applies to the exact inspection and platform shown. It does not
+establish readiness for another commit. Interrupted commands show receipt recovery;
+failed preparations show their reason; pending cleanup and uncertain publication
+remain separate from readiness. Deployment prerequisites are checked when a
+preparation is requested.
+
 ## Inspect Ayni setup
 
 Open a connected repository card, choose **Ayni runtime**, then **Inspect Ayni setup**. Paste the full lowercase

@@ -7,9 +7,10 @@
  import Feedback from '$lib/components/feedback.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
  import { rpc, RpcError, type Connection } from '$lib/api';
- import type { Repository, RepositoryInspection } from '$lib/repositories';
- import { runtimeStages, runtimeReasons, type RuntimePreparation, type RuntimeSigner, type RuntimeCommand } from '$lib/runtime-preparation';
- let { repo, inspection = null }: { repo: Repository; inspection?: RepositoryInspection | null } = $props();
+ import { inspectionReasons, type Repository, type RepositoryInspection } from '$lib/repositories';
+ import { runtimeOverview, runtimeStages, runtimeReasons, type RuntimePreparation, type RuntimeSigner, type RuntimeCommand } from '$lib/runtime-preparation';
+ let { repo, inspection = null, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, refreshInspection }: { repo: Repository; inspection?: RepositoryInspection | null; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; refreshInspection?: () => Promise<void> } = $props();
+ let loaded = $state(false);
  let expanded = $state(false), busy = $state(false), error = $state('');
  let polling = false, mounted = false, historySequence = 0;
  let pending = $state<RuntimeCommand | null>(null);
@@ -17,6 +18,7 @@
  let registries = $state.raw<Connection[]>([]), signers = $state.raw<RuntimeSigner[]>([]), operations = $state.raw<RuntimePreparation[]>([]);
  let next = $state(''), registryId = $state(''), signerId = $state(''), platform = $state('linux/arm64');
  let seconds = $state(1800), builds = $state(1), allowBuild = $state(false), allowReplace = $state(false);
+ const overview = $derived(runtimeOverview({loaded,error,rejected,moreHistory:!!next,pending:!!pending,inspectionLoading,inspectionError,inspectionReason:inspectionReasons[(inspection || latestInspection)?.safeReason || ''],inspection:inspection || latestInspection,operations,registries,signers,sourceReady:!!connection?.enabled && !!connection?.activeCredentialRevision,sourceRevision:connection?.revision}));
  const storage = $derived(`ayni.runtime.preparation.pending.${repo.id}`);
  const usableInspection = $derived(inspection?.state === 'completed' && !!inspection.result && !(inspection.result.findings || []).some(f => !['adapter_discovery_pending', 'runtime_verification_pending'].includes(f.code)));
  const registry = $derived(registries.find(value => value.id === registryId));
@@ -44,7 +46,8 @@
   do { const page = await rpc('ListRuntimeSigners', { afterId, limit: 100 }); identities.push(...(page.signers || [])); afterId = page.nextAfterId || ''; } while (afterId && ++pages < 20);
   if (mounted) { registries = connections; signers = identities; }
  }
- async function open() { expanded = true; await Promise.all([configuration(), history()]); }
+ async function refresh() { await Promise.all([configuration(), history()]); loaded = true; }
+ async function open() { expanded = true; await refresh(); }
  async function accept(operation: RuntimePreparation) {
   if (operation.repositoryId !== repo.id) throw new Error('The retained preparation belongs to another repository.');
   persist(null);
@@ -70,7 +73,7 @@
   persist({ method, request: { idempotencyKey: crypto.randomUUID(), id: operation.id, expectedGeneration: operation.generation } }); await resume();
  }
  async function poll() {
-  if (!expanded || busy || polling || !operations.some(value => activeStates.has(value.state))) return;
+  if (!loaded || busy || polling || !operations.some(value => activeStates.has(value.state))) return;
   polling = true;
   try { await history(); } catch { if (mounted) error = 'Live updates paused. Refresh history to reconnect; accepted work remains retained.'; } finally { polling = false; }
  }
@@ -80,15 +83,24 @@
   if (saved) {
    try { const value = JSON.parse(saved); if (!['StartRuntimePreparation', 'CancelRuntimePreparation', 'RetryRuntimePreparation'].includes(value.method) || typeof value.request?.idempotencyKey !== 'string' || value.method === 'StartRuntimePreparation' && value.request.repositoryId !== repo.id) throw new Error(); pending = value; expanded = true; void perform(open); }
    catch { error = 'The saved preparation command could not be read. Refresh retained history before starting another.'; expanded = true; }
-  }
+  } else { void perform(refresh); }
   const timer = setInterval(() => void poll(), 2000);
   return () => { mounted = false; clearInterval(timer); };
  });
 </script>
 <section class="space-y-4 border-t pt-4" data-runtime-preparation={repo.id} aria-label={`Runtime preparation for ${repo.fullName}`}>
+ <section class="space-y-3 rounded-xl border bg-card p-5" aria-label="Runtime status" aria-live="polite">
+  <h3 class="text-lg font-semibold">{overview.title}</h3>
+  <p class="text-sm text-muted-foreground">{overview.description}</p>
+  {#if inspection || latestInspection}{@const checked = inspection || latestInspection!}<p class="text-xs text-muted-foreground">Saved inspection: {new Date(Number(checked.updatedAtUnixMs)).toLocaleString()}{checked.result?.ayniVersion ? ` · Ayni ${checked.result.ayniVersion}` : ''}</p>{/if}
+  {#if overview.issues.length}<div class="space-y-2"><h4 class="font-medium">Issues to resolve</h4><ul class="list-disc space-y-2 pl-5 text-sm">{#each overview.issues as issue (issue)}<li>{issue}</li>{/each}</ul></div>{/if}
+  {#if overview.nextAction}<p class="text-sm"><span class="font-medium">Next step:</span> {overview.nextAction}</p>{/if}
+  <p class="text-xs text-muted-foreground">Readiness applies to an exact inspection and platform. Deployment prerequisites are checked when preparation is requested.</p>
+  <Button variant="outline" disabled={busy} onclick={() => perform(async () => { await refreshInspection?.(); await refresh(); })}>Refresh runtime status</Button>
+ </section>
  <h3 class="font-semibold">Runtime preparation</h3>
  <p class="text-sm text-muted-foreground">Verify an immutable runtime for an inspected commit. Building and replacement use explicit allowances. Preparation starts no tasks.</p>
- {#if inspection}<p class="break-all text-sm">Selected commit: <code>{inspection.commitSha}</code></p>{:else}<p class="text-sm">Select a completed inspection above to prepare its exact commit.</p>{/if}
+ {#if inspection}<p class="break-all text-sm">Selected commit: <code>{inspection.commitSha}</code></p>{:else}<p class="text-sm">Select a completed inspection below to prepare its exact commit.</p>{/if}
  {#if !expanded}<Button variant="outline" disabled={busy} onclick={() => perform(open)}>Open runtime preparation</Button>{:else}
   {#if error}<Feedback kind="error" title="Preparation needs attention" message={error}/>{/if}
   {#if busy}<p role="status" class="text-sm">Loading runtime preparation…</p>{/if}

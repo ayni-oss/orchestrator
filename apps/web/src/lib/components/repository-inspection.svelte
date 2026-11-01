@@ -13,6 +13,7 @@
  let commitSha = $state('');
  let busy = $state(false);
  let error = $state('');
+ let inspectionLoaded = $state(false);
  let pending = $state<InspectRequest | null>(null);
  let inspections = $state.raw<RepositoryInspection[]>([]);
  let next = $state('');
@@ -39,7 +40,7 @@
  async function load(append = false) {
   const response = await rpc('ListRepositoryInspections', { repositoryId: repo.id, afterId: append ? next : '', limit: 20 });
   inspections = append ? [...inspections, ...(response.inspections || [])] : response.inspections || [];
-  next = response.nextAfterId || '';
+  next = response.nextAfterId || ''; inspectionLoaded = true;
  }
  async function accept(value: RepositoryInspection) {
   inspections = [value, ...inspections.filter(i => i.id !== value.id)];
@@ -63,7 +64,7 @@
  async function open() { expanded = true; await load(); }
  onMount(() => {
   const saved = sessionStorage.getItem(storageKey);
-  if (!saved) return;
+  if (!saved) { void perform(() => load()); return; }
   try {
    const value = JSON.parse(saved);
    if (value.repositoryId !== repo.id || !/^[a-f0-9]{40}$/.test(value.commitSha) || typeof value.idempotencyKey !== 'string' || typeof value.expectedConnectionRevision !== 'string') throw new Error();
@@ -73,6 +74,7 @@
  });
 </script>
 <div class="space-y-4" data-repository-inspection={repo.id}>
+ <RuntimePreparation {repo} {connection} inspection={runtimeInspection} latestInspection={inspections[0] || null} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} refreshInspection={() => perform(() => load())}/>
  <div class="space-y-1"><h3 class="font-semibold">Inspect, then prepare a runtime</h3><p class="text-sm text-muted-foreground">First inspect the Ayni configuration at an exact commit. Then select a completed inspection to verify or build, certify and publish its runtime. Only a verified preparation can report runtime readiness.</p></div>
  {#if !expanded}
   <Button variant="outline" onclick={() => perform(open)} disabled={busy}>Inspect Ayni setup</Button>
@@ -139,5 +141,5 @@
   {/each}
   {#if next}<Button variant="outline" disabled={busy} onclick={() => perform(() => load(true))}>More inspections</Button>{/if}
  {/if}
- <RuntimePreparation {repo} inspection={runtimeInspection}/>
+
 </div>
