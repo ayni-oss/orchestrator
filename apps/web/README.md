@@ -38,7 +38,11 @@ resolved to the existing Lucide dependency. Other controls use the same compact
 shadcn styling. Update shared components and tokens instead of adding page-specific
 field borders or raw form controls.
 
-Repository catalog UI: `/repositories`. Project cards link to
+Repository catalog UI: `/repositories`. Available repositories use the same compact, clickable grid cards as projects.
+Opening a connected repository shows Source code and Ayni runtime tabs. Source code covers connection status and
+GitHub integration details; Ayni runtime covers exact-commit inspection and
+preparation. Switching tabs preserves in-progress selections. Technical inspection
+metadata and connection history are collapsed by default. Project cards link to
 `/projects/:id/repositories?workspace=:workspaceId`. Repository connect and project
 association requests retain their exact non-secret bytes and idempotency key across
 reload; scope changes create a fresh component instance. **Connected** describes
@@ -63,7 +67,8 @@ reapplying the old name over a later edit.
 
 ### Inspect committed Ayni setup
 
-In Repositories, open **Inspect Ayni setup** on a connected repository and enter a
+In Repositories, open a connected repository card, choose **Ayni runtime**, then
+**Inspect Ayni setup**, and enter a
 full lowercase commit SHA. The retained result shows policy/lock digests, locked
 tools, public trust key IDs and corrective findings. Reload after an interrupted
 request and choose **Recover inspection** or **Retry same inspection**.
@@ -79,7 +84,7 @@ signing keys and advanced administrator-owned Secret references. Exact setup,
 updates and original receipt recovery survive reloads. Public identities and
 references do not by themselves grant builds or establish runtime readiness.
 
-Repository Runtime preparation shows frozen source/configuration, explicit build
+The repository’s Ayni runtime tab shows runtime preparation with frozen source/configuration, explicit build
 and replacement grants, stage history, independent verification, cleanup and exact
 command recovery. Runtime preparation needs an admitted deployment profile. See
 [the user guide](../../docs/site/repositories.md) for setup and recovery; verified

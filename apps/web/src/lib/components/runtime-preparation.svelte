@@ -109,8 +109,15 @@
    <article class="space-y-3 rounded-md border p-4" aria-label={`Runtime preparation ${operation.id}`}>
     <p class="font-medium">{operation.state === 'ready' ? 'Runtime ready' : operation.state.replaceAll('_', ' ')} · {runtimeStages[operation.stage] || operation.stage}</p>
     <InformationTable rows={[
+     {label:'Platform',value:operation.platform},
+     {label:'Content verification',value:operation.contentVerified ? 'Verified' : 'Not verified'},
+     {label:'Managed compatibility',value:operation.managedCompatible ? 'Verified' : 'Not verified'},
+     {label:'Cleanup',value:operation.cleanupComplete ? 'Complete' : 'Not complete'},
+    ]}/>
+    <details class="rounded-md border p-3"><summary class="cursor-pointer text-sm font-medium">Preparation technical details</summary><div class="pt-3">
+    <InformationTable rows={[
      {label:'Operation',value:operation.id,monospace:true},{label:'Inspection',value:operation.inspectionId,monospace:true},{label:'Generation',value:operation.generation},
-     {label:'Frozen input digest',value:operation.frozenInputDigest,monospace:true},{label:'Platform',value:operation.platform},
+     {label:'Frozen input digest',value:operation.frozenInputDigest,monospace:true},
      {label:'Source commit',value:operation.sourceCommit || 'Not retained',monospace:true},
      {label:'Source tree',value:operation.sourceTree || 'Not retained',monospace:true},
      {label:'Policy digest',value:operation.policyDigest || 'Not retained',monospace:true},
@@ -118,9 +125,6 @@
      {label:'Lock fingerprint',value:operation.lockFingerprint || 'Not retained',monospace:true},
      {label:'Registry destination',value:operation.registryDestination || 'Not retained'},
      {label:'Builds started / allowance',value:`${operation.buildsStarted || 0} / ${operation.maxBuilds || 0}`},
-     {label:'Content verification',value:operation.contentVerified ? 'Verified' : 'Not verified'},
-     {label:'Managed compatibility',value:operation.managedCompatible ? 'Verified' : 'Not verified'},
-     {label:'Cleanup',value:operation.cleanupComplete ? 'Complete' : 'Not complete'},
      {label:'Image digest',value:operation.imageDigest || 'Not retained',monospace:true},
      {label:'Publication intent',value:operation.expectedManifestDigest || 'Not retained',monospace:true},
      {label:'Protected content root',value:operation.protectedContentRoot || 'Not retained',monospace:true},
@@ -130,6 +134,7 @@
      {label:'Managed check digest',value:operation.managedCheckDigest || 'Not retained',monospace:true},
      {label:'Updated',value:new Date(Number(operation.updatedAtUnixMs)).toLocaleString()},
     ]}/>
+    </div></details>
     {#if operation.safeReason}<p class="text-sm">{runtimeReasons[operation.safeReason] || 'This stage needs attention. Review the retained reason and configuration before retrying.'}</p><code class="text-xs">{operation.safeReason}</code>{/if}
     <div class="flex flex-wrap gap-2">{#if activeStates.has(operation.state) && operation.state !== 'cancelling'}<Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => command('CancelRuntimePreparation', operation))}>Cancel preparation</Button>{/if}{#if retryStates.has(operation.state)}<Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => command('RetryRuntimePreparation', operation))}>{operation.state === 'publication_uncertain' ? 'Reconcile publication' : 'Retry preparation'}</Button>{/if}</div>
    </article>

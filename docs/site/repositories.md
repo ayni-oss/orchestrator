@@ -22,13 +22,17 @@ flowchart LR
 
 1. In **Configuration → Source control → GitHub**, save and validate an existing GitHub App connection.
 2. Install that App on the GitHub account that owns your repository, with **Contents: read** permission and access to that repository.
-3. Open **Settings → Repositories** in the sidebar and choose the source connection.
+3. Open **Settings → Repositories** in the sidebar, expand **Find repositories on GitHub**, and choose the source connection.
 4. Choose **Discover installations**, select the owning account, then choose **Discover repositories**.
 5. Choose **Connect repository** for the repository you want to use.
 
-The shared catalog shows the repository identity, installation, default branch and
-connection time. **Connected** records source access at that time; it does not mean
-a runtime is ready or a task can execute.
+Available repositories appear as compact cards, like projects. Open a connected
+repository card to see its **Source code** and **Ayni runtime** tabs. The card’s
+three-dot menu also opens either tab directly.
+
+**Source code** shows the GitHub connection and configuration status. Expand
+**Source integration details** for GitHub IDs and connection time. Connected source
+access does not mean a runtime is ready or a task can execute.
 
 ## Use it from a project
 
@@ -43,7 +47,7 @@ workspace to reuse the same repository without sharing conversations or credenti
 
 ## Recover a failed or interrupted check
 
-Connection history shows the source-access stage, its safe failure reason and the
+Expand **Connection history** on the repository list to see the source-access stage, its safe failure reason and the
 operation identity. An unavailable or rate-limited GitHub check can resume through
 **Resume source check**. If the browser loses a save response, **Recover status**
 reads its retained result; **Retry same connection** retries the exact selection.
@@ -54,12 +58,12 @@ the saved App connection or its installation access.
 
 ## Inspect Ayni setup
 
-Open **Inspect Ayni setup** on a connected repository, paste the full lowercase
+Open a connected repository card, choose **Ayni runtime**, then **Inspect Ayni setup**. Paste the full lowercase
 commit SHA from GitHub, and choose **Inspect commit**. The result shows the exact
-commit, policy and lock digests, locked tools, trusted public key IDs and next
-steps for missing or invalid inputs.
+commit and next steps for missing or invalid inputs. Expand **Inspection technical
+details** for policy and lock digests, locked tools and trusted public key IDs.
 
-If the response is interrupted, reload and choose **Recover inspection**. Use
+If the response is interrupted, reopen the repository’s **Ayni runtime** tab and choose **Recover inspection**. Use
 **Retry same inspection** when GitHub becomes available again. A new commit needs
 a new inspection; earlier results remain in history.
 

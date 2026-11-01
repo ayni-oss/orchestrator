@@ -20,6 +20,8 @@ test('repository catalog and project associations use retained canonical receipt
   browser=await chromium.launch({headless:true});const page=await browser.newPage();
   await page.goto(`${origin}/repositories`);await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
   await page.getByRole('region',{name:'fixture/browser-repository',exact:true}).first().waitFor();
+  await page.locator(`main a[href="/repositories/${fixture}"]`).click();
+  await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
   const inspectionCard = page.locator(`[data-repository-inspection="${fixture}"]`);
   await inspectionCard.getByRole('button',{name:'Inspect Ayni setup',exact:true}).click();
   await inspectionCard.getByText('Static inspection complete',{exact:true}).waitFor();
@@ -38,6 +40,7 @@ test('repository catalog and project associations use retained canonical receipt
   });
   await inspectionCard.getByRole('button',{name:'Inspect commit',exact:true}).click();
   await lostInspection;await page.unroute('**/api/InspectRepository');await page.reload();
+  await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
   await inspectionCard.getByRole('button',{name:'Recover inspection',exact:true}).click();
   await inspectionCard.getByText('The saved App key is invalid. Update the source connection.',{exact:true}).waitFor();
   await page.waitForFunction(id=>sessionStorage.getItem(`ayni.repository.inspection.pending.${id}`)===null,fixture);
@@ -46,6 +49,8 @@ test('repository catalog and project associations use retained canonical receipt
   const inspectionConflict=await page.request.post(`${origin}/api/InspectRepository`,{headers:{'x-console-request':'1'},data:{...inspectionRequest,commitSha:'c'.repeat(40)}});
   assert.equal(inspectionConflict.status(),409);
   await inspectionCard.screenshot({path:'/tmp/repository-inspection-browser.png'});
+  await page.getByRole('link',{name:'Back to repositories',exact:true}).click();
+  await page.getByText('Find repositories on GitHub',{exact:true}).click();
   await page.getByLabel('GitHub App connection',{exact:true}).selectOption(process.env.AYNI_REPOSITORY_SOURCE);
   await page.getByRole('button',{name:'Discover installations',exact:true}).click();
   await page.getByRole('alert').filter({hasText:'Repository needs attention'}).getByText('The saved App key is invalid. Update the source connection.',{exact:true}).waitFor();

@@ -1,0 +1,13 @@
+<script lang="ts">
+ import { goto } from '$app/navigation';
+ import InformationCard from './information-card.svelte';
+ import type { Repository } from '$lib/repositories';
+ let { repo }: { repo: Repository } = $props();
+ const href = $derived(`/repositories/${repo.id}`);
+</script>
+<InformationCard title={repo.fullName} headingLevel={2} navigationHref={href} actions={[
+ {label:'Source code',onSelect:()=>{void goto(href);}},
+ {label:'Ayni runtime',onSelect:()=>{void goto(`${href}?tab=runtime`);}},
+]}>
+ <p class="min-h-16 text-sm leading-relaxed text-muted-foreground">{repo.private ? 'Private repository' : 'Public repository'}<br/>Default branch: {repo.defaultBranch}</p>
+</InformationCard>

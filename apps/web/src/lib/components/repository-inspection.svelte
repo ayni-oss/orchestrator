@@ -72,7 +72,8 @@
   } catch { error = 'The saved inspection request could not be read. Reload repository history before starting another.'; expanded = true; }
  });
 </script>
-<div class="space-y-4 border-t pt-4" data-repository-inspection={repo.id}>
+<div class="space-y-4" data-repository-inspection={repo.id}>
+ <div class="space-y-1"><h3 class="font-semibold">Inspect, then prepare a runtime</h3><p class="text-sm text-muted-foreground">First inspect the Ayni configuration at an exact commit. Then select a completed inspection to verify or build, certify and publish its runtime. Only a verified preparation can report runtime readiness.</p></div>
  {#if !expanded}
   <Button variant="outline" onclick={() => perform(open)} disabled={busy}>Inspect Ayni setup</Button>
  {:else}
@@ -106,13 +107,15 @@
   {#each inspections as item (item.id)}
    <section class="space-y-3 rounded-md border p-4" aria-label={`Inspection ${item.commitSha}`}>
     <p class="font-medium">{item.state === 'completed' ? 'Static inspection complete' : item.state === 'accepted' ? 'Inspection awaiting retry' : item.state === 'superseded' ? 'Source connection changed' : 'Inspection failed'}</p>
+    <p class="text-sm text-muted-foreground">Commit <code>{item.commitSha.slice(0,12)}</code> · {new Date(Number(item.updatedAtUnixMs)).toLocaleString()}</p>
+    {#if item.safeReason}<p class="text-sm">{inspectionReasons[item.safeReason] || 'Source inspection needs attention. Check the source connection and retry.'}</p>{/if}
+    <details class="rounded-md border p-3"><summary class="cursor-pointer text-sm font-medium">Inspection technical details</summary><div class="space-y-3 pt-3">
     <InformationTable rows={[
      { label: 'Commit', value: item.commitSha, monospace: true },
      { label: 'Operation', value: item.id, monospace: true },
      { label: 'Source connection revision', value: item.connectionRevision },
      { label: 'Updated', value: new Date(Number(item.updatedAtUnixMs)).toLocaleString() },
     ]} />
-    {#if item.safeReason}<p class="text-sm">{inspectionReasons[item.safeReason] || 'Source inspection needs attention. Check the source connection and retry.'}</p>{/if}
     {#if item.result}
      <InformationTable rows={[
       { label: 'Policy digest', value: item.result.policyDigest || 'Unavailable', monospace: true },
@@ -123,8 +126,11 @@
       { label: 'Locked tools', value: item.result.tools?.join(', ') || 'None inspected' },
       { label: 'Trusted key IDs', value: item.result.trustKeyIds?.join(', ') || 'None inspected' },
      ]} />
+    {/if}
+    </div></details>
+    {#if item.result}
      {#each item.result.findings || [] as finding (finding.code + finding.path)}
-      <div class="space-y-1 border-t pt-3"><p class="text-sm font-medium">{finding.path || 'Preparation requirements'}</p><p class="text-sm">{finding.action}</p><code class="text-xs text-muted-foreground">{finding.code}</code></div>
+      <div class="space-y-1 border-t pt-3"><p class="text-sm font-medium">{finding.path || 'Preparation requirements'}</p><p class="text-sm">{finding.action}</p><details><summary class="cursor-pointer text-xs text-muted-foreground">Finding code</summary><code class="text-xs text-muted-foreground">{finding.code}</code></details></div>
      {/each}
     {/if}
     {#if item.state === 'accepted'}<Button variant="outline" disabled={busy || !!pending} onclick={() => perform(async () => {persist({ idempotencyKey: item.idempotencyKey, repositoryId: item.repositoryId, expectedConnectionRevision: item.connectionRevision, commitSha: item.commitSha }); await resume();})}>Resume inspection</Button>{/if}
