@@ -10,6 +10,27 @@ built on durable project conversations, reviewed plans and isolated task executi
 The [active roadmap](ROADMAP.md) focuses on the product workspace, responsive
 feedback, execution traceability, project metrics and future event-driven inputs.
 
+## Product responsibilities
+
+Orchestrator coordinates work from product intent to a reviewable software
+outcome. Projects retain goals and decisions; reviewed plans authorize bounded
+agent execution; verification and separately authorized publication retain
+inspectable evidence. Models, skills and MCP integrations supply capabilities
+inside that workflow.
+
+Ayni owns repository signals, quality policy evaluation, tool integrations and
+locked development environments. Orchestrator owns execution authority, worker
+isolation, runtime publication and evidence retention. It consumes Ayni contracts
+without duplicating adapter or lock semantics. See the
+[preparation boundary](docs/technical/architecture/repository-preparation.md#compatibility-and-product-acceptance).
+
+Ayni quality establishes satisfaction of the configured code-quality contract.
+Product acceptance also needs evidence that the requested behavior meets its
+acceptance criteria. Measuring user or business outcomes remains future work;
+a passing code-quality result does not establish product success.
+
+## Current delivery boundary
+
 The next focus is shared repository onboarding and verified runtime preparation,
 with a new UI delivered alongside each slice for local testing. Projects select
 catalog repositories directly, including reuse across workspaces. See the

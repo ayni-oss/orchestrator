@@ -111,6 +111,30 @@ The supported Ayni onboarding matrix must be qualified explicitly.
 Historical `main` admitted 0.15.0; alpha's development CLI pin alone establishes no repository-builder compatibility.
 Keep this integration in Orchestrator and consume Ayni's supported CLI/artifacts without reimplementing adapters or lock generation.
 
+## Compatibility and product acceptance
+
+Ayni owns runtime and tool compatibility within a repository configuration
+context. Its [current version-selection contract](https://github.com/ayni-oss/ayni/blob/main/docs/contributing/tooling-reconciliation.md)
+preserves native project authority for project tools. Ayni's agreed direction is
+a catalog of qualified exact language/runtime, package-manager and signal-tool
+combinations. Universal enforcement remains planned; an exact lock alone does
+not establish qualification.
+
+Orchestrator owns a separate integration matrix: the exact Ayni release/source,
+CLI and artifact contracts, trusted executable/image identities and qualified
+worker/deployment profile. Consume the contracts of the admitted release. An
+upstream feature or dependency bump does not qualify this integration or change
+an attempt's frozen selection.
+
+Environment verification establishes lock/content association. A signed
+certificate additionally authenticates a statement from a trusted key under the
+consumer's trust policy. Managed quality evaluates the frozen source against
+repository policy. None of those facts authorizes task execution or publication.
+
+Product acceptance needs evidence against the approved task's requested behavior
+and acceptance criteria. A passing Ayni quality result does not establish user
+or business outcomes. Broader outcome measurement remains planned.
+
 ## Kubernetes runtime delivery prerequisite
 
 Deliver preparation through Kubernetes supervisors with separate source, build,
@@ -118,8 +142,10 @@ certification, publication and verification workloads. The first build profile t
 qualify is rootless Podman with an operation-local image store and `vfs` storage.
 Qualification must establish user-namespace support, engine execution under the
 selected seccomp/AppArmor policy, bounded storage/egress and reliable cleanup;
-this profile is not qualified yet. No host engine socket or privileged fallback
-is enabled when those requirements fail.
+qualification is deployment-specific. The
+[runtime operation contract](runtime-preparation.md#deployment-and-qualification)
+and packaging evidence record measured limits. No host engine socket or privileged
+fallback is enabled when those requirements fail.
 
 The builder explicitly selects `AYNI_OCI_RUNTIME=podman`, an exact executor
 image digest and a matching Linux node architecture. Kernel and storage support

@@ -14,7 +14,7 @@ if missing or unexpected:
 if (output / 'CNAME').read_text().strip() != 'orchestrator.ayni.build':
     raise SystemExit('Site CNAME must be orchestrator.ayni.build')
 home = (output / 'index.html').read_text()
-for required in ['ayni-brand-mark', '<svg', 'favicon.svg', 'Durable workflow foundations', 'PostgreSQL authority']:
+for required in ['ayni-brand-mark', '<svg', 'favicon.svg', 'From intent to reviewed delivery', 'Project setup']:
     if required not in home:
         raise SystemExit(f'Homepage branding/content is missing: {required}')
 if not (output / 'favicon.svg').is_file():
