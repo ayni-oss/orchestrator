@@ -60,7 +60,7 @@ the saved App connection or its installation access.
 
 Open a repository card and choose **Ayni runtime**. The tab loads saved status
 without starting a preparation. It shows the inspected commit, known setup issues
-and the next step before the preparation form. Inspection findings include their
+and the next step together. Choose **Configure runtime** to review the registry, named signing key, platform and allowance. **Build and publish runtime** starts one server-owned run: it reads the latest default branch, inspects Ayni setup, then builds if needed, certifies, publishes and verifies the image. A missing setup input or disabled build profile stops the run with an actionable issue. Current progress and recovery controls stay visible. Previous preparations and inspection attempts are collapsed into history. Inspection findings include their
 saved date and Ayni version. Choose **Recheck default branch** to resolve GitHub’s
 current default branch and inspect its latest commit. Each click resolves the
 branch again; cached repository metadata and a previously entered SHA do not
@@ -69,7 +69,7 @@ choose the commit. Preparation history and configuration are refreshed afterward
 If inspection is interrupted, recover or retry that exact request before another
 recheck. Recovery keeps its original SHA even if the branch has advanced. A new
 recheck creates a fresh request. You can still inspect a specific SHA explicitly
-in the inspection form.
+under **Inspect a specific commit**.
 
 A ready result applies to the exact inspection and platform shown. It does not
 establish readiness for another commit. Interrupted commands show receipt recovery;
@@ -79,7 +79,7 @@ preparation is requested.
 
 ## Inspect Ayni setup
 
-Open a connected repository card, choose **Ayni runtime**, then **Inspect Ayni setup**. Paste the full lowercase
+Open a connected repository card, choose **Ayni runtime**, then expand **Inspect a specific commit**. Paste the full lowercase
 commit SHA from GitHub, and choose **Inspect commit**. The result shows the exact
 commit and next steps for missing or invalid inputs. Expand **Inspection technical
 details** for policy and lock digests, locked tools and trusted public key IDs.
@@ -93,8 +93,9 @@ Static inspection does not start tasks or build images.
 ## Set up a signer
 
 Open **Configuration → Runtime signing** and choose **Add signing key**. Enter a
-name and Key ID. You can add multiple named keys and manage each one from the
-list. Choose
+key name, such as `project-2026`. This name is the actual trust-policy key name,
+not a separate display label or a generated fingerprint. You can add multiple named
+keys and manage each one from the list. Choose
 **Generate a new key** to let the server create and store a private key, or
 **Import an existing key** to paste or select a file containing the raw value of
 `AYNI_ENV_CERTIFICATE_SIGNING_KEY`: 64 lowercase hexadecimal characters, with an
@@ -106,8 +107,13 @@ in browser storage. Generated private keys are never returned to the browser.
 If a response is interrupted, reload and choose **Recover signer setup**. Recovery
 continues the same request. If an import needs material again, re-enter the same
 seed; a different seed cannot replace that retained identity. If a rejected setup
-has no receipt, correct its public name or Key ID and resume with the same recovery
+has no receipt, correct its key name and resume with the same recovery
 key. An interrupted request must be recovered before starting another.
+
+To correct a saved key name, choose **Edit**, change **Name**, and save. This creates
+a new public configuration revision while preserving the signing material and
+previous receipts. Update the repository trust entry and regenerate its lock to
+use the corrected name; frozen preparations retain their original identity.
 
 Expand **Repository trust policy** on the saved signer and copy its public entry
 into the existing `environment.certificate.trusted_keys` configuration in
@@ -128,8 +134,7 @@ Your deployment administrator must first enable a qualified Kubernetes runtime
 profile. In **Configuration**, select a registry connection and set up a signer.
 The committed repository policy must trust that signer.
 
-On the repository, open **Runtime preparation**, select a completed inspection,
-registry, signer and platform, and set the time/build allowance. Leave building
+On the repository’s **Ayni runtime** tab, choose **Configure runtime**. Review the registry, named signer, platform and time/build allowance. A single available registry and signer are selected automatically. Enable building to permit an absent image to be built and published, then choose **Build and publish runtime**. The server checks the latest default-branch commit and continues the complete pipeline without further browser actions. Leave building
 disabled to check an existing image. Enable building for a confirmed missing image;
 replacing an invalid image requires the separate replacement choice.
 
@@ -147,3 +152,16 @@ Registry access failures are reported when registry operations execute; correct 
 configured connection before starting a new operation when its credentials changed.
 
 Verified runtime selection for project plans and tasks follows in the next slice.
+
+The reviewed settings are retained on the server. Closing the browser does not
+interrupt an accepted run. **Prepare latest commit** reuses those settings for one
+new bounded run; **Change runtime settings** lets you review them first. No build is
+started merely by opening a repository, and there is no recurring build permission
+or automatic rebuild on every push in this flow.
+
+For `ayni-oss/sandbox`, a registry connection at `ghcr.io/ayni-oss` produces
+`ghcr.io/ayni-oss/sandbox`. The runtime status shows the destination and an **Open
+registry package** link. It shows an immutable image reference after publication
+is confirmed by retained evidence. An intended digest or uncertain push does not
+establish publication. Verification and cleanup must still finish before **Runtime
+ready** appears.

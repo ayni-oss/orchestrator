@@ -16,6 +16,7 @@ pub mod provider_calls;
 pub mod publications;
 pub mod repositories;
 pub mod repository_inspections;
+pub mod repository_runtime;
 pub mod runtime_preparations;
 pub mod runtime_signer_provisioning;
 pub mod runtime_signers;

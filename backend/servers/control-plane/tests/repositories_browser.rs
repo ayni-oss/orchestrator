@@ -6,8 +6,9 @@ use ayni_orchestrator_control_plane::{
 use ayni_orchestrator_workflow_postgres::{
     WorkflowStore,
     store::{
-        connections::SaveGithub,
+        connections::{ProviderSettings, SaveGithub, SaveProvider},
         repositories::{Connect, ObservedRepository},
+        runtime_signers::SaveSigner,
     },
 };
 use std::{env, error::Error, net::TcpListener};
@@ -70,6 +71,7 @@ async fn repository_browser_preserves_catalog_and_project_receipts() -> Result<(
         .create_project(&key(), &b.id, "Source B", "Reuse a shared catalog")
         .await?
         .resource;
+    let (runtime_registry, runtime_signer) = seed_runtime_configuration(&store).await?;
     let address = TcpListener::bind("127.0.0.1:0")?.local_addr()?;
     let (shutdown, rx) = watch::channel(false);
     let grpc = tokio::spawn(serve_grpc(address, WorkflowStore::new(url), rx));
@@ -85,6 +87,8 @@ async fn repository_browser_preserves_catalog_and_project_receipts() -> Result<(
             gateway_address.port().to_string(),
         )
         .env("AYNI_REPOSITORY_FIXTURE", repo.id)
+        .env("AYNI_REPOSITORY_REGISTRY", runtime_registry)
+        .env("AYNI_REPOSITORY_SIGNER", runtime_signer)
         .env("AYNI_REPOSITORY_SOURCE", source.connection_id)
         .env("AYNI_REPOSITORY_WORKSPACE_A", a.id)
         .env("AYNI_REPOSITORY_WORKSPACE_B", b.id)
@@ -129,4 +133,41 @@ async fn seed_static_inspection(
         }
     )).await?;
     Ok(())
+}
+
+async fn seed_runtime_configuration(
+    store: &WorkflowStore,
+) -> Result<(String, String), Box<dyn Error>> {
+    let registry = store
+        .save_provider_connection(SaveProvider {
+            key: &uuid::Uuid::now_v7().to_string(),
+            id: "",
+            expected: 0,
+            name: "Repository runtime fixture registry",
+            provider: "github",
+            capability: "container_registry",
+            settings: ProviderSettings {
+                registry_destination: "ghcr.io/fixture".into(),
+                push_username: "fixture".into(),
+                pull_username: "fixture".into(),
+            },
+            credential: &serde_json::to_string(&["synthetic-push", "synthetic-pull"])?,
+        })
+        .await?;
+    store
+        .finish_provider_validation(&registry.id, "", &[])
+        .await?;
+    let signer = store
+        .save_runtime_signer(SaveSigner {
+            key: &uuid::Uuid::now_v7().to_string(),
+            id: "",
+            expected_revision: 0,
+            display_name: "Repository runtime fixture signer",
+            key_id: "fixture",
+            public_key: &"e".repeat(64),
+            secret_name: "ayni-runtime-signer-browser-fixture",
+            secret_uid: &uuid::Uuid::new_v4().to_string(),
+        })
+        .await?;
+    Ok((registry.connection_id, signer.id))
 }

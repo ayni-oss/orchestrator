@@ -77,6 +77,8 @@ profile. Connect those artifacts to trusted server-side Git/source preparation,
 including dependency ancestry, then freeze each admitted attempt. A configuration
 edit or removal blocks new use as appropriate but cannot rewrite existing attempts.
 
+Repository onboarding should retain reviewed settings and carry one bounded run from the latest default branch through inspection, build, certification, publication and verification. Keep current progress, deployment blockers and the confirmed registry image visible; later runs may reuse reviewed settings without granting recurring builds.
+
 The [repository delivery plan](docs/technical/research/repository-runtime-workspace-delivery.md)
 details setup and handoff scenarios. Missing support, denied access, invalid trust,
 outages and cleanup must remain actionable states rather than fallback execution.

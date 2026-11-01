@@ -126,9 +126,8 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
   await page.getByRole('button',{name:'Add signing key',exact:true}).click();
   await page.getByRole('radio',{name:'Advanced: existing Secret reference'}).check();
-  const signerName=`Runtime signer ${randomUUID()}`;
+  const signerName=`runtime-signer-${randomUUID()}`;
   await page.getByLabel('Name',{exact:true}).fill(signerName);
-  await page.getByLabel('Key ID',{exact:true}).fill('fixture-runtime');
   await page.getByLabel('Public key',{exact:true}).fill('503e65851ff2ac80d18ef4a5aafeeaa4664e816be09138662c1723a75f611c3a');
   await page.getByLabel('Immutable Secret name',{exact:true}).fill('ayni-runtime-signer-browser-fixture');
   await page.getByLabel('Secret UID',{exact:true}).fill(randomUUID());
@@ -141,7 +140,8 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   await page.unroute('**/api/SaveRuntimeSigner');await page.reload();
   await page.getByRole('button',{name:'Recover signer update',exact:true}).click();
   const signerCard=page.getByRole('region',{name:signerName,exact:true});await signerCard.waitFor();
-  await signerCard.getByText('fixture-runtime',{exact:true}).waitFor();
+  assert.equal(signerRequest.keyId,signerName);
+  await signerCard.getByText('503e65851ff2ac80d18ef4a5aafeeaa4664e816be09138662c1723a75f611c3a',{exact:true}).waitFor();
   const signerConflict=await page.request.post(`${origin}/api/SaveRuntimeSigner`,{headers:{'x-console-request':'1'},data:{...signerRequest,secretUid:randomUUID()}});assert.equal(signerConflict.status(),409);
   await signerCard.getByRole('button',{name:`Disable ${signerName}`,exact:true}).click();
   await signerCard.getByRole('button',{name:`Enable ${signerName}`,exact:true}).waitFor();

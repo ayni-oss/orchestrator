@@ -25,7 +25,7 @@
  function retainSetup(value:ProvisionIntent|null){setup=value;if(value)sessionStorage.setItem(setupStorage,JSON.stringify(value));else sessionStorage.removeItem(setupStorage);}
  async function perform(action:()=>Promise<void>){busy=true;error='';try{await action();}catch(e){error=e instanceof RpcError&&e.status===409?'This signer or retained command has changed. Recover the original command, then refresh before making another update.':e instanceof RpcError&&e.status===404?'No receipt was found. Retry the original update if its response was interrupted.':'Signer configuration could not be loaded or saved. Recover a retained command before retrying.';}finally{busy=false;}}
  async function load(append=false){const result=await rpc('ListRuntimeSigners',{afterId:append?next:'',limit:50});signers=append?[...signers,...(result.signers||[])]:result.signers||[];next=result.nextAfterId||'';}
- function select(value:Signer|null){editorOpen=true;clearPrivate();selected=value?.id||'';selectedRevision=value?.revision||'0';name=value?.displayName||'';keyId=value?.keyId||'';publicKey=value?.publicKey||'';secretName=value?.secretName||'';secretUid=value?.secretUid||'';mode=value?'manual':'generate';notice='';error='';}
+ function select(value:Signer|null){editorOpen=true;clearPrivate();selected=value?.id||'';selectedRevision=value?.revision||'0';name=value?.keyId||'';keyId=value?.keyId||'';publicKey=value?.publicKey||'';secretName=value?.secretName||'';secretUid=value?.secretUid||'';mode=value?'manual':'generate';notice='';error='';}
  function changeMode(value:'generate'|'import'|'manual'){clearPrivate();mode=value;error='';notice='';}
  function closeEditor(){select(null);editorOpen=false;}
  async function accept(value:Signer){
@@ -38,14 +38,14 @@
  }
  async function retry(){if(!pending)return;const result=await rpc(pending.method,pending.request);await accept(result.signer);}
  async function recover(){if(!pending)return;const result=await rpc('GetRuntimeSignerReceipt',{idempotencyKey:pending.request.idempotencyKey});await accept(result.signer);}
- async function save(){if(hasPending)return;persist({method:'SaveRuntimeSigner',request:{idempotencyKey:crypto.randomUUID(),id:selected,expectedRevision:selectedRevision,displayName:name,keyId,publicKey,secretName,secretUid}});await retry();}
+ async function save(){if(hasPending)return;keyId=name;validateSignerFields(name,keyId);persist({method:'SaveRuntimeSigner',request:{idempotencyKey:crypto.randomUUID(),id:selected,expectedRevision:selectedRevision,displayName:name,keyId,publicKey,secretName,secretUid}});await retry();}
  async function toggle(value:Signer){if(hasPending)return;persist({method:'SetRuntimeSignerEnabled',request:{idempotencyKey:crypto.randomUUID(),id:value.id,expectedRevision:value.revision,enabled:!value.enabled}});await retry();}
  function setupError(cause:unknown){
   if(cause instanceof RpcError){
    if(provisioningReasons[cause.message])return provisioningReasons[cause.message];
    if(cause.status===503)return 'The signer setup service is unavailable. Recover this request when access is restored; ask the administrator to check the deployment.';
    if(cause.status===409)return provisioningReasons.signer_provisioning_conflict;
-   if(cause.status===400)return 'The signing input was rejected. Check the name, Key ID and raw seed format, then recover the original setup before retrying.';
+   if(cause.status===400)return 'The signing input was rejected. Check the key name and raw seed format, then recover the original setup before retrying.';
   }
   return 'The setup response was interrupted. Recover this exact setup before starting another; no private material is retained in this browser.';
  }
@@ -58,7 +58,7 @@
  async function submitSetup(){
   let material='';let request:(ProvisionIntent&{signingSeed:string})|null=null;busy=true;error='';
   try{
-   if(!setup||canCorrect)validateSignerFields(name,keyId);
+   if(!setup||canCorrect){keyId=name;validateSignerFields(name,keyId);}
    const intent=setup?(canCorrect?{...setup,displayName:name,keyId}:setup):{idempotencyKey:crypto.randomUUID(),displayName:name,keyId,mode:mode as 'generate'|'import'};
    if(intent.mode==='import')material=signingSeed(seed);
    if(!setup||canCorrect)retainSetup(intent);
@@ -72,7 +72,7 @@
  async function recoverSetup(){
   if(!setup)return;busy=true;error='';clearPrivate();
   try{await acceptSetup(await rpc('RecoverRuntimeSignerProvisioning',{idempotencyKey:setup.idempotencyKey}));}
-  catch(cause){if(cause instanceof RpcError&&cause.status===404){receiptMissing=true;operation=null;notice=inputRejected?'The rejected setup has no receipt. Correct its public name or Key ID, then resume with the same recovery key.':'No setup receipt was found. Resume the same request below; its name, Key ID and recovery key stay unchanged.';}else error=setupError(cause);}
+  catch(cause){if(cause instanceof RpcError&&cause.status===404){receiptMissing=true;operation=null;notice=inputRejected?'The rejected setup has no receipt. Correct its key name, then resume with the same recovery key.':'No setup receipt was found. Resume the same request below; its key name and recovery key stay unchanged.';}else error=setupError(cause);}
   finally{clearPrivate();busy=false;}
  }
  async function readSeedFile(event:Event){
@@ -84,7 +84,7 @@
  async function copyTrust(value:Signer){try{await navigator.clipboard.writeText(trustSnippet(value));notice='Public trust policy copied. Commit it and regenerate the repository lock before inspecting again.';}catch{error='Copy the displayed public trust policy into the repository policy.';}}
  onMount(()=>{void perform(async()=>{
   const saved=sessionStorage.getItem(storage);if(saved){const value=JSON.parse(saved);if(!['SaveRuntimeSigner','SetRuntimeSignerEnabled'].includes(value.method)||typeof value.request?.idempotencyKey!=='string')throw new Error('invalid public command');pending=value;}
-  const savedSetup=sessionStorage.getItem(setupStorage);if(savedSetup){const value=provisionIntent(JSON.parse(savedSetup));if(!value)throw new Error('invalid public setup');setup=value;name=value.displayName;keyId=value.keyId;mode=value.mode;}
+  const savedSetup=sessionStorage.getItem(setupStorage);if(savedSetup){const value=provisionIntent(JSON.parse(savedSetup));if(!value)throw new Error('invalid public setup');setup=value;name=value.keyId;keyId=value.keyId;mode=value.mode;}
   editorOpen=!!pending||!!setup;await load();if(setup)await recoverSetup();
  });return clearPrivate;});
 </script>
@@ -104,8 +104,7 @@
  {#if editorOpen||setup}
  <InformationCard title={selected?'Update signer reference':setup?'Resume signer setup':'Add signing key'}>
   <form class="space-y-4" onsubmit={event=>{event.preventDefault();if(mode==='manual')void perform(save);else void submitSetup();}}>
-   <div class="grid gap-4 sm:grid-cols-2"><div class="space-y-2"><Label for="signer-name">Name</Label><Input id="signer-name" bind:value={name} required maxlength={120} disabled={busy||!!pending||(!!setup&&!canCorrect)}/></div>
-   <div class="space-y-2"><Label for="signer-key-id">Key ID</Label><Input id="signer-key-id" bind:value={keyId} required maxlength={128} pattern={'[A-Za-z0-9_.\\-]+'} disabled={busy||!!pending||(!!setup&&!canCorrect)||!!selected}/></div></div>
+   <div class="space-y-2"><Label for="signer-name">Name</Label><Input id="signer-name" bind:value={name} required maxlength={120} disabled={busy||!!pending||(!!setup&&!canCorrect)}/><p class="text-xs text-muted-foreground">Use this exact name in .ayni.toml with the public key. Use letters, numbers, dots, underscores or hyphens.</p></div>
    {#if !setup}<fieldset disabled={busy||!!pending||!!selected} class="space-y-2"><legend class="text-sm font-medium">Signing key</legend><div class="flex flex-wrap gap-4 text-sm">
     <label class="flex items-center gap-2"><input type="radio" name="signer-mode" value="generate" checked={mode==='generate'} onchange={()=>changeMode('generate')}/>Generate a new key</label>
     <label class="flex items-center gap-2"><input type="radio" name="signer-mode" value="import" checked={mode==='import'} onchange={()=>changeMode('import')}/>Import an existing key</label>
@@ -132,10 +131,10 @@
  <Button variant="outline" disabled={busy} onclick={()=>perform(()=>load())}>Refresh signers</Button>
  {#if busy}<p role="status" class="text-sm text-muted-foreground">Loading signer configuration…</p>{/if}
  {#if !signers.length&&!busy}<p class="text-sm text-muted-foreground">Add a named signing key to get started. You can configure multiple keys.</p>{/if}
- {#each signers as item(item.id)}<InformationCard title={item.displayName} status={item.enabled?'enabled':'disabled'}>
-  <InformationTable rows={[{label:'Key ID',value:item.keyId},{label:'Public key',value:item.publicKey,monospace:true},{label:'Secret name',value:item.secretName},{label:'Secret UID',value:item.secretUid,monospace:true},{label:'Configuration revision',value:item.revision}]}/>
+ {#each signers as item(item.id)}<InformationCard title={item.keyId} status={item.enabled?'enabled':'disabled'}>
+  <InformationTable rows={[{label:'Public key',value:item.publicKey,monospace:true},{label:'Secret name',value:item.secretName},{label:'Secret UID',value:item.secretUid,monospace:true},{label:'Configuration revision',value:item.revision}]}/>
   <details class="space-y-3"><summary class="cursor-pointer text-sm font-medium">Repository trust policy</summary><pre class="overflow-x-auto rounded-lg bg-muted p-3 text-xs">{trustSnippet(item)}</pre><Button variant="outline" onclick={()=>copyTrust(item)}>Copy public trust policy</Button><p class="text-xs text-muted-foreground">Merge this public entry into the existing environment.certificate.trusted_keys configuration in .ayni.toml, preserving other keys. If that configuration uses inline tables, edit the existing entry rather than adding a duplicate table. Commit the policy and regenerated lock, then inspect the new commit.</p></details>
-  <div class="flex flex-wrap gap-2"><Button variant="outline" disabled={busy||hasPending} onclick={()=>select(item)}>Edit {item.displayName}</Button><Button variant="outline" disabled={busy||hasPending} onclick={()=>perform(()=>toggle(item))}>{item.enabled?'Disable':'Enable'} {item.displayName}</Button></div>
+  <div class="flex flex-wrap gap-2"><Button variant="outline" disabled={busy||hasPending} onclick={()=>select(item)}>Edit {item.keyId}</Button><Button variant="outline" disabled={busy||hasPending} onclick={()=>perform(()=>toggle(item))}>{item.enabled?'Disable':'Enable'} {item.keyId}</Button></div>
  </InformationCard>{/each}
  {#if next}<Button variant="outline" disabled={busy} onclick={()=>perform(()=>load(true))}>More signers</Button>{/if}
 </div>

@@ -87,7 +87,11 @@ pub async fn serve(
         .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
         .build_v1()
         .map_err(io::Error::other)?;
-    Server::builder()
+    let onboarding = tokio::spawn(runtime_preparation::onboarding::run(
+        api.clone(),
+        shutdown.clone(),
+    ));
+    let result = Server::builder()
         .add_service(
             v1::runtime_preparation_service_server::RuntimePreparationServiceServer::new(
                 api.clone(),
@@ -123,7 +127,9 @@ pub async fn serve(
             }
         })
         .await
-        .map_err(io::Error::other)
+        .map_err(io::Error::other);
+    onboarding.abort();
+    result
 }
 
 #[tonic::async_trait]

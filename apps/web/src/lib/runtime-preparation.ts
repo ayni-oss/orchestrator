@@ -16,6 +16,7 @@ export type StartRuntimeRequest = {
 };
 export type RuntimeCommand =
  | { method: 'StartRuntimePreparation'; request: StartRuntimeRequest }
+ | { method: 'StartRepositoryRuntime'; request: RepositoryRuntimeSettings & {idempotencyKey: string} }
  | { method: 'CancelRuntimePreparation' | 'RetryRuntimePreparation'; request: { idempotencyKey: string; id: string; expectedGeneration: string } };
 export const runtimeStages: Record<string, string> = {
  acquire_source: 'Acquire exact source', discover: 'Discover registry image', pull_existing: 'Pull existing image',
@@ -72,14 +73,15 @@ export const runtimeReasons: Record<string, string> = {
 };
 
 export function runtimeOverview(input: {
- loaded: boolean; error: string; pending: boolean; rejected?: boolean;
+ loaded: boolean; error: string; pending: boolean; rejected?: boolean; inspectionPending?: boolean;
  inspectionLoading: boolean; inspectionError: string; inspectionReason?: string;
  inspection: import('./repositories').RepositoryInspection | null;
  operations: RuntimePreparation[]; registries: import('./api').Connection[]; signers: RuntimeSigner[];
  sourceReady: boolean; sourceRevision?: string; moreHistory?: boolean;
 }): { title: string; description: string; issues: string[]; nextAction: string; operation?: RuntimePreparation } {
  const candidate = input.inspection;
- const operation = candidate ? input.operations.find(value => value.inspectionId === candidate.id) : input.operations[0];
+ const operation = candidate ? input.operations.find(value => value.inspectionId === candidate.id) || input.operations.find(value => ['pending','running','stopping','cancelling','cleanup_pending','publication_uncertain'].includes(value.state) || value.state !== 'ready' && !value.cleanupComplete) : input.operations[0];
+ if (input.inspectionPending) return {title:'Inspection result needs recovery',description:'The last check has an unconfirmed result. Older saved checks do not establish the result of this request.',issues:[],nextAction:'Recover the interrupted check using the controls above.'};
  if (input.rejected) return {title:'Preparation request rejected',description:input.error,issues:[],nextAction:'Review the rejected command below, dismiss it and correct the selection before trying again.'};
  if (input.pending) return {title:'Preparation response needs recovery',description:'The last command has an uncertain response. Its retained receipt determines whether work started.',issues:[],nextAction:'Recover the preparation receipt below before starting another command.'};
  if (input.error || input.inspectionError) return {title:'Runtime status unavailable',description:input.error || input.inspectionError,issues:[],nextAction:'Retry the default-branch recheck when access is restored.'};
@@ -89,7 +91,7 @@ export function runtimeOverview(input: {
   const titles: Record<string,string> = {ready:'Runtime ready',pending:'Runtime preparation queued',running:'Runtime preparation in progress',stopping:'Runtime preparation stopping',cancelling:'Runtime preparation cancelling',cleanup_pending:'Runtime cleanup pending',publication_uncertain:'Publication needs reconciliation',blocked:'Runtime preparation blocked',failed:'Runtime preparation failed',unavailable:'Runtime preparation unavailable',cancelled:'Runtime preparation cancelled',superseded:'Runtime preparation superseded',stopped:'Runtime preparation stopped'};
   return {title:titles[operation.state] || `Runtime preparation: ${operation.state.replaceAll('_',' ')}`,description,operation,
    issues:operation.safeReason ? [runtimeReasons[operation.safeReason] || 'Review the retained stage evidence before retrying.'] : [],
-   nextAction:operation.state === 'ready' ? 'This saved preparation is ready for this exact inspection and platform.' : operation.state === 'publication_uncertain' ? 'Open preparation details and reconcile publication using the retained request.' : ['pending','running','stopping','cancelling','cleanup_pending'].includes(operation.state) ? 'Status updates automatically while preparation and cleanup continue.' : 'Open preparation details to review the failure and available recovery actions.'};
+   nextAction:operation.state === 'ready' ? 'This saved preparation is ready for this exact inspection and platform.' : operation.state === 'publication_uncertain' ? 'Reconcile publication to confirm whether the saved image was published.' : ['pending','running','stopping','cancelling','cleanup_pending'].includes(operation.state) ? 'Status updates automatically while preparation and cleanup continue.' : 'Review the issue above, then retry this preparation when it is resolved.'};
  }
  if (input.moreHistory) return {title:'More runtime history available',description:'No preparation for this inspection appears in the loaded history. Earlier preparations have not been checked yet.',issues:[],nextAction:'Open preparation details and load more preparations to check earlier results.'};
  const issues: string[] = [];
@@ -104,7 +106,27 @@ export function runtimeOverview(input: {
  if (!input.registries.some(value => value.enabled && value.activeCredentialRevision)) issues.push('No enabled, validated runtime registry is available. Configure a registry connection.');
  const enabledSigners = input.signers.filter(value => value.enabled);
  if (!enabledSigners.length) issues.push('No enabled runtime signer is available. Configure a signer and commit its public trust entry.');
- else if (candidate?.result?.trustKeyIds?.length && !enabledSigners.some(value => candidate.result!.trustKeyIds!.includes(value.keyId))) issues.push(`The inspection trusts Key IDs: ${candidate.result.trustKeyIds.join(', ')}. Enabled signers use: ${enabledSigners.map(value => `${value.displayName || 'Signer'} (Key ID ${value.keyId})`).join('; ')}. The Key ID and public key must both match the repository trust policy; a matching display name is not enough.`);
+ else if (candidate?.result?.trustKeyIds?.length && !enabledSigners.some(value => candidate.result!.trustKeyIds!.includes(value.keyId))) issues.push(`The inspection trusts key names: ${candidate.result.trustKeyIds.join(', ')}. Enabled signing keys are named: ${enabledSigners.map(value => value.keyId).join(', ')}. Use the same key name and public key in the repository trust policy.`);
  return {title:issues.length ? 'Runtime setup needs attention' : 'Runtime not prepared',description:candidate ? `No preparation is saved for inspected commit ${candidate.commitSha.slice(0,12)}.` : 'No runtime preparation has been started for this repository.',issues:[...new Set(issues)],
- nextAction:issues.length ? 'Resolve the setup issues, inspect the updated commit and select its completed inspection below.' : 'Select the inspection below, then choose a registry and signer to verify or prepare its runtime.'};
+ nextAction:issues.length ? 'Resolve the issue shown above, then recheck the default branch.' : 'Configure a runtime for the checked commit.'};
+}
+
+export type RepositoryRuntimeSettings = Omit<StartRuntimeRequest,'idempotencyKey'|'inspectionId'> & {expectedConnectionRevision: string};
+export type RepositoryRuntimeRun = {id:string; idempotencyKey:string; settings:RepositoryRuntimeSettings; state:string; safeReason?:string; commitSha?:string; inspectionId?:string; preparationId?:string};
+export const onboardingReasons: Record<string,string> = {
+ source_unavailable: 'The latest default branch could not be read. Check the GitHub connection and repository access, then prepare again.',
+ configuration_changed: 'The source, registry or signing configuration changed. Review the current settings before preparing again.',
+ inspection_failed: 'The repository inspection could not complete. Check source access and prepare again.',
+ inspection_findings: 'The repository setup needs changes. Resolve the inspection issues shown below, then prepare the latest commit.',
+ runtime_profile_unavailable: 'Runtime building is not enabled on this deployment. Ask the deployment administrator to enable a qualified runtime build profile.',
+ preparation_admission_failed: 'Preparation could not be admitted. Review signer trust, platform and allowance against the deployment profile, then prepare again.',
+ step_unavailable: 'A preparation step could not complete. Review access and prepare again.',
+};
+export function runtimeRegistryImage(operation: RuntimePreparation | undefined, destination = '') {
+ const target = operation?.registryDestination || destination;
+ const match = /^ghcr\.io\/([a-z0-9][a-z0-9._-]*)\/([a-z0-9][a-z0-9._-]*)$/.exec(target);
+ if (!match) return null;
+ const digest = operation?.imageDigest;
+ const confirmed = !!digest && /^sha256:[a-f0-9]{64}$/.test(digest) && (operation?.state === 'ready' || !!operation?.expectedManifestDigest && digest === operation.expectedManifestDigest && ['pull_final','verify_content','verify_compatibility','cleanup'].includes(operation.stage) && operation.state !== 'publication_uncertain');
+ return {destination:target, url:`https://github.com/orgs/${match[1]}/packages/container/package/${match[2]}`, reference:confirmed ? `${target}@${digest}` : '', confirmed};
 }

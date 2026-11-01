@@ -67,6 +67,15 @@ pub(super) async fn start(
     context: &RequestContext,
     value: &v1::StartRuntimePreparationRequest,
 ) -> Result<Operation, Status> {
+    start_reviewed(service, context, value, None).await
+}
+
+pub(super) async fn start_reviewed(
+    service: &WorkflowGrpc,
+    context: &RequestContext,
+    value: &v1::StartRuntimePreparationRequest,
+    reviewed: Option<(u64, u64)>,
+) -> Result<Operation, Status> {
     let command = start_command(value);
     if let Some(operation) = service
         .store
@@ -82,7 +91,7 @@ pub(super) async fn start(
     let frozen = freeze_inputs(service, context, value, &profile, inputs).await?;
     service
         .store
-        .start_runtime_preparation(command, frozen)
+        .start_reviewed_runtime_preparation(command, frozen, reviewed)
         .await
         .map_err(|e| context.store(&e))
 }

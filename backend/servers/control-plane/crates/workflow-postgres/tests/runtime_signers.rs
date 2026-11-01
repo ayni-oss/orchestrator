@@ -127,18 +127,6 @@ async fn public_signer_configuration_retains_exact_replay_revisions_and_access_b
             .await,
         Err(StoreError::ConfigurationRevisionConflict)
     ));
-    assert!(matches!(
-        store
-            .save_runtime_signer(SaveSigner {
-                key: &key(),
-                id: &original.id,
-                expected_revision: 2,
-                key_id: "different-key",
-                ..request.clone()
-            })
-            .await,
-        Err(StoreError::InvalidInput(_))
-    ));
     let disable = key();
     let disabled = store
         .set_runtime_signer_enabled(&disable, &original.id, 2, false)
@@ -215,7 +203,7 @@ async fn public_signer_configuration_retains_exact_replay_revisions_and_access_b
     assert!(historical.contains(&enabled));
     for sql in [
         "DELETE FROM workflow_runtime_signers",
-        "UPDATE workflow_runtime_signers SET key_id='rewritten'",
+        "UPDATE workflow_runtime_signers SET id='rewritten'",
         "DELETE FROM workflow_runtime_signer_revisions",
         "UPDATE workflow_runtime_signer_revisions SET configuration='rewritten'",
         "DELETE FROM workflow_runtime_signer_receipts",
@@ -232,5 +220,66 @@ async fn public_signer_configuration_retains_exact_replay_revisions_and_access_b
         );
     }
     task.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires disposable migrated PostgreSQL with runtime-role URL"]
+async fn signer_key_name_corrections_preserve_key_material_and_original_receipts() -> TestResult {
+    let role = std::env::var("AYNI_POSTGRES_RUNTIME_FEASIBILITY_ROLE")?;
+    ayni_orchestrator_workflow_postgres::migrate_for_runtime(
+        &std::env::var("AYNI_POSTGRES_FEASIBILITY_URL")?,
+        &role,
+    )
+    .await?;
+    let store = WorkflowStore::new(std::env::var("AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL")?);
+    let command = key();
+    let public = "a".repeat(64);
+    let uid = uuid::Uuid::new_v4().to_string();
+    let request = SaveSigner {
+        key_id: "old-fingerprint",
+        ..input(&command, &public, &uid)
+    };
+    let original = store.save_runtime_signer(request.clone()).await?;
+    let rename = key();
+    let correction = SaveSigner {
+        key: &rename,
+        id: &original.id,
+        expected_revision: 1,
+        key_id: "project-2026",
+        display_name: "project-2026",
+        ..request.clone()
+    };
+    let named = store.save_runtime_signer(correction.clone()).await?;
+    assert_eq!(named.key_id, "project-2026");
+    assert_eq!(named.public_key, original.public_key);
+    assert_eq!(named.secret_name, original.secret_name);
+    assert_eq!(named.secret_uid, original.secret_uid);
+    assert_eq!(named.revision, 2);
+    assert_ne!(named.active_revision, original.active_revision);
+    assert_eq!(store.save_runtime_signer(correction.clone()).await?, named);
+    assert_eq!(store.save_runtime_signer(request).await?, original);
+    assert_eq!(store.get_runtime_signer_receipt(&command).await?, original);
+    assert_eq!(store.get_runtime_signer_receipt(&rename).await?, named);
+    assert_eq!(store.get_runtime_signer(&original.id).await?, named);
+    assert!(matches!(
+        store
+            .save_runtime_signer(SaveSigner {
+                key: &key(),
+                key_id: "another-name",
+                ..correction.clone()
+            })
+            .await,
+        Err(StoreError::ConfigurationRevisionConflict)
+    ));
+    assert!(matches!(
+        store
+            .save_runtime_signer(SaveSigner {
+                key_id: "another-name",
+                ..correction
+            })
+            .await,
+        Err(StoreError::IdempotencyConflict)
+    ));
     Ok(())
 }

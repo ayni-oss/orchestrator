@@ -35,6 +35,28 @@ preparation is off. Disabling a signer prevents new use; it does not delete its
 private key. Deleting retained keys or the signing namespace is a separate manual
 operator cleanup decision. There is no key-deletion API.
 
+## Repository onboarding
+
+`StartRepositoryRuntime` retains one reviewed, bounded default-branch preparation
+intent and its original receipt in PostgreSQL. Source revision, registry/signer
+revisions, platform and build/replacement allowances are captured. The control
+plane claims a leased step, resolves the latest default branch once, persists the
+exact SHA, runs canonical inspection and admits canonical runtime preparation.
+The run has separate deterministic inspection/preparation keys. Restart, lost
+responses and expired claims recover those commands; stale claims cannot advance
+state. Admission checks the reviewed registry/signer revisions inside the same
+transaction that freezes the preparation. Only public settings and references are
+retained; this adds no new credential capability.
+
+`GetRepositoryRuntime` reads current progress and last reviewed settings;
+`GetRepositoryRuntimeReceipt` reads the immutable original acknowledgement.
+Onboarding `completed` means the preparation has been admitted and linked, not
+that an image was published or verified. Actual progress, cancellation, publication
+reconciliation and readiness belong to the linked preparation. Blocking source,
+setup, trust, configuration and deployment issues remain explicit. A failed step
+cannot grant additional builds. New source or allowance requires a new reviewed
+run; this feature does not install a push listener or recurring build schedule.
+
 ## Admission and evidence
 
 `StartRuntimePreparation` freezes the completed inspection, repository/connection

@@ -405,7 +405,10 @@ async fn prior_signer_schema_upgrades_and_retains_existing_public_receipts() -> 
         .query_one("SELECT max(version) FROM workflow_schema_migrations", &[])
         .await?
         .get(0);
-    assert_eq!(version, 38);
+    assert_eq!(
+        version,
+        ayni_orchestrator_workflow_postgres::migrations::CURRENT_SCHEMA_VERSION
+    );
     ayni_orchestrator_workflow_postgres::migrate_client(&mut client).await?;
     let after:String=client.query_one("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='workflow_runtime_signer_receipts_kind_check'",&[]).await?.get(0);
     assert!(after.contains("provision"));

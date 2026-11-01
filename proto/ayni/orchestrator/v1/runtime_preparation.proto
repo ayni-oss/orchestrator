@@ -3,6 +3,9 @@ package ayni.orchestrator.v1;
 
 // Trusted local-operator setup for separate runtime preparation capabilities.
 service RuntimePreparationService {
+  rpc StartRepositoryRuntime(StartRepositoryRuntimeRequest) returns (StartRepositoryRuntimeResponse);
+  rpc GetRepositoryRuntime(GetRepositoryRuntimeRequest) returns (GetRepositoryRuntimeResponse);
+  rpc GetRepositoryRuntimeReceipt(GetRepositoryRuntimeReceiptRequest) returns (GetRepositoryRuntimeReceiptResponse);
   rpc ProvisionRuntimeSigner(ProvisionRuntimeSignerRequest) returns (ProvisionRuntimeSignerResponse);
   rpc RecoverRuntimeSignerProvisioning(RecoverRuntimeSignerProvisioningRequest) returns (RecoverRuntimeSignerProvisioningResponse);
   rpc SaveRuntimeSigner(SaveRuntimeSignerRequest) returns (SaveRuntimeSignerResponse);
@@ -191,4 +194,45 @@ message ProvisionRuntimeSignerResponse {
 message RecoverRuntimeSignerProvisioningResponse {
   RuntimeSignerProvisioningOperation operation = 1;
   RuntimeSigner signer = 2;
+}
+
+// One reviewed onboarding run. It resolves the latest default branch once, then
+// retains exact inspection/preparation keys. No recurring or unbounded build grant.
+message StartRepositoryRuntimeRequest {
+  string idempotency_key = 1;
+  string repository_id = 2;
+  uint64 expected_connection_revision = 3;
+  string registry_connection_id = 4;
+  string signer_id = 5;
+  string platform = 6;
+  uint32 max_seconds = 7;
+  uint32 max_builds = 8;
+  bool allow_build = 9;
+  bool allow_replace = 10;
+}
+message RepositoryRuntimeRun {
+  string id = 1;
+  string idempotency_key = 2;
+  StartRepositoryRuntimeRequest settings = 3;
+  string state = 4;
+  string safe_reason = 5;
+  string commit_sha = 6;
+  string inspection_id = 7;
+  string preparation_id = 8;
+}
+message StartRepositoryRuntimeResponse {
+  RepositoryRuntimeRun run = 1;
+}
+message GetRepositoryRuntimeRequest {
+  string repository_id = 1;
+}
+message GetRepositoryRuntimeResponse {
+  RepositoryRuntimeRun run = 1;
+}
+message GetRepositoryRuntimeReceiptRequest {
+  string idempotency_key = 1;
+}
+
+message GetRepositoryRuntimeReceiptResponse {
+  RepositoryRuntimeRun run = 1;
 }

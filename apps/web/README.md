@@ -71,7 +71,7 @@ In Repositories, open a connected repository card and choose **Ayni runtime**.
 **Recheck default branch** resolves GitHub’s current default branch and inspects
 its latest SHA on every click. Recovery retries the frozen SHA from the original
 request. For an explicit commit, choose
-**Inspect Ayni setup**, and enter a
+**Inspect a specific commit**, and enter a
 full lowercase commit SHA. The retained result shows policy/lock digests, locked
 tools, public trust key IDs and corrective findings. Reload after an interrupted
 request and choose **Recover inspection** or **Retry same inspection**.
@@ -83,12 +83,23 @@ preparation gates. A static inspection result alone establishes neither.
 ### Runtime signing and preparation
 
 Configuration → Runtime signing supports server-generated or imported immutable
-signing keys and advanced administrator-owned Secret references. Exact setup,
+signing keys and advanced administrator-owned Secret references. The entered Name
+is the actual trust-policy key name (`keyId` in the API); it is paired with the
+public key. Correcting a name creates a new public configuration revision and
+preserves old receipts and frozen preparation inputs. Exact setup,
 updates and original receipt recovery survive reloads. Public identities and
 references do not by themselves grant builds or establish runtime readiness.
 
-The repository’s Ayni runtime tab shows runtime preparation with frozen source/configuration, explicit build
+The repository’s Ayni runtime tab keeps current status, issues and the next action together. Choose **Configure runtime** after a successful check to review the checked commit and configuration. Current progress and recovery controls stay visible; previous preparations and inspections are collapsed by default. Preparation retains frozen source/configuration, explicit build
 and replacement grants, stage history, independent verification, cleanup and exact
 command recovery. Runtime preparation needs an admitted deployment profile. See
 [the user guide](../../docs/site/repositories.md) for setup and recovery; verified
 artifact selection for project tasks remains planned.
+
+Repository onboarding uses StartRepositoryRuntime/GetRepositoryRuntime and an
+immutable receipt API. Reviewed settings are retained server-side. The leased
+control-plane workflow freezes the current default-branch SHA, inspects it and
+starts canonical preparation without browser orchestration. The runtime status
+tracks that run, exposes deployment blockers, and links the repository package and
+confirmed immutable image. Prepare latest commit reuses reviewed settings for one
+new bounded run. Opening a page never renews a build grant.

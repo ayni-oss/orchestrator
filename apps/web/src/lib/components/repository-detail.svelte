@@ -47,9 +47,10 @@
    <Tabs.Trigger value="runtime" class={triggerClass}>Ayni runtime</Tabs.Trigger>
   </Tabs.List>
   <Tabs.Content value="source" class="space-y-4">
-   <div class="space-y-1"><h3 class="font-semibold">Source code connected</h3><p class="text-sm text-muted-foreground">This repository is in the shared catalog and can be selected by projects. Open Ayni runtime to inspect a commit and prepare its runtime.</p></div>
+   <div class="space-y-1"><h3 class="font-semibold">Source code connected</h3><p class="text-sm text-muted-foreground">This repository is in the shared catalog and can be selected by projects. Set up Ayni runtime to check the latest default branch and build, publish and verify its image.</p></div>
     <InformationTable rows={[{label:'GitHub connection',value:connection?.displayName || 'Connection unavailable'},{label:'Connection status',value:!connection ? 'Unavailable' : !connection.enabled ? 'Disabled' : !connection.activeCredentialRevision ? 'Validation required' : 'Configured'}]}/>
     {#if !connection?.enabled || !connection?.activeCredentialRevision}<p class="text-sm">Enable and validate the source connection before inspecting commits.</p>{/if}
+    <Button onclick={() => {tab='runtime';}}>Set up runtime</Button>
     <a class="text-sm text-primary underline underline-offset-4" href="/settings/source-control/github">Manage source connection</a>
     <details class="rounded-md border p-3"><summary class="cursor-pointer text-sm font-medium">Source integration details</summary><div class="pt-3"><InformationTable rows={[{label:'GitHub repository ID',value:repo.providerRepositoryId},{label:'GitHub installation ID',value:repo.installationId},{label:'Connected',value:new Date(Number(repo.connectedAtUnixMs)).toLocaleString()}]}/><p class="mt-3 text-xs text-muted-foreground">GitHub IDs identify this repository and the App installation that grants access. Source access was checked when the repository was connected.</p></div></details>
   </Tabs.Content>

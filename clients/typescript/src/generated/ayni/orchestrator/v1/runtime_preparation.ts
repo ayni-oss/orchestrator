@@ -219,6 +219,54 @@ export interface RecoverRuntimeSignerProvisioningResponse {
   signer?: RuntimeSigner | undefined;
 }
 
+/**
+ * One reviewed onboarding run. It resolves the latest default branch once, then
+ * retains exact inspection/preparation keys. No recurring or unbounded build grant.
+ */
+export interface StartRepositoryRuntimeRequest {
+  idempotencyKey: string;
+  repositoryId: string;
+  expectedConnectionRevision: string;
+  registryConnectionId: string;
+  signerId: string;
+  platform: string;
+  maxSeconds: number;
+  maxBuilds: number;
+  allowBuild: boolean;
+  allowReplace: boolean;
+}
+
+export interface RepositoryRuntimeRun {
+  id: string;
+  idempotencyKey: string;
+  settings?: StartRepositoryRuntimeRequest | undefined;
+  state: string;
+  safeReason: string;
+  commitSha: string;
+  inspectionId: string;
+  preparationId: string;
+}
+
+export interface StartRepositoryRuntimeResponse {
+  run?: RepositoryRuntimeRun | undefined;
+}
+
+export interface GetRepositoryRuntimeRequest {
+  repositoryId: string;
+}
+
+export interface GetRepositoryRuntimeResponse {
+  run?: RepositoryRuntimeRun | undefined;
+}
+
+export interface GetRepositoryRuntimeReceiptRequest {
+  idempotencyKey: string;
+}
+
+export interface GetRepositoryRuntimeReceiptResponse {
+  run?: RepositoryRuntimeRun | undefined;
+}
+
 function createBaseRuntimeSigner(): RuntimeSigner {
   return {
     id: "",
@@ -3921,9 +3969,870 @@ export const RecoverRuntimeSignerProvisioningResponse: MessageFns<RecoverRuntime
   },
 };
 
+function createBaseStartRepositoryRuntimeRequest(): StartRepositoryRuntimeRequest {
+  return {
+    idempotencyKey: "",
+    repositoryId: "",
+    expectedConnectionRevision: "0",
+    registryConnectionId: "",
+    signerId: "",
+    platform: "",
+    maxSeconds: 0,
+    maxBuilds: 0,
+    allowBuild: false,
+    allowReplace: false,
+  };
+}
+
+export const StartRepositoryRuntimeRequest: MessageFns<StartRepositoryRuntimeRequest> = {
+  encode(message: StartRepositoryRuntimeRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.repositoryId !== "") {
+      writer.uint32(18).string(message.repositoryId);
+    }
+    if (message.expectedConnectionRevision !== "0") {
+      writer.uint32(24).uint64(message.expectedConnectionRevision);
+    }
+    if (message.registryConnectionId !== "") {
+      writer.uint32(34).string(message.registryConnectionId);
+    }
+    if (message.signerId !== "") {
+      writer.uint32(42).string(message.signerId);
+    }
+    if (message.platform !== "") {
+      writer.uint32(50).string(message.platform);
+    }
+    if (message.maxSeconds !== 0) {
+      writer.uint32(56).uint32(message.maxSeconds);
+    }
+    if (message.maxBuilds !== 0) {
+      writer.uint32(64).uint32(message.maxBuilds);
+    }
+    if (message.allowBuild !== false) {
+      writer.uint32(72).bool(message.allowBuild);
+    }
+    if (message.allowReplace !== false) {
+      writer.uint32(80).bool(message.allowReplace);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StartRepositoryRuntimeRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseStartRepositoryRuntimeRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.repositoryId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.expectedConnectionRevision = reader.uint64().toString();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.registryConnectionId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.signerId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.platform = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.maxSeconds = reader.uint32();
+            continue;
+          }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.maxBuilds = reader.uint32();
+            continue;
+          }
+          case 9: {
+            if (tag !== 72) {
+              break;
+            }
+
+            message.allowBuild = reader.bool();
+            continue;
+          }
+          case 10: {
+            if (tag !== 80) {
+              break;
+            }
+
+            message.allowReplace = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): StartRepositoryRuntimeRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      repositoryId: isSet(object.repositoryId)
+        ? globalThis.String(object.repositoryId)
+        : isSet(object.repository_id)
+        ? globalThis.String(object.repository_id)
+        : "",
+      expectedConnectionRevision: isSet(object.expectedConnectionRevision)
+        ? globalThis.String(object.expectedConnectionRevision)
+        : isSet(object.expected_connection_revision)
+        ? globalThis.String(object.expected_connection_revision)
+        : "0",
+      registryConnectionId: isSet(object.registryConnectionId)
+        ? globalThis.String(object.registryConnectionId)
+        : isSet(object.registry_connection_id)
+        ? globalThis.String(object.registry_connection_id)
+        : "",
+      signerId: isSet(object.signerId)
+        ? globalThis.String(object.signerId)
+        : isSet(object.signer_id)
+        ? globalThis.String(object.signer_id)
+        : "",
+      platform: isSet(object.platform) ? globalThis.String(object.platform) : "",
+      maxSeconds: isSet(object.maxSeconds)
+        ? globalThis.Number(object.maxSeconds)
+        : isSet(object.max_seconds)
+        ? globalThis.Number(object.max_seconds)
+        : 0,
+      maxBuilds: isSet(object.maxBuilds)
+        ? globalThis.Number(object.maxBuilds)
+        : isSet(object.max_builds)
+        ? globalThis.Number(object.max_builds)
+        : 0,
+      allowBuild: isSet(object.allowBuild)
+        ? globalThis.Boolean(object.allowBuild)
+        : isSet(object.allow_build)
+        ? globalThis.Boolean(object.allow_build)
+        : false,
+      allowReplace: isSet(object.allowReplace)
+        ? globalThis.Boolean(object.allowReplace)
+        : isSet(object.allow_replace)
+        ? globalThis.Boolean(object.allow_replace)
+        : false,
+    };
+  },
+
+  toJSON(message: StartRepositoryRuntimeRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.repositoryId !== "") {
+      obj.repositoryId = message.repositoryId;
+    }
+    if (message.expectedConnectionRevision !== "0") {
+      obj.expectedConnectionRevision = message.expectedConnectionRevision;
+    }
+    if (message.registryConnectionId !== "") {
+      obj.registryConnectionId = message.registryConnectionId;
+    }
+    if (message.signerId !== "") {
+      obj.signerId = message.signerId;
+    }
+    if (message.platform !== "") {
+      obj.platform = message.platform;
+    }
+    if (message.maxSeconds !== 0) {
+      obj.maxSeconds = Math.round(message.maxSeconds);
+    }
+    if (message.maxBuilds !== 0) {
+      obj.maxBuilds = Math.round(message.maxBuilds);
+    }
+    if (message.allowBuild !== false) {
+      obj.allowBuild = message.allowBuild;
+    }
+    if (message.allowReplace !== false) {
+      obj.allowReplace = message.allowReplace;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<StartRepositoryRuntimeRequest>): StartRepositoryRuntimeRequest {
+    return StartRepositoryRuntimeRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<StartRepositoryRuntimeRequest>): StartRepositoryRuntimeRequest {
+    const message = createBaseStartRepositoryRuntimeRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.repositoryId = object.repositoryId ?? "";
+    message.expectedConnectionRevision = object.expectedConnectionRevision ?? "0";
+    message.registryConnectionId = object.registryConnectionId ?? "";
+    message.signerId = object.signerId ?? "";
+    message.platform = object.platform ?? "";
+    message.maxSeconds = object.maxSeconds ?? 0;
+    message.maxBuilds = object.maxBuilds ?? 0;
+    message.allowBuild = object.allowBuild ?? false;
+    message.allowReplace = object.allowReplace ?? false;
+    return message;
+  },
+};
+
+function createBaseRepositoryRuntimeRun(): RepositoryRuntimeRun {
+  return {
+    id: "",
+    idempotencyKey: "",
+    settings: undefined,
+    state: "",
+    safeReason: "",
+    commitSha: "",
+    inspectionId: "",
+    preparationId: "",
+  };
+}
+
+export const RepositoryRuntimeRun: MessageFns<RepositoryRuntimeRun> = {
+  encode(message: RepositoryRuntimeRun, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(18).string(message.idempotencyKey);
+    }
+    if (message.settings !== undefined) {
+      StartRepositoryRuntimeRequest.encode(message.settings, writer.uint32(26).fork()).join();
+    }
+    if (message.state !== "") {
+      writer.uint32(34).string(message.state);
+    }
+    if (message.safeReason !== "") {
+      writer.uint32(42).string(message.safeReason);
+    }
+    if (message.commitSha !== "") {
+      writer.uint32(50).string(message.commitSha);
+    }
+    if (message.inspectionId !== "") {
+      writer.uint32(58).string(message.inspectionId);
+    }
+    if (message.preparationId !== "") {
+      writer.uint32(66).string(message.preparationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RepositoryRuntimeRun {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRepositoryRuntimeRun();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.settings = StartRepositoryRuntimeRequest.decode(reader, reader.uint32());
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.safeReason = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.commitSha = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.inspectionId = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.preparationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RepositoryRuntimeRun {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      settings: isSet(object.settings) ? StartRepositoryRuntimeRequest.fromJSON(object.settings) : undefined,
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+      safeReason: isSet(object.safeReason)
+        ? globalThis.String(object.safeReason)
+        : isSet(object.safe_reason)
+        ? globalThis.String(object.safe_reason)
+        : "",
+      commitSha: isSet(object.commitSha)
+        ? globalThis.String(object.commitSha)
+        : isSet(object.commit_sha)
+        ? globalThis.String(object.commit_sha)
+        : "",
+      inspectionId: isSet(object.inspectionId)
+        ? globalThis.String(object.inspectionId)
+        : isSet(object.inspection_id)
+        ? globalThis.String(object.inspection_id)
+        : "",
+      preparationId: isSet(object.preparationId)
+        ? globalThis.String(object.preparationId)
+        : isSet(object.preparation_id)
+        ? globalThis.String(object.preparation_id)
+        : "",
+    };
+  },
+
+  toJSON(message: RepositoryRuntimeRun): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.settings !== undefined) {
+      obj.settings = StartRepositoryRuntimeRequest.toJSON(message.settings);
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    if (message.safeReason !== "") {
+      obj.safeReason = message.safeReason;
+    }
+    if (message.commitSha !== "") {
+      obj.commitSha = message.commitSha;
+    }
+    if (message.inspectionId !== "") {
+      obj.inspectionId = message.inspectionId;
+    }
+    if (message.preparationId !== "") {
+      obj.preparationId = message.preparationId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RepositoryRuntimeRun>): RepositoryRuntimeRun {
+    return RepositoryRuntimeRun.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RepositoryRuntimeRun>): RepositoryRuntimeRun {
+    const message = createBaseRepositoryRuntimeRun();
+    message.id = object.id ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.settings = (object.settings !== undefined && object.settings !== null)
+      ? StartRepositoryRuntimeRequest.fromPartial(object.settings)
+      : undefined;
+    message.state = object.state ?? "";
+    message.safeReason = object.safeReason ?? "";
+    message.commitSha = object.commitSha ?? "";
+    message.inspectionId = object.inspectionId ?? "";
+    message.preparationId = object.preparationId ?? "";
+    return message;
+  },
+};
+
+function createBaseStartRepositoryRuntimeResponse(): StartRepositoryRuntimeResponse {
+  return { run: undefined };
+}
+
+export const StartRepositoryRuntimeResponse: MessageFns<StartRepositoryRuntimeResponse> = {
+  encode(message: StartRepositoryRuntimeResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.run !== undefined) {
+      RepositoryRuntimeRun.encode(message.run, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StartRepositoryRuntimeResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseStartRepositoryRuntimeResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.run = RepositoryRuntimeRun.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): StartRepositoryRuntimeResponse {
+    return { run: isSet(object.run) ? RepositoryRuntimeRun.fromJSON(object.run) : undefined };
+  },
+
+  toJSON(message: StartRepositoryRuntimeResponse): unknown {
+    const obj: any = {};
+    if (message.run !== undefined) {
+      obj.run = RepositoryRuntimeRun.toJSON(message.run);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<StartRepositoryRuntimeResponse>): StartRepositoryRuntimeResponse {
+    return StartRepositoryRuntimeResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<StartRepositoryRuntimeResponse>): StartRepositoryRuntimeResponse {
+    const message = createBaseStartRepositoryRuntimeResponse();
+    message.run = (object.run !== undefined && object.run !== null)
+      ? RepositoryRuntimeRun.fromPartial(object.run)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetRepositoryRuntimeRequest(): GetRepositoryRuntimeRequest {
+  return { repositoryId: "" };
+}
+
+export const GetRepositoryRuntimeRequest: MessageFns<GetRepositoryRuntimeRequest> = {
+  encode(message: GetRepositoryRuntimeRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repositoryId !== "") {
+      writer.uint32(10).string(message.repositoryId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRepositoryRuntimeRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRepositoryRuntimeRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositoryId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRepositoryRuntimeRequest {
+    return {
+      repositoryId: isSet(object.repositoryId)
+        ? globalThis.String(object.repositoryId)
+        : isSet(object.repository_id)
+        ? globalThis.String(object.repository_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetRepositoryRuntimeRequest): unknown {
+    const obj: any = {};
+    if (message.repositoryId !== "") {
+      obj.repositoryId = message.repositoryId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRepositoryRuntimeRequest>): GetRepositoryRuntimeRequest {
+    return GetRepositoryRuntimeRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRepositoryRuntimeRequest>): GetRepositoryRuntimeRequest {
+    const message = createBaseGetRepositoryRuntimeRequest();
+    message.repositoryId = object.repositoryId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetRepositoryRuntimeResponse(): GetRepositoryRuntimeResponse {
+  return { run: undefined };
+}
+
+export const GetRepositoryRuntimeResponse: MessageFns<GetRepositoryRuntimeResponse> = {
+  encode(message: GetRepositoryRuntimeResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.run !== undefined) {
+      RepositoryRuntimeRun.encode(message.run, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRepositoryRuntimeResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRepositoryRuntimeResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.run = RepositoryRuntimeRun.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRepositoryRuntimeResponse {
+    return { run: isSet(object.run) ? RepositoryRuntimeRun.fromJSON(object.run) : undefined };
+  },
+
+  toJSON(message: GetRepositoryRuntimeResponse): unknown {
+    const obj: any = {};
+    if (message.run !== undefined) {
+      obj.run = RepositoryRuntimeRun.toJSON(message.run);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRepositoryRuntimeResponse>): GetRepositoryRuntimeResponse {
+    return GetRepositoryRuntimeResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRepositoryRuntimeResponse>): GetRepositoryRuntimeResponse {
+    const message = createBaseGetRepositoryRuntimeResponse();
+    message.run = (object.run !== undefined && object.run !== null)
+      ? RepositoryRuntimeRun.fromPartial(object.run)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetRepositoryRuntimeReceiptRequest(): GetRepositoryRuntimeReceiptRequest {
+  return { idempotencyKey: "" };
+}
+
+export const GetRepositoryRuntimeReceiptRequest: MessageFns<GetRepositoryRuntimeReceiptRequest> = {
+  encode(message: GetRepositoryRuntimeReceiptRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRepositoryRuntimeReceiptRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRepositoryRuntimeReceiptRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRepositoryRuntimeReceiptRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+    };
+  },
+
+  toJSON(message: GetRepositoryRuntimeReceiptRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRepositoryRuntimeReceiptRequest>): GetRepositoryRuntimeReceiptRequest {
+    return GetRepositoryRuntimeReceiptRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRepositoryRuntimeReceiptRequest>): GetRepositoryRuntimeReceiptRequest {
+    const message = createBaseGetRepositoryRuntimeReceiptRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    return message;
+  },
+};
+
+function createBaseGetRepositoryRuntimeReceiptResponse(): GetRepositoryRuntimeReceiptResponse {
+  return { run: undefined };
+}
+
+export const GetRepositoryRuntimeReceiptResponse: MessageFns<GetRepositoryRuntimeReceiptResponse> = {
+  encode(message: GetRepositoryRuntimeReceiptResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.run !== undefined) {
+      RepositoryRuntimeRun.encode(message.run, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRepositoryRuntimeReceiptResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRepositoryRuntimeReceiptResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.run = RepositoryRuntimeRun.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRepositoryRuntimeReceiptResponse {
+    return { run: isSet(object.run) ? RepositoryRuntimeRun.fromJSON(object.run) : undefined };
+  },
+
+  toJSON(message: GetRepositoryRuntimeReceiptResponse): unknown {
+    const obj: any = {};
+    if (message.run !== undefined) {
+      obj.run = RepositoryRuntimeRun.toJSON(message.run);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRepositoryRuntimeReceiptResponse>): GetRepositoryRuntimeReceiptResponse {
+    return GetRepositoryRuntimeReceiptResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRepositoryRuntimeReceiptResponse>): GetRepositoryRuntimeReceiptResponse {
+    const message = createBaseGetRepositoryRuntimeReceiptResponse();
+    message.run = (object.run !== undefined && object.run !== null)
+      ? RepositoryRuntimeRun.fromPartial(object.run)
+      : undefined;
+    return message;
+  },
+};
+
 /** Trusted local-operator setup for separate runtime preparation capabilities. */
 export type RuntimePreparationServiceService = typeof RuntimePreparationServiceService;
 export const RuntimePreparationServiceService = {
+  startRepositoryRuntime: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/StartRepositoryRuntime" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: StartRepositoryRuntimeRequest): Buffer =>
+      Buffer.from(StartRepositoryRuntimeRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): StartRepositoryRuntimeRequest => StartRepositoryRuntimeRequest.decode(value),
+    responseSerialize: (value: StartRepositoryRuntimeResponse): Buffer =>
+      Buffer.from(StartRepositoryRuntimeResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): StartRepositoryRuntimeResponse =>
+      StartRepositoryRuntimeResponse.decode(value),
+  },
+  getRepositoryRuntime: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/GetRepositoryRuntime" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetRepositoryRuntimeRequest): Buffer =>
+      Buffer.from(GetRepositoryRuntimeRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetRepositoryRuntimeRequest => GetRepositoryRuntimeRequest.decode(value),
+    responseSerialize: (value: GetRepositoryRuntimeResponse): Buffer =>
+      Buffer.from(GetRepositoryRuntimeResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetRepositoryRuntimeResponse => GetRepositoryRuntimeResponse.decode(value),
+  },
+  getRepositoryRuntimeReceipt: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/GetRepositoryRuntimeReceipt" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetRepositoryRuntimeReceiptRequest): Buffer =>
+      Buffer.from(GetRepositoryRuntimeReceiptRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetRepositoryRuntimeReceiptRequest =>
+      GetRepositoryRuntimeReceiptRequest.decode(value),
+    responseSerialize: (value: GetRepositoryRuntimeReceiptResponse): Buffer =>
+      Buffer.from(GetRepositoryRuntimeReceiptResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetRepositoryRuntimeReceiptResponse =>
+      GetRepositoryRuntimeReceiptResponse.decode(value),
+  },
   provisionRuntimeSigner: {
     path: "/ayni.orchestrator.v1.RuntimePreparationService/ProvisionRuntimeSigner" as const,
     requestStream: false as const,
@@ -4071,6 +4980,9 @@ export const RuntimePreparationServiceService = {
 } as const;
 
 export interface RuntimePreparationServiceServer extends UntypedServiceImplementation {
+  startRepositoryRuntime: handleUnaryCall<StartRepositoryRuntimeRequest, StartRepositoryRuntimeResponse>;
+  getRepositoryRuntime: handleUnaryCall<GetRepositoryRuntimeRequest, GetRepositoryRuntimeResponse>;
+  getRepositoryRuntimeReceipt: handleUnaryCall<GetRepositoryRuntimeReceiptRequest, GetRepositoryRuntimeReceiptResponse>;
   provisionRuntimeSigner: handleUnaryCall<ProvisionRuntimeSignerRequest, ProvisionRuntimeSignerResponse>;
   recoverRuntimeSignerProvisioning: handleUnaryCall<
     RecoverRuntimeSignerProvisioningRequest,
@@ -4092,6 +5004,51 @@ export interface RuntimePreparationServiceServer extends UntypedServiceImplement
 }
 
 export interface RuntimePreparationServiceClient extends Client {
+  startRepositoryRuntime(
+    request: StartRepositoryRuntimeRequest,
+    callback: (error: ServiceError | null, response: StartRepositoryRuntimeResponse) => void,
+  ): ClientUnaryCall;
+  startRepositoryRuntime(
+    request: StartRepositoryRuntimeRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: StartRepositoryRuntimeResponse) => void,
+  ): ClientUnaryCall;
+  startRepositoryRuntime(
+    request: StartRepositoryRuntimeRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: StartRepositoryRuntimeResponse) => void,
+  ): ClientUnaryCall;
+  getRepositoryRuntime(
+    request: GetRepositoryRuntimeRequest,
+    callback: (error: ServiceError | null, response: GetRepositoryRuntimeResponse) => void,
+  ): ClientUnaryCall;
+  getRepositoryRuntime(
+    request: GetRepositoryRuntimeRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetRepositoryRuntimeResponse) => void,
+  ): ClientUnaryCall;
+  getRepositoryRuntime(
+    request: GetRepositoryRuntimeRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetRepositoryRuntimeResponse) => void,
+  ): ClientUnaryCall;
+  getRepositoryRuntimeReceipt(
+    request: GetRepositoryRuntimeReceiptRequest,
+    callback: (error: ServiceError | null, response: GetRepositoryRuntimeReceiptResponse) => void,
+  ): ClientUnaryCall;
+  getRepositoryRuntimeReceipt(
+    request: GetRepositoryRuntimeReceiptRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetRepositoryRuntimeReceiptResponse) => void,
+  ): ClientUnaryCall;
+  getRepositoryRuntimeReceipt(
+    request: GetRepositoryRuntimeReceiptRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetRepositoryRuntimeReceiptResponse) => void,
+  ): ClientUnaryCall;
   provisionRuntimeSigner(
     request: ProvisionRuntimeSignerRequest,
     callback: (error: ServiceError | null, response: ProvisionRuntimeSignerResponse) => void,

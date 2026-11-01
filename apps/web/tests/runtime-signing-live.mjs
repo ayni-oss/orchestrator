@@ -24,8 +24,8 @@ try{
  for(const mode of ['generate','import']){
   activeMode=mode;checkpoint('fill_public_intent');
   await page.getByRole('button',{name:'Add signing key',exact:true}).click();
-  const keyId=`qualification-${mode}-${randomUUID().slice(0,8)}`;const displayName=`Synthetic signer ${keyId}`;
-  await page.getByLabel('Name',{exact:true}).fill(displayName);await page.getByLabel('Key ID',{exact:true}).fill(keyId);
+  const keyId=`qualification-${mode}-${randomUUID().slice(0,8)}`;const displayName=keyId;
+  await page.getByLabel('Name',{exact:true}).fill(keyId);
   if(mode==='import'){
    await page.getByRole('radio',{name:'Import an existing key',exact:true}).check();
    await page.getByLabel('Signing seed file',{exact:true}).setInputFiles({name:'public-rfc8032-seed.txt',mimeType:'text/plain',buffer:Buffer.from(seed+'\n')});

@@ -7,7 +7,7 @@ import {once} from 'node:events';
 import {randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {chromium} from 'playwright';
-import {exerciseRuntimePreparation,exerciseDefaultBranchRecheck} from './runtime-preparation-ui.mjs';
+import {exerciseRuntimePreparation,exerciseDefaultBranchRecheck,exerciseRepositoryOnboarding} from './runtime-preparation-ui.mjs';
 
 // This fixture qualifies UI command/recovery behavior only, never runtime readiness.
 test('runtime preparation UI retains explicit grants and recovers exact commands', {timeout:120000}, async()=>{
@@ -28,6 +28,7 @@ test('runtime preparation UI retains explicit grants and recovers exact commands
   browser=await chromium.launch({headless:true});const page=await browser.newPage();
   await exerciseRuntimePreparation(page,origin,repositoryId);
   await exerciseDefaultBranchRecheck(page,origin,repositoryId);
+  await exerciseRepositoryOnboarding(page,origin,repositoryId);
  } finally {
   await browser?.close();
   if(child&&child.exitCode===null){process.kill(-child.pid,'SIGTERM');await once(child,'exit');}

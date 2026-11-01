@@ -29,6 +29,12 @@ test('multiple named signers survive reload, edit independently and recover with
   const data=body?JSON.parse(body):{};requests.push({method:request.url,data});
   function send(value,status=200){response.writeHead(status,{'Content-Type':'application/json'});response.end(JSON.stringify(value));}
   if(request.url==='/api/ListRuntimeSigners'){if(failList){failList=false;return send({message:'synthetic list unavailable'},503);}return send({signers});}
+  if(request.url==='/api/SaveRuntimeSigner'){
+   const index=signers.findIndex(value=>value.id===data.id);const current=signers[index];
+   if(!current||current.revision!==data.expectedRevision)return send({message:'stale signer'},409);
+   const signer={...current,...data,revision:String(Number(current.revision)+1),activeRevision:randomUUID()};
+   signers[index]=signer;return send({signer});
+  }
   if(request.url==='/api/ProvisionRuntimeSigner'){
    if(rejectNext){rejectNext=false;return send({message:'synthetic public validation rejection'},400);}
    let operation=operations.get(data.idempotencyKey);
@@ -55,7 +61,7 @@ test('multiple named signers survive reload, edit independently and recover with
   let ready=false;for(let i=0;i<120;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await delay(250);}assert.ok(ready,'UI fixture server did not start');
   browser=await chromium.launch({headless:true});const page=await browser.newPage();
   const visit=async()=>{await page.goto(`${origin}/settings/runtime-signing`);await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');await page.getByRole('button',{name:'Refresh signers',exact:true}).waitFor();};
-  const fill=async(name,key)=>{await page.getByLabel('Name',{exact:true}).fill(name);await page.getByLabel('Key ID',{exact:true}).fill(key);};
+  const fill=async(_label,key)=>{await page.getByLabel('Name',{exact:true}).fill(key);};
   const privateAbsent=async()=>{
    const stored=await page.evaluate(()=>[...Object.values(localStorage),...Object.values(sessionStorage)].join('\n'));
    const inputValues=await page.locator('input').evaluateAll(inputs=>inputs.map(input=>input.value));
@@ -64,7 +70,7 @@ test('multiple named signers survive reload, edit independently and recover with
    for(const request of requests.filter(value=>value.method==='/api/RecoverRuntimeSignerProvisioning'))assert.deepEqual(Object.keys(request.data),['idempotencyKey']);
   };
   await visit();assert.equal(await page.getByLabel('Name',{exact:true}).count(),0);await page.getByRole('button',{name:'Add signing key',exact:true}).click();assert.equal(await page.getByRole('radio',{name:'Generate a new key',exact:true}).isChecked(),true);
-  await fill('Generated signer','generated.fixture');
+  await fill('generated.fixture','generated.fixture');
   await page.route('**/api/ProvisionRuntimeSigner',async route=>{await route.fetch();await route.abort('failed');});
   await page.getByRole('button',{name:'Generate signer',exact:true}).click();
   await page.getByRole('region',{name:'Recover signer setup',exact:true}).waitFor();
@@ -73,7 +79,7 @@ test('multiple named signers survive reload, edit independently and recover with
   const retained=JSON.parse(await page.evaluate(()=>sessionStorage.getItem('ayni.runtime.signer.provisioning.pending')));
   assert.deepEqual(Object.keys(retained).sort(),['displayName','idempotencyKey','keyId','mode']);
   await privateAbsent();await page.unroute('**/api/ProvisionRuntimeSigner');await page.reload();
-  const generatedCard=page.getByRole('region',{name:'Generated signer',exact:true});await generatedCard.waitFor();
+  const generatedCard=page.getByRole('region',{name:'generated.fixture',exact:true});await generatedCard.waitFor();
   // The list card can precede receipt acceptance; wait for recovery to commit.
   await page.waitForFunction(()=>sessionStorage.getItem('ayni.runtime.signer.provisioning.pending')===null);
   await page.getByRole('button',{name:'Add signing key',exact:true}).waitFor();
@@ -81,7 +87,7 @@ test('multiple named signers survive reload, edit independently and recover with
   assert.equal(generated,1);assert.equal(requests.filter(value=>value.method==='/api/ProvisionRuntimeSigner').length,1);
   await generatedCard.locator('summary').click();await generatedCard.getByText('"generated.fixture" = "'+publicKey+'"',{exact:false}).waitFor();
   assert.equal(await page.evaluate(()=>sessionStorage.getItem('ayni.runtime.signer.provisioning.pending')),null);
-  await page.getByRole('button',{name:'Add signing key',exact:true}).click();await page.getByRole('radio',{name:'Import an existing key',exact:true}).check();await fill('Imported signer','imported.fixture');
+  await page.getByRole('button',{name:'Add signing key',exact:true}).click();await page.getByRole('radio',{name:'Import an existing key',exact:true}).check();await fill('imported.fixture','imported.fixture');
   await page.getByLabel('Private signing seed',{exact:true}).fill(seed);
   const importPending=once(gateway,'import-pending');
   await page.getByRole('button',{name:'Import signer',exact:true}).click();await importPending;
@@ -97,22 +103,30 @@ test('multiple named signers survive reload, edit independently and recover with
   await page.getByLabel('Signing seed file',{exact:true}).setInputFiles({name:'synthetic-seed.txt',mimeType:'text/plain',buffer:Buffer.from(seed+'\n')});
   await page.waitForFunction(expected=>document.querySelector('#signer-seed')?.value===expected,seed);
   await page.getByRole('button',{name:'Resume signer setup',exact:true}).click();
-  const importedCard=page.getByRole('region',{name:'Imported signer',exact:true});await importedCard.waitFor();assert.equal(imported,1);await privateAbsent();
+  const importedCard=page.getByRole('region',{name:'imported.fixture',exact:true});await importedCard.waitFor();assert.equal(imported,1);await privateAbsent();
   await page.reload();await generatedCard.waitFor();await importedCard.waitFor();
-  await page.getByRole('button',{name:'Edit Generated signer',exact:true}).click();assert.equal(await page.getByLabel('Name',{exact:true}).inputValue(),'Generated signer');
+  await page.getByRole('button',{name:'Edit generated.fixture',exact:true}).click();assert.equal(await page.getByLabel('Name',{exact:true}).inputValue(),'generated.fixture');
   await page.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(await page.getByLabel('Name',{exact:true}).count(),0);
   assert.equal(await page.evaluate(()=>sessionStorage.getItem('ayni.runtime.signer.provisioning.pending')),null);
+  await page.getByRole('button',{name:'Edit generated.fixture',exact:true}).click();
+  await page.getByLabel('Name',{exact:true}).fill('project-2026');
+  assert.equal(await page.getByLabel('Key ID',{exact:true}).count(),0,'the name is the trust identity, not an independent label');
+  await page.getByRole('button',{name:'Save signer reference',exact:true}).click();
+  const namedCard=page.getByRole('region',{name:'project-2026',exact:true});await namedCard.waitFor();
+  const renamed=requests.filter(value=>value.method==='/api/SaveRuntimeSigner').at(-1).data;
+  assert.equal(renamed.keyId,'project-2026');assert.equal(renamed.displayName,'project-2026');assert.equal(renamed.publicKey,publicKey);
+  await namedCard.locator('summary').click();await namedCard.getByText('"project-2026" = "'+publicKey+'"',{exact:false}).waitFor();
   await page.getByRole('button',{name:'Add signing key',exact:true}).click();
   const beforeValidation=requests.filter(value=>value.method==='/api/ProvisionRuntimeSigner').length;
-  await fill('Reserved key','unsigned');await page.getByRole('button',{name:'Generate signer',exact:true}).click();await page.getByText(/Key ID unsigned is reserved/).waitFor();
-  await fill('   ','valid.fixture');await page.getByRole('button',{name:'Generate signer',exact:true}).click();await page.getByText(/Enter a shorter name/).waitFor();
+  await fill('Reserved key','unsigned');await page.getByRole('button',{name:'Generate signer',exact:true}).click();await page.getByText(/name unsigned is reserved/).waitFor();
+  await fill('   ','   ');await page.getByRole('button',{name:'Generate signer',exact:true}).click();await page.getByText(/Enter a shorter name/).waitFor();
   assert.equal(requests.filter(value=>value.method==='/api/ProvisionRuntimeSigner').length,beforeValidation);
   assert.equal(await page.evaluate(()=>sessionStorage.getItem('ayni.runtime.signer.provisioning.pending')),null);
   rejectNext=true;await fill('Rejected public name','rejected.fixture');await page.getByRole('button',{name:'Generate signer',exact:true}).click();await page.getByText(/signing input was rejected/).waitFor();
   const rejectedIntent=JSON.parse(await page.evaluate(()=>sessionStorage.getItem('ayni.runtime.signer.provisioning.pending')));
   assert.equal(await page.getByLabel('Name',{exact:true}).isDisabled(),true);
   await page.getByRole('button',{name:'Recover signer setup',exact:true}).click();await page.getByText(/rejected setup has no receipt/).waitFor();
-  await fill('Corrected signer','corrected.fixture');await page.getByRole('button',{name:'Resume signer setup',exact:true}).click();await page.getByRole('region',{name:'Corrected signer',exact:true}).waitFor();
+  await fill('corrected.fixture','corrected.fixture');await page.getByRole('button',{name:'Resume signer setup',exact:true}).click();await page.getByRole('region',{name:'corrected.fixture',exact:true}).waitFor();
   const correctedRequest=requests.filter(value=>value.method==='/api/ProvisionRuntimeSigner').at(-1).data;assert.equal(correctedRequest.idempotencyKey,rejectedIntent.idempotencyKey);assert.equal(correctedRequest.keyId,'corrected.fixture');
   await page.getByRole('button',{name:'Add signing key',exact:true}).click();await fill('Disabled setup','disabled.fixture');disabled=true;
   await page.getByRole('button',{name:'Generate signer',exact:true}).click();await page.getByText('Signer setup is disabled in this deployment. Ask the administrator to enable it, then recover this setup.',{exact:true}).waitFor();

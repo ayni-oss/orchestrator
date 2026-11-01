@@ -944,3 +944,6 @@ async fn local_immutable_tooling_is_admitted_but_registry_artifacts_remain_desti
     assert_eq!(f.cleanup(&op).await?.state, "cancelled");
     Ok(())
 }
+
+#[path = "runtime_preparations/onboarding.rs"]
+mod onboarding;

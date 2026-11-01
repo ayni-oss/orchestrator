@@ -25,6 +25,18 @@ impl WorkflowStore {
         input: Start<'_>,
         freeze: FreezeInputs,
     ) -> Result<Operation, StoreError> {
+        self.start_reviewed_runtime_preparation(input, freeze, None)
+            .await
+    }
+    /// Admit an onboarding run only against its reviewed registry and signer revisions.
+    /// # Errors
+    /// Reject stale public configuration atomically with preparation creation.
+    pub async fn start_reviewed_runtime_preparation(
+        &self,
+        input: Start<'_>,
+        freeze: FreezeInputs,
+        reviewed: Option<(u64, u64)>,
+    ) -> Result<Operation, StoreError> {
         validation::start(&input)?;
         let request_digest = digest(json(&input)?);
         let (mut client, driver) = crate::connect(&self.database_url).await?;
@@ -40,6 +52,11 @@ impl WorkflowStore {
         let id = new_id();
         let at = now(&tx).await?;
         let frozen = load_snapshot(&tx, &input, freeze, &id).await?;
+        if reviewed.is_some_and(|(registry, signer)| {
+            frozen.registry_connection_revision != registry || frozen.signer_revision != signer
+        }) {
+            return Err(StoreError::ConfigurationRevisionConflict);
+        }
         let encoded = json(&frozen)?;
         let frozen_digest = digest(&encoded);
         let deadline = integer(at + u64::from(input.max_seconds) * 1000)?;
