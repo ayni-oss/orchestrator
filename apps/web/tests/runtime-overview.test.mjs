@@ -10,7 +10,7 @@ test('runtime overview explains absent preparation and known configuration block
  assert.match(clean.nextAction,/Select the inspection/);
  const blocked=runtimeOverview({...base,registries:[],signers:[{enabled:true,keyId:'other'}],inspection:{...inspection,result:{trustKeyIds:['trusted'],findings:[{code:'ayni_version_unsupported',action:'Regenerate the lock with supported Ayni.'},{code:'adapter_discovery_pending',action:'Discovery still required.'}]}}});
  assert.equal(blocked.title,'Runtime setup needs attention');
- assert.deepEqual(blocked.issues,['Regenerate the lock with supported Ayni.','No enabled, validated runtime registry is available. Configure a registry connection.','No enabled signer matches this inspection’s trusted key IDs. Review signer trust in the committed Ayni policy and inspect the updated commit.']);
+ assert.deepEqual(blocked.issues,['Regenerate the lock with supported Ayni.','No enabled, validated runtime registry is available. Configure a registry connection.','The inspection trusts Key IDs: trusted. Enabled signers use: Signer (Key ID other). The Key ID and public key must both match the repository trust policy; a matching display name is not enough.']);
 });
 
 test('runtime readiness stays scoped to the inspected commit and platform',()=>{

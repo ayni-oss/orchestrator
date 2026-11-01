@@ -7,14 +7,14 @@ import {once} from 'node:events';
 import {randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {chromium} from 'playwright';
-import {exerciseRuntimePreparation} from './runtime-preparation-ui.mjs';
+import {exerciseRuntimePreparation,exerciseDefaultBranchRecheck} from './runtime-preparation-ui.mjs';
 
 // This fixture qualifies UI command/recovery behavior only, never runtime readiness.
 test('runtime preparation UI retains explicit grants and recovers exact commands', {timeout:120000}, async()=>{
  const repositoryId=randomUUID();
  const repository={id:repositoryId,connectionId:randomUUID(),installationId:'123',providerRepositoryId:'456',fullName:'fixture/runtime-ui',defaultBranch:'main',private:true,connectedAtUnixMs:String(Date.now())};
  const gateway=createServer((request,response)=>{
-  const body=request.url==='/api/ListRepositories'?{repositories:[repository]}:request.url==='/api/ListWorkspaces'?{workspaces:[]}:{};
+  const body=request.url==='/api/ListRepositories'?{repositories:[repository]}:request.url==='/api/ListWorkspaces'?{workspaces:[]}:request.url==='/api/ListConnections'?{connections:[{id:repository.connectionId,displayName:'Fixture GitHub',capability:'source_control',enabled:true,activeCredentialRevision:'credential',revision:'1'}]}:{};
   response.writeHead(200,{'Content-Type':'application/json'});response.end(JSON.stringify(body));
  });
  let child,browser;
@@ -27,6 +27,7 @@ test('runtime preparation UI retains explicit grants and recovers exact commands
   let ready=false;for(let i=0;i<120;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await delay(250);}assert.ok(ready,'UI fixture server did not start');
   browser=await chromium.launch({headless:true});const page=await browser.newPage();
   await exerciseRuntimePreparation(page,origin,repositoryId);
+  await exerciseDefaultBranchRecheck(page,origin,repositoryId);
  } finally {
   await browser?.close();
   if(child&&child.exitCode===null){process.kill(-child.pid,'SIGTERM');await once(child,'exit');}

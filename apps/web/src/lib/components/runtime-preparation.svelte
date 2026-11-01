@@ -9,7 +9,7 @@
  import { rpc, RpcError, type Connection } from '$lib/api';
  import { inspectionReasons, type Repository, type RepositoryInspection } from '$lib/repositories';
  import { runtimeOverview, runtimeStages, runtimeReasons, type RuntimePreparation, type RuntimeSigner, type RuntimeCommand } from '$lib/runtime-preparation';
- let { repo, inspection = null, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, refreshInspection }: { repo: Repository; inspection?: RepositoryInspection | null; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; refreshInspection?: () => Promise<void> } = $props();
+ let { repo, inspection = null, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false }: { repo: Repository; inspection?: RepositoryInspection | null; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean } = $props();
  let loaded = $state(false);
  let expanded = $state(false), busy = $state(false), error = $state('');
  let polling = false, mounted = false, historySequence = 0;
@@ -90,13 +90,14 @@
 </script>
 <section class="space-y-4 border-t pt-4" data-runtime-preparation={repo.id} aria-label={`Runtime preparation for ${repo.fullName}`}>
  <section class="space-y-3 rounded-xl border bg-card p-5" aria-label="Runtime status" aria-live="polite">
-  <h3 class="text-lg font-semibold">{overview.title}</h3>
-  <p class="text-sm text-muted-foreground">{overview.description}</p>
+  <h3 class="text-lg font-semibold">{checkingDefault ? 'Checking latest default branch' : overview.title}</h3>
+  <p class="text-sm text-muted-foreground">{checkingDefault ? "Resolving GitHub’s current default branch and inspecting its latest commit…" : overview.description}</p>
   {#if inspection || latestInspection}{@const checked = inspection || latestInspection!}<p class="text-xs text-muted-foreground">Saved inspection: {new Date(Number(checked.updatedAtUnixMs)).toLocaleString()}{checked.result?.ayniVersion ? ` · Ayni ${checked.result.ayniVersion}` : ''}</p>{/if}
-  {#if overview.issues.length}<div class="space-y-2"><h4 class="font-medium">Issues to resolve</h4><ul class="list-disc space-y-2 pl-5 text-sm">{#each overview.issues as issue (issue)}<li>{issue}</li>{/each}</ul></div>{/if}
-  {#if overview.nextAction}<p class="text-sm"><span class="font-medium">Next step:</span> {overview.nextAction}</p>{/if}
+  {#if overview.issues.length && !checkingDefault}<div class="space-y-2"><h4 class="font-medium">Issues to resolve</h4><ul class="list-disc space-y-2 break-words pl-5 text-sm">{#each overview.issues as issue (issue)}<li>{issue}</li>{/each}</ul></div>{/if}
+  {#if overview.nextAction && !checkingDefault}<p class="text-sm"><span class="font-medium">Next step:</span> {overview.nextAction}</p>{/if}
   <p class="text-xs text-muted-foreground">Readiness applies to an exact inspection and platform. Deployment prerequisites are checked when preparation is requested.</p>
-  <Button variant="outline" disabled={busy} onclick={() => perform(async () => { await refreshInspection?.(); await refresh(); })}>Refresh runtime status</Button>
+  <Button variant="outline" disabled={busy || recheckDisabled || checkingDefault} onclick={() => perform(async () => { await recheckDefaultBranch?.(); await refresh(); })}>Recheck default branch</Button>
+  <p class="text-xs text-muted-foreground">Each recheck resolves the current default branch from GitHub. Results and preparation requests retain their exact commit.</p>
  </section>
  <h3 class="font-semibold">Runtime preparation</h3>
  <p class="text-sm text-muted-foreground">Verify an immutable runtime for an inspected commit. Building and replacement use explicit allowances. Preparation starts no tasks.</p>

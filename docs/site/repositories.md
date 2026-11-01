@@ -61,8 +61,15 @@ the saved App connection or its installation access.
 Open a repository card and choose **Ayni runtime**. The tab loads saved status
 without starting a preparation. It shows the inspected commit, known setup issues
 and the next step before the preparation form. Inspection findings include their
-saved date and Ayni version. Choose **Refresh runtime status** to reload the saved
-inspection, preparation history and configuration.
+saved date and Ayni version. Choose **Recheck default branch** to resolve GitHub’s
+current default branch and inspect its latest commit. Each click resolves the
+branch again; cached repository metadata and a previously entered SHA do not
+choose the commit. Preparation history and configuration are refreshed afterward.
+
+If inspection is interrupted, recover or retry that exact request before another
+recheck. Recovery keeps its original SHA even if the branch has advanced. A new
+recheck creates a fresh request. You can still inspect a specific SHA explicitly
+in the inspection form.
 
 A ready result applies to the exact inspection and platform shown. It does not
 establish readiness for another commit. Interrupted commands show receipt recovery;

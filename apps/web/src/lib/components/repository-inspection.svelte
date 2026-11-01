@@ -14,6 +14,7 @@
  let busy = $state(false);
  let error = $state('');
  let inspectionLoaded = $state(false);
+ let checkingDefault = $state(false);
  let pending = $state<InspectRequest | null>(null);
  let inspections = $state.raw<RepositoryInspection[]>([]);
  let next = $state('');
@@ -56,6 +57,19 @@
   persist({ idempotencyKey: crypto.randomUUID(), repositoryId: repo.id, expectedConnectionRevision: connection.revision, commitSha });
   await resume();
  }
+ async function recheckDefaultBranch() {
+  if (!connection || pending) return;
+  checkingDefault = true; expanded = true;
+  runtimeInspection = null;
+  try {
+   const resolved = await rpc('ResolveRepositoryDefaultCommit', {repositoryId:repo.id, expectedConnectionRevision:connection.revision});
+   if (resolved.safeReason) throw new Error(inspectionReasons[resolved.safeReason] || 'The default branch could not be resolved. Retry when GitHub is available.');
+   if (!/^[a-f0-9]{40}$/.test(resolved.commitSha)) throw new Error('GitHub did not return an exact commit for the default branch.');
+   commitSha = resolved.commitSha;
+   persist({idempotencyKey:crypto.randomUUID(), repositoryId:repo.id, expectedConnectionRevision:connection.revision, commitSha:resolved.commitSha});
+   await resume();
+  } finally { checkingDefault = false; }
+ }
  async function recover() {
   if (!pending) return;
   const result = await rpc('GetRepositoryInspection', { idempotencyKey: pending.idempotencyKey });
@@ -74,7 +88,7 @@
  });
 </script>
 <div class="space-y-4" data-repository-inspection={repo.id}>
- <RuntimePreparation {repo} {connection} inspection={runtimeInspection} latestInspection={inspections[0] || null} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} refreshInspection={() => perform(() => load())}/>
+ <RuntimePreparation {repo} {connection} inspection={runtimeInspection} latestInspection={inspections[0] || null} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || !!pending || !canInspect} recheckDefaultBranch={() => perform(recheckDefaultBranch)}/>
  <div class="space-y-1"><h3 class="font-semibold">Inspect, then prepare a runtime</h3><p class="text-sm text-muted-foreground">First inspect the Ayni configuration at an exact commit. Then select a completed inspection to verify or build, certify and publish its runtime. Only a verified preparation can report runtime readiness.</p></div>
  {#if !expanded}
   <Button variant="outline" onclick={() => perform(open)} disabled={busy}>Inspect Ayni setup</Button>

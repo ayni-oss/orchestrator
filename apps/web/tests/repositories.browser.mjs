@@ -22,6 +22,10 @@ test('repository catalog and project associations use retained canonical receipt
   await page.getByRole('region',{name:'fixture/browser-repository',exact:true}).first().waitFor();
   await page.locator(`main a[href="/repositories/${fixture}"]`).click();
   await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
+  const resolved=await page.request.post(`${origin}/api/ResolveRepositoryDefaultCommit`,{headers:{'x-console-request':'1'},data:{repositoryId:fixture,expectedConnectionRevision:'1'}});
+  assert.equal(resolved.status(),200);assert.equal((await resolved.json()).safeReason,'github_key_invalid');assert.equal((await resolved.json()).commitSha || '','');
+  const staleResolve=await page.request.post(`${origin}/api/ResolveRepositoryDefaultCommit`,{headers:{'x-console-request':'1'},data:{repositoryId:fixture,expectedConnectionRevision:'999'}});
+  assert.equal(staleResolve.status(),409);
   const inspectionCard = page.locator(`[data-repository-inspection="${fixture}"]`);
   await inspectionCard.getByRole('button',{name:'Inspect Ayni setup',exact:true}).click();
   await inspectionCard.getByText('Static inspection complete',{exact:true}).waitFor();

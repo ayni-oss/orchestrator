@@ -115,3 +115,47 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  for(const method of ['ListRepositoryInspections','ListConnections','ListRuntimeSigners','ListRuntimePreparations','GetRuntimePreparation','GetRuntimePreparationReceipt','StartRuntimePreparation','RetryRuntimePreparation','CancelRuntimePreparation']) await page.unroute(`**/api/${method}`);
  console.log('runtime-preparation-ui: intercepted UI contract coverage passed for explicit grants, lost-response receipt recovery, current-generation publication reconciliation, separate cleanup gate and cancellation; no registry/build qualification claimed.');
 }
+
+export async function exerciseDefaultBranchRecheck(page, origin, repositoryId) {
+ let head='a'.repeat(40), resolutions=0, failResolution=false, loseResponse=false;
+ let inspections=[], requests=[];
+ await page.route('**/api/ListRepositoryInspections',route=>route.fulfill({json:{inspections}}));
+ await page.route('**/api/ListRuntimePreparations',route=>route.fulfill({json:{operations:[]}}));
+ await page.route('**/api/ResolveRepositoryDefaultCommit',route=>{
+  const request=route.request().postDataJSON();
+  assert.equal(request.repositoryId,repositoryId);assert.equal(request.expectedConnectionRevision,'1');
+  assert.equal('commitSha' in request,false);assert.equal('defaultBranch' in request,false);
+  resolutions++;
+  return route.fulfill({json:failResolution?{safeReason:'github_unavailable'}:{defaultBranch:'release/current',commitSha:head}});
+ });
+ await page.route('**/api/InspectRepository',async route=>{
+  const request=route.request().postDataJSON();requests.push(request);
+  let inspection=inspections.find(value=>value.idempotencyKey===request.idempotencyKey);
+  if(!inspection){inspection={id:randomUUID(),idempotencyKey:request.idempotencyKey,repositoryId,connectionRevision:'1',commitSha:request.commitSha,state:'completed',updatedAtUnixMs:String(Date.now()),result:{ayniVersion:'0.17.1',trustKeyIds:['fixture'],findings:[]}};inspections=[inspection,...inspections];}
+  if(loseResponse){loseResponse=false;await route.abort('failed');}else await route.fulfill({json:{inspection}});
+ });
+ await page.goto(`${origin}/repositories/${repositoryId}?tab=runtime`);
+ const summary=page.getByRole('region',{name:'Runtime status',exact:true});
+ const recheck=summary.getByRole('button',{name:'Recheck default branch',exact:true});
+ await recheck.click();
+ await summary.getByText(`No preparation is saved for inspected commit ${'a'.repeat(12)}.`,{exact:true}).waitFor();
+ assert.equal(resolutions,1);assert.equal(requests[0].commitSha,head);
+ head='b'.repeat(40);loseResponse=true;
+ await recheck.click();
+ await page.getByRole('button',{name:'Retry same inspection',exact:true}).waitFor();
+ assert.equal(resolutions,2);assert.equal(requests[1].commitSha,head);
+ head='c'.repeat(40);
+ await page.getByRole('button',{name:'Retry same inspection',exact:true}).click();
+ await summary.getByText(`No preparation is saved for inspected commit ${'b'.repeat(12)}.`,{exact:true}).waitFor();
+ assert.deepEqual(requests[2],requests[1],'inspection retry must preserve the exact commit and key');
+ assert.equal(resolutions,2,'retry must not resolve a moving branch');
+ await recheck.click();
+ await summary.getByText(`No preparation is saved for inspected commit ${'c'.repeat(12)}.`,{exact:true}).waitFor();
+ assert.equal(resolutions,3);assert.equal(requests[3].commitSha,head);
+ assert.notEqual(requests[3].idempotencyKey,requests[1].idempotencyKey);
+ failResolution=true;
+ await recheck.click();
+ await summary.getByText('Runtime status unavailable',{exact:true}).waitFor();
+ assert.equal(resolutions,4);assert.equal(requests.length,4,'resolution failure must not inspect a cached commit');
+ for(const method of ['ListRepositoryInspections','ListRuntimePreparations','ResolveRepositoryDefaultCommit','InspectRepository']) await page.unroute(`**/api/${method}`);
+}

@@ -32,7 +32,7 @@ mod tests {
     use prost_types::FileDescriptorSet;
     use std::collections::{BTreeMap, BTreeSet};
 
-    const REPOSITORY_METHODS: [&str; 11] = [
+    const REPOSITORY_METHODS: [&str; 12] = [
         "ListGithubInstallations",
         "ListGithubRepositories",
         "ConnectRepository",
@@ -41,6 +41,7 @@ mod tests {
         "ListRepositories",
         "AssociateProjectRepository",
         "ListProjectRepositories",
+        "ResolveRepositoryDefaultCommit",
         "InspectRepository",
         "GetRepositoryInspection",
         "ListRepositoryInspections",

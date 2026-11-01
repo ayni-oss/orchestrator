@@ -82,7 +82,7 @@ export function runtimeOverview(input: {
  const operation = candidate ? input.operations.find(value => value.inspectionId === candidate.id) : input.operations[0];
  if (input.rejected) return {title:'Preparation request rejected',description:input.error,issues:[],nextAction:'Review the rejected command below, dismiss it and correct the selection before trying again.'};
  if (input.pending) return {title:'Preparation response needs recovery',description:'The last command has an uncertain response. Its retained receipt determines whether work started.',issues:[],nextAction:'Recover the preparation receipt below before starting another command.'};
- if (input.error || input.inspectionError) return {title:'Runtime status unavailable',description:input.error || input.inspectionError,issues:[],nextAction:'Refresh runtime status to reload retained evidence.'};
+ if (input.error || input.inspectionError) return {title:'Runtime status unavailable',description:input.error || input.inspectionError,issues:[],nextAction:'Retry the default-branch recheck when access is restored.'};
  if (!input.loaded || input.inspectionLoading) return {title:'Checking runtime status',description:'Loading saved preparations, inspection results and configuration.',issues:[],nextAction:''};
  if (operation) {
   const description = `${operation.sourceCommit ? `Commit ${operation.sourceCommit.slice(0,12)} · ` : ''}${operation.platform} · ${runtimeStages[operation.stage] || operation.stage}`;
@@ -104,7 +104,7 @@ export function runtimeOverview(input: {
  if (!input.registries.some(value => value.enabled && value.activeCredentialRevision)) issues.push('No enabled, validated runtime registry is available. Configure a registry connection.');
  const enabledSigners = input.signers.filter(value => value.enabled);
  if (!enabledSigners.length) issues.push('No enabled runtime signer is available. Configure a signer and commit its public trust entry.');
- else if (candidate?.result?.trustKeyIds?.length && !enabledSigners.some(value => candidate.result!.trustKeyIds!.includes(value.keyId))) issues.push('No enabled signer matches this inspection’s trusted key IDs. Review signer trust in the committed Ayni policy and inspect the updated commit.');
+ else if (candidate?.result?.trustKeyIds?.length && !enabledSigners.some(value => candidate.result!.trustKeyIds!.includes(value.keyId))) issues.push(`The inspection trusts Key IDs: ${candidate.result.trustKeyIds.join(', ')}. Enabled signers use: ${enabledSigners.map(value => `${value.displayName || 'Signer'} (Key ID ${value.keyId})`).join('; ')}. The Key ID and public key must both match the repository trust policy; a matching display name is not enough.`);
  return {title:issues.length ? 'Runtime setup needs attention' : 'Runtime not prepared',description:candidate ? `No preparation is saved for inspected commit ${candidate.commitSha.slice(0,12)}.` : 'No runtime preparation has been started for this repository.',issues:[...new Set(issues)],
  nextAction:issues.length ? 'Resolve the setup issues, inspect the updated commit and select its completed inspection below.' : 'Select the inspection below, then choose a registry and signer to verify or prepare its runtime.'};
 }

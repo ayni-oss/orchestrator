@@ -11,6 +11,7 @@ service RepositoryService {
   rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse);
   rpc AssociateProjectRepository(AssociateProjectRepositoryRequest) returns (AssociateProjectRepositoryResponse);
   rpc ListProjectRepositories(ListProjectRepositoriesRequest) returns (ListProjectRepositoriesResponse);
+  rpc ResolveRepositoryDefaultCommit(ResolveRepositoryDefaultCommitRequest) returns (ResolveRepositoryDefaultCommitResponse);
   rpc InspectRepository(InspectRepositoryRequest) returns (InspectRepositoryResponse);
   rpc GetRepositoryInspection(GetRepositoryInspectionRequest) returns (GetRepositoryInspectionResponse);
   rpc ListRepositoryInspections(ListRepositoryInspectionsRequest) returns (ListRepositoryInspectionsResponse);
@@ -177,4 +178,16 @@ message ListRepositoryInspectionsRequest {
 message ListRepositoryInspectionsResponse {
   repeated RepositoryInspection inspections = 1;
   string next_after_id = 2;
+}
+
+// Resolve fresh provider metadata and the current default-branch head without inspecting it.
+// Inspection must freeze the returned commit through InspectRepository.
+message ResolveRepositoryDefaultCommitRequest {
+  string repository_id = 1;
+  uint64 expected_connection_revision = 2;
+}
+message ResolveRepositoryDefaultCommitResponse {
+  string default_branch = 1;
+  string commit_sha = 2;
+  string safe_reason = 3;
 }

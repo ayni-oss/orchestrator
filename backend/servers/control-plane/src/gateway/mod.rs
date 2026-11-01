@@ -464,6 +464,12 @@ async fn repository_rpc(
     body: Value,
 ) -> Result<Json<Value>, ApiError> {
     match method {
+        "ResolveRepositoryDefaultCommit" => forward!(
+            body,
+            gateway.repositories(),
+            resolve_repository_default_commit,
+            v1::ResolveRepositoryDefaultCommitRequest
+        ),
         "InspectRepository" => forward!(
             body,
             gateway.repositories(),

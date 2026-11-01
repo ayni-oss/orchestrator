@@ -86,6 +86,25 @@ impl Github {
         }
         serde_json::from_slice(&bytes).map_err(|_| "github_response_invalid")
     }
+    /// Resolve the provider's current default branch once; subsequent inspection uses only its SHA.
+    pub async fn default_commit(
+        &self,
+        installation: u64,
+        repo: u64,
+    ) -> Result<(String, String), &'static str> {
+        let token = self.installation_token(installation, Some(repo)).await?;
+        let metadata = self
+            .request(Method::GET, &format!("/repositories/{repo}"), &token, None)
+            .await?;
+        let metadata = parse_repository(&metadata)?;
+        if metadata.provider_repository_id != repo {
+            return Err("github_response_invalid");
+        }
+        let path = default_commit_path(repo, &metadata.default_branch)?;
+        let value = self.request(Method::GET, &path, &token, None).await?;
+        let sha = default_commit_sha(&value)?;
+        Ok((metadata.default_branch, sha))
+    }
     /// All subsequent reads are addressed by immutable tree/blob IDs, never a branch.
     pub async fn frozen_source(
         &self,
@@ -272,6 +291,21 @@ struct TreeEntry {
     sha: String,
     size: usize,
 }
+fn default_commit_path(repo: u64, branch: &str) -> Result<String, &'static str> {
+    let mut url =
+        reqwest::Url::parse("https://api.github.com").map_err(|_| "github_response_invalid")?;
+    url.path_segments_mut()
+        .map_err(|()| "github_response_invalid")?
+        .extend(["repositories", &repo.to_string(), "commits", branch]);
+    Ok(url.path().to_owned())
+}
+fn default_commit_sha(value: &Value) -> Result<String, &'static str> {
+    value["sha"]
+        .as_str()
+        .filter(|sha| object_id(sha))
+        .map(str::to_owned)
+        .ok_or("github_response_invalid")
+}
 fn object_id(value: &str) -> bool {
     value.len() == 40
         && value
@@ -457,5 +491,32 @@ mod frozen_tests {
         assert!(safe_path("nested/Cargo.lock"));
         assert!(!object_id(&"A".repeat(40)));
         assert!(!object_id("main"));
+    }
+}
+
+#[cfg(test)]
+mod default_commit_tests {
+    use super::*;
+    #[test]
+    fn default_branch_refs_are_encoded_as_one_path_segment() {
+        assert_eq!(
+            default_commit_path(42, "release/current?#"),
+            Ok("/repositories/42/commits/release%2Fcurrent%3F%23".into())
+        );
+    }
+    #[test]
+    fn only_exact_lowercase_commit_identities_can_be_frozen() {
+        assert_eq!(
+            default_commit_sha(&json!({"sha":"a".repeat(40)})),
+            Ok("a".repeat(40))
+        );
+        for value in [
+            json!({}),
+            json!({"sha":"main"}),
+            json!({"sha":"A".repeat(40)}),
+            json!({"sha":"a".repeat(39)}),
+        ] {
+            assert_eq!(default_commit_sha(&value), Err("github_response_invalid"));
+        }
     }
 }

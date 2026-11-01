@@ -37,7 +37,7 @@ root = Path("proto/ayni/orchestrator/v1")
 expected = {
     "runtime_preparation.proto": {"RuntimePreparationService": ["ProvisionRuntimeSigner", "RecoverRuntimeSignerProvisioning", "SaveRuntimeSigner", "SetRuntimeSignerEnabled", "ListRuntimeSigners", "GetRuntimeSignerReceipt", "StartRuntimePreparation", "GetRuntimePreparation", "ListRuntimePreparations", "GetRuntimePreparationReceipt", "CancelRuntimePreparation", "RetryRuntimePreparation"]},
     "repositories.proto": {
-        "RepositoryService": ["ListGithubInstallations", "ListGithubRepositories", "ConnectRepository", "GetRepositoryOperation", "ListRepositoryOperations", "ListRepositories", "AssociateProjectRepository", "ListProjectRepositories", "InspectRepository", "GetRepositoryInspection", "ListRepositoryInspections"],
+        "RepositoryService": ["ListGithubInstallations", "ListGithubRepositories", "ConnectRepository", "GetRepositoryOperation", "ListRepositoryOperations", "ListRepositories", "AssociateProjectRepository", "ListProjectRepositories", "ResolveRepositoryDefaultCommit", "InspectRepository", "GetRepositoryInspection", "ListRepositoryInspections"],
     },
     "connections.proto": {
         "ConnectionService": ["SaveGithubConnection", "SaveProviderConnection", "ValidateProviderConnection", "SetConnectionEnabled", "ValidateGithubConnection", "GetConnectionOperation", "ListConnections", "ListConnectionOperations"],
