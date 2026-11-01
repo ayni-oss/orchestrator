@@ -32,6 +32,11 @@ a runtime is ready or a task can execute.
 
 ## Use it from a project
 
+The current UI attaches catalog repositories directly. Alpha will add workspace
+repository availability so projects select a subset; that restriction is not yet
+enforced. See [the planned workflow](alpha.md).
+
+
 Open **All workspaces**, choose a workspace card, then choose **Repositories** from the project card’s three-dot menu. Select a
 catalog repository and choose **Attach repository**. Repeat this in another
 workspace to reuse the same repository without sharing conversations or credentials.

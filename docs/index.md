@@ -1,12 +1,17 @@
 # Documentation
 
-The current public page is the [M1 Slice 3 contributor preview](site/index.md).
+Start with the [contributor preview](site/index.md) for current local availability
+and [the alpha workflow](site/alpha.md) for the intended product experience.
+[Connect a repository](site/repositories.md) describes the available setup journey.
 
-The next focus is [repository preparation with a usable UI](../ROADMAP.md#next-focus-repository-preparation-with-a-usable-ui).
-Read the [shared repository contract](technical/architecture/repository-preparation.md)
-for ownership and gates, and the [delivery plan](technical/research/repository-runtime-workspace-delivery.md)
-for browser journeys and qualification. This direction does not imply current UI support.
+The [roadmap](../ROADMAP.md) owns alpha delivery order and acceptance. The
+[alpha product contract](technical/architecture/alpha-product.md) defines workspace
+scope, project chat, autonomous task graphs and reviewable PR delivery. Planned
+requirements are not claims of current implementation.
 
-Contributors and deployment maintainers should start with the [technical documentation](technical/README.md), which covers PostgreSQL authority, authenticated durable delivery, conversation-supervisor ownership, the canonical private-v1 contract, local deployment, validation, and operations.
+Contributors and deployment maintainers should use the
+[technical documentation index](technical/README.md) for current runtime contracts,
+planned extensions, evidence limits and local operations.
 
-Only `docs/site/` is published by VitePress. Technical documents and dated research remain repository sources and are excluded from the website and its search index.
+Only `docs/site/` is published by VitePress. Technical documents and historical
+research remain repository sources, excluded from the website and its search index.

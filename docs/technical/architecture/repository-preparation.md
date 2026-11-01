@@ -4,7 +4,7 @@ Status: shared repository discovery, catalog connection and project associations
 
 ## What this decides
 
-- Repository integrations form a shared catalog alongside workspaces. Projects select repositories directly, including reuse across workspaces.
+- Repository integrations form a shared catalog. Alpha adds workspace availability; projects select a subset of their workspace repositories. Current direct catalog associations do not yet enforce that requirement.
 - Onboarding produces verified, immutable runtime artifacts through explicit source, tooling, trust, registry and execution gates.
 - PostgreSQL owns commands, receipts, generations and accepted evidence. Scoped workers perform external operations under trusted supervision.
 - The new UI ships with each backend slice. Maintainers can inspect and exercise each delivered journey locally.
@@ -14,7 +14,7 @@ Status: shared repository discovery, catalog connection and project associations
 
 The product journey needs a trusted way to prepare repositories and runtime images before tasks can use them.
 Current local task preparation asks an operator to supply those inputs manually.
-The [roadmap](../../../ROADMAP.md#next-focus-repository-preparation-with-a-usable-ui) makes replacing that manual gap the next focus.
+The [roadmap](../../../ROADMAP.md#a-workspace-scope-and-execution-ready-repositories) makes replacing that manual gap the next focus.
 
 ## Current boundary
 
@@ -30,12 +30,18 @@ The [roadmap](../../../ROADMAP.md#next-focus-repository-preparation-with-a-usabl
 | --- | --- |
 | Integration connection | Shared source, registry or signing capability with safe status and PostgreSQL credential revision references. |
 | Repository | Stable provider repository identity and source connection reference, independent of any workspace. |
-| Project association | Explicit use of a catalog repository by one project; several workspaces' projects may reference the same repository. |
+| Workspace availability (planned) | Catalog repositories available for projects in a workspace; several workspaces may reuse the same catalog identity. |
+| Project association | Selected project repositories. Current associations are direct; alpha enforces selection from workspace availability. |
 | Source observation | Exact repository commit, inspected policy/lock bytes or protected references, and their digests. |
 | Environment revision | Immutable Ayni contract, lock identity, platform, builder, destination and trust expectations. |
 | Preparation operation | Frozen inputs, bounded allowance, generation, stage, workload binding, receipts, findings and cleanup state. |
 | Verified runtime artifact | Registry digest and accepted verification evidence bound to the environment revision and inspected source. |
 | Attempt selection | Task-owned source, artifact and verification references, budgets and upstream selections frozen for execution. |
+
+The [alpha product contract](alpha-product.md#workspace-project-and-task-scope) owns
+workspace availability and project-subset semantics, including changes/removal.
+The forward transition must preserve current retained PostgreSQL associations and
+attempt provenance; prior SQLite membership schemas are not implementation requirements.
 
 An association does not expose credentials, another project's history or integration administration.
 Define local-operator grants before exposing mutations; remote tenancy and multi-user access remain separate scope.
@@ -204,10 +210,17 @@ This handoff remains planned; current tasks use the trusted local preparation he
 Trusted server-side preparation resolves the approved repository/ref through its project association.
 It verifies exact Git objects, original lock and reviewed upstream ancestry, then produces the existing frozen source handoff.
 An arbitrary browser digest or catalog selection cannot attest source or authorize execution.
-Preserve current snapshot/context bounds and fail explicitly when the repository exceeds supported limits.
+Bound source acquisition and fail explicitly on unsupported inputs. The current
+64-file/128-KiB model snapshot is an implementation limit, not alpha's engineering
+capability contract; the [planned agent loop](alpha-product.md#reviewed-plans-and-autonomous-execution)
+uses bounded research/retrieval and tools over the approved repository scope.
 
 Preparation records the verified artifact/evidence references alongside existing immutable attempt inputs.
-Approval still admits awaiting-execution tasks; preparation still dispatches no coding; explicit start still owns execution.
+Current approval admits awaiting-execution tasks; preparation dispatches no coding
+and explicit start owns execution. Alpha may review bounded execution/publication
+grants with the plan so ready tasks proceed autonomously. Preserve distinct
+retained grants and authoritative action decisions rather than making approval
+itself an unbounded dispatch permission.
 Execution-time checks and credential-free managed quality remain mandatory even after onboarding verification.
 Recovery preserves the selected source/runtime and creates fresh linked outcomes under its separate confirmation boundary.
 
@@ -221,5 +234,5 @@ Accepted records explain authority; traces diagnose execution and metrics summar
 - [Delivery and acceptance](../research/repository-runtime-workspace-delivery.md) defines UI slices, interruption gates and evidence requirements.
 - [Task preparation](task-execution.md), [dependencies](task-dependencies.md) and [quality](task-quality.md) define the existing downstream boundaries.
 - [Code organization](code-organization.md) and [tracing](../operations/execution-tracing.md) define current authority and diagnostic responsibilities.
-- Historical [onboarding](https://github.com/ayni-oss/orchestrator/blob/c279a7bcdf340f5479cc292c1571bba22af04b27/docs/technical/guides/operator-onboarding.md) and [builders](https://github.com/ayni-oss/orchestrator/blob/c279a7bcdf340f5479cc292c1571bba22af04b27/docs/technical/reference/repository-builders.md) record main's behavior, including its workspace-membership layer, which this design does not retain.
+- Historical [onboarding](https://github.com/ayni-oss/orchestrator/blob/c279a7bcdf340f5479cc292c1571bba22af04b27/docs/technical/guides/operator-onboarding.md) and [builders](https://github.com/ayni-oss/orchestrator/blob/c279a7bcdf340f5479cc292c1571bba22af04b27/docs/technical/reference/repository-builders.md) record main's behavior. Alpha's workspace availability is a new product requirement, not a requirement to restore those historical schemas or APIs.
 - Historical [activation](https://github.com/ayni-oss/orchestrator/blob/c279a7bcdf340f5479cc292c1571bba22af04b27/backend/servers/control-plane/crates/application/src/runtime_activation.rs) and [runtime evidence](https://github.com/ayni-oss/orchestrator/blob/c279a7bcdf340f5479cc292c1571bba22af04b27/backend/libs/runtime/profiles/ayni/src/managed_runtime.rs) show guarded selection and environment/quality separation.

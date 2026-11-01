@@ -35,6 +35,15 @@ Classification does not assign priority. The automation owns those five
 `kind/*` labels on pull requests and reapplies the classification when a title
 changes.
 
+## Alpha product delivery
+
+Use the [alpha product contract](docs/technical/architecture/alpha-product.md) for
+workspace/project scope, engineering autonomy, environment changes, task graphs
+and plan-selected PR layout. The [roadmap](ROADMAP.md#delivery-sequence) sequences
+usable increments; a backend-only implementation does not complete a product slice.
+Preserve the existing sole UI and durable authority rather than restoring retired
+compatibility paths. Delivery stops at reviewable PRs; never merge automatically.
+
 ## Alpha contracts
 
 All Orchestrator-owned interfaces remain v1 until alpha merges. Extend the

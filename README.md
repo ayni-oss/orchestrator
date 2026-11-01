@@ -5,141 +5,81 @@
 
 # Ayni Orchestrator
 
-Ayni Orchestrator is evolving into an open-source software factory for AI agents,
-built on durable project conversations, reviewed plans and isolated task execution.
-The [active roadmap](ROADMAP.md) focuses on the product workspace, responsive
-feedback, execution traceability, project metrics and future event-driven inputs.
+Ayni Orchestrator is building an Ayni-first software factory: project chat develops
+reviewed plans, autonomous agents execute modular tasks, and results return as
+reviewable pull requests. Tasks can run alone, in sequence or as a dependency DAG;
+the plan chooses their PR layout. Humans retain merge authority.
+
+This is the alpha target, not a claim that the complete journey is delivered.
+The [roadmap](ROADMAP.md) defines executable milestones and acceptance; the
+[alpha product contract](docs/technical/architecture/alpha-product.md) defines scope.
 
 ## Product responsibilities
 
-Orchestrator coordinates work from product intent to a reviewable software
-outcome. Projects retain goals and decisions; reviewed plans authorize bounded
-agent execution; verification and separately authorized publication retain
-inspectable evidence. Models, skills and MCP integrations supply capabilities
-inside that workflow.
+Workspaces define available repositories and shared context, instructions, skills
+and MCP capabilities. Projects select the repositories needed for a chunk of
+changes. Project chat researches source, validates plans, follows progress and
+resolves questions. Approved agents should inspect, edit, write tests, build and
+repair within their scope and allowance, including dependency/environment changes.
+Workspace repository scope and the full engineering loop remain planned.
 
-Ayni owns repository signals, quality policy evaluation, tool integrations and
-locked development environments. Orchestrator owns execution authority, worker
-isolation, runtime publication and evidence retention. It consumes Ayni contracts
-without duplicating adapter or lock semantics. See the
-[preparation boundary](docs/technical/architecture/repository-preparation.md#compatibility-and-product-acceptance).
+Ayni owns tool integrations, exact locks, portable environments and code-quality
+policy evaluation. Orchestrator owns planning, execution authority, isolation,
+runtime publication, task coordination and retained delivery evidence. It consumes
+Ayni contracts rather than duplicating adapter or lock semantics. Ayni is alpha's
+first runtime path; custom containers remain future scope.
 
-Ayni quality establishes satisfaction of the configured code-quality contract.
-Product acceptance also needs evidence that the requested behavior meets its
-acceptance criteria. Measuring user or business outcomes remains future work;
-a passing code-quality result does not establish product success.
+Passing managed Ayni quality is required for delivery. The requested behavior also
+needs acceptance evidence; quality alone does not establish product success.
+Execution, quality, acceptance and PR publication remain separate outcomes.
 
 ## Current delivery boundary
 
-The next focus is shared repository onboarding and verified runtime preparation,
-with a new UI delivered alongside each slice for local testing. Projects select
-catalog repositories directly, including reuse across workspaces. See the
-[preparation contract](docs/technical/architecture/repository-preparation.md) and
-[UI delivery plan](docs/technical/research/repository-runtime-workspace-delivery.md).
-The local UI provides workspace/project creation, named integration configuration,
-GitHub repository discovery, a shared catalog and direct project associations.
-Exact-commit static Ayni inspection is available with retained findings and recovery.
-Runtime preparation now provides bounded Kubernetes build, separate certification,
-publication, independent content/managed compatibility checks and recoverable history.
-Runtime signing supports server-generated keys, raw-seed import and recoverable
-public identity setup, with an advanced administrator reference editor. Repository
-trust still requires a reviewed policy commit and new inspection. Runtime preparation
-requires an explicitly qualified deployment profile and configured registry/signer.
-The current Docker Desktop profile remains disabled because its network policies
-failed the actual enforcement check; Node stage and supervisor lifecycle checks passed.
-The separate Cilium development cluster passes the complete Node component and
-supervisor lifecycle gates, and serves a fresh runtime-enabled UI on port 5175.
-Project-plan/task selection of verified runtimes is the next slice; current task
-source preparation still uses the trusted local helper. Full task-delivery screens remain planned.
+The sole [web application](apps/web/README.md) provides workspace/project creation,
+named GitHub/GHCR/OpenAI configuration, repository discovery/catalog, direct project
+associations and exact-commit static Ayni inspection. Workspace repository
+availability is not yet enforced; project chat, plan review and complete task
+browser journeys remain planned.
 
-The [backend foundation roadmap](docs/technical/history/backend-foundation-roadmap.md)
-is archived with its acceptance limits; planned product capabilities are not claims
-of delivered behavior.
+Runtime preparation implements bounded Kubernetes build, separate certification,
+publication, independent content/managed checks, signing setup and recoverable
+history. It requires an explicitly qualified profile, registry and trusted signer.
+The default Docker Desktop profile remains disabled after failed network-policy
+enforcement; a separate native-arm64 Cilium topology has Node component and
+supervisor lifecycle evidence. See [runtime packaging](deploy/images/runtime-preparation/README.md)
+for the exact tested envelope, patched CLI prerequisites and live integration gaps.
 
-The runtime provides **conversation execution, plan approval and isolated task delivery through managed quality and draft publication** on the M1 durable foundation, with shared agent configuration and isolated sessions supporting scripted or explicitly enabled OpenAI execution. It provides:
+Canonical v1 backend APIs implement durable conversations, isolated sessions,
+immutable plan approval, frozen task attempts, managed quality, recovery,
+dependency selections, draft publication and execution timelines. Planning's
+built-in tools currently read instructions, project facts and conversation history;
+coding currently uses a single bounded file-proposal pass. Task source/runtime
+preparation still requires a trusted local helper.
 
-- PostgreSQL 17.6 as the source of truth for workspace, project, conversation and task state;
-- conversation-owned operator and agent plans with immutable versions, scoped history, retained provenance, exact write receipts and version review;
-- explicit approval of an exact plan version/digest with atomic, once-only admission and immutable task origin;
-- repository-owned forward migrations under an advisory lock;
-- minimal workspace, project, and conversation creation;
-- durable, scoped-idempotent message admission with FIFO turn ordering;
-- an isolated authenticated three-stream JetStream profile;
-- exact-byte command and decision publication with broker storage kept separate from ownership;
-- a retained conversation supervisor with signed claim, acceptance, and terminal-report handoffs;
-- accepted scripted responses, FIFO successor promotion, snapshots, and stable bounded history;
-- resumable notification-backed watches with durable replay and typed cursor expiry;
-- bounded consumer quarantine, replay retention cleanup, and operational metrics;
-- immutable workspace instructions, provider/model settings and token budgets frozen at message admission;
-- conversation-scoped session generations, retained result ledgers, idle expiry and replacement;
-- bounded foreground OpenAI Responses requests with retained identity, reservation, result and nullable usage;
-- durable turn cancellation and explicit uncertain outcomes that never automatically retry paid calls;
-- three scoped read tools with frozen inputs, retained invocation results and turn-wide budgets;
-- explicit possible-charge acknowledgement to retire a session held by an uncertain call;
-- a canonical private-v1 gRPC API on a trusted pod-loopback listener; and
-- a Docker Desktop Helm stack with separated database/broker identities and retained storage.
+Conversation handoffs use JetStream; coding tasks use HTTP callbacks and supervisor
+polling. The [task event direction](docs/technical/architecture/task-events.md)
+extends durable orchestration while preserving PostgreSQL authority, explicit
+permits and stale-worker fencing. Event transport alone does not establish capacity.
 
-This is a clean replacement, not a compatibility migration. The prior SQLite workflow, browser API adapter, runtime workers, legacy development fixtures, and custom-client workflow path are not part of the current runtime. The [web application](apps/web/README.md) uses the promoted example UI and supports configuration and basic hierarchy navigation. There is one frontend.
+The [foundation roadmap archive](docs/technical/history/backend-foundation-roadmap.md)
+retains M1–M8 provenance and acceptance limits. Current-source browser qualification
+must replace retired console coverage. Fixture/provider protocol tests do not
+establish autonomous coding, live forge publication or production readiness.
 
-The cumulative M1 acceptance evidence is recorded in the delivery PR. Canonical APIs expose shared configuration, isolated sessions, provider usage and cancellation. OpenAI execution requires an explicit model, deployment enablement and a workspace-scoped credential mounted directly into its session. Scripted execution remains the default. OpenAI conversations can read frozen workspace instructions, project status and their own bounded history. The final M2 acceptance scope includes deterministic provider/tool recovery fixtures and a separately reported live-provider smoke test. All Orchestrator interfaces stay v1 until alpha merges.
+## Local development and documentation
 
-Plan review retains the project and originating conversation for later task feedback. Structured agent proposals retain provider and conversation provenance; explicit approval atomically admits the reviewed task set in an awaiting-execution state. Plan creation and approval dispatch no coding work. Trusted operators can prepare a task with frozen local Git evidence, runtime selection and budgets; preparation retains blockers or one attempt and also dispatches no coding work. Prepared tasks can be explicitly started as isolated coding attempts with bounded concurrency with retained changes and cancellation fencing. A credential-free quality stage validates a frozen reconstruction with managed Ayni evidence and exposes quality separately from coding completion. See [task quality](docs/technical/architecture/task-quality.md). Canonical task reads expose progress, blockers, accepted patches and quality artifacts separately, with bounded cancellation and reviewed publication controls. Source verification and upload use the trusted local helper. Operators can separately authorize accepted changes for a recoverable GitHub draft under scoped publication authority. See [draft publication](docs/technical/architecture/task-publication.md). See [isolated execution](docs/technical/architecture/isolated-task-execution.md). See [execution preparation](docs/technical/architecture/task-execution.md). See [durable plan review](docs/technical/architecture/plan-review.md).
+Use [local development](docs/technical/operations/local-development.md) for the
+explicit cluster contexts, immutable deployment, live editing and retained-state
+operations. `dev/ctl live` runs the sole frontend and backend live loop. Setup and
+runtime qualification have documented prerequisites; the alpha journey must not
+require per-task terminal source-pack preparation.
 
-Task execution and quality problems also produce retained feedback in their
-originating conversation and project attention. Notices link to task evidence;
-they do not authorize continuation or repair. See [task feedback](docs/technical/architecture/task-feedback.md)
-and the [M6 delivery plan](docs/technical/research/project-workflow-m6-delivery-plan.md)
-for the boundary between attention and later confirmed recovery.
-[Recovery review](docs/technical/architecture/task-recovery.md) lets operators record
-immutable proposals with frozen saved-work evidence and additional allowances, plus
-task questions and one answer per question. Recording them authorizes no execution.
-Exact confirmation can now authorize one bounded linked attempt with preserved saved
-changes and parent evidence. Confirmed recovery resolves the parent attention decision while
-conversation history links to the continued coding and quality outcomes. Questions retain
-one canonical answer across pagination and concurrent tabs. Confirmed continuation preserves frozen upstream selections. Worker-originated questions
-and recovery proposals retain their provenance; an explicit answer and exact confirmation
-are frozen into the next bounded segment.
+- [Contributor preview](docs/site/index.md) explains current local product availability.
+- [Alpha workflow](docs/site/alpha.md) explains the intended workspace, project, task and PR experience.
+- [Technical documentation](docs/technical/README.md) indexes current contracts and planned extensions.
+- [Repository preparation](docs/technical/architecture/repository-preparation.md) defines source/runtime gates and Ayni boundaries.
+- [Architecture](docs/technical/architecture/architecture.md) defines current ownership and durable execution.
 
-Fresh conversations can read bounded task lifecycle facts and accepted outcomes
-through frozen project status. Coding, managed quality and publication remain separate facts; the snapshot
-contains no other conversation's transcript, plan text or reasoning. Later task
-changes do not rewrite an eligible turn's retained inputs. See
-[factual project continuity](docs/technical/architecture/project-continuity.md) and
-the [M7 delivery plan](docs/technical/research/project-workflow-m7-delivery-plan.md).
-Explicitly authorized outcome assessments produce reviewable follow-up plans in their
-originating conversation. Scoped MCP tools and Anthropic Messages reuse the retained
-budget, tool, cancellation and uncertainty boundaries. See [MCP integrations](docs/technical/architecture/mcp-integrations.md)
-and [operational acceptance](docs/technical/operations/operational-acceptance.md) for
-configuration, retention and the cumulative deployed evidence requirements.
-
-## Start locally
-
-```sh
-dev/ctl deploy
-dev/ctl check --expect-empty
-dev/ctl scenario
-```
-
-Run `dev/ctl live` for the new product at `http://127.0.0.1:5174`, or use
-`dev/ctl gateway` and `pnpm web:dev`. The product supports manual GitHub App
-configuration and workspace/project creation. See [connection setup](docs/technical/operations/local-development.md#product-configuration-foundation).
-The [SvelteKit application](apps/web/README.md) is the sole frontend. Its shell,
-styles and components come from the example UI; historical backend wiring is not restored.
-
-`dev/ctl gateway` starts a loopback-only JSON/SSE API adapter for trusted local
-tooling; it serves no pages or assets. The private v1 gRPC API and trusted source
-and publication helpers remain available. Browser-dependent acceptance profiles
-are blocked until the next-focus UI and its replacement coverage are implemented
-and qualified.
-
-See [task delivery acceptance](docs/technical/operations/task-acceptance.md) for the cumulative M4 gates and integration limits. See [local development](docs/technical/operations/local-development.md) for prerequisites, trusted diagnostics, validation, restart checks, and explicit cleanup.
-
-## Documentation
-
-- [Architecture](docs/technical/architecture/architecture.md)
-- [Operations](docs/technical/operations/operations.md)
-- [M1 durable foundation contract](docs/technical/research/project-workflow-m1-durable-foundation.md)
-- [Technical documentation index](docs/technical/README.md)
-- [Contributor preview](docs/site/index.md)
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for repository checks, [AGENTS.md](AGENTS.md) for repository rules, and [ROADMAP.md](ROADMAP.md) for active product direction.
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) for branch, review,
+validation and publication rules. Interfaces remain v1 during alpha; old SQLite
+workflow, BFF and retired frontend paths are not compatibility requirements.

@@ -32,8 +32,9 @@ profile and configured registry/signer. The Docker Desktop profile remains
 disabled after its network-policy enforcement check failed; qualification on
 another profile does not enable it.
 
-Automatic project/task runtime handoff and complete task-delivery browser
-journeys remain planned. Current task preparation still uses a trusted local
+Workspace repository scope, automatic project/task runtime handoff, autonomous
+coding and complete task-delivery browser journeys remain planned. Read
+[the alpha workflow](alpha.md) for the intended project chat, task graph and PR experience. Current task preparation still uses a trusted local
 helper. Additional-provider qualification and sustained production capacity
 remain separate acceptance work.
 

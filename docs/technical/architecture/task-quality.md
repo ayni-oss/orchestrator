@@ -1,5 +1,15 @@
 # Task quality and retained evidence
 
+## Planned environment-changing work
+
+Alpha requires dependency/lock-changing tasks and a trusted candidate-environment
+validation path. See the [product contract](alpha-product.md#environment-changing-work).
+The fixed original-lock/runtime reconstruction below is current behavior; it must
+not be bypassed or relabelled as supporting changed environments. New candidate
+revisions and final managed evidence remain independently owned and immutable.
+
+## Current quality contract
+
 > UI status: the local product supports configuration and basic workspace/project
 > navigation; see [integration connections](../architecture/integration-connections.md).
 > Conversation/task browser steps below describe the retired UI and remain

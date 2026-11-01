@@ -9,7 +9,7 @@
 The workspace inspector reads accepted transitions through
 `ProjectConversationService.ListExecutionTimeline`. It explains retained workflow
 history alongside the live current activity. It is the retained-history boundary for
-[observable execution](../../../ROADMAP.md#product-delivery-sequence).
+[observable execution](../../../ROADMAP.md#delivery-sequence).
 
 ## Retention and authority
 

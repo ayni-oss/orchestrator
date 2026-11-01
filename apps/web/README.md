@@ -10,7 +10,12 @@ GHCR PAT connections, OpenAI key validation/model discovery and explicit workspa
 connection/model/budget selection. Historical BFF/API wiring is not restored.
 Shared GitHub repository discovery/catalog and direct project associations are available.
 Exact-commit static Ayni inspection provides retained findings and retry recovery.
-Guided App setup, full adapter discovery and runtime preparation remain outstanding.
+Runtime preparation, signer setup, stage evidence and recovery are available behind
+an explicitly qualified Kubernetes profile. Guided App setup, full adapter discovery
+and project/task runtime handoff remain outstanding. Current direct project
+associations do not yet enforce planned workspace repository availability.
+See the [alpha UI contract](../../docs/technical/architecture/project-workspace.md)
+for project chat, plans, task graphs and delivery journeys still to implement.
 
 Run `pnpm web:dev` with the local gateway, or `dev/ctl live` for one frontend plus
 backend rebuild/rollout. The default web URL is http://127.0.0.1:5174.
@@ -63,13 +68,19 @@ full lowercase commit SHA. The retained result shows policy/lock digests, locked
 tools, public trust key IDs and corrective findings. Reload after an interrupted
 request and choose **Recover inspection** or **Retry same inspection**.
 
-Static inspection never enables preparation or starts work. Full adapter discovery,
-configured signer admission and runtime verification remain later gates.
+Static inspection never enables preparation or starts work. Full adapter discovery
+remains pending; signer admission and independent runtime verification are separate
+preparation gates. A static inspection result alone establishes neither.
 
-### Runtime signer references
+### Runtime signing and preparation
 
-Configuration → Runtime signing manages public signer identities and references to
-administrator-owned immutable Secrets. Exact updates and original receipt recovery
-survive reloads. Saving a reference validates public input shapes; it does not read
-the Secret, grant signing access, enable builds or establish runtime readiness.
-The runtime preparation execution journey remains under development.
+Configuration → Runtime signing supports server-generated or imported immutable
+signing keys and advanced administrator-owned Secret references. Exact setup,
+updates and original receipt recovery survive reloads. Public identities and
+references do not by themselves grant builds or establish runtime readiness.
+
+Repository Runtime preparation shows frozen source/configuration, explicit build
+and replacement grants, stage history, independent verification, cleanup and exact
+command recovery. Runtime preparation needs an admitted deployment profile. See
+[the user guide](../../docs/site/repositories.md) for setup and recovery; verified
+artifact selection for project tasks remains planned.

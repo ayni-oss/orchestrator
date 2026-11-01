@@ -1,5 +1,10 @@
 # M4 delivery plan
 
+> Historical foundation delivery plan. Its dated scope and evidence remain
+> provenance; the active [alpha roadmap](../../../ROADMAP.md) and
+> [product contract](../architecture/alpha-product.md) govern new work.
+> Current behavior is documented in the linked architecture contracts.
+
 Date: 2026-10-22. Status: agreed six-slice direction; individual PRs own delivery evidence.
 
 M3 admits approved work without dispatching it. M4 takes an independently executable

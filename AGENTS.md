@@ -79,6 +79,13 @@
   Retries must not duplicate work or external actions; stale results must not
   replace newer desired state. Test restart, cancellation, and cleanup behavior.
 
+## Alpha product delivery
+
+- Follow the [alpha product contract](docs/technical/architecture/alpha-product.md) and active roadmap. Workspace availability bounds project repository selection; current direct catalog associations are a documented gap.
+- Alpha includes grounded project chat, versioned context/skills/MCP capabilities, an autonomous engineering/test/repair loop and modular standalone/sequential/DAG tasks. The reviewed plan chooses shared/separate/stacked PR delivery; humans retain merge authority.
+- Preserve PostgreSQL authority, immutable approvals, frozen attempts, isolated verification and recoverable external effects. Extend the existing event delivery pattern for coding tasks; do not treat the current one-shot worker or polling path as the target product contract.
+- Distinguish backend implementation, current UI availability and qualified product behavior. Do not claim complete features from fixture-only evidence or delete active coverage without a replacement qualification path.
+
 ## Alpha interface versioning
 
 - Keep every Orchestrator-owned API, event, schema and retained format at v1
