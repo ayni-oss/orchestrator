@@ -43,13 +43,14 @@ fn signer(row: &Row) -> Result<Signer, StoreError> {
         enabled: row.get("enabled"),
     })
 }
-fn validate(input: &SaveSigner<'_>) -> Result<String, StoreError> {
+pub(super) fn validate(input: &SaveSigner<'_>) -> Result<String, StoreError> {
     validate_key(input.key)?;
     if !input.id.is_empty() {
         validate_id(input.id, "signer_id")?;
     }
     validate_name(input.display_name, "display_name")?;
     if input.display_name.len() > 120
+        || input.key_id == "unsigned"
         || input.key_id.is_empty()
         || input.key_id.len() > 128
         || !input
@@ -122,7 +123,7 @@ async fn replay(
         serde_json::from_str(row.get::<_, &str>("result")).map_err(|_| StoreError::CorruptState)?,
     ))
 }
-async fn retain(
+pub(super) async fn retain(
     tx: &Transaction<'_>,
     key: &str,
     kind: &str,
@@ -143,6 +144,7 @@ impl WorkflowStore {
         let (mut client, driver) = crate::connect(&self.database_url).await?;
         let tx = client.transaction().await?;
         connections::serialize_key(&tx, input.key).await?;
+        super::runtime_signer_provisioning::reject_reserved(&tx, input.key).await?;
         if let Some(value) = replay(&tx, input.key, "save", &safe).await? {
             tx.commit().await?;
             driver.abort();
@@ -191,6 +193,7 @@ impl WorkflowStore {
         let (mut client, driver) = crate::connect(&self.database_url).await?;
         let tx = client.transaction().await?;
         connections::serialize_key(&tx, key).await?;
+        super::runtime_signer_provisioning::reject_reserved(&tx, key).await?;
         if let Some(value) = replay(&tx, key, "enabled", &safe).await? {
             tx.commit().await?;
             driver.abort();

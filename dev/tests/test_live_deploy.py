@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class LiveDeployTests(unittest.TestCase):
-    def run_deploy(self, fail_upgrade=False, legacy_workload=False, retained_storage=False):
+    def run_deploy(self, fail_upgrade=False, legacy_workload=False, retained_storage=False, qualified=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             record = root / 'calls.jsonl'
@@ -30,6 +30,7 @@ if name == 'kubectl':
     if 'statefulset' in args and 'get' in args and os.environ.get('LIVE_TEST_LEGACY') == '1':
         print('statefulset.apps/scripted-executor')
     if 'current-context' in args: print('docker-desktop')
+    if 'get-contexts' in args: print(os.environ['AYNI_ORCHESTRATOR_CONTEXT'])
     if 'deployment/control-plane' in args and 'get' in args:
         print('1' if any('readyReplicas' in arg for arg in args) else 'deployment.apps/control-plane')
     if 'deployment/task-publisher' in args and 'get' in args: print('deployment.apps/task-publisher')
@@ -41,7 +42,9 @@ if name == 'kubectl':
                        LIVE_TEST_RECORD=str(record), LIVE_TEST_FAIL='1' if fail_upgrade else '0',
                        LIVE_TEST_LEGACY='1' if legacy_workload else '0',
                        LIVE_TEST_RETAINED='1' if retained_storage else '0',
-                       AYNI_ORCHESTRATOR_NAMESPACE='ayni-orchestrator-test',
+                       AYNI_ORCHESTRATOR_NAMESPACE='ayni-orchestrator-runtime-qualification' if qualified else 'ayni-orchestrator-test',
+                       AYNI_ORCHESTRATOR_CONTEXT='kind-ayni-runtime-qualification' if qualified else 'docker-desktop',
+                       KUBECONFIG='/tmp/ayni-runtime-cluster/kubeconfig' if qualified else '/tmp/unused-fixture-kubeconfig',
                        AYNI_ORCHESTRATOR_LIVE_MIGRATE='true')
             result = subprocess.run(['bash', 'dev/scripts/live-deploy.sh',
                                      'local/ayni-live-control-plane:test',
@@ -59,6 +62,15 @@ if name == 'kubectl':
         self.assertLess(upgrade, up)
         self.assertTrue(any('deployment/task-publisher' in call and 'status' in call for call in calls))
         self.assertTrue(any(any('readyReplicas' in arg for arg in call) for call in calls))
+
+    def test_parallel_deploy_targets_only_explicit_isolated_context(self):
+        result, calls = self.run_deploy(qualified=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        mutations = [call for call in calls if any(verb in call for verb in ('upgrade', 'scale', 'create', 'patch', 'apply', 'label'))]
+        self.assertTrue(mutations)
+        self.assertTrue(all('kind-ayni-runtime-qualification' in call for call in mutations))
+        self.assertFalse(any('docker-desktop' in call for call in calls))
+        self.assertFalse(any('use-context' in call or 'config' in call and 'set' in call for call in calls))
 
     def test_failed_upgrade_does_not_claim_recovery_or_rollback_schema(self):
         result, calls = self.run_deploy(fail_upgrade=True)

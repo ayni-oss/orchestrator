@@ -1,0 +1,18 @@
+environment = { certificate = { trusted_keys = { runtime-fixture = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a" } } }
+
+[checks]
+test = false
+coverage = false
+size = true
+complexity = false
+deps = false
+mutation = false
+
+[languages]
+enabled = ["node"]
+
+[node]
+roots = ["."]
+
+[node.size]
+"**/*.js" = { warn = 120, fail = 200, exclude = ["node_modules/**", ".ayni/**"] }

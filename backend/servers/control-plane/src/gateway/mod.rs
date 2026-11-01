@@ -540,6 +540,54 @@ async fn runtime_preparation_rpc(
     body: Value,
 ) -> Result<Json<Value>, ApiError> {
     match method {
+        "StartRuntimePreparation" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            start_runtime_preparation,
+            v1::StartRuntimePreparationRequest
+        ),
+        "GetRuntimePreparation" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            get_runtime_preparation,
+            v1::GetRuntimePreparationRequest
+        ),
+        "ListRuntimePreparations" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            list_runtime_preparations,
+            v1::ListRuntimePreparationsRequest
+        ),
+        "GetRuntimePreparationReceipt" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            get_runtime_preparation_receipt,
+            v1::GetRuntimePreparationReceiptRequest
+        ),
+        "CancelRuntimePreparation" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            cancel_runtime_preparation,
+            v1::CancelRuntimePreparationRequest
+        ),
+        "RetryRuntimePreparation" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            retry_runtime_preparation,
+            v1::RetryRuntimePreparationRequest
+        ),
+        "ProvisionRuntimeSigner" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            provision_runtime_signer,
+            v1::ProvisionRuntimeSignerRequest
+        ),
+        "RecoverRuntimeSignerProvisioning" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            recover_runtime_signer_provisioning,
+            v1::RecoverRuntimeSignerProvisioningRequest
+        ),
         "SaveRuntimeSigner" => forward!(
             body,
             gateway.runtime_preparation(),

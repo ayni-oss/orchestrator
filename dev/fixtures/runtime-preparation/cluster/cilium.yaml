@@ -1,0 +1,15 @@
+# Pinned Helm chart 1.20.4. Keep kube-proxy; install only in the dedicated cluster.
+ipam:
+  mode: kubernetes
+kubeProxyReplacement: false
+operator:
+  replicas: 1
+  image:
+    genericDigest: sha256:f72cbe831147c52dd5fd3c8ec06fe3e913dfe32490113b9462480ccc21a02cdb
+image:
+  pullPolicy: IfNotPresent
+  digest: sha256:1615b8097f64e1461cd55bd2037b817484d3586d1e065b88014463c797d0832a
+hubble:
+  enabled: false
+envoy:
+  enabled: false

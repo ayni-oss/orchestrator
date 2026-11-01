@@ -2,7 +2,8 @@
 
 Connect a GitHub repository once, then attach it to projects in any workspace.
 This local operator flow establishes source access and supports exact-commit static
-Ayni inspection. Runtime preparation remains planned.
+Ayni inspection. With a configured Kubernetes runtime profile, you can also
+prepare and verify an immutable runtime image.
 
 ```mermaid
 ---
@@ -57,5 +58,62 @@ If the response is interrupted, reload and choose **Recover inspection**. Use
 **Retry same inspection** when GitHub becomes available again. A new commit needs
 a new inspection; earlier results remain in history.
 
-Static inspection does not start tasks or build images. Full environment discovery
-and runtime verification follow in later delivery slices.
+Static inspection does not start tasks or build images.
+
+## Set up a signer
+
+Open **Configuration → Runtime signing** and choose **Add signing key**. Enter a
+name and Key ID. You can add multiple named keys and manage each one from the
+list. Choose
+**Generate a new key** to let the server create and store a private key, or
+**Import an existing key** to paste or select a file containing the raw value of
+`AYNI_ENV_CERTIFICATE_SIGNING_KEY`: 64 lowercase hexadecimal characters, with an
+optional final newline. Do not include an environment assignment or quotes.
+
+The server stores the key in an immutable signing Secret and returns its public
+identity. Imported private material is cleared after submission and is never saved
+in browser storage. Generated private keys are never returned to the browser.
+If a response is interrupted, reload and choose **Recover signer setup**. Recovery
+continues the same request. If an import needs material again, re-enter the same
+seed; a different seed cannot replace that retained identity. If a rejected setup
+has no receipt, correct its public name or Key ID and resume with the same recovery
+key. An interrupted request must be recovered before starting another.
+
+Expand **Repository trust policy** on the saved signer and copy its public entry
+into the existing `environment.certificate.trusted_keys` configuration in
+`.ayni.toml`, preserving other trusted keys. If it uses inline tables, edit that
+configuration rather than adding a duplicate table. Commit the policy and regenerate
+the lock with the supported Ayni version, then inspect that commit again. Signer
+setup does not automatically trust the key or authorize a build.
+
+Signer setup must be enabled by the deployment administrator. The advanced
+**existing Secret reference** option remains available for a signing identity
+already provisioned by an administrator. Disabling a signer prevents new use
+without deleting its stored key. Deployment removal also retains signing keys;
+ask the administrator to review any permanent cleanup separately.
+
+## Prepare a runtime
+
+Your deployment administrator must first enable a qualified Kubernetes runtime
+profile. In **Configuration**, select a registry connection and set up a signer.
+The committed repository policy must trust that signer.
+
+On the repository, open **Runtime preparation**, select a completed inspection,
+registry, signer and platform, and set the time/build allowance. Leave building
+disabled to check an existing image. Enable building for a confirmed missing image;
+replacing an invalid image requires the separate replacement choice.
+
+The operation shows source, build, certification, publication, verification and
+cleanup progress. **Ready** requires independent content and managed compatibility
+checks plus completed cleanup. A connected repository or a successful build alone
+does not establish readiness. Runtime compatibility is separate from whether the
+repository's quality checks pass.
+
+Reload to recover retained operations and exact save receipts. Cancel stops the
+workload and cleans its resources. Retry preserves the original inputs and
+allowance; change the inputs or allowance by starting a new operation. If publication
+was interrupted, recovery reads back the intended image before trying another action.
+Registry access failures are reported when registry operations execute; correct the
+configured connection before starting a new operation when its credentials changed.
+
+Verified runtime selection for project plans and tasks follows in the next slice.

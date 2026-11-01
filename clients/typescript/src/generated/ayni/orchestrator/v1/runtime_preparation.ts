@@ -76,6 +76,149 @@ export interface GetRuntimeSignerReceiptResponse {
   signer?: RuntimeSigner | undefined;
 }
 
+/** Public metadata/evidence only; source bytes and credential values never appear here. */
+export interface RuntimePreparation {
+  id: string;
+  idempotencyKey: string;
+  repositoryId: string;
+  inspectionId: string;
+  registryConnectionId: string;
+  signerId: string;
+  platform: string;
+  state: string;
+  stage: string;
+  safeReason: string;
+  generation: string;
+  allowBuild: boolean;
+  allowReplace: boolean;
+  maxBuilds: number;
+  buildsStarted: number;
+  deadlineUnixMs: string;
+  frozenInputDigest: string;
+  imageDigest: string;
+  candidateImage: string;
+  protectedContentRoot: string;
+  certificateDigest: string;
+  contentVerified: boolean;
+  managedCompatible: boolean;
+  cleanupComplete: boolean;
+  acceptedAtUnixMs: string;
+  updatedAtUnixMs: string;
+  expectedManifestDigest: string;
+  sourceCommit: string;
+  sourceTree: string;
+  policyDigest: string;
+  lockDigest: string;
+  lockFingerprint: string;
+  registryDestination: string;
+  managedCheckDigest: string;
+  unsignedManifestDigest: string;
+  certificationLayerDigest: string;
+}
+
+export interface StartRuntimePreparationRequest {
+  idempotencyKey: string;
+  repositoryId: string;
+  inspectionId: string;
+  registryConnectionId: string;
+  signerId: string;
+  platform: string;
+  maxSeconds: number;
+  maxBuilds: number;
+  allowBuild: boolean;
+  allowReplace: boolean;
+}
+
+export interface StartRuntimePreparationResponse {
+  operation?: RuntimePreparation | undefined;
+}
+
+export interface GetRuntimePreparationRequest {
+  id: string;
+}
+
+export interface GetRuntimePreparationResponse {
+  operation?: RuntimePreparation | undefined;
+}
+
+export interface ListRuntimePreparationsRequest {
+  repositoryId: string;
+  afterId: string;
+  limit: number;
+}
+
+export interface ListRuntimePreparationsResponse {
+  operations: RuntimePreparation[];
+  nextAfterId: string;
+}
+
+export interface GetRuntimePreparationReceiptRequest {
+  idempotencyKey: string;
+}
+
+export interface GetRuntimePreparationReceiptResponse {
+  operation?: RuntimePreparation | undefined;
+}
+
+export interface CancelRuntimePreparationRequest {
+  idempotencyKey: string;
+  id: string;
+  expectedGeneration: string;
+}
+
+export interface CancelRuntimePreparationResponse {
+  operation?: RuntimePreparation | undefined;
+}
+
+export interface RetryRuntimePreparationRequest {
+  idempotencyKey: string;
+  id: string;
+  expectedGeneration: string;
+}
+
+export interface RetryRuntimePreparationResponse {
+  operation?: RuntimePreparation | undefined;
+}
+
+/** Private seed is an upload only; responses and retained intents contain public identity. */
+export interface ProvisionRuntimeSignerRequest {
+  idempotencyKey: string;
+  displayName: string;
+  keyId: string;
+  mode: string;
+  signingSeed: string;
+}
+
+export interface RecoverRuntimeSignerProvisioningRequest {
+  idempotencyKey: string;
+}
+
+export interface RuntimeSignerProvisioningOperation {
+  id: string;
+  idempotencyKey: string;
+  displayName: string;
+  keyId: string;
+  mode: string;
+  state: string;
+  safeReason: string;
+  publicKey: string;
+  secretName: string;
+  secretUid: string;
+  signerId: string;
+  acceptedAtUnixMs: string;
+  updatedAtUnixMs: string;
+}
+
+export interface ProvisionRuntimeSignerResponse {
+  operation?: RuntimeSignerProvisioningOperation | undefined;
+  signer?: RuntimeSigner | undefined;
+}
+
+export interface RecoverRuntimeSignerProvisioningResponse {
+  operation?: RuntimeSignerProvisioningOperation | undefined;
+  signer?: RuntimeSigner | undefined;
+}
+
 function createBaseRuntimeSigner(): RuntimeSigner {
   return {
     id: "",
@@ -1110,9 +1253,2702 @@ export const GetRuntimeSignerReceiptResponse: MessageFns<GetRuntimeSignerReceipt
   },
 };
 
+function createBaseRuntimePreparation(): RuntimePreparation {
+  return {
+    id: "",
+    idempotencyKey: "",
+    repositoryId: "",
+    inspectionId: "",
+    registryConnectionId: "",
+    signerId: "",
+    platform: "",
+    state: "",
+    stage: "",
+    safeReason: "",
+    generation: "0",
+    allowBuild: false,
+    allowReplace: false,
+    maxBuilds: 0,
+    buildsStarted: 0,
+    deadlineUnixMs: "0",
+    frozenInputDigest: "",
+    imageDigest: "",
+    candidateImage: "",
+    protectedContentRoot: "",
+    certificateDigest: "",
+    contentVerified: false,
+    managedCompatible: false,
+    cleanupComplete: false,
+    acceptedAtUnixMs: "0",
+    updatedAtUnixMs: "0",
+    expectedManifestDigest: "",
+    sourceCommit: "",
+    sourceTree: "",
+    policyDigest: "",
+    lockDigest: "",
+    lockFingerprint: "",
+    registryDestination: "",
+    managedCheckDigest: "",
+    unsignedManifestDigest: "",
+    certificationLayerDigest: "",
+  };
+}
+
+export const RuntimePreparation: MessageFns<RuntimePreparation> = {
+  encode(message: RuntimePreparation, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(18).string(message.idempotencyKey);
+    }
+    if (message.repositoryId !== "") {
+      writer.uint32(26).string(message.repositoryId);
+    }
+    if (message.inspectionId !== "") {
+      writer.uint32(34).string(message.inspectionId);
+    }
+    if (message.registryConnectionId !== "") {
+      writer.uint32(42).string(message.registryConnectionId);
+    }
+    if (message.signerId !== "") {
+      writer.uint32(50).string(message.signerId);
+    }
+    if (message.platform !== "") {
+      writer.uint32(58).string(message.platform);
+    }
+    if (message.state !== "") {
+      writer.uint32(66).string(message.state);
+    }
+    if (message.stage !== "") {
+      writer.uint32(74).string(message.stage);
+    }
+    if (message.safeReason !== "") {
+      writer.uint32(82).string(message.safeReason);
+    }
+    if (message.generation !== "0") {
+      writer.uint32(88).uint64(message.generation);
+    }
+    if (message.allowBuild !== false) {
+      writer.uint32(96).bool(message.allowBuild);
+    }
+    if (message.allowReplace !== false) {
+      writer.uint32(104).bool(message.allowReplace);
+    }
+    if (message.maxBuilds !== 0) {
+      writer.uint32(112).uint32(message.maxBuilds);
+    }
+    if (message.buildsStarted !== 0) {
+      writer.uint32(120).uint32(message.buildsStarted);
+    }
+    if (message.deadlineUnixMs !== "0") {
+      writer.uint32(128).uint64(message.deadlineUnixMs);
+    }
+    if (message.frozenInputDigest !== "") {
+      writer.uint32(138).string(message.frozenInputDigest);
+    }
+    if (message.imageDigest !== "") {
+      writer.uint32(146).string(message.imageDigest);
+    }
+    if (message.candidateImage !== "") {
+      writer.uint32(154).string(message.candidateImage);
+    }
+    if (message.protectedContentRoot !== "") {
+      writer.uint32(162).string(message.protectedContentRoot);
+    }
+    if (message.certificateDigest !== "") {
+      writer.uint32(170).string(message.certificateDigest);
+    }
+    if (message.contentVerified !== false) {
+      writer.uint32(176).bool(message.contentVerified);
+    }
+    if (message.managedCompatible !== false) {
+      writer.uint32(184).bool(message.managedCompatible);
+    }
+    if (message.cleanupComplete !== false) {
+      writer.uint32(192).bool(message.cleanupComplete);
+    }
+    if (message.acceptedAtUnixMs !== "0") {
+      writer.uint32(200).uint64(message.acceptedAtUnixMs);
+    }
+    if (message.updatedAtUnixMs !== "0") {
+      writer.uint32(208).uint64(message.updatedAtUnixMs);
+    }
+    if (message.expectedManifestDigest !== "") {
+      writer.uint32(218).string(message.expectedManifestDigest);
+    }
+    if (message.sourceCommit !== "") {
+      writer.uint32(226).string(message.sourceCommit);
+    }
+    if (message.sourceTree !== "") {
+      writer.uint32(234).string(message.sourceTree);
+    }
+    if (message.policyDigest !== "") {
+      writer.uint32(242).string(message.policyDigest);
+    }
+    if (message.lockDigest !== "") {
+      writer.uint32(250).string(message.lockDigest);
+    }
+    if (message.lockFingerprint !== "") {
+      writer.uint32(258).string(message.lockFingerprint);
+    }
+    if (message.registryDestination !== "") {
+      writer.uint32(266).string(message.registryDestination);
+    }
+    if (message.managedCheckDigest !== "") {
+      writer.uint32(274).string(message.managedCheckDigest);
+    }
+    if (message.unsignedManifestDigest !== "") {
+      writer.uint32(282).string(message.unsignedManifestDigest);
+    }
+    if (message.certificationLayerDigest !== "") {
+      writer.uint32(290).string(message.certificationLayerDigest);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RuntimePreparation {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRuntimePreparation();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.repositoryId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.inspectionId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.registryConnectionId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.signerId = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.platform = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.stage = reader.string();
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.safeReason = reader.string();
+            continue;
+          }
+          case 11: {
+            if (tag !== 88) {
+              break;
+            }
+
+            message.generation = reader.uint64().toString();
+            continue;
+          }
+          case 12: {
+            if (tag !== 96) {
+              break;
+            }
+
+            message.allowBuild = reader.bool();
+            continue;
+          }
+          case 13: {
+            if (tag !== 104) {
+              break;
+            }
+
+            message.allowReplace = reader.bool();
+            continue;
+          }
+          case 14: {
+            if (tag !== 112) {
+              break;
+            }
+
+            message.maxBuilds = reader.uint32();
+            continue;
+          }
+          case 15: {
+            if (tag !== 120) {
+              break;
+            }
+
+            message.buildsStarted = reader.uint32();
+            continue;
+          }
+          case 16: {
+            if (tag !== 128) {
+              break;
+            }
+
+            message.deadlineUnixMs = reader.uint64().toString();
+            continue;
+          }
+          case 17: {
+            if (tag !== 138) {
+              break;
+            }
+
+            message.frozenInputDigest = reader.string();
+            continue;
+          }
+          case 18: {
+            if (tag !== 146) {
+              break;
+            }
+
+            message.imageDigest = reader.string();
+            continue;
+          }
+          case 19: {
+            if (tag !== 154) {
+              break;
+            }
+
+            message.candidateImage = reader.string();
+            continue;
+          }
+          case 20: {
+            if (tag !== 162) {
+              break;
+            }
+
+            message.protectedContentRoot = reader.string();
+            continue;
+          }
+          case 21: {
+            if (tag !== 170) {
+              break;
+            }
+
+            message.certificateDigest = reader.string();
+            continue;
+          }
+          case 22: {
+            if (tag !== 176) {
+              break;
+            }
+
+            message.contentVerified = reader.bool();
+            continue;
+          }
+          case 23: {
+            if (tag !== 184) {
+              break;
+            }
+
+            message.managedCompatible = reader.bool();
+            continue;
+          }
+          case 24: {
+            if (tag !== 192) {
+              break;
+            }
+
+            message.cleanupComplete = reader.bool();
+            continue;
+          }
+          case 25: {
+            if (tag !== 200) {
+              break;
+            }
+
+            message.acceptedAtUnixMs = reader.uint64().toString();
+            continue;
+          }
+          case 26: {
+            if (tag !== 208) {
+              break;
+            }
+
+            message.updatedAtUnixMs = reader.uint64().toString();
+            continue;
+          }
+          case 27: {
+            if (tag !== 218) {
+              break;
+            }
+
+            message.expectedManifestDigest = reader.string();
+            continue;
+          }
+          case 28: {
+            if (tag !== 226) {
+              break;
+            }
+
+            message.sourceCommit = reader.string();
+            continue;
+          }
+          case 29: {
+            if (tag !== 234) {
+              break;
+            }
+
+            message.sourceTree = reader.string();
+            continue;
+          }
+          case 30: {
+            if (tag !== 242) {
+              break;
+            }
+
+            message.policyDigest = reader.string();
+            continue;
+          }
+          case 31: {
+            if (tag !== 250) {
+              break;
+            }
+
+            message.lockDigest = reader.string();
+            continue;
+          }
+          case 32: {
+            if (tag !== 258) {
+              break;
+            }
+
+            message.lockFingerprint = reader.string();
+            continue;
+          }
+          case 33: {
+            if (tag !== 266) {
+              break;
+            }
+
+            message.registryDestination = reader.string();
+            continue;
+          }
+          case 34: {
+            if (tag !== 274) {
+              break;
+            }
+
+            message.managedCheckDigest = reader.string();
+            continue;
+          }
+          case 35: {
+            if (tag !== 282) {
+              break;
+            }
+
+            message.unsignedManifestDigest = reader.string();
+            continue;
+          }
+          case 36: {
+            if (tag !== 290) {
+              break;
+            }
+
+            message.certificationLayerDigest = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RuntimePreparation {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      repositoryId: isSet(object.repositoryId)
+        ? globalThis.String(object.repositoryId)
+        : isSet(object.repository_id)
+        ? globalThis.String(object.repository_id)
+        : "",
+      inspectionId: isSet(object.inspectionId)
+        ? globalThis.String(object.inspectionId)
+        : isSet(object.inspection_id)
+        ? globalThis.String(object.inspection_id)
+        : "",
+      registryConnectionId: isSet(object.registryConnectionId)
+        ? globalThis.String(object.registryConnectionId)
+        : isSet(object.registry_connection_id)
+        ? globalThis.String(object.registry_connection_id)
+        : "",
+      signerId: isSet(object.signerId)
+        ? globalThis.String(object.signerId)
+        : isSet(object.signer_id)
+        ? globalThis.String(object.signer_id)
+        : "",
+      platform: isSet(object.platform) ? globalThis.String(object.platform) : "",
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+      stage: isSet(object.stage) ? globalThis.String(object.stage) : "",
+      safeReason: isSet(object.safeReason)
+        ? globalThis.String(object.safeReason)
+        : isSet(object.safe_reason)
+        ? globalThis.String(object.safe_reason)
+        : "",
+      generation: isSet(object.generation) ? globalThis.String(object.generation) : "0",
+      allowBuild: isSet(object.allowBuild)
+        ? globalThis.Boolean(object.allowBuild)
+        : isSet(object.allow_build)
+        ? globalThis.Boolean(object.allow_build)
+        : false,
+      allowReplace: isSet(object.allowReplace)
+        ? globalThis.Boolean(object.allowReplace)
+        : isSet(object.allow_replace)
+        ? globalThis.Boolean(object.allow_replace)
+        : false,
+      maxBuilds: isSet(object.maxBuilds)
+        ? globalThis.Number(object.maxBuilds)
+        : isSet(object.max_builds)
+        ? globalThis.Number(object.max_builds)
+        : 0,
+      buildsStarted: isSet(object.buildsStarted)
+        ? globalThis.Number(object.buildsStarted)
+        : isSet(object.builds_started)
+        ? globalThis.Number(object.builds_started)
+        : 0,
+      deadlineUnixMs: isSet(object.deadlineUnixMs)
+        ? globalThis.String(object.deadlineUnixMs)
+        : isSet(object.deadline_unix_ms)
+        ? globalThis.String(object.deadline_unix_ms)
+        : "0",
+      frozenInputDigest: isSet(object.frozenInputDigest)
+        ? globalThis.String(object.frozenInputDigest)
+        : isSet(object.frozen_input_digest)
+        ? globalThis.String(object.frozen_input_digest)
+        : "",
+      imageDigest: isSet(object.imageDigest)
+        ? globalThis.String(object.imageDigest)
+        : isSet(object.image_digest)
+        ? globalThis.String(object.image_digest)
+        : "",
+      candidateImage: isSet(object.candidateImage)
+        ? globalThis.String(object.candidateImage)
+        : isSet(object.candidate_image)
+        ? globalThis.String(object.candidate_image)
+        : "",
+      protectedContentRoot: isSet(object.protectedContentRoot)
+        ? globalThis.String(object.protectedContentRoot)
+        : isSet(object.protected_content_root)
+        ? globalThis.String(object.protected_content_root)
+        : "",
+      certificateDigest: isSet(object.certificateDigest)
+        ? globalThis.String(object.certificateDigest)
+        : isSet(object.certificate_digest)
+        ? globalThis.String(object.certificate_digest)
+        : "",
+      contentVerified: isSet(object.contentVerified)
+        ? globalThis.Boolean(object.contentVerified)
+        : isSet(object.content_verified)
+        ? globalThis.Boolean(object.content_verified)
+        : false,
+      managedCompatible: isSet(object.managedCompatible)
+        ? globalThis.Boolean(object.managedCompatible)
+        : isSet(object.managed_compatible)
+        ? globalThis.Boolean(object.managed_compatible)
+        : false,
+      cleanupComplete: isSet(object.cleanupComplete)
+        ? globalThis.Boolean(object.cleanupComplete)
+        : isSet(object.cleanup_complete)
+        ? globalThis.Boolean(object.cleanup_complete)
+        : false,
+      acceptedAtUnixMs: isSet(object.acceptedAtUnixMs)
+        ? globalThis.String(object.acceptedAtUnixMs)
+        : isSet(object.accepted_at_unix_ms)
+        ? globalThis.String(object.accepted_at_unix_ms)
+        : "0",
+      updatedAtUnixMs: isSet(object.updatedAtUnixMs)
+        ? globalThis.String(object.updatedAtUnixMs)
+        : isSet(object.updated_at_unix_ms)
+        ? globalThis.String(object.updated_at_unix_ms)
+        : "0",
+      expectedManifestDigest: isSet(object.expectedManifestDigest)
+        ? globalThis.String(object.expectedManifestDigest)
+        : isSet(object.expected_manifest_digest)
+        ? globalThis.String(object.expected_manifest_digest)
+        : "",
+      sourceCommit: isSet(object.sourceCommit)
+        ? globalThis.String(object.sourceCommit)
+        : isSet(object.source_commit)
+        ? globalThis.String(object.source_commit)
+        : "",
+      sourceTree: isSet(object.sourceTree)
+        ? globalThis.String(object.sourceTree)
+        : isSet(object.source_tree)
+        ? globalThis.String(object.source_tree)
+        : "",
+      policyDigest: isSet(object.policyDigest)
+        ? globalThis.String(object.policyDigest)
+        : isSet(object.policy_digest)
+        ? globalThis.String(object.policy_digest)
+        : "",
+      lockDigest: isSet(object.lockDigest)
+        ? globalThis.String(object.lockDigest)
+        : isSet(object.lock_digest)
+        ? globalThis.String(object.lock_digest)
+        : "",
+      lockFingerprint: isSet(object.lockFingerprint)
+        ? globalThis.String(object.lockFingerprint)
+        : isSet(object.lock_fingerprint)
+        ? globalThis.String(object.lock_fingerprint)
+        : "",
+      registryDestination: isSet(object.registryDestination)
+        ? globalThis.String(object.registryDestination)
+        : isSet(object.registry_destination)
+        ? globalThis.String(object.registry_destination)
+        : "",
+      managedCheckDigest: isSet(object.managedCheckDigest)
+        ? globalThis.String(object.managedCheckDigest)
+        : isSet(object.managed_check_digest)
+        ? globalThis.String(object.managed_check_digest)
+        : "",
+      unsignedManifestDigest: isSet(object.unsignedManifestDigest)
+        ? globalThis.String(object.unsignedManifestDigest)
+        : isSet(object.unsigned_manifest_digest)
+        ? globalThis.String(object.unsigned_manifest_digest)
+        : "",
+      certificationLayerDigest: isSet(object.certificationLayerDigest)
+        ? globalThis.String(object.certificationLayerDigest)
+        : isSet(object.certification_layer_digest)
+        ? globalThis.String(object.certification_layer_digest)
+        : "",
+    };
+  },
+
+  toJSON(message: RuntimePreparation): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.repositoryId !== "") {
+      obj.repositoryId = message.repositoryId;
+    }
+    if (message.inspectionId !== "") {
+      obj.inspectionId = message.inspectionId;
+    }
+    if (message.registryConnectionId !== "") {
+      obj.registryConnectionId = message.registryConnectionId;
+    }
+    if (message.signerId !== "") {
+      obj.signerId = message.signerId;
+    }
+    if (message.platform !== "") {
+      obj.platform = message.platform;
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    if (message.stage !== "") {
+      obj.stage = message.stage;
+    }
+    if (message.safeReason !== "") {
+      obj.safeReason = message.safeReason;
+    }
+    if (message.generation !== "0") {
+      obj.generation = message.generation;
+    }
+    if (message.allowBuild !== false) {
+      obj.allowBuild = message.allowBuild;
+    }
+    if (message.allowReplace !== false) {
+      obj.allowReplace = message.allowReplace;
+    }
+    if (message.maxBuilds !== 0) {
+      obj.maxBuilds = Math.round(message.maxBuilds);
+    }
+    if (message.buildsStarted !== 0) {
+      obj.buildsStarted = Math.round(message.buildsStarted);
+    }
+    if (message.deadlineUnixMs !== "0") {
+      obj.deadlineUnixMs = message.deadlineUnixMs;
+    }
+    if (message.frozenInputDigest !== "") {
+      obj.frozenInputDigest = message.frozenInputDigest;
+    }
+    if (message.imageDigest !== "") {
+      obj.imageDigest = message.imageDigest;
+    }
+    if (message.candidateImage !== "") {
+      obj.candidateImage = message.candidateImage;
+    }
+    if (message.protectedContentRoot !== "") {
+      obj.protectedContentRoot = message.protectedContentRoot;
+    }
+    if (message.certificateDigest !== "") {
+      obj.certificateDigest = message.certificateDigest;
+    }
+    if (message.contentVerified !== false) {
+      obj.contentVerified = message.contentVerified;
+    }
+    if (message.managedCompatible !== false) {
+      obj.managedCompatible = message.managedCompatible;
+    }
+    if (message.cleanupComplete !== false) {
+      obj.cleanupComplete = message.cleanupComplete;
+    }
+    if (message.acceptedAtUnixMs !== "0") {
+      obj.acceptedAtUnixMs = message.acceptedAtUnixMs;
+    }
+    if (message.updatedAtUnixMs !== "0") {
+      obj.updatedAtUnixMs = message.updatedAtUnixMs;
+    }
+    if (message.expectedManifestDigest !== "") {
+      obj.expectedManifestDigest = message.expectedManifestDigest;
+    }
+    if (message.sourceCommit !== "") {
+      obj.sourceCommit = message.sourceCommit;
+    }
+    if (message.sourceTree !== "") {
+      obj.sourceTree = message.sourceTree;
+    }
+    if (message.policyDigest !== "") {
+      obj.policyDigest = message.policyDigest;
+    }
+    if (message.lockDigest !== "") {
+      obj.lockDigest = message.lockDigest;
+    }
+    if (message.lockFingerprint !== "") {
+      obj.lockFingerprint = message.lockFingerprint;
+    }
+    if (message.registryDestination !== "") {
+      obj.registryDestination = message.registryDestination;
+    }
+    if (message.managedCheckDigest !== "") {
+      obj.managedCheckDigest = message.managedCheckDigest;
+    }
+    if (message.unsignedManifestDigest !== "") {
+      obj.unsignedManifestDigest = message.unsignedManifestDigest;
+    }
+    if (message.certificationLayerDigest !== "") {
+      obj.certificationLayerDigest = message.certificationLayerDigest;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RuntimePreparation>): RuntimePreparation {
+    return RuntimePreparation.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RuntimePreparation>): RuntimePreparation {
+    const message = createBaseRuntimePreparation();
+    message.id = object.id ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.repositoryId = object.repositoryId ?? "";
+    message.inspectionId = object.inspectionId ?? "";
+    message.registryConnectionId = object.registryConnectionId ?? "";
+    message.signerId = object.signerId ?? "";
+    message.platform = object.platform ?? "";
+    message.state = object.state ?? "";
+    message.stage = object.stage ?? "";
+    message.safeReason = object.safeReason ?? "";
+    message.generation = object.generation ?? "0";
+    message.allowBuild = object.allowBuild ?? false;
+    message.allowReplace = object.allowReplace ?? false;
+    message.maxBuilds = object.maxBuilds ?? 0;
+    message.buildsStarted = object.buildsStarted ?? 0;
+    message.deadlineUnixMs = object.deadlineUnixMs ?? "0";
+    message.frozenInputDigest = object.frozenInputDigest ?? "";
+    message.imageDigest = object.imageDigest ?? "";
+    message.candidateImage = object.candidateImage ?? "";
+    message.protectedContentRoot = object.protectedContentRoot ?? "";
+    message.certificateDigest = object.certificateDigest ?? "";
+    message.contentVerified = object.contentVerified ?? false;
+    message.managedCompatible = object.managedCompatible ?? false;
+    message.cleanupComplete = object.cleanupComplete ?? false;
+    message.acceptedAtUnixMs = object.acceptedAtUnixMs ?? "0";
+    message.updatedAtUnixMs = object.updatedAtUnixMs ?? "0";
+    message.expectedManifestDigest = object.expectedManifestDigest ?? "";
+    message.sourceCommit = object.sourceCommit ?? "";
+    message.sourceTree = object.sourceTree ?? "";
+    message.policyDigest = object.policyDigest ?? "";
+    message.lockDigest = object.lockDigest ?? "";
+    message.lockFingerprint = object.lockFingerprint ?? "";
+    message.registryDestination = object.registryDestination ?? "";
+    message.managedCheckDigest = object.managedCheckDigest ?? "";
+    message.unsignedManifestDigest = object.unsignedManifestDigest ?? "";
+    message.certificationLayerDigest = object.certificationLayerDigest ?? "";
+    return message;
+  },
+};
+
+function createBaseStartRuntimePreparationRequest(): StartRuntimePreparationRequest {
+  return {
+    idempotencyKey: "",
+    repositoryId: "",
+    inspectionId: "",
+    registryConnectionId: "",
+    signerId: "",
+    platform: "",
+    maxSeconds: 0,
+    maxBuilds: 0,
+    allowBuild: false,
+    allowReplace: false,
+  };
+}
+
+export const StartRuntimePreparationRequest: MessageFns<StartRuntimePreparationRequest> = {
+  encode(message: StartRuntimePreparationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.repositoryId !== "") {
+      writer.uint32(18).string(message.repositoryId);
+    }
+    if (message.inspectionId !== "") {
+      writer.uint32(26).string(message.inspectionId);
+    }
+    if (message.registryConnectionId !== "") {
+      writer.uint32(34).string(message.registryConnectionId);
+    }
+    if (message.signerId !== "") {
+      writer.uint32(42).string(message.signerId);
+    }
+    if (message.platform !== "") {
+      writer.uint32(50).string(message.platform);
+    }
+    if (message.maxSeconds !== 0) {
+      writer.uint32(56).uint32(message.maxSeconds);
+    }
+    if (message.maxBuilds !== 0) {
+      writer.uint32(64).uint32(message.maxBuilds);
+    }
+    if (message.allowBuild !== false) {
+      writer.uint32(72).bool(message.allowBuild);
+    }
+    if (message.allowReplace !== false) {
+      writer.uint32(80).bool(message.allowReplace);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StartRuntimePreparationRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseStartRuntimePreparationRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.repositoryId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.inspectionId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.registryConnectionId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.signerId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.platform = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.maxSeconds = reader.uint32();
+            continue;
+          }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.maxBuilds = reader.uint32();
+            continue;
+          }
+          case 9: {
+            if (tag !== 72) {
+              break;
+            }
+
+            message.allowBuild = reader.bool();
+            continue;
+          }
+          case 10: {
+            if (tag !== 80) {
+              break;
+            }
+
+            message.allowReplace = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): StartRuntimePreparationRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      repositoryId: isSet(object.repositoryId)
+        ? globalThis.String(object.repositoryId)
+        : isSet(object.repository_id)
+        ? globalThis.String(object.repository_id)
+        : "",
+      inspectionId: isSet(object.inspectionId)
+        ? globalThis.String(object.inspectionId)
+        : isSet(object.inspection_id)
+        ? globalThis.String(object.inspection_id)
+        : "",
+      registryConnectionId: isSet(object.registryConnectionId)
+        ? globalThis.String(object.registryConnectionId)
+        : isSet(object.registry_connection_id)
+        ? globalThis.String(object.registry_connection_id)
+        : "",
+      signerId: isSet(object.signerId)
+        ? globalThis.String(object.signerId)
+        : isSet(object.signer_id)
+        ? globalThis.String(object.signer_id)
+        : "",
+      platform: isSet(object.platform) ? globalThis.String(object.platform) : "",
+      maxSeconds: isSet(object.maxSeconds)
+        ? globalThis.Number(object.maxSeconds)
+        : isSet(object.max_seconds)
+        ? globalThis.Number(object.max_seconds)
+        : 0,
+      maxBuilds: isSet(object.maxBuilds)
+        ? globalThis.Number(object.maxBuilds)
+        : isSet(object.max_builds)
+        ? globalThis.Number(object.max_builds)
+        : 0,
+      allowBuild: isSet(object.allowBuild)
+        ? globalThis.Boolean(object.allowBuild)
+        : isSet(object.allow_build)
+        ? globalThis.Boolean(object.allow_build)
+        : false,
+      allowReplace: isSet(object.allowReplace)
+        ? globalThis.Boolean(object.allowReplace)
+        : isSet(object.allow_replace)
+        ? globalThis.Boolean(object.allow_replace)
+        : false,
+    };
+  },
+
+  toJSON(message: StartRuntimePreparationRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.repositoryId !== "") {
+      obj.repositoryId = message.repositoryId;
+    }
+    if (message.inspectionId !== "") {
+      obj.inspectionId = message.inspectionId;
+    }
+    if (message.registryConnectionId !== "") {
+      obj.registryConnectionId = message.registryConnectionId;
+    }
+    if (message.signerId !== "") {
+      obj.signerId = message.signerId;
+    }
+    if (message.platform !== "") {
+      obj.platform = message.platform;
+    }
+    if (message.maxSeconds !== 0) {
+      obj.maxSeconds = Math.round(message.maxSeconds);
+    }
+    if (message.maxBuilds !== 0) {
+      obj.maxBuilds = Math.round(message.maxBuilds);
+    }
+    if (message.allowBuild !== false) {
+      obj.allowBuild = message.allowBuild;
+    }
+    if (message.allowReplace !== false) {
+      obj.allowReplace = message.allowReplace;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<StartRuntimePreparationRequest>): StartRuntimePreparationRequest {
+    return StartRuntimePreparationRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<StartRuntimePreparationRequest>): StartRuntimePreparationRequest {
+    const message = createBaseStartRuntimePreparationRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.repositoryId = object.repositoryId ?? "";
+    message.inspectionId = object.inspectionId ?? "";
+    message.registryConnectionId = object.registryConnectionId ?? "";
+    message.signerId = object.signerId ?? "";
+    message.platform = object.platform ?? "";
+    message.maxSeconds = object.maxSeconds ?? 0;
+    message.maxBuilds = object.maxBuilds ?? 0;
+    message.allowBuild = object.allowBuild ?? false;
+    message.allowReplace = object.allowReplace ?? false;
+    return message;
+  },
+};
+
+function createBaseStartRuntimePreparationResponse(): StartRuntimePreparationResponse {
+  return { operation: undefined };
+}
+
+export const StartRuntimePreparationResponse: MessageFns<StartRuntimePreparationResponse> = {
+  encode(message: StartRuntimePreparationResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operation !== undefined) {
+      RuntimePreparation.encode(message.operation, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StartRuntimePreparationResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseStartRuntimePreparationResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operation = RuntimePreparation.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): StartRuntimePreparationResponse {
+    return { operation: isSet(object.operation) ? RuntimePreparation.fromJSON(object.operation) : undefined };
+  },
+
+  toJSON(message: StartRuntimePreparationResponse): unknown {
+    const obj: any = {};
+    if (message.operation !== undefined) {
+      obj.operation = RuntimePreparation.toJSON(message.operation);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<StartRuntimePreparationResponse>): StartRuntimePreparationResponse {
+    return StartRuntimePreparationResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<StartRuntimePreparationResponse>): StartRuntimePreparationResponse {
+    const message = createBaseStartRuntimePreparationResponse();
+    message.operation = (object.operation !== undefined && object.operation !== null)
+      ? RuntimePreparation.fromPartial(object.operation)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetRuntimePreparationRequest(): GetRuntimePreparationRequest {
+  return { id: "" };
+}
+
+export const GetRuntimePreparationRequest: MessageFns<GetRuntimePreparationRequest> = {
+  encode(message: GetRuntimePreparationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRuntimePreparationRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRuntimePreparationRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRuntimePreparationRequest {
+    return { id: isSet(object.id) ? globalThis.String(object.id) : "" };
+  },
+
+  toJSON(message: GetRuntimePreparationRequest): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRuntimePreparationRequest>): GetRuntimePreparationRequest {
+    return GetRuntimePreparationRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRuntimePreparationRequest>): GetRuntimePreparationRequest {
+    const message = createBaseGetRuntimePreparationRequest();
+    message.id = object.id ?? "";
+    return message;
+  },
+};
+
+function createBaseGetRuntimePreparationResponse(): GetRuntimePreparationResponse {
+  return { operation: undefined };
+}
+
+export const GetRuntimePreparationResponse: MessageFns<GetRuntimePreparationResponse> = {
+  encode(message: GetRuntimePreparationResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operation !== undefined) {
+      RuntimePreparation.encode(message.operation, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRuntimePreparationResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRuntimePreparationResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operation = RuntimePreparation.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRuntimePreparationResponse {
+    return { operation: isSet(object.operation) ? RuntimePreparation.fromJSON(object.operation) : undefined };
+  },
+
+  toJSON(message: GetRuntimePreparationResponse): unknown {
+    const obj: any = {};
+    if (message.operation !== undefined) {
+      obj.operation = RuntimePreparation.toJSON(message.operation);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRuntimePreparationResponse>): GetRuntimePreparationResponse {
+    return GetRuntimePreparationResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRuntimePreparationResponse>): GetRuntimePreparationResponse {
+    const message = createBaseGetRuntimePreparationResponse();
+    message.operation = (object.operation !== undefined && object.operation !== null)
+      ? RuntimePreparation.fromPartial(object.operation)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseListRuntimePreparationsRequest(): ListRuntimePreparationsRequest {
+  return { repositoryId: "", afterId: "", limit: 0 };
+}
+
+export const ListRuntimePreparationsRequest: MessageFns<ListRuntimePreparationsRequest> = {
+  encode(message: ListRuntimePreparationsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repositoryId !== "") {
+      writer.uint32(10).string(message.repositoryId);
+    }
+    if (message.afterId !== "") {
+      writer.uint32(18).string(message.afterId);
+    }
+    if (message.limit !== 0) {
+      writer.uint32(24).uint32(message.limit);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListRuntimePreparationsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListRuntimePreparationsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositoryId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.afterId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.limit = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListRuntimePreparationsRequest {
+    return {
+      repositoryId: isSet(object.repositoryId)
+        ? globalThis.String(object.repositoryId)
+        : isSet(object.repository_id)
+        ? globalThis.String(object.repository_id)
+        : "",
+      afterId: isSet(object.afterId)
+        ? globalThis.String(object.afterId)
+        : isSet(object.after_id)
+        ? globalThis.String(object.after_id)
+        : "",
+      limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
+    };
+  },
+
+  toJSON(message: ListRuntimePreparationsRequest): unknown {
+    const obj: any = {};
+    if (message.repositoryId !== "") {
+      obj.repositoryId = message.repositoryId;
+    }
+    if (message.afterId !== "") {
+      obj.afterId = message.afterId;
+    }
+    if (message.limit !== 0) {
+      obj.limit = Math.round(message.limit);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListRuntimePreparationsRequest>): ListRuntimePreparationsRequest {
+    return ListRuntimePreparationsRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListRuntimePreparationsRequest>): ListRuntimePreparationsRequest {
+    const message = createBaseListRuntimePreparationsRequest();
+    message.repositoryId = object.repositoryId ?? "";
+    message.afterId = object.afterId ?? "";
+    message.limit = object.limit ?? 0;
+    return message;
+  },
+};
+
+function createBaseListRuntimePreparationsResponse(): ListRuntimePreparationsResponse {
+  return { operations: [], nextAfterId: "" };
+}
+
+export const ListRuntimePreparationsResponse: MessageFns<ListRuntimePreparationsResponse> = {
+  encode(message: ListRuntimePreparationsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.operations) {
+      RuntimePreparation.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.nextAfterId !== "") {
+      writer.uint32(18).string(message.nextAfterId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListRuntimePreparationsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListRuntimePreparationsResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operations.push(RuntimePreparation.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.nextAfterId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListRuntimePreparationsResponse {
+    return {
+      operations: globalThis.Array.isArray(object?.operations)
+        ? object.operations.map((e: any) => RuntimePreparation.fromJSON(e))
+        : [],
+      nextAfterId: isSet(object.nextAfterId)
+        ? globalThis.String(object.nextAfterId)
+        : isSet(object.next_after_id)
+        ? globalThis.String(object.next_after_id)
+        : "",
+    };
+  },
+
+  toJSON(message: ListRuntimePreparationsResponse): unknown {
+    const obj: any = {};
+    if (message.operations?.length) {
+      obj.operations = message.operations.map((e) => RuntimePreparation.toJSON(e));
+    }
+    if (message.nextAfterId !== "") {
+      obj.nextAfterId = message.nextAfterId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListRuntimePreparationsResponse>): ListRuntimePreparationsResponse {
+    return ListRuntimePreparationsResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListRuntimePreparationsResponse>): ListRuntimePreparationsResponse {
+    const message = createBaseListRuntimePreparationsResponse();
+    message.operations = object.operations?.map((e) => RuntimePreparation.fromPartial(e)) || [];
+    message.nextAfterId = object.nextAfterId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetRuntimePreparationReceiptRequest(): GetRuntimePreparationReceiptRequest {
+  return { idempotencyKey: "" };
+}
+
+export const GetRuntimePreparationReceiptRequest: MessageFns<GetRuntimePreparationReceiptRequest> = {
+  encode(message: GetRuntimePreparationReceiptRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRuntimePreparationReceiptRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRuntimePreparationReceiptRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRuntimePreparationReceiptRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+    };
+  },
+
+  toJSON(message: GetRuntimePreparationReceiptRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRuntimePreparationReceiptRequest>): GetRuntimePreparationReceiptRequest {
+    return GetRuntimePreparationReceiptRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRuntimePreparationReceiptRequest>): GetRuntimePreparationReceiptRequest {
+    const message = createBaseGetRuntimePreparationReceiptRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    return message;
+  },
+};
+
+function createBaseGetRuntimePreparationReceiptResponse(): GetRuntimePreparationReceiptResponse {
+  return { operation: undefined };
+}
+
+export const GetRuntimePreparationReceiptResponse: MessageFns<GetRuntimePreparationReceiptResponse> = {
+  encode(message: GetRuntimePreparationReceiptResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operation !== undefined) {
+      RuntimePreparation.encode(message.operation, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRuntimePreparationReceiptResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRuntimePreparationReceiptResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operation = RuntimePreparation.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRuntimePreparationReceiptResponse {
+    return { operation: isSet(object.operation) ? RuntimePreparation.fromJSON(object.operation) : undefined };
+  },
+
+  toJSON(message: GetRuntimePreparationReceiptResponse): unknown {
+    const obj: any = {};
+    if (message.operation !== undefined) {
+      obj.operation = RuntimePreparation.toJSON(message.operation);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRuntimePreparationReceiptResponse>): GetRuntimePreparationReceiptResponse {
+    return GetRuntimePreparationReceiptResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRuntimePreparationReceiptResponse>): GetRuntimePreparationReceiptResponse {
+    const message = createBaseGetRuntimePreparationReceiptResponse();
+    message.operation = (object.operation !== undefined && object.operation !== null)
+      ? RuntimePreparation.fromPartial(object.operation)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseCancelRuntimePreparationRequest(): CancelRuntimePreparationRequest {
+  return { idempotencyKey: "", id: "", expectedGeneration: "0" };
+}
+
+export const CancelRuntimePreparationRequest: MessageFns<CancelRuntimePreparationRequest> = {
+  encode(message: CancelRuntimePreparationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.id !== "") {
+      writer.uint32(18).string(message.id);
+    }
+    if (message.expectedGeneration !== "0") {
+      writer.uint32(24).uint64(message.expectedGeneration);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CancelRuntimePreparationRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCancelRuntimePreparationRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.expectedGeneration = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): CancelRuntimePreparationRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      expectedGeneration: isSet(object.expectedGeneration)
+        ? globalThis.String(object.expectedGeneration)
+        : isSet(object.expected_generation)
+        ? globalThis.String(object.expected_generation)
+        : "0",
+    };
+  },
+
+  toJSON(message: CancelRuntimePreparationRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.expectedGeneration !== "0") {
+      obj.expectedGeneration = message.expectedGeneration;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<CancelRuntimePreparationRequest>): CancelRuntimePreparationRequest {
+    return CancelRuntimePreparationRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CancelRuntimePreparationRequest>): CancelRuntimePreparationRequest {
+    const message = createBaseCancelRuntimePreparationRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.id = object.id ?? "";
+    message.expectedGeneration = object.expectedGeneration ?? "0";
+    return message;
+  },
+};
+
+function createBaseCancelRuntimePreparationResponse(): CancelRuntimePreparationResponse {
+  return { operation: undefined };
+}
+
+export const CancelRuntimePreparationResponse: MessageFns<CancelRuntimePreparationResponse> = {
+  encode(message: CancelRuntimePreparationResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operation !== undefined) {
+      RuntimePreparation.encode(message.operation, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CancelRuntimePreparationResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCancelRuntimePreparationResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operation = RuntimePreparation.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): CancelRuntimePreparationResponse {
+    return { operation: isSet(object.operation) ? RuntimePreparation.fromJSON(object.operation) : undefined };
+  },
+
+  toJSON(message: CancelRuntimePreparationResponse): unknown {
+    const obj: any = {};
+    if (message.operation !== undefined) {
+      obj.operation = RuntimePreparation.toJSON(message.operation);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<CancelRuntimePreparationResponse>): CancelRuntimePreparationResponse {
+    return CancelRuntimePreparationResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CancelRuntimePreparationResponse>): CancelRuntimePreparationResponse {
+    const message = createBaseCancelRuntimePreparationResponse();
+    message.operation = (object.operation !== undefined && object.operation !== null)
+      ? RuntimePreparation.fromPartial(object.operation)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseRetryRuntimePreparationRequest(): RetryRuntimePreparationRequest {
+  return { idempotencyKey: "", id: "", expectedGeneration: "0" };
+}
+
+export const RetryRuntimePreparationRequest: MessageFns<RetryRuntimePreparationRequest> = {
+  encode(message: RetryRuntimePreparationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.id !== "") {
+      writer.uint32(18).string(message.id);
+    }
+    if (message.expectedGeneration !== "0") {
+      writer.uint32(24).uint64(message.expectedGeneration);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RetryRuntimePreparationRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRetryRuntimePreparationRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.expectedGeneration = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RetryRuntimePreparationRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      expectedGeneration: isSet(object.expectedGeneration)
+        ? globalThis.String(object.expectedGeneration)
+        : isSet(object.expected_generation)
+        ? globalThis.String(object.expected_generation)
+        : "0",
+    };
+  },
+
+  toJSON(message: RetryRuntimePreparationRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.expectedGeneration !== "0") {
+      obj.expectedGeneration = message.expectedGeneration;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RetryRuntimePreparationRequest>): RetryRuntimePreparationRequest {
+    return RetryRuntimePreparationRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RetryRuntimePreparationRequest>): RetryRuntimePreparationRequest {
+    const message = createBaseRetryRuntimePreparationRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.id = object.id ?? "";
+    message.expectedGeneration = object.expectedGeneration ?? "0";
+    return message;
+  },
+};
+
+function createBaseRetryRuntimePreparationResponse(): RetryRuntimePreparationResponse {
+  return { operation: undefined };
+}
+
+export const RetryRuntimePreparationResponse: MessageFns<RetryRuntimePreparationResponse> = {
+  encode(message: RetryRuntimePreparationResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operation !== undefined) {
+      RuntimePreparation.encode(message.operation, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RetryRuntimePreparationResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRetryRuntimePreparationResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operation = RuntimePreparation.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RetryRuntimePreparationResponse {
+    return { operation: isSet(object.operation) ? RuntimePreparation.fromJSON(object.operation) : undefined };
+  },
+
+  toJSON(message: RetryRuntimePreparationResponse): unknown {
+    const obj: any = {};
+    if (message.operation !== undefined) {
+      obj.operation = RuntimePreparation.toJSON(message.operation);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RetryRuntimePreparationResponse>): RetryRuntimePreparationResponse {
+    return RetryRuntimePreparationResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RetryRuntimePreparationResponse>): RetryRuntimePreparationResponse {
+    const message = createBaseRetryRuntimePreparationResponse();
+    message.operation = (object.operation !== undefined && object.operation !== null)
+      ? RuntimePreparation.fromPartial(object.operation)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseProvisionRuntimeSignerRequest(): ProvisionRuntimeSignerRequest {
+  return { idempotencyKey: "", displayName: "", keyId: "", mode: "", signingSeed: "" };
+}
+
+export const ProvisionRuntimeSignerRequest: MessageFns<ProvisionRuntimeSignerRequest> = {
+  encode(message: ProvisionRuntimeSignerRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.displayName !== "") {
+      writer.uint32(18).string(message.displayName);
+    }
+    if (message.keyId !== "") {
+      writer.uint32(26).string(message.keyId);
+    }
+    if (message.mode !== "") {
+      writer.uint32(34).string(message.mode);
+    }
+    if (message.signingSeed !== "") {
+      writer.uint32(42).string(message.signingSeed);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProvisionRuntimeSignerRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProvisionRuntimeSignerRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.displayName = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.keyId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.mode = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.signingSeed = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ProvisionRuntimeSignerRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      displayName: isSet(object.displayName)
+        ? globalThis.String(object.displayName)
+        : isSet(object.display_name)
+        ? globalThis.String(object.display_name)
+        : "",
+      keyId: isSet(object.keyId)
+        ? globalThis.String(object.keyId)
+        : isSet(object.key_id)
+        ? globalThis.String(object.key_id)
+        : "",
+      mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
+      signingSeed: isSet(object.signingSeed)
+        ? globalThis.String(object.signingSeed)
+        : isSet(object.signing_seed)
+        ? globalThis.String(object.signing_seed)
+        : "",
+    };
+  },
+
+  toJSON(message: ProvisionRuntimeSignerRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.displayName !== "") {
+      obj.displayName = message.displayName;
+    }
+    if (message.keyId !== "") {
+      obj.keyId = message.keyId;
+    }
+    if (message.mode !== "") {
+      obj.mode = message.mode;
+    }
+    if (message.signingSeed !== "") {
+      obj.signingSeed = message.signingSeed;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ProvisionRuntimeSignerRequest>): ProvisionRuntimeSignerRequest {
+    return ProvisionRuntimeSignerRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ProvisionRuntimeSignerRequest>): ProvisionRuntimeSignerRequest {
+    const message = createBaseProvisionRuntimeSignerRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.displayName = object.displayName ?? "";
+    message.keyId = object.keyId ?? "";
+    message.mode = object.mode ?? "";
+    message.signingSeed = object.signingSeed ?? "";
+    return message;
+  },
+};
+
+function createBaseRecoverRuntimeSignerProvisioningRequest(): RecoverRuntimeSignerProvisioningRequest {
+  return { idempotencyKey: "" };
+}
+
+export const RecoverRuntimeSignerProvisioningRequest: MessageFns<RecoverRuntimeSignerProvisioningRequest> = {
+  encode(message: RecoverRuntimeSignerProvisioningRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RecoverRuntimeSignerProvisioningRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRecoverRuntimeSignerProvisioningRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RecoverRuntimeSignerProvisioningRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+    };
+  },
+
+  toJSON(message: RecoverRuntimeSignerProvisioningRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RecoverRuntimeSignerProvisioningRequest>): RecoverRuntimeSignerProvisioningRequest {
+    return RecoverRuntimeSignerProvisioningRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RecoverRuntimeSignerProvisioningRequest>): RecoverRuntimeSignerProvisioningRequest {
+    const message = createBaseRecoverRuntimeSignerProvisioningRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    return message;
+  },
+};
+
+function createBaseRuntimeSignerProvisioningOperation(): RuntimeSignerProvisioningOperation {
+  return {
+    id: "",
+    idempotencyKey: "",
+    displayName: "",
+    keyId: "",
+    mode: "",
+    state: "",
+    safeReason: "",
+    publicKey: "",
+    secretName: "",
+    secretUid: "",
+    signerId: "",
+    acceptedAtUnixMs: "0",
+    updatedAtUnixMs: "0",
+  };
+}
+
+export const RuntimeSignerProvisioningOperation: MessageFns<RuntimeSignerProvisioningOperation> = {
+  encode(message: RuntimeSignerProvisioningOperation, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(18).string(message.idempotencyKey);
+    }
+    if (message.displayName !== "") {
+      writer.uint32(26).string(message.displayName);
+    }
+    if (message.keyId !== "") {
+      writer.uint32(34).string(message.keyId);
+    }
+    if (message.mode !== "") {
+      writer.uint32(42).string(message.mode);
+    }
+    if (message.state !== "") {
+      writer.uint32(50).string(message.state);
+    }
+    if (message.safeReason !== "") {
+      writer.uint32(58).string(message.safeReason);
+    }
+    if (message.publicKey !== "") {
+      writer.uint32(66).string(message.publicKey);
+    }
+    if (message.secretName !== "") {
+      writer.uint32(74).string(message.secretName);
+    }
+    if (message.secretUid !== "") {
+      writer.uint32(82).string(message.secretUid);
+    }
+    if (message.signerId !== "") {
+      writer.uint32(90).string(message.signerId);
+    }
+    if (message.acceptedAtUnixMs !== "0") {
+      writer.uint32(96).uint64(message.acceptedAtUnixMs);
+    }
+    if (message.updatedAtUnixMs !== "0") {
+      writer.uint32(104).uint64(message.updatedAtUnixMs);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RuntimeSignerProvisioningOperation {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRuntimeSignerProvisioningOperation();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.displayName = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.keyId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.mode = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.safeReason = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.publicKey = reader.string();
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.secretName = reader.string();
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.secretUid = reader.string();
+            continue;
+          }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.signerId = reader.string();
+            continue;
+          }
+          case 12: {
+            if (tag !== 96) {
+              break;
+            }
+
+            message.acceptedAtUnixMs = reader.uint64().toString();
+            continue;
+          }
+          case 13: {
+            if (tag !== 104) {
+              break;
+            }
+
+            message.updatedAtUnixMs = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RuntimeSignerProvisioningOperation {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      displayName: isSet(object.displayName)
+        ? globalThis.String(object.displayName)
+        : isSet(object.display_name)
+        ? globalThis.String(object.display_name)
+        : "",
+      keyId: isSet(object.keyId)
+        ? globalThis.String(object.keyId)
+        : isSet(object.key_id)
+        ? globalThis.String(object.key_id)
+        : "",
+      mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+      safeReason: isSet(object.safeReason)
+        ? globalThis.String(object.safeReason)
+        : isSet(object.safe_reason)
+        ? globalThis.String(object.safe_reason)
+        : "",
+      publicKey: isSet(object.publicKey)
+        ? globalThis.String(object.publicKey)
+        : isSet(object.public_key)
+        ? globalThis.String(object.public_key)
+        : "",
+      secretName: isSet(object.secretName)
+        ? globalThis.String(object.secretName)
+        : isSet(object.secret_name)
+        ? globalThis.String(object.secret_name)
+        : "",
+      secretUid: isSet(object.secretUid)
+        ? globalThis.String(object.secretUid)
+        : isSet(object.secret_uid)
+        ? globalThis.String(object.secret_uid)
+        : "",
+      signerId: isSet(object.signerId)
+        ? globalThis.String(object.signerId)
+        : isSet(object.signer_id)
+        ? globalThis.String(object.signer_id)
+        : "",
+      acceptedAtUnixMs: isSet(object.acceptedAtUnixMs)
+        ? globalThis.String(object.acceptedAtUnixMs)
+        : isSet(object.accepted_at_unix_ms)
+        ? globalThis.String(object.accepted_at_unix_ms)
+        : "0",
+      updatedAtUnixMs: isSet(object.updatedAtUnixMs)
+        ? globalThis.String(object.updatedAtUnixMs)
+        : isSet(object.updated_at_unix_ms)
+        ? globalThis.String(object.updated_at_unix_ms)
+        : "0",
+    };
+  },
+
+  toJSON(message: RuntimeSignerProvisioningOperation): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.displayName !== "") {
+      obj.displayName = message.displayName;
+    }
+    if (message.keyId !== "") {
+      obj.keyId = message.keyId;
+    }
+    if (message.mode !== "") {
+      obj.mode = message.mode;
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    if (message.safeReason !== "") {
+      obj.safeReason = message.safeReason;
+    }
+    if (message.publicKey !== "") {
+      obj.publicKey = message.publicKey;
+    }
+    if (message.secretName !== "") {
+      obj.secretName = message.secretName;
+    }
+    if (message.secretUid !== "") {
+      obj.secretUid = message.secretUid;
+    }
+    if (message.signerId !== "") {
+      obj.signerId = message.signerId;
+    }
+    if (message.acceptedAtUnixMs !== "0") {
+      obj.acceptedAtUnixMs = message.acceptedAtUnixMs;
+    }
+    if (message.updatedAtUnixMs !== "0") {
+      obj.updatedAtUnixMs = message.updatedAtUnixMs;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RuntimeSignerProvisioningOperation>): RuntimeSignerProvisioningOperation {
+    return RuntimeSignerProvisioningOperation.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RuntimeSignerProvisioningOperation>): RuntimeSignerProvisioningOperation {
+    const message = createBaseRuntimeSignerProvisioningOperation();
+    message.id = object.id ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.displayName = object.displayName ?? "";
+    message.keyId = object.keyId ?? "";
+    message.mode = object.mode ?? "";
+    message.state = object.state ?? "";
+    message.safeReason = object.safeReason ?? "";
+    message.publicKey = object.publicKey ?? "";
+    message.secretName = object.secretName ?? "";
+    message.secretUid = object.secretUid ?? "";
+    message.signerId = object.signerId ?? "";
+    message.acceptedAtUnixMs = object.acceptedAtUnixMs ?? "0";
+    message.updatedAtUnixMs = object.updatedAtUnixMs ?? "0";
+    return message;
+  },
+};
+
+function createBaseProvisionRuntimeSignerResponse(): ProvisionRuntimeSignerResponse {
+  return { operation: undefined, signer: undefined };
+}
+
+export const ProvisionRuntimeSignerResponse: MessageFns<ProvisionRuntimeSignerResponse> = {
+  encode(message: ProvisionRuntimeSignerResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operation !== undefined) {
+      RuntimeSignerProvisioningOperation.encode(message.operation, writer.uint32(10).fork()).join();
+    }
+    if (message.signer !== undefined) {
+      RuntimeSigner.encode(message.signer, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProvisionRuntimeSignerResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProvisionRuntimeSignerResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operation = RuntimeSignerProvisioningOperation.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.signer = RuntimeSigner.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ProvisionRuntimeSignerResponse {
+    return {
+      operation: isSet(object.operation) ? RuntimeSignerProvisioningOperation.fromJSON(object.operation) : undefined,
+      signer: isSet(object.signer) ? RuntimeSigner.fromJSON(object.signer) : undefined,
+    };
+  },
+
+  toJSON(message: ProvisionRuntimeSignerResponse): unknown {
+    const obj: any = {};
+    if (message.operation !== undefined) {
+      obj.operation = RuntimeSignerProvisioningOperation.toJSON(message.operation);
+    }
+    if (message.signer !== undefined) {
+      obj.signer = RuntimeSigner.toJSON(message.signer);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ProvisionRuntimeSignerResponse>): ProvisionRuntimeSignerResponse {
+    return ProvisionRuntimeSignerResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ProvisionRuntimeSignerResponse>): ProvisionRuntimeSignerResponse {
+    const message = createBaseProvisionRuntimeSignerResponse();
+    message.operation = (object.operation !== undefined && object.operation !== null)
+      ? RuntimeSignerProvisioningOperation.fromPartial(object.operation)
+      : undefined;
+    message.signer = (object.signer !== undefined && object.signer !== null)
+      ? RuntimeSigner.fromPartial(object.signer)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseRecoverRuntimeSignerProvisioningResponse(): RecoverRuntimeSignerProvisioningResponse {
+  return { operation: undefined, signer: undefined };
+}
+
+export const RecoverRuntimeSignerProvisioningResponse: MessageFns<RecoverRuntimeSignerProvisioningResponse> = {
+  encode(message: RecoverRuntimeSignerProvisioningResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operation !== undefined) {
+      RuntimeSignerProvisioningOperation.encode(message.operation, writer.uint32(10).fork()).join();
+    }
+    if (message.signer !== undefined) {
+      RuntimeSigner.encode(message.signer, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RecoverRuntimeSignerProvisioningResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRecoverRuntimeSignerProvisioningResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operation = RuntimeSignerProvisioningOperation.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.signer = RuntimeSigner.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RecoverRuntimeSignerProvisioningResponse {
+    return {
+      operation: isSet(object.operation) ? RuntimeSignerProvisioningOperation.fromJSON(object.operation) : undefined,
+      signer: isSet(object.signer) ? RuntimeSigner.fromJSON(object.signer) : undefined,
+    };
+  },
+
+  toJSON(message: RecoverRuntimeSignerProvisioningResponse): unknown {
+    const obj: any = {};
+    if (message.operation !== undefined) {
+      obj.operation = RuntimeSignerProvisioningOperation.toJSON(message.operation);
+    }
+    if (message.signer !== undefined) {
+      obj.signer = RuntimeSigner.toJSON(message.signer);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RecoverRuntimeSignerProvisioningResponse>): RecoverRuntimeSignerProvisioningResponse {
+    return RecoverRuntimeSignerProvisioningResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RecoverRuntimeSignerProvisioningResponse>): RecoverRuntimeSignerProvisioningResponse {
+    const message = createBaseRecoverRuntimeSignerProvisioningResponse();
+    message.operation = (object.operation !== undefined && object.operation !== null)
+      ? RuntimeSignerProvisioningOperation.fromPartial(object.operation)
+      : undefined;
+    message.signer = (object.signer !== undefined && object.signer !== null)
+      ? RuntimeSigner.fromPartial(object.signer)
+      : undefined;
+    return message;
+  },
+};
+
 /** Trusted local-operator setup for separate runtime preparation capabilities. */
 export type RuntimePreparationServiceService = typeof RuntimePreparationServiceService;
 export const RuntimePreparationServiceService = {
+  provisionRuntimeSigner: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/ProvisionRuntimeSigner" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ProvisionRuntimeSignerRequest): Buffer =>
+      Buffer.from(ProvisionRuntimeSignerRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ProvisionRuntimeSignerRequest => ProvisionRuntimeSignerRequest.decode(value),
+    responseSerialize: (value: ProvisionRuntimeSignerResponse): Buffer =>
+      Buffer.from(ProvisionRuntimeSignerResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ProvisionRuntimeSignerResponse =>
+      ProvisionRuntimeSignerResponse.decode(value),
+  },
+  recoverRuntimeSignerProvisioning: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/RecoverRuntimeSignerProvisioning" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RecoverRuntimeSignerProvisioningRequest): Buffer =>
+      Buffer.from(RecoverRuntimeSignerProvisioningRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RecoverRuntimeSignerProvisioningRequest =>
+      RecoverRuntimeSignerProvisioningRequest.decode(value),
+    responseSerialize: (value: RecoverRuntimeSignerProvisioningResponse): Buffer =>
+      Buffer.from(RecoverRuntimeSignerProvisioningResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): RecoverRuntimeSignerProvisioningResponse =>
+      RecoverRuntimeSignerProvisioningResponse.decode(value),
+  },
   saveRuntimeSigner: {
     path: "/ayni.orchestrator.v1.RuntimePreparationService/SaveRuntimeSigner" as const,
     requestStream: false as const,
@@ -1159,16 +3995,133 @@ export const RuntimePreparationServiceService = {
     responseDeserialize: (value: Buffer): GetRuntimeSignerReceiptResponse =>
       GetRuntimeSignerReceiptResponse.decode(value),
   },
+  startRuntimePreparation: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/StartRuntimePreparation" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: StartRuntimePreparationRequest): Buffer =>
+      Buffer.from(StartRuntimePreparationRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): StartRuntimePreparationRequest => StartRuntimePreparationRequest.decode(value),
+    responseSerialize: (value: StartRuntimePreparationResponse): Buffer =>
+      Buffer.from(StartRuntimePreparationResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): StartRuntimePreparationResponse =>
+      StartRuntimePreparationResponse.decode(value),
+  },
+  getRuntimePreparation: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/GetRuntimePreparation" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetRuntimePreparationRequest): Buffer =>
+      Buffer.from(GetRuntimePreparationRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetRuntimePreparationRequest => GetRuntimePreparationRequest.decode(value),
+    responseSerialize: (value: GetRuntimePreparationResponse): Buffer =>
+      Buffer.from(GetRuntimePreparationResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetRuntimePreparationResponse => GetRuntimePreparationResponse.decode(value),
+  },
+  listRuntimePreparations: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/ListRuntimePreparations" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListRuntimePreparationsRequest): Buffer =>
+      Buffer.from(ListRuntimePreparationsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListRuntimePreparationsRequest => ListRuntimePreparationsRequest.decode(value),
+    responseSerialize: (value: ListRuntimePreparationsResponse): Buffer =>
+      Buffer.from(ListRuntimePreparationsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListRuntimePreparationsResponse =>
+      ListRuntimePreparationsResponse.decode(value),
+  },
+  getRuntimePreparationReceipt: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/GetRuntimePreparationReceipt" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetRuntimePreparationReceiptRequest): Buffer =>
+      Buffer.from(GetRuntimePreparationReceiptRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetRuntimePreparationReceiptRequest =>
+      GetRuntimePreparationReceiptRequest.decode(value),
+    responseSerialize: (value: GetRuntimePreparationReceiptResponse): Buffer =>
+      Buffer.from(GetRuntimePreparationReceiptResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetRuntimePreparationReceiptResponse =>
+      GetRuntimePreparationReceiptResponse.decode(value),
+  },
+  cancelRuntimePreparation: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/CancelRuntimePreparation" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CancelRuntimePreparationRequest): Buffer =>
+      Buffer.from(CancelRuntimePreparationRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CancelRuntimePreparationRequest =>
+      CancelRuntimePreparationRequest.decode(value),
+    responseSerialize: (value: CancelRuntimePreparationResponse): Buffer =>
+      Buffer.from(CancelRuntimePreparationResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CancelRuntimePreparationResponse =>
+      CancelRuntimePreparationResponse.decode(value),
+  },
+  retryRuntimePreparation: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/RetryRuntimePreparation" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RetryRuntimePreparationRequest): Buffer =>
+      Buffer.from(RetryRuntimePreparationRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RetryRuntimePreparationRequest => RetryRuntimePreparationRequest.decode(value),
+    responseSerialize: (value: RetryRuntimePreparationResponse): Buffer =>
+      Buffer.from(RetryRuntimePreparationResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): RetryRuntimePreparationResponse =>
+      RetryRuntimePreparationResponse.decode(value),
+  },
 } as const;
 
 export interface RuntimePreparationServiceServer extends UntypedServiceImplementation {
+  provisionRuntimeSigner: handleUnaryCall<ProvisionRuntimeSignerRequest, ProvisionRuntimeSignerResponse>;
+  recoverRuntimeSignerProvisioning: handleUnaryCall<
+    RecoverRuntimeSignerProvisioningRequest,
+    RecoverRuntimeSignerProvisioningResponse
+  >;
   saveRuntimeSigner: handleUnaryCall<SaveRuntimeSignerRequest, SaveRuntimeSignerResponse>;
   setRuntimeSignerEnabled: handleUnaryCall<SetRuntimeSignerEnabledRequest, SetRuntimeSignerEnabledResponse>;
   listRuntimeSigners: handleUnaryCall<ListRuntimeSignersRequest, ListRuntimeSignersResponse>;
   getRuntimeSignerReceipt: handleUnaryCall<GetRuntimeSignerReceiptRequest, GetRuntimeSignerReceiptResponse>;
+  startRuntimePreparation: handleUnaryCall<StartRuntimePreparationRequest, StartRuntimePreparationResponse>;
+  getRuntimePreparation: handleUnaryCall<GetRuntimePreparationRequest, GetRuntimePreparationResponse>;
+  listRuntimePreparations: handleUnaryCall<ListRuntimePreparationsRequest, ListRuntimePreparationsResponse>;
+  getRuntimePreparationReceipt: handleUnaryCall<
+    GetRuntimePreparationReceiptRequest,
+    GetRuntimePreparationReceiptResponse
+  >;
+  cancelRuntimePreparation: handleUnaryCall<CancelRuntimePreparationRequest, CancelRuntimePreparationResponse>;
+  retryRuntimePreparation: handleUnaryCall<RetryRuntimePreparationRequest, RetryRuntimePreparationResponse>;
 }
 
 export interface RuntimePreparationServiceClient extends Client {
+  provisionRuntimeSigner(
+    request: ProvisionRuntimeSignerRequest,
+    callback: (error: ServiceError | null, response: ProvisionRuntimeSignerResponse) => void,
+  ): ClientUnaryCall;
+  provisionRuntimeSigner(
+    request: ProvisionRuntimeSignerRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ProvisionRuntimeSignerResponse) => void,
+  ): ClientUnaryCall;
+  provisionRuntimeSigner(
+    request: ProvisionRuntimeSignerRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ProvisionRuntimeSignerResponse) => void,
+  ): ClientUnaryCall;
+  recoverRuntimeSignerProvisioning(
+    request: RecoverRuntimeSignerProvisioningRequest,
+    callback: (error: ServiceError | null, response: RecoverRuntimeSignerProvisioningResponse) => void,
+  ): ClientUnaryCall;
+  recoverRuntimeSignerProvisioning(
+    request: RecoverRuntimeSignerProvisioningRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: RecoverRuntimeSignerProvisioningResponse) => void,
+  ): ClientUnaryCall;
+  recoverRuntimeSignerProvisioning(
+    request: RecoverRuntimeSignerProvisioningRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: RecoverRuntimeSignerProvisioningResponse) => void,
+  ): ClientUnaryCall;
   saveRuntimeSigner(
     request: SaveRuntimeSignerRequest,
     callback: (error: ServiceError | null, response: SaveRuntimeSignerResponse) => void,
@@ -1228,6 +4181,96 @@ export interface RuntimePreparationServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetRuntimeSignerReceiptResponse) => void,
+  ): ClientUnaryCall;
+  startRuntimePreparation(
+    request: StartRuntimePreparationRequest,
+    callback: (error: ServiceError | null, response: StartRuntimePreparationResponse) => void,
+  ): ClientUnaryCall;
+  startRuntimePreparation(
+    request: StartRuntimePreparationRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: StartRuntimePreparationResponse) => void,
+  ): ClientUnaryCall;
+  startRuntimePreparation(
+    request: StartRuntimePreparationRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: StartRuntimePreparationResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimePreparation(
+    request: GetRuntimePreparationRequest,
+    callback: (error: ServiceError | null, response: GetRuntimePreparationResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimePreparation(
+    request: GetRuntimePreparationRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetRuntimePreparationResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimePreparation(
+    request: GetRuntimePreparationRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetRuntimePreparationResponse) => void,
+  ): ClientUnaryCall;
+  listRuntimePreparations(
+    request: ListRuntimePreparationsRequest,
+    callback: (error: ServiceError | null, response: ListRuntimePreparationsResponse) => void,
+  ): ClientUnaryCall;
+  listRuntimePreparations(
+    request: ListRuntimePreparationsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListRuntimePreparationsResponse) => void,
+  ): ClientUnaryCall;
+  listRuntimePreparations(
+    request: ListRuntimePreparationsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListRuntimePreparationsResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimePreparationReceipt(
+    request: GetRuntimePreparationReceiptRequest,
+    callback: (error: ServiceError | null, response: GetRuntimePreparationReceiptResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimePreparationReceipt(
+    request: GetRuntimePreparationReceiptRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetRuntimePreparationReceiptResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimePreparationReceipt(
+    request: GetRuntimePreparationReceiptRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetRuntimePreparationReceiptResponse) => void,
+  ): ClientUnaryCall;
+  cancelRuntimePreparation(
+    request: CancelRuntimePreparationRequest,
+    callback: (error: ServiceError | null, response: CancelRuntimePreparationResponse) => void,
+  ): ClientUnaryCall;
+  cancelRuntimePreparation(
+    request: CancelRuntimePreparationRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CancelRuntimePreparationResponse) => void,
+  ): ClientUnaryCall;
+  cancelRuntimePreparation(
+    request: CancelRuntimePreparationRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CancelRuntimePreparationResponse) => void,
+  ): ClientUnaryCall;
+  retryRuntimePreparation(
+    request: RetryRuntimePreparationRequest,
+    callback: (error: ServiceError | null, response: RetryRuntimePreparationResponse) => void,
+  ): ClientUnaryCall;
+  retryRuntimePreparation(
+    request: RetryRuntimePreparationRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: RetryRuntimePreparationResponse) => void,
+  ): ClientUnaryCall;
+  retryRuntimePreparation(
+    request: RetryRuntimePreparationRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: RetryRuntimePreparationResponse) => void,
   ): ClientUnaryCall;
 }
 

@@ -41,8 +41,11 @@ Durable-workflow local Docker Desktop development:
   dependencies                  Build locked Helm dependencies
   help                          Show this help
 
-Commands always target the docker-desktop context. Override the namespace with
-AYNI_ORCHESTRATOR_NAMESPACE. Canonical private-v1 gRPC stays pod-local.
+Commands default to the guarded docker-desktop context. Isolated runtime testing
+may explicitly select AYNI_ORCHESTRATOR_CONTEXT=kind-ayni-runtime-qualification,
+KUBECONFIG=/tmp/ayni-runtime-cluster/kubeconfig and
+AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-runtime-qualification.
+Other contexts are rejected. Canonical private-v1 gRPC stays pod-local.
 EOF
 }
 

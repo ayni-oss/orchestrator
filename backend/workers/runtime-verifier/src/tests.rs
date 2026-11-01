@@ -144,15 +144,36 @@ fn trusted_cli_identity_is_required_and_unknown_flags_are_rejected() {
 }
 
 #[test]
-fn real_official_lock_fixture_does_not_grant_portable_trust() {
+fn official_fixture_inputs_validate_with_matching_public_trust() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../dev/fixtures/task-quality/source")
+        .join("../../../dev/fixtures/runtime-preparation/source")
         .canonicalize()
         .unwrap();
     let lock = ayni_environment::read_lock(&root).unwrap();
     assert_eq!(lock.ayni_version(), VERSION);
+    let policy = AyniPolicy::parse(&fs::read_to_string(root.join(".ayni.toml")).unwrap()).unwrap();
+    let trust = policy.environment_certificate_trust_policy().unwrap();
+    assert!(!trust.is_empty());
+    assert_eq!(
+        trust.fingerprint(),
+        lock.certificate_trust_policy().fingerprint
+    );
+}
+
+#[test]
+fn missing_public_trust_is_rejected_before_lock_or_candidate_evaluation() {
+    let root = tempfile::tempdir().unwrap();
+    let policy = include_str!("../../../../dev/fixtures/runtime-preparation/source/.ayni.toml");
+    let policy = policy
+        .lines()
+        .filter(|line| !line.starts_with("environment ="))
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(root.path().join(".ayni.toml"), policy).unwrap();
+    // An intentionally malformed lock proves trust is rejected before lock parsing.
+    fs::write(root.path().join(".ayni.lock"), b"not a lock").unwrap();
     let evidence = verify(&Options {
-        source: root,
+        source: root.path().into(),
         expected_platform: "linux/arm64".into(),
         expected_cli_sha256: format!("sha256:{}", "0".repeat(64)),
     });
@@ -175,22 +196,22 @@ fn source_preflight_rejects_oversized_inputs_before_upstream_reads() {
 
 #[test]
 fn official_lock_rejects_changed_frozen_source_bytes() {
-    let fixture =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../dev/fixtures/task-quality/source");
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../dev/fixtures/runtime-preparation/source");
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
     for name in [
         ".ayni.toml",
         ".ayni.lock",
-        "Cargo.toml",
-        "Cargo.lock",
-        "rust-toolchain.toml",
+        "package.json",
+        "package-lock.json",
+        "index.js",
     ] {
         fs::copy(fixture.join(name), root.join(name)).unwrap();
     }
     ayni_environment::read_lock(&root).unwrap();
-    let mut manifest = fs::read(root.join("Cargo.toml")).unwrap();
+    let mut manifest = fs::read(root.join("package.json")).unwrap();
     manifest.push(b'\n');
-    fs::write(root.join("Cargo.toml"), manifest).unwrap();
+    fs::write(root.join("package.json"), manifest).unwrap();
     assert!(ayni_environment::read_lock(&root).is_err());
 }

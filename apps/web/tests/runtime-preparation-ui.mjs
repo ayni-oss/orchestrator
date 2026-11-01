@@ -1,0 +1,96 @@
+// UI contract coverage only. These intercepted replies do not qualify a runtime or registry.
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+
+export async function exerciseRuntimePreparation(page, origin, repositoryId) {
+ const inspectionId=randomUUID(),registryId=randomUUID(),signerId=randomUUID(),operationId=randomUUID();
+ const hash=`sha256:${'1'.repeat(64)}`;
+ const inspection={id:inspectionId,idempotencyKey:randomUUID(),repositoryId,connectionRevision:'1',commitSha:'d'.repeat(40),state:'completed',updatedAtUnixMs:String(Date.now()),result:{policyDigest:hash,lockDigest:hash,lockFingerprint:hash,trustKeyIds:['fixture-signer'],findings:[{code:'adapter_discovery_pending',path:'.ayni.lock',action:'Managed discovery remains required.'},{code:'runtime_verification_pending',path:'.ayni.lock',action:'Runtime verification remains required.'}]}};
+ let operation,originalReceipt,startRequest,retryRequest,cancelRequest;
+ await page.route('**/api/ListRepositoryInspections',route=>route.fulfill({json:{inspections:[inspection]}}));
+ await page.route('**/api/ListConnections',route=>route.fulfill({json:{connections:[{id:registryId,displayName:'Fixture runtime registry',provider:'github',capability:'container_registry',revision:'1',enabled:true,activeCredentialRevision:randomUUID(),registryDestination:'ghcr.io/fixture'}]}}));
+ await page.route('**/api/ListRuntimeSigners',route=>route.fulfill({json:{signers:[{id:signerId,displayName:'Fixture reviewed signer',keyId:'fixture-signer',enabled:true,revision:'1'}]}}));
+ await page.route('**/api/ListRuntimePreparations',route=>route.fulfill({json:{operations:operation?[operation]:[]}}));
+ await page.route('**/api/GetRuntimePreparation',route=>route.fulfill({json:{operation}}));
+ await page.route('**/api/GetRuntimePreparationReceipt',route=>route.fulfill({json:{operation:originalReceipt}}));
+ let acknowledge;const lost=new Promise(resolve=>{acknowledge=resolve;});
+ await page.route('**/api/StartRuntimePreparation',async route=>{
+  startRequest=route.request().postDataJSON();
+  assert.equal(startRequest.repositoryId,repositoryId);assert.equal(startRequest.inspectionId,inspectionId);
+  assert.equal(startRequest.maxSeconds,1800);assert.equal(startRequest.allowBuild,false);assert.equal(startRequest.allowReplace,false);assert.equal(startRequest.maxBuilds,0);
+  assert.equal('executorImage' in startRequest,false);assert.equal('expectedCliSha256' in startRequest,false);assert.equal('destination' in startRequest,false);
+  originalReceipt={id:operationId,idempotencyKey:startRequest.idempotencyKey,repositoryId,inspectionId,registryConnectionId:registryId,signerId,platform:startRequest.platform,state:'pending',stage:'acquire_source',generation:'1',frozenInputDigest:hash,updatedAtUnixMs:String(Date.now())};
+  Object.assign(originalReceipt,{sourceCommit:inspection.commitSha,sourceTree:'e'.repeat(40),policyDigest:hash,lockDigest:hash,lockFingerprint:hash,registryDestination:'ghcr.io/fixture/runtime'});
+  operation={...originalReceipt,state:'publication_uncertain',stage:'publish',generation:'3',safeReason:'publication_uncertain',expectedManifestDigest:hash};
+  await route.abort('failed');acknowledge();
+ });
+ await page.goto(`${origin}/repositories`);await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
+ const inspectionCard=page.locator(`[data-repository-inspection="${repositoryId}"]`);
+ await inspectionCard.getByRole('button',{name:'Inspect Ayni setup',exact:true}).click();
+ await inspectionCard.getByRole('button',{name:'Select for runtime preparation',exact:true}).click();
+ const preparation=page.locator(`[data-runtime-preparation="${repositoryId}"]`);
+ await preparation.getByRole('button',{name:'Open runtime preparation',exact:true}).click();
+ await preparation.getByLabel('Runtime registry',{exact:true}).selectOption(registryId);
+ await preparation.getByLabel('Runtime signer',{exact:true}).selectOption(signerId);
+ assert.equal(await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).isChecked(),false);
+ assert.equal(await preparation.getByRole('checkbox',{name:'Also allow replacement if an existing image is invalid',exact:true}).count(),0);
+ await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).check();
+ await preparation.getByRole('checkbox',{name:'Also allow replacement if an existing image is invalid',exact:true}).check();
+ await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).uncheck();
+ await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).check();
+ assert.equal(await preparation.getByRole('checkbox',{name:'Also allow replacement if an existing image is invalid',exact:true}).isChecked(),false);
+ await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).uncheck();
+ await preparation.getByRole('button',{name:'Verify existing runtime',exact:true}).click();await lost;
+ await page.reload();
+ await preparation.getByRole('button',{name:'Recover preparation receipt',exact:true}).click();
+ await preparation.getByRole('button',{name:'Reconcile publication',exact:true}).waitFor();
+ assert.equal(await preparation.getByText('Runtime ready',{exact:true}).count(),0);
+ await page.waitForFunction(id=>sessionStorage.getItem(`ayni.runtime.preparation.pending.${id}`)===null,repositoryId);
+ await page.route('**/api/RetryRuntimePreparation',async route=>{
+  retryRequest=route.request().postDataJSON();assert.equal(retryRequest.id,operationId);assert.equal(retryRequest.expectedGeneration,'3');
+  operation={...operation,state:'cleanup_pending',stage:'cleanup',generation:'4',safeReason:'cleanup_pending',contentVerified:true,managedCompatible:true,cleanupComplete:false};
+  originalReceipt=operation;await route.fulfill({json:{operation}});
+ });
+ await preparation.getByRole('button',{name:'Reconcile publication',exact:true}).click();
+ await preparation.getByText('Cleanup is incomplete. The supervisor will keep trying; refresh history to check progress. This runtime cannot become ready until cleanup is confirmed.',{exact:true}).waitFor();
+ assert.equal(await preparation.getByRole('button',{name:'Retry cleanup',exact:true}).count(),0);
+ assert.equal(await preparation.getByText('Runtime ready',{exact:true}).count(),0);
+ await preparation.getByText('Not complete',{exact:true}).waitFor();
+ await page.route('**/api/CancelRuntimePreparation',async route=>{
+  cancelRequest=route.request().postDataJSON();assert.equal(cancelRequest.id,operationId);assert.equal(cancelRequest.expectedGeneration,'4');
+  operation={...operation,state:'cancelling',generation:'5',safeReason:'cancelled'};originalReceipt=operation;await route.fulfill({json:{operation}});
+ });
+ await preparation.getByRole('button',{name:'Cancel preparation',exact:true}).click();
+ await preparation.getByText('cancelling · Confirm cleanup',{exact:true}).waitFor();
+ assert.ok(retryRequest.idempotencyKey && cancelRequest.idempotencyKey && retryRequest.idempotencyKey!==cancelRequest.idempotencyKey);
+ await inspectionCard.getByRole('button',{name:'Inspect Ayni setup',exact:true}).click();
+ await inspectionCard.getByRole('button',{name:'Select for runtime preparation',exact:true}).click();
+ await preparation.getByLabel('Runtime registry',{exact:true}).selectOption(registryId);
+ await preparation.getByLabel('Runtime signer',{exact:true}).selectOption(signerId);
+ await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).check();
+ await preparation.getByLabel('Maximum build attempts',{exact:true}).fill('2');
+ await preparation.getByRole('checkbox',{name:'Also allow replacement if an existing image is invalid',exact:true}).check();
+ await page.unroute('**/api/StartRuntimePreparation');
+ let buildGrant;
+ await page.route('**/api/StartRuntimePreparation',async route=>{
+  buildGrant=route.request().postDataJSON();
+  assert.equal(buildGrant.allowBuild,true);assert.equal(buildGrant.allowReplace,true);assert.equal(buildGrant.maxBuilds,2);
+  assert.equal(buildGrant.inspectionId,inspectionId);assert.equal(buildGrant.registryConnectionId,registryId);
+  assert.notEqual(buildGrant.idempotencyKey,startRequest.idempotencyKey);
+  operation={...operation,id:randomUUID(),idempotencyKey:buildGrant.idempotencyKey,state:'pending',stage:'acquire_source',generation:'1',safeReason:'',contentVerified:false,managedCompatible:false,maxBuilds:buildGrant.maxBuilds,allowBuild:buildGrant.allowBuild,allowReplace:buildGrant.allowReplace};
+  await route.fulfill({json:{operation}});
+ });
+ await preparation.getByRole('button',{name:'Verify or prepare runtime',exact:true}).click();
+ await preparation.getByText('pending · Acquire exact source',{exact:true}).waitFor();
+ assert.ok(buildGrant);
+ await page.unroute('**/api/CancelRuntimePreparation');
+ await page.route('**/api/CancelRuntimePreparation',route=>route.fulfill({status:409,json:{message:'Generation changed; refresh retained history.'}}));
+ await preparation.getByRole('button',{name:'Cancel preparation',exact:true}).click();
+ await preparation.getByRole('button',{name:'Dismiss rejected command',exact:true}).waitFor();
+ assert.notEqual(await page.evaluate(id=>sessionStorage.getItem(`ayni.runtime.preparation.pending.${id}`),repositoryId),null);
+ await preparation.getByRole('button',{name:'Dismiss rejected command',exact:true}).click();
+ assert.equal(await page.evaluate(id=>sessionStorage.getItem(`ayni.runtime.preparation.pending.${id}`),repositoryId),null);
+ await preparation.screenshot({path:'/tmp/runtime-preparation-ui.png'});
+ for(const method of ['ListRepositoryInspections','ListConnections','ListRuntimeSigners','ListRuntimePreparations','GetRuntimePreparation','GetRuntimePreparationReceipt','StartRuntimePreparation','RetryRuntimePreparation','CancelRuntimePreparation']) await page.unroute(`**/api/${method}`);
+ console.log('runtime-preparation-ui: intercepted UI contract coverage passed for explicit grants, lost-response receipt recovery, current-generation publication reconciliation, separate cleanup gate and cancellation; no registry/build qualification claimed.');
+}

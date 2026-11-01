@@ -73,30 +73,35 @@ fn parse_models(value: &serde_json::Value, key: &str) -> Result<Vec<String>, &'s
 }
 async fn registry(client: &Client, candidate: &ProviderCandidate) -> Result<(), &'static str> {
     let settings = &candidate.operation.connection.settings;
-    let repository = settings
-        .registry_destination
-        .strip_prefix("ghcr.io/")
-        .ok_or("provider_response_invalid")?;
     let tokens: Vec<String> =
         serde_json::from_str(&candidate.credential).map_err(|_| "provider_response_invalid")?;
     if tokens.len() != 2 {
         return Err("provider_response_invalid");
     }
     // Separate requests prove that neither credential silently substitutes for the other.
-    for (username, password, actions) in [
-        (&settings.push_username, &tokens[0], "push,pull"),
-        (&settings.pull_username, &tokens[1], "pull"),
+    for (username, password) in [
+        (&settings.push_username, &tokens[0]),
+        (&settings.pull_username, &tokens[1]),
     ] {
+        // An unscoped registry token may carry anonymous access. Establish the
+        // supplied account identity independently before accepting that response.
+        let account = json(
+            client
+                .get("https://api.github.com/user")
+                .header("User-Agent", "ayni-orchestrator")
+                .bearer_auth(password)
+                .send()
+                .await
+                .map_err(|_| "provider_unavailable")?,
+        )
+        .await?;
+        registry_account(&account, username)?;
         let value = json(
             client
                 .get("https://ghcr.io/token")
-                .query(&[
-                    ("service", "ghcr.io"),
-                    (
-                        "scope",
-                        format!("repository:{repository}:{actions}").as_str(),
-                    ),
-                ])
+                // Authentication only: a connection has no package scope.
+                // Actual push/pull permission is checked by runtime execution.
+                .query(&[("service", "ghcr.io")])
                 .basic_auth(username, Some(password))
                 .send()
                 .await
@@ -109,8 +114,33 @@ async fn registry(client: &Client, candidate: &ProviderCandidate) -> Result<(), 
     }
     Ok(())
 }
+fn registry_account(account: &serde_json::Value, username: &str) -> Result<(), &'static str> {
+    if account["login"]
+        .as_str()
+        .is_some_and(|login| login.eq_ignore_ascii_case(username))
+    {
+        Ok(())
+    } else {
+        Err("provider_authentication_failed")
+    }
+}
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn registry_authentication_requires_the_configured_github_account() {
+        assert_eq!(
+            super::registry_account(&serde_json::json!({"login":"Fixture"}), "fixture"),
+            Ok(())
+        );
+        for account in [
+            serde_json::json!({"login":"another"}),
+            serde_json::json!({"token":"anonymous"}),
+            serde_json::json!({}),
+        ] {
+            assert!(super::registry_account(&account, "fixture").is_err());
+        }
+    }
+
     #[test]
     fn model_discovery_is_bounded_and_never_returns_credential_echoes() {
         assert_eq!(

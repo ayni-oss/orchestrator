@@ -7,7 +7,7 @@ components, fonts and original light/dark tokens. It provides Workspaces and Con
 It creates and discovers workspaces/projects through canonical v1 APIs and manages
 multiple named GitHub App source-control, GitHub Container Registry and OpenAI
 connections. Workspace settings selects an OpenAI connection, discovered model,
-instructions and budgets. Repositories provides shared source discovery and catalog admission. Project cards link to their repository associations. Runtime preparation remains later delivery. The duplicate example and diagnostic frontend
+instructions and budgets. Repositories provides shared source discovery and catalog admission. Project cards link to their repository associations. Runtime preparation uses separately frozen registry/signer revisions and a qualified Kubernetes profile. The duplicate example and diagnostic frontend
 are removed. All future journeys extend this application.
 
 `ConnectionService` admits manual App credentials, changes enabled state, validates
@@ -70,10 +70,17 @@ not establish compatibility with the conversation execution API. Custom endpoint
 are not accepted by the configuration UI. Selected connection sessions always use
 the standard OpenAI endpoint; existing isolated provider fixtures remain separate.
 
-GHCR configuration requires an explicit `ghcr.io/owner/package` destination and
+GHCR configuration requires an explicit `ghcr.io/organization` destination and
 separate push/pull usernames and classic PAT inputs. Destination and account
 identities are immutable; create another named connection to change them. Candidate
-validation independently authenticates both credentials using scoped token requests.
+validation independently checks each credential against its configured GitHub
+account at `/user`, then makes an unscoped GHCR token request. An anonymous
+registry token cannot substitute for authenticated account identity.
+Runtime preparation appends the lowercase repository name: `ayni-oss/sandbox`
+with `ghcr.io/ayni-oss` selects `ghcr.io/ayni-oss/sandbox`.
+Existing package-level connections are normalized to their organization with a
+revision increment; frozen operations and history keep their original destinations.
+Pending credential candidates must be saved again before validation.
 It does not establish package permissions. Runtime operations must report authentication,
 push and pull failures at their actual stage; no disposable test image is required. Guided GitHub App setup remains outstanding. Saved source connections support installation/repository discovery and shared project associations through the repository catalog.
 
@@ -175,33 +182,42 @@ static findings; it does not establish live GitHub source qualification.
 
 ## Runtime preparation foundations
 
-Runtime preparation currently provides public signer-reference configuration, an immutable
-GHCR discovery client and a trusted content-verifier binary. These are preparation
-foundations; the build/sign/publication supervisor and its UI journey are not
-implemented. No runtime can be admitted as ready through these primitives alone.
+Runtime preparation combines immutable GHCR discovery, the trusted content verifier,
+public signer references and a durable Kubernetes supervisor. See the
+[runtime operation contract](runtime-preparation.md) for stages, grants, deployment
+requirements and recovery. A configured connection is a capability; successful
+publication/pull evidence comes only from actual execution.
 
-Runtime signing configuration stores a reviewed key ID/public key and the name
-and exact UID of an administrator-owned immutable Kubernetes Secret. The namespace
-belongs to deployment configuration. The product does not read the referenced
-object when saving metadata. Preparation must later validate immutability, UID,
-private/public key agreement and stage authority before delivering signing access.
+Runtime signing supports deployment-gated server generation or raw Ed25519 seed
+import. Public durable setup intents retain idempotency, name, Key ID, mode and
+public identity. The service creates an immutable Kubernetes Secret and records
+its name and exact UID; PostgreSQL, receipts and browser storage contain no
+signing seed. Generated private keys are not returned to the browser. Import
+fields are cleared after submission. Lost responses recover the same setup;
+missing imported material requires re-entry of the same seed, not a replacement.
+
+The advanced editor also accepts an administrator-provisioned immutable Secret
+reference with the reserved `ayni-runtime-signer-` name prefix. The namespace
+belongs to deployment configuration. The supervisor checks Secret immutability
+and UID before and after certification; the independent certifier checks
+private/public key agreement before signing.
 
 Signer changes use exact command receipts and immutable public revisions. Rotation
-and enable/disable operations fence stale versions. Read APIs and lost-response
-recovery return public configuration only. There is no signing material or signer
-credential reader in PostgreSQL. Initial administrator provisioning remains an
-external prerequisite, with the reserved `ayni-runtime-signer-` object-name prefix.
+and enable/disable operations fence stale versions. Reads and lost-response
+recovery return public configuration only. Disabling signer setup or uninstalling
+Helm retains the signing namespace and keys. Disabling a signer prevents new use
+without deleting its key; permanent cleanup is a separate operator decision.
 
-The registry library distinguishes confirmed manifest absence from access failure,
-rate limiting, outage, malformed data and unsupported platform. Manifest and config
-bytes must match their immutable digests. Discovery returns a candidate, never
-verification or replacement authority. Registry publication is not implemented.
+Registry failures distinguish absence from access denial, rate limiting, outage,
+malformed data and unsupported platform. Manifest/config bytes must match their
+digests. Discovery grants no verification or replacement authority. Publication
+uses an operation-specific tag and retains its expected digest before the push;
+uncertainty requires exact readback rather than an automatic rebuild.
 
-`backend/workers/runtime-verifier` consumes frozen policy/lock inputs, a platform
-and an independently trusted expected Ayni executable digest. It invokes the
-pinned Ayni public verifier against the actual candidate root, including signature
-and protected content, without executing the candidate's CLI. Its `content_verified`
-result covers certification/content only. Full adapter discovery, managed execution,
-operation-generation binding, cleanup and runtime admission remain separate gates.
-The packaging Dockerfile rejects a dynamic interpreter or shared-library dependency
-before producing the trusted verifier image.
+`backend/workers/runtime-verifier` uses pinned public Ayni contracts against the
+actual candidate root without executing its CLI. Its `content_verified` result
+covers certification/content. A separate credential-free managed probe prepares
+frozen source, executes the candidate's exact trusted CLI under source/network
+isolation and validates the typed completion artifact. Source quality and runtime
+compatibility remain distinct. Readiness requires both checks, confirmed cleanup
+and current configuration selections.

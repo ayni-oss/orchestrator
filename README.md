@@ -18,7 +18,17 @@ catalog repositories directly, including reuse across workspaces. See the
 The local UI provides workspace/project creation, named integration configuration,
 GitHub repository discovery, a shared catalog and direct project associations.
 Exact-commit static Ayni inspection is available with retained findings and recovery.
-Full adapter compatibility and runtime preparation remain planned; current task
+Runtime preparation now provides bounded Kubernetes build, separate certification,
+publication, independent content/managed compatibility checks and recoverable history.
+Runtime signing supports server-generated keys, raw-seed import and recoverable
+public identity setup, with an advanced administrator reference editor. Repository
+trust still requires a reviewed policy commit and new inspection. Runtime preparation
+requires an explicitly qualified deployment profile and configured registry/signer.
+The current Docker Desktop profile remains disabled because its network policies
+failed the actual enforcement check; Node stage and supervisor lifecycle checks passed.
+The separate Cilium development cluster passes the complete Node component and
+supervisor lifecycle gates, and serves a fresh runtime-enabled UI on port 5175.
+Project-plan/task selection of verified runtimes is the next slice; current task
 source preparation still uses the trusted local helper. Full task-delivery screens remain planned.
 
 The [backend foundation roadmap](docs/technical/history/backend-foundation-roadmap.md)

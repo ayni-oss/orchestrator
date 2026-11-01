@@ -1,0 +1,182 @@
+{{- $runtimePreparation := .Values.runtimePreparation | default dict }}
+{{- if and .Values.enabled $runtimePreparation.enabled }}
+{{- $runtime := include "ayni-orchestrator.runtimeNamespace" . }}
+{{- if not .Values.runtimePreparation.profile.qualified }}{{ fail "runtime preparation requires an explicitly qualified profile" }}{{ end }}
+{{- range $image := list .Values.runtimePreparation.profile.worker_image .Values.runtimePreparation.profile.executor_image .Values.runtimePreparation.profile.verifier_image }}
+{{- if not (regexMatch "@sha256:[a-f0-9]{64}$" $image) }}{{ fail "runtime preparation images must use immutable digests" }}{{ end }}
+{{- end }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $runtime }}
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    # The builder needs unmasked proc and setuid helpers inside a user namespace.
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: runtime-preparation-engine
+  namespace: {{ $runtime }}
+data:
+  storage.conf: |
+    [storage]
+    driver = "vfs"
+    graphroot = "/scratch/store"
+    runroot = "/scratch/run"
+  containers.conf: |
+    [containers]
+    cgroups = "disabled"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: runtime-preparation-supervisor
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: runtime-preparation-supervisor
+  namespace: {{ $runtime }}
+rules:
+  - apiGroups: [""]
+    resources: [pods, persistentvolumeclaims, secrets]
+    verbs: [get, list, create, delete]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: runtime-preparation-supervisor
+  namespace: {{ $runtime }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: runtime-preparation-supervisor
+subjects:
+  - kind: ServiceAccount
+    name: runtime-preparation-supervisor
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runtime-preparation-supervisor
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: runtime-preparation-supervisor
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: runtime-preparation-supervisor
+    spec:
+      serviceAccountName: runtime-preparation-supervisor
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: supervisor
+          image: {{ .Values.runtimePreparation.profile.worker_image | quote }}
+          command: [/usr/local/bin/ayni-runtime-supervisor]
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          env:
+            - name: ORCHESTRATOR_RUNTIME_NAMESPACE
+              value: {{ $runtime }}
+            - name: ORCHESTRATOR_RUNTIME_AUTHORITY_URL
+              value: http://control-plane.{{ .Release.Namespace }}.svc:{{ .Values.controlPlane.httpPort }}
+            - name: ORCHESTRATOR_RUNTIME_AUTHORITY_TOKEN_PATH
+              value: /runtime-authority/token
+            - name: ORCHESTRATOR_RUNTIME_STORAGE_CLASS
+              value: {{ .Values.runtimePreparation.storageClassName | quote }}
+            - name: ORCHESTRATOR_RUNTIME_PULL_POLICY
+              value: {{ .Values.images.pullPolicy }}
+          volumeMounts:
+            - name: authority
+              mountPath: /runtime-authority
+              readOnly: true
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "1", memory: 256Mi}
+      volumes:
+        - name: authority
+          secret:
+            secretName: {{ .Values.runtimePreparation.authoritySecretName }}
+            defaultMode: 0440
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: runtime-default-deny
+  namespace: {{ $runtime }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: runtime-stage-authority
+  namespace: {{ $runtime }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: ayni.build/stage
+        operator: NotIn
+        values: [verify_content, verify_compatibility, cleanup]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ayni-orchestrator-control-plane
+      ports:
+        - {protocol: TCP, port: {{ .Values.controlPlane.httpPort }}}
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+{{- if .Values.runtimePreparation.publicEgress }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: runtime-public-stage-egress
+  namespace: {{ $runtime }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: ayni.build/stage
+        operator: In
+        values: [acquire_source, discover, pull_existing, build, publish, pull_final]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4]
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 80}
+{{- end }}
+{{- end }}

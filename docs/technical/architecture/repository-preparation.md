@@ -1,6 +1,6 @@
 # Shared repository and runtime preparation
 
-Status: shared repository discovery, catalog connection and project associations are implemented for the trusted local operator. Exact-commit static policy/lock/input/trust inspection is implemented; full adapter discovery, setup and runtime gates remain planned. See [integration connections](integration-connections.md) for the current source-access boundary.
+Status: shared repository discovery, catalog connection and project associations are implemented for the trusted local operator. Exact-commit static policy/lock/input/trust inspection and gated Kubernetes runtime preparation are implemented; full setup assistance and project/task runtime handoff remain planned. See [integration connections](integration-connections.md) for the current source-access boundary.
 
 ## What this decides
 
@@ -22,7 +22,7 @@ The [roadmap](../../../ROADMAP.md#next-focus-repository-preparation-with-a-usabl
 - The trusted local helper verifies Git objects and lock bytes, while the operator supplies a runtime digest.
 - Prepared attempts retain immutable inputs, but preparation does not establish image availability or compatibility.
 - Isolated workers perform separate managed quality; coding, quality and publication remain independent outcomes.
-- The local gateway serves APIs only. The new local product supports manual App connections, installation/repository discovery, a shared source catalog and project associations. Runtime preparation follows. The retained web example supplies design reference only.
+- The local gateway serves APIs only. The new local product supports manual App connections, installation/repository discovery, a shared source catalog and project associations. Runtime preparation has retained stages, evidence and explicit recovery in this UI.
 
 ## Ownership and records
 
@@ -128,52 +128,22 @@ evidence.
 
 ### Pinned Ayni boundary
 
-Ayni 0.16.2 at
-[`8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc`](https://github.com/ayni-oss/ayni/tree/8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc)
-supports Docker and Podman engines. Its
-[build implementation](https://github.com/ayni-oss/ayni/blob/8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc/environment/src/runtime/engine.rs#L197)
-assembles an image, runs inventory/validation containers, signs certification,
-assembles the certified image and records its local image identity in one engine
-workflow. The
-[CLI build command](https://github.com/ayni-oss/ayni/blob/8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc/cli/src/environment_backend.rs#L36)
-can add a local tag; it does not publish to a registry. A BuildKit-only service
-cannot replace the engine's image execution and inspection operations.
+Ayni 0.17.0 provides supported public policy, lock, certificate, protected-content
+verification and offline filesystem certification contracts. Orchestrator consumes
+these contracts rather than copying private image inventory/signature semantics.
+The exact source revision is pinned in Cargo manifests and the executable/image
+identities are frozen in each admitted profile. The rootless Podman builder uses
+Ayni's ordinary adapter preparation/build lifecycle without a signing key; its
+local unsigned certificate does not grant runtime readiness.
 
-[Certificate creation and signing material](https://github.com/ayni-oss/ayni/blob/8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc/environment/src/certificate.rs)
-and the build inventory/finalization helpers are private implementation details.
-Ayni correctly
-[removes signing variables from child tools](https://github.com/ayni-oss/ayni/blob/8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc/adapters/common/src/exec.rs#L428),
-but the signing parent still shares an engine and lifecycle with repository-derived
-build work. That does not satisfy this preparation contract's separate signing
-stage. The public
-[certificate types](https://github.com/ayni-oss/ayni/blob/8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc/core/src/environment_certificate.rs)
-and [content verifier](https://github.com/ayni-oss/ayni/blob/8eb4c7c8abcbd7ecb4bbda26e0140b58ffcfc6dc/environment/src/prebuilt.rs#L107)
-provide useful contracts, but do not expose a complete independent certify/export
-workflow. Orchestrator must not copy those private image semantics to close the gap.
-
-### Standalone Ayni prerequisite
-
-Add an independently useful staged image workflow in a separate Ayni PR, with
-public fixtures and tests for local/offline signing and external builders:
-
-- **Unsigned build/export:** preserve existing adapter discovery, lock checks,
-  dependency preparation and executor validation; export an immutable OCI layout
-  with a supported report binding the candidate to source, lock, platform, executor
-  and tooling identities. Export grants no portable trust or runtime readiness.
-- **Offline certify/finalize:** accept that immutable export and the reviewed
-  policy/lock, independently inspect actual protected bytes and the expected Ayni
-  executable, and produce the supported certificate, final OCI image and provenance
-  report. This stage runs no repository commands and shares no engine, writable
-  storage or processes with the builder. It must reject tampered exports and
-  unsupported inputs before using signing authority.
-- **Contract and recovery:** retain the ordinary local build workflow while
-  exposing staged CLI/artifact contracts. Test unsigned export round trips,
-  mismatched inputs, offline key handling, final digest readback and interrupted
-  finalization. Keep Kubernetes and provider credential management in Orchestrator.
-
-This improvement lets Ayni users build on one machine and certify offline on
-another, without giving a build executor a signing key. Its scope and compatibility
-must be accepted upstream before Orchestrator selects the resulting release.
+After the builder is deleted, an independent stage copies and checks the immutable
+OCI export and freezes its unsigned digest/protected root outside builder storage.
+A separate signer-only stage uses `ayni_environment::staged::certify_filesystem`
+against read-only inputs and emits the public certification layer/report. A fresh
+finalizer applies that layer using standard OCI tooling and verifies the retained
+lineage before publication. No signer stage executes repository code or shares a
+builder engine. See the [runtime operation contract](runtime-preparation.md) for
+the executable topology and acceptance limits.
 
 ### Workload and admission contract
 
@@ -181,7 +151,7 @@ must be accepted upstream before Orchestrator selects the resulting release.
 | --- | --- |
 | Source acquisition | Repository-scoped read access only; publish the complete frozen checkout and input digests before removing access. |
 | Unsigned builder | Qualified rootless engine, frozen source and bounded dependency downloads; retain an immutable export. No signing or registry push credentials. |
-| Certifier | Fresh isolated filesystem, immutable export and reviewed signer reference; independently inspect and finalize with the new Ayni contract. No repository execution, source credentials or registry push access. |
+| Certifier | Fresh isolated filesystem, immutable export and reviewed signer reference; independently inspect and certify with Ayni’s supported offline contract. No repository execution, source credentials or registry push access. |
 | Publisher | Final certified export and destination-scoped push credentials only; retain the registry digest and reconcile uncertain publication by readback. |
 | Independent verifier | Separate pull capability, exact platform digest and frozen inputs; verify actual certification/protected content and applicable managed compatibility evidence. No signing or push access. |
 
@@ -191,11 +161,10 @@ Use the existing
 UID adoption, deadlines and authenticated evidence. Implement resumable cleanup
 for pods, temporary credentials and storage, and confirm it before admission.
 The [integration foundations](integration-connections.md#runtime-preparation-foundations)
-are configuration, discovery and content-verification building blocks; they do
-not establish this executor or the staged Ayni contract.
+describe the retained connections used by these stages.
 
-Until the upstream contract and the Kubernetes profile pass deployment acceptance,
-retain an actionable prerequisite failure and keep runtime preparation unavailable.
+Until the deployment’s Kubernetes profile is explicitly qualified, retain an
+actionable prerequisite failure and keep runtime preparation unavailable.
 Missing user-namespace support, denied engine startup, unavailable credentials,
 registry denial/outage, invalid existing images and pending cleanup cannot produce
 readiness or silently select a different execution mode. Build remains limited to
@@ -203,6 +172,8 @@ confirmed absence under its grant; replacing an invalid image needs explicit
 replacement authority.
 
 ## Task handoff and feedback
+
+This handoff remains planned; current tasks use the trusted local preparation helper.
 
 Trusted server-side preparation resolves the approved repository/ref through its project association.
 It verifies exact Git objects, original lock and reviewed upstream ancestry, then produces the existing frozen source handoff.

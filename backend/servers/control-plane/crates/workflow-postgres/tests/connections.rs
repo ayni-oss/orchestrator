@@ -357,7 +357,7 @@ async fn provider_configuration_preserves_credentials_and_freezes_workspace_admi
             provider: "github",
             capability: "container_registry",
             settings: ProviderSettings {
-                registry_destination: "ghcr.io/fixture/runtime".into(),
+                registry_destination: "ghcr.io/fixture".into(),
                 push_username: "fixture-push".into(),
                 pull_username: "fixture-pull".into(),
             },
@@ -379,5 +379,85 @@ async fn provider_configuration_preserves_credentials_and_freezes_workspace_admi
             .is_empty()
     );
     assert!(!serde_json::to_string(&registry)?.contains("fixture-push-pat"));
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires disposable migrated PostgreSQL with the runtime-role URL"]
+async fn registry_organization_upgrade_fences_candidates_and_preserves_receipts() -> TestResult {
+    use ayni_orchestrator_workflow_postgres::store::connections::{ProviderSettings, SaveProvider};
+    let admin_url = std::env::var("AYNI_POSTGRES_FEASIBILITY_URL")?;
+    let role = std::env::var("AYNI_POSTGRES_RUNTIME_FEASIBILITY_ROLE")?;
+    ayni_orchestrator_workflow_postgres::migrate_for_runtime(&admin_url, &role).await?;
+    let store = WorkflowStore::new(std::env::var("AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL")?);
+    let saved = store
+        .save_provider_connection(SaveProvider {
+            key: &key(),
+            id: "",
+            expected: 0,
+            name: "Organization upgrade fixture",
+            provider: "github",
+            capability: "container_registry",
+            settings: ProviderSettings {
+                registry_destination: "ghcr.io/fixture".into(),
+                push_username: "fixture-push".into(),
+                pull_username: "fixture-pull".into(),
+            },
+            credential: r#"["synthetic-push","synthetic-pull"]"#,
+        })
+        .await?;
+    let before = store
+        .list_connection_operations(&saved.connection_id, "", 100)
+        .await?;
+    let (client, connection) = tokio_postgres::connect(&admin_url, tokio_postgres::NoTls).await?;
+    let driver = tokio::spawn(async move {
+        let _ = connection.await;
+    });
+    // Seed the prior connection representation without touching its credentials.
+    client.execute("UPDATE workflow_connections SET settings=jsonb_set(settings::jsonb,'{registry_destination}','\"ghcr.io/fixture/old-package\"')::text WHERE id=$1", &[&saved.connection_id]).await?;
+    client
+        .batch_execute(include_str!(
+            "../migrations/0037_registry_organizations.sql"
+        ))
+        .await?;
+    let row = client.query_one("SELECT revision,settings,candidate_credential_revision FROM workflow_connections WHERE id=$1", &[&saved.connection_id]).await?;
+    assert_eq!(row.get::<_, i64>("revision"), 2);
+    let settings: ProviderSettings = serde_json::from_str(row.get("settings"))?;
+    assert_eq!(settings.registry_destination, "ghcr.io/fixture");
+    assert_eq!(
+        row.get::<_, String>("candidate_credential_revision"),
+        saved.connection.candidate_credential_revision
+    );
+    assert_eq!(
+        serde_json::to_value(
+            store
+                .list_connection_operations(&saved.connection_id, "", 100)
+                .await?
+        )?,
+        serde_json::to_value(before)?
+    );
+    client
+        .batch_execute(include_str!(
+            "../migrations/0037_registry_organizations.sql"
+        ))
+        .await?;
+    assert_eq!(
+        client
+            .query_one(
+                "SELECT revision FROM workflow_connections WHERE id=$1",
+                &[&saved.connection_id]
+            )
+            .await?
+            .get::<_, i64>(0),
+        2
+    );
+    assert_eq!(
+        store
+            .finish_provider_validation(&saved.id, "", &[])
+            .await?
+            .state,
+        "superseded"
+    );
+    driver.abort();
     Ok(())
 }

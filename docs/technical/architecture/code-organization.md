@@ -7,6 +7,7 @@ The Orchestrator runtime separates transport contracts, PostgreSQL authority, br
 | `proto/ayni/orchestrator/v1` | Canonical private-v1 commands, receipts, projections, snapshots, history, watches, configuration and session commands |
 | `proto/ayni/orchestrator/events/v1` | Exact command, signed report, and targeted decision payloads |
 | `backend/libs/events` | Bounded CloudEvent encoding, identity/binding validation, signing, and strict verification |
+| `backend/libs/worker-sandbox` | Shared Linux child identity checks, Landlock filesystem confinement and seccomp network isolation for trusted launchers |
 | `backend/servers/control-plane/crates/grpc-contract` | Generated Rust API and transport-level request validation |
 | `backend/servers/control-plane/crates/workflow-postgres` | Forward migrations, immutable configuration/turn inputs, session generations, authoritative transactions, report decisions, FIFO promotion, projections, immutable plan review and exact outbox bytes |
 | `backend/servers/control-plane` | Secret-file configuration, HTTP probes, loopback gRPC, outbox publication, report consumption, and process lifecycle |

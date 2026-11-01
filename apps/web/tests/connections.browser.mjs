@@ -82,16 +82,16 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
    const displayName=`${provider} ${randomUUID()}`;
    await page.getByLabel('Connection name',{exact:true}).fill(displayName);
    if(registry) {
-    await page.getByLabel('Destination',{exact:true}).fill('ghcr.io/fixture/browser-validation');
+    await page.getByLabel('Organization destination',{exact:true}).fill('ghcr.io/fixture');
     await page.getByLabel('Push username',{exact:true}).fill('fixture-push');
     await page.getByLabel('Pull username',{exact:true}).fill('fixture-pull');
     for(const label of ['Push PAT','Pull PAT']){const value=`fixture-token-${randomUUID()}`;providerSecrets.push(value);await page.getByLabel(label,{exact:true}).fill(value);}
    } else {const value=`fixture-openai-${randomUUID()}`;providerSecrets.push(value);await page.getByLabel('API key',{exact:true}).fill(value);}
    const dialog=page.getByRole('dialog');
    if(registry) {
-    await page.getByLabel('Destination',{exact:true}).fill('ghcr.io/fixture');
-    assert.equal(await page.getByLabel('Destination',{exact:true}).evaluate(input=>input.checkValidity()),false);
-    await page.getByLabel('Destination',{exact:true}).fill('ghcr.io/fixture/browser-validation');
+    await page.getByLabel('Organization destination',{exact:true}).fill('ghcr.io/fixture/browser-validation');
+    assert.equal(await page.getByLabel('Organization destination',{exact:true}).evaluate(input=>input.checkValidity()),false);
+    await page.getByLabel('Organization destination',{exact:true}).fill('ghcr.io/fixture');
    }
    await page.route('**/api/SaveProviderConnection',route=>route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({message:'Rejected configuration'})}));
    await dialog.getByRole('button',{name:'Save connection',exact:true}).click();
@@ -124,6 +124,8 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   for(const secret of providerSecrets)assert.equal(await page.evaluate(secret=>[...Object.values(localStorage),...Object.values(sessionStorage)].some(value=>value.includes(secret)),secret),false);
   await page.goto(`${origin}/settings/runtime-signing`);
   await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
+  await page.getByRole('button',{name:'Add signing key',exact:true}).click();
+  await page.getByRole('radio',{name:'Advanced: existing Secret reference'}).check();
   const signerName=`Runtime signer ${randomUUID()}`;
   await page.getByLabel('Name',{exact:true}).fill(signerName);
   await page.getByLabel('Key ID',{exact:true}).fill('fixture-runtime');
@@ -141,9 +143,9 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   const signerCard=page.getByRole('region',{name:signerName,exact:true});await signerCard.waitFor();
   await signerCard.getByText('fixture-runtime',{exact:true}).waitFor();
   const signerConflict=await page.request.post(`${origin}/api/SaveRuntimeSigner`,{headers:{'x-console-request':'1'},data:{...signerRequest,secretUid:randomUUID()}});assert.equal(signerConflict.status(),409);
-  await signerCard.getByRole('button',{name:'Disable signer',exact:true}).click();
-  await signerCard.getByRole('button',{name:'Enable signer',exact:true}).waitFor();
-  await page.reload();await signerCard.getByRole('button',{name:'Enable signer',exact:true}).waitFor();
+  await signerCard.getByRole('button',{name:`Disable ${signerName}`,exact:true}).click();
+  await signerCard.getByRole('button',{name:`Enable ${signerName}`,exact:true}).waitFor();
+  await page.reload();await signerCard.getByRole('button',{name:`Enable ${signerName}`,exact:true}).waitFor();
   await page.screenshot({path:'/tmp/runtime-signing-browser.png',fullPage:true});
   await page.evaluate(()=>window.scrollTo(0,0));
   await page.screenshot({path:'/tmp/integrations-product.png',fullPage:true});

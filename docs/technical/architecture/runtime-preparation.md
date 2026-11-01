@@ -1,0 +1,156 @@
+# Kubernetes runtime preparation
+
+Runtime preparation produces a verified immutable image for one exact inspected
+repository commit. It does not approve plans, start tasks or change task runtime
+selection. The [repository preparation contract](repository-preparation.md) owns
+those later handoffs.
+
+## Signer setup and recovery
+
+`ProvisionRuntimeSigner` accepts a public idempotency key, name, Key ID and
+`generate` or `import` mode. Import accepts only a raw 32-byte Ed25519 seed encoded
+as 64 lowercase hexadecimal characters, optionally followed by one LF. Generate
+creates material on the server. The deployment-gated service creates an immutable
+Kubernetes Secret in its signing namespace and registers its public metadata;
+responses contain no private seed. Private material is not stored in PostgreSQL,
+request receipts, browser storage or public operation history.
+
+The browser retains only the public setup intent and clears its password/file
+inputs before awaiting submission and again on completion. Recovery uses
+`RecoverRuntimeSignerProvisioning` with the original idempotency key. Generated
+setup adopts the winning Secret rather than creating a replacement. If an imported
+Secret is absent, the retained public identity requires the same seed again;
+re-entry cannot replace it with a different key. Pending and blocked operations
+remain recoverable across reloads. Disabled deployment and permission failures
+produce closed, actionable findings without echoing private request data.
+
+The advanced reference editor remains available for administrator-provisioned
+Secrets. Neither flow edits repository policy, grants build authority, nor changes
+a selected runtime. Operators must review the public trust entry, commit it with a
+regenerated lock and obtain a new exact-commit inspection.
+
+Generated/imported signing Secrets and their namespace are retained when signer
+setup is disabled or Helm is uninstalled, including deployments where runtime
+preparation is off. Disabling a signer prevents new use; it does not delete its
+private key. Deleting retained keys or the signing namespace is a separate manual
+operator cleanup decision. There is no key-deletion API.
+
+## Admission and evidence
+
+`StartRuntimePreparation` freezes the completed inspection, repository/connection
+revisions, exact commit/tree, policy/lock/input bytes, platform, registry destination,
+signer reference and administrator-owned qualified profile. The requested seconds,
+build count, build grant and invalid-image replacement grant are explicit.
+Unqualified/absent profiles, stale revisions, unsupported locks and untrusted signer
+keys produce retained actionable blockers rather than an alternative executor.
+
+PostgreSQL owns operations, stage generations, receipts and accepted evidence.
+A command retry recovers its exact receipt. Stage reports bind operation, stage,
+generation, command digest and exact Kubernetes pod UID using derived capabilities.
+A completed stage first enters `stopping`; no successor receives inputs or authority
+until the supervisor confirms deletion of that exact pod. A stale pod/report cannot
+replace a newer binding.
+
+| Stage | Capability and output |
+| --- | --- |
+| Acquire source | Installation-scoped GitHub read; exact commit/tree and bounded complete checkout. Locked source is also retained separately. |
+| Discover/pull | Destination-scoped registry read; reuse a retained immutable candidate or discover a platform candidate. Confirmed absence is different from access failure. |
+| Build | Source read-only; rootless Podman with operation-local vfs storage and bounded public dependency access. No source, signer or push credential. |
+| Freeze candidate | Independent verified OCI copy/unpack after builder deletion; freeze unsigned manifest and protected root. |
+| Certify | Read-only frozen candidate and locked inputs; reviewed administrator signer Secret only. Ayni's public offline contract signs independently inspected protected bytes. |
+| Finalize | Read-only unsigned export/certification layer/report; standard OCI tooling produces a retained intended manifest. No signing seed. |
+| Publish | Final export plus destination push capability; intended digest is retained before publication. |
+| Pull final | Independent registry readback of the intended immutable digest. |
+| Verify content | Actual candidate filesystem plus trusted static verifier; no application credential or candidate CLI execution. |
+| Verify compatibility | Credential-free candidate image; isolated preparation init container, then a separate managed quality container with frozen prepared source. |
+| Cleanup | Delete owned pods, temporary credential objects and operation PVCs. Readiness waits for confirmed cleanup. |
+
+Temporary image-pull credentials are delivered to the Kubernetes node, never
+mounted into verification containers. Signing keys remain outside PostgreSQL and
+worker credential APIs. The supervisor validates signer Secret immutability and
+UID before launch and after certification; the certifier checks its public-key
+agreement. Only then can the supervisor submit accepted certification evidence.
+
+OCI descriptors, config/layers and transfers are digest checked and bounded.
+Layer expansion is preflighted before unpacking, including decompressed bytes,
+entries and unsupported sparse records. Generic OCI handling does not replace
+Ayni's protected-content contract. Original source mode/content is checked before
+builder execution and after managed preparation.
+
+## Managed compatibility
+
+The content verifier uses pinned Ayni public APIs and a separately trusted CLI hash
+against the image's actual root. Only after this passes does the managed probe
+invoke that image's expected CLI. Trusted static launchers are installed from the
+pinned probe image, never copied from the repository.
+
+Preparation and quality use separate container cgroups. Their trusted static parent
+runs as UID/GID 0 inside the pod user namespace, with only SETUID/SETGID and
+no-new-privileges. This is not host root. The parent requires those exact effective
+capabilities before spawning the UID/GID 10002 child, which retains no capabilities
+or supplementary groups. A non-root parent with only bounding capabilities cannot
+perform that identity transition and is rejected. Quality mounts the prepared
+checkout read-only, with fresh artifact storage and bounded writable scratch.
+Preparation uses the official Ayni entrypoint once. Quality activates tooling through
+bounded, parsed Mise JSON from protected `/etc/ayni` configuration, restores writable
+caller caches, then invokes the fixed Ayni check directly in the prepared checkout.
+It does not repeat dependency preparation against the sealed source. Shared
+worker sandbox code drops child identity/capabilities, denies network and confines
+writes. Parent-owned capture files and preparation evidence remain outside the
+repository child identity. The typed Ayni artifact must show the exact managed
+lock/certificate/platform, complete locked targets/tools and no command/setup
+failure. Legitimate source test/metric failures do not make the runtime incompatible;
+their quality result remains separate from environment readiness.
+
+## Publication and recovery
+
+Writes target an operation-specific tag, avoiding an unsupported registry tag-CAS
+claim. Before pushing, the authority retains the intended manifest digest. A lost
+response or failed push after intent is `publication_uncertain`; retry reads back
+that exact tag/digest rather than rebuilding or spending a new build allowance.
+A previously ready artifact can be selected by immutable digest, then pulled and
+verified again under current inputs. A discovered invalid artifact is never
+replaced without both build and replacement grants.
+
+Cancellation retires the bound workload and cleans operation resources. Retry is
+available after cleanup and preserves the original frozen inputs, deadline,
+build consumption and publication intent. A new allowance or changed selection
+requires a new operation. History remains inspectable when configuration changes;
+only evidence matching the current selections can become ready.
+
+## Deployment and qualification
+
+The chart defaults runtime preparation off. Enabling it requires immutable worker,
+executor and probe image digests, a trusted CLI hash, an explicit `qualified` profile,
+resource ceilings, a supervisor authority Secret and immutable signer Secrets in
+the dedicated runtime namespace. Signer setup is independently deployment-gated;
+it can generate/import those Secrets or an administrator can provision them. See
+[image packaging](../../../deploy/images/runtime-preparation/README.md).
+
+The initial profile is native Linux arm64, rootless Podman/vfs in Kubernetes pod
+user namespaces (`hostUsers: false`). Actual qualification requires setuid mapping
+helpers, unmasked proc, unconfined seccomp and privilege escalation inside that user
+namespace. These exceptions apply only to builders. The profile uses no privileged
+container, host engine socket, host mount, host PID or SYS_ADMIN capability.
+Certifier/finalizer use ordinary restricted non-root pods. Clusters must explicitly
+support this profile; there is no Docker-socket or host-execution fallback.
+
+Public build/transfer egress is an explicit deployment choice and NetworkPolicy
+excludes private/link-local ranges. This is IP/port enforcement, not DNS-domain
+filtering. Credential-free verification has no external egress. PVC requests alone
+are not enforced filesystem quotas on Docker Desktop; trusted I/O/expansion limits
+and kubelet ephemeral-storage enforcement have distinct roles. A deployment must
+qualify capacity for its repositories rather than treating a small smoke build as
+proof that every language/toolchain fits.
+
+The packaging README records measured qualification and limits. Live GitHub/GHCR
+access, actual publication and repository-specific capacity must be reported as
+separate evidence; mocked UI or PostgreSQL tests do not establish them.
+
+### Registry destination
+
+A registry connection selects only `ghcr.io/<organization>`. Admission derives the
+lowercase package from the catalog repository name and freezes the complete image
+destination before discovery or publication. For `ayni-oss/sandbox`, a connection
+at `ghcr.io/ayni-oss` yields `ghcr.io/ayni-oss/sandbox`. Reuse and verification bind
+to that complete destination; a connection never supplies a package override.

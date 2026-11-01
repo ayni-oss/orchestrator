@@ -132,6 +132,7 @@ impl Github {
             repo,
             token,
             entries,
+            tree_sha: tree.to_owned(),
         })
     }
     pub async fn frozen_blob(
@@ -185,7 +186,7 @@ impl Github {
             })
             .collect()
     }
-    async fn installation_token(
+    pub(super) async fn installation_token(
         &self,
         installation: u64,
         repo: Option<u64>,
@@ -263,6 +264,7 @@ pub(super) struct FrozenSource {
     repo: u64,
     token: String,
     entries: BTreeMap<String, TreeEntry>,
+    pub tree_sha: String,
 }
 struct TreeEntry {
     mode: String,

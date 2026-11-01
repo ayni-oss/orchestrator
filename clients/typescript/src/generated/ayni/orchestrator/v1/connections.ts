@@ -119,7 +119,10 @@ export interface SaveProviderConnectionRequest {
   displayName: string;
   provider: string;
   capability: string;
-  /** Explicit ghcr.io/owner/package destination, immutable for this connection. */
+  /**
+   * Organization-only ghcr.io/owner destination, immutable for this connection.
+   * Runtime preparation derives the package from the selected repository name.
+   */
   registryDestination: string;
   pushUsername: string;
   pullUsername: string;

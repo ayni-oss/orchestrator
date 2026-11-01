@@ -18,6 +18,13 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPONENTS = ('control-plane', 'conversation-supervisor')
+sys.path.insert(0, str(ROOT / 'dev/lib'))
+from local_context import checked_context, selected_context
+
+
+def state_directory(context, selected):
+    base = ROOT / '.local/live'
+    return base / selected if context == 'docker-desktop' else base / context / selected
 
 
 def namespace():
@@ -160,19 +167,20 @@ def main():
     args = parser.parse_args()
     selected = namespace()
     env = dict(os.environ, AYNI_ORCHESTRATOR_NAMESPACE=selected, HELM_NO_PLUGINS='1')
-    directory = ROOT / '.local/live' / selected
+    context = selected_context(env)
+    directory = state_directory(context, selected)
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / 'status.json'
     state = read_state(path)
+    if state.get('context', context) != context:
+        raise ValueError('Retained live state belongs to another Kubernetes context')
     if args.command == 'status':
         print(json.dumps(state or {'phase': 'not_started', 'namespace': selected}, indent=2))
         return 0
     if args.confirmation and args.command != 'reset':
         parser.error('namespace confirmation is only accepted for reset')
     with exclusive(directory):
-        context = run(['kubectl', 'config', 'current-context'], env, capture=True)
-        if context != 'docker-desktop':
-            raise ValueError('live only supports the explicitly selected docker-desktop context')
+        checked_context(env)
         if args.command == 'reset':
             if args.confirmation != selected:
                 parser.error(f'reset permanently deletes all retained state; supply exact namespace: {selected}')
@@ -182,7 +190,7 @@ def main():
         children = []
         stopped = threading.Event()
         try:
-            write_state(path, state, namespace=selected, owner_pid=os.getpid(), phase='starting')
+            write_state(path, state, namespace=selected, context=context, owner_pid=os.getpid(), phase='starting')
             if args.command == 'watch':
                 require_free_ports()
                 threading.Thread(target=heartbeat, args=(path, stopped), daemon=True).start()

@@ -7,6 +7,7 @@ COPY backend ./backend
 COPY proto ./proto
 COPY dev/fixtures/task-source ./dev/fixtures/task-source
 COPY dev/fixtures/task-quality ./dev/fixtures/task-quality
+COPY dev/fixtures/runtime-preparation ./dev/fixtures/runtime-preparation
 RUN --mount=type=cache,id=ayni-runtime-verifier-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=ayni-runtime-verifier-git,target=/usr/local/cargo/git \
     --mount=type=cache,id=ayni-runtime-verifier-target,target=/workspace/target \

@@ -102,7 +102,8 @@ message SaveProviderConnectionRequest {
   string display_name = 4;
   string provider = 5;
   string capability = 6;
-  // Explicit ghcr.io/owner/package destination, immutable for this connection.
+  // Organization-only ghcr.io/owner destination, immutable for this connection.
+  // Runtime preparation derives the package from the selected repository name.
   string registry_destination = 7;
   string push_username = 8;
   string pull_username = 9;

@@ -8,6 +8,8 @@ mod publications;
 mod recovery;
 mod repositories;
 mod runtime_preparation;
+pub(crate) use repositories::installation_read_token;
+pub(crate) use repositories::runtime_source_inputs;
 mod tasks;
 mod timeline;
 use projections::{

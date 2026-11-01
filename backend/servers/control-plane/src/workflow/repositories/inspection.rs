@@ -36,7 +36,7 @@ fn source_finding(reason: &str, path: &str) -> Finding {
         ),
     }
 }
-fn empty_result() -> InspectionResult {
+pub(super) fn empty_result() -> InspectionResult {
     InspectionResult {
         policy_digest: String::new(),
         lock_digest: String::new(),
@@ -120,7 +120,7 @@ pub(super) async fn inspect(
             }
             Ok(None) => {
                 result.findings.push(finding("locked_input_missing", LOCK,
-                    "Commit every input referenced by the environment lock and regenerate it with Ayni 0.16.2."));
+                    "Commit every input referenced by the environment lock and regenerate it with Ayni 0.17.0."));
                 return Ok(result);
             }
             Err(reason @ ("source_bounds_exceeded" | "source_path_unsupported")) => {
@@ -191,7 +191,7 @@ fn parse_policy(result: &mut InspectionResult, bytes: Option<&[u8]>) -> Option<A
             result.findings.push(finding(
                 "policy_missing",
                 POLICY,
-                "Commit .ayni.toml using Ayni 0.16.2, then inspect that commit.",
+                "Commit .ayni.toml using Ayni 0.17.0, then inspect that commit.",
             ));
             None
         }
@@ -206,7 +206,7 @@ fn parse_policy(result: &mut InspectionResult, bytes: Option<&[u8]>) -> Option<A
                 result.findings.push(finding(
                     "policy_invalid",
                     POLICY,
-                    "Repair the policy using Ayni 0.16.2 and commit the corrected file.",
+                    "Repair the policy using Ayni 0.17.0 and commit the corrected file.",
                 ));
                 None
             }
@@ -221,7 +221,7 @@ fn parse_lock(result: &mut InspectionResult, bytes: Option<&[u8]>) -> Option<Env
             result.findings.push(finding(
                 "lock_missing",
                 LOCK,
-                "Run ayni env lock with Ayni 0.16.2 and commit .ayni.lock and its input files.",
+                "Run ayni env lock with Ayni 0.17.0 and commit .ayni.lock and its input files.",
             ));
             None
         }
@@ -231,7 +231,7 @@ fn parse_lock(result: &mut InspectionResult, bytes: Option<&[u8]>) -> Option<Env
             if let Ok(lock) = serde_json::from_slice::<EnvironmentLock>(bytes) {
                 Some(lock)
             } else {
-                result.findings.push(finding("lock_invalid_or_unsupported", LOCK, "Regenerate and commit the lock with supported Ayni 0.16.2; the lock must have a valid schema, recipe and fingerprint."));
+                result.findings.push(finding("lock_invalid_or_unsupported", LOCK, "Regenerate and commit the lock with supported Ayni 0.17.0; the lock must have a valid schema, recipe and fingerprint."));
                 None
             }
         }
@@ -265,11 +265,11 @@ fn summarize_lock(result: &mut InspectionResult, lock: &EnvironmentLock) {
             "Bind the environment lock to the root .ayni.toml policy before runtime preparation.",
         ));
     }
-    if lock.ayni_version() != "0.16.2" {
+    if lock.ayni_version() != "0.17.0" {
         result.findings.push(finding(
             "ayni_version_unsupported",
             LOCK,
-            "Regenerate the lock with supported Ayni 0.16.2 before runtime preparation.",
+            "Regenerate the lock with supported Ayni 0.17.0 before runtime preparation.",
         ));
     }
 }
@@ -289,7 +289,7 @@ fn summarize_trust(
                     result.findings.push(finding("trust_fingerprint_mismatch", LOCK, "Review the public certificate trust policy and regenerate the lock to bind its exact trust fingerprint."));
                 }
             }
-            Err(_) => result.findings.push(finding("trust_invalid", POLICY, "Configure valid public certificate trust key identifiers and public keys with Ayni 0.16.2.")),
+            Err(_) => result.findings.push(finding("trust_invalid", POLICY, "Configure valid public certificate trust key identifiers and public keys with Ayni 0.17.0.")),
         }
 }
 
@@ -315,7 +315,7 @@ fn bound_summary(result: &mut InspectionResult) {
     }
 }
 
-fn locked_paths(lock: &EnvironmentLock) -> Result<BTreeSet<String>, &'static str> {
+pub(super) fn locked_paths(lock: &EnvironmentLock) -> Result<BTreeSet<String>, &'static str> {
     let mut paths = BTreeSet::from([
         POLICY.to_owned(),
         LOCK.to_owned(),
@@ -372,7 +372,7 @@ fn locked_paths(lock: &EnvironmentLock) -> Result<BTreeSet<String>, &'static str
     }
     Ok(paths)
 }
-fn validate_inputs(
+pub(super) fn validate_inputs(
     result: &mut InspectionResult,
     files: &BTreeMap<String, Vec<u8>>,
 ) -> Result<(), &'static str> {
@@ -402,12 +402,12 @@ fn validate_inputs(
                 .any(|source| !source_digest_matches(source, files))
             {
                 result.findings.push(finding("locked_input_digest_mismatch", LOCK,
-                    "Regenerate the lock with Ayni 0.16.2 from the committed generic tool and package source files; their bytes must match the declared digests."));
+                    "Regenerate the lock with Ayni 0.17.0 from the committed generic tool and package source files; their bytes must match the declared digests."));
             }
         }
         Err(_) => {
             result.findings.push(finding("lock_inputs_or_platform_invalid", LOCK,
-                "Regenerate the lock from these committed input bytes with Ayni 0.16.2, and include the control-plane host architecture in its platforms. Locked input digests and host architecture must both validate."));
+                "Regenerate the lock from these committed input bytes with Ayni 0.17.0, and include the control-plane host architecture in its platforms. Locked input digests and host architecture must both validate."));
         }
     }
     Ok(())
@@ -442,12 +442,51 @@ mod tests {
         .collect()
     }
     #[test]
+    fn supported_runtime_fixture_validates_committed_inputs()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../dev/fixtures/runtime-preparation/source");
+        let files: BTreeMap<_, _> = [
+            POLICY,
+            LOCK,
+            "package.json",
+            "package-lock.json",
+            "index.js",
+        ]
+        .into_iter()
+        .map(|path| fs::read(root.join(path)).map(|bytes| (path.to_owned(), bytes)))
+        .collect::<Result<_, _>>()?;
+        let (mut result, lock) = inspect_headers(empty_result(), &files);
+        assert_eq!(result.ayni_version, "0.17.0");
+        assert!(lock.is_some());
+        assert!(
+            !result
+                .findings
+                .iter()
+                .any(|finding| finding.code == "ayni_version_unsupported")
+        );
+        validate_inputs(&mut result, &files)?;
+        assert!(
+            !result
+                .findings
+                .iter()
+                .any(|finding| finding.code == "lock_inputs_or_platform_invalid")
+        );
+        Ok(())
+    }
+    #[test]
     fn real_ayni_fixture_validates_exact_inputs_and_never_claims_readiness()
     -> Result<(), Box<dyn std::error::Error>> {
         let files = fixture()?;
         let (mut result, lock) = inspect_headers(empty_result(), &files);
         let lock = lock.ok_or("official fixture lock missing")?;
-        assert_eq!(result.ayni_version, "0.16.2");
+        assert_eq!(result.ayni_version, "0.17.0");
+        assert!(
+            !result
+                .findings
+                .iter()
+                .any(|finding| finding.code == "ayni_version_unsupported")
+        );
         assert_eq!(result.lock_schema, "0.9.0");
         assert_eq!(result.lock_fingerprint, lock.fingerprint());
         assert!(result.tools.contains(&"rust@1.94.0".into()));

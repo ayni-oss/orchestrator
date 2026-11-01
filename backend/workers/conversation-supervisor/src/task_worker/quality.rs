@@ -493,44 +493,10 @@ fn bound_capture(path: &Path, maximum: u64) -> Result<bool> {
 /// Runs before constructing Tokio's multithreaded runtime.
 #[cfg(target_os = "linux")]
 pub fn child(stage: &str) -> Result {
-    use rustix::{
-        process,
-        thread::{self, CapabilitySet},
-    };
     use std::os::unix::process::CommandExt as _;
-    // CommandExt drops UID, GID and supplementary groups in the forked child,
-    // while its launcher capabilities still exist, before this exec boundary.
-    if process::getuid().as_raw() != 10002
-        || process::geteuid().as_raw() != 10002
-        || process::getgid().as_raw() != 10002
-        || process::getegid().as_raw() != 10002
-        || !process::getgroups()
-            .map_err(|_| "quality child groups unavailable")?
-            .is_empty()
-    {
-        return Err("quality child identity was not isolated".into());
-    }
-    let capabilities =
-        thread::capabilities(None).map_err(|_| "quality child capabilities unavailable")?;
-    if capabilities.effective != CapabilitySet::empty()
-        || capabilities.permitted != CapabilitySet::empty()
-        || capabilities.inheritable != CapabilitySet::empty()
-    {
-        return Err("quality child retained capabilities".into());
-    }
-    thread::set_no_new_privs(true).map_err(|_| "quality child no_new_privs failed")?;
-    for (resource, limit) in [
-        (rustix::process::Resource::Nproc, 2048),
-        (rustix::process::Resource::Nofile, 8192),
-    ] {
-        rustix::process::setrlimit(
-            resource,
-            rustix::process::Rlimit {
-                current: Some(limit),
-                maximum: Some(limit),
-            },
-        )?;
-    }
+    // The fork/exec boundary drops UID/GID and supplementary groups before
+    // shared verification removes every remaining privilege escalation path.
+    ayni_orchestrator_worker_sandbox::identity::isolate_child(10002, 10002)?;
     super::network::isolate().map_err(|_| "quality child network isolation failed")?;
     super::filesystem::isolate(stage).map_err(|_| "quality child filesystem isolation failed")?;
     let mut command = Command::new("/usr/local/bin/ayni-entrypoint");

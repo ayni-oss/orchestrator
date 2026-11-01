@@ -135,3 +135,14 @@ else
   create_immutable_secret workflow-publication-authority --from-file=token="$publication_directory/token"
   echo "created immutable local publication authority Secret"
 fi
+
+# Runtime stages have a distinct supervisor authority, never a provider/signing key.
+if secret_exists workflow-runtime-authority; then
+  echo "local runtime authority Secret already exists"
+else
+  runtime_directory="$scratch/workflow-runtime-authority"
+  mkdir -m 0700 "$runtime_directory"
+  openssl rand -hex 32 > "$runtime_directory/token"
+  create_immutable_secret workflow-runtime-authority --from-file=token="$runtime_directory/token"
+  echo "created immutable local runtime authority Secret"
+fi

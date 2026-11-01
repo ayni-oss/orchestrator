@@ -5,6 +5,7 @@
  import { Label } from '$lib/components/ui/label/index.js';
  import Feedback from '$lib/components/feedback.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
+ import RuntimePreparation from '$lib/components/runtime-preparation.svelte';
  import { rpc, RpcError, type Connection } from '$lib/api';
  import { inspectionReasons, type Repository, type RepositoryInspection, type InspectRequest } from '$lib/repositories';
  let { repo, connection }: { repo: Repository; connection?: Connection } = $props();
@@ -15,6 +16,7 @@
  let pending = $state<InspectRequest | null>(null);
  let inspections = $state.raw<RepositoryInspection[]>([]);
  let next = $state('');
+ let runtimeInspection = $state.raw<RepositoryInspection | null>(null);
  const storageKey = $derived(`ayni.repository.inspection.pending.${repo.id}`);
  const canInspect = $derived(!!connection?.enabled && !!connection?.activeCredentialRevision);
  const validCommit = $derived(/^[a-f0-9]{40}$/.test(commitSha));
@@ -126,8 +128,10 @@
      {/each}
     {/if}
     {#if item.state === 'accepted'}<Button variant="outline" disabled={busy || !!pending} onclick={() => perform(async () => {persist({ idempotencyKey: item.idempotencyKey, repositoryId: item.repositoryId, expectedConnectionRevision: item.connectionRevision, commitSha: item.commitSha }); await resume();})}>Resume inspection</Button>{/if}
+    {#if item.state === 'completed'}<Button variant="outline" disabled={busy} onclick={() => { runtimeInspection = item; }}>Select for runtime preparation</Button>{/if}
    </section>
   {/each}
   {#if next}<Button variant="outline" disabled={busy} onclick={() => perform(() => load(true))}>More inspections</Button>{/if}
  {/if}
+ <RuntimePreparation {repo} inspection={runtimeInspection}/>
 </div>

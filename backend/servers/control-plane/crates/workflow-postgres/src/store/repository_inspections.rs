@@ -102,6 +102,24 @@ fn validate_observation(value: &Result<InspectionResult, &str>) -> Result<(), St
     Ok(())
 }
 impl WorkflowStore {
+    /// Resolve a retained inspection by immutable identity for runtime admission.
+    /// # Errors
+    /// Reject absent or invalid identities and unavailable retained state.
+    pub async fn get_runtime_inspection_by_id(&self, id: &str) -> Result<Inspection, StoreError> {
+        validate_id(id, "inspection_id")?;
+        let (client, driver) = crate::connect(&self.database_url).await?;
+        let row = client
+            .query_opt(
+                "SELECT * FROM workflow_repository_inspections WHERE id=$1",
+                &[&id],
+            )
+            .await?
+            .ok_or(StoreError::NotFound)?;
+        let result = inspection(&row)?;
+        driver.abort();
+        Ok(result)
+    }
+
     /// Read the safe catalog identity used to obtain exact committed source.
     /// # Errors
     /// Reject invalid IDs, absent repositories and database errors.

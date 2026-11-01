@@ -15,3 +15,12 @@ app.kubernetes.io/part-of: ayni-orchestrator
 {{- printf "http://workflow-traces.%s.svc:4318/v1/traces" .Release.Namespace -}}
 {{- end -}}
 {{- end -}}
+
+{{- define "ayni-orchestrator.runtimeNamespace" -}}
+{{- $runtime := printf "%s-runtime" .Release.Namespace -}}
+{{- if gt (len $runtime) 63 -}}
+{{- printf "%s-%s-runtime" (.Release.Namespace | trunc 45 | trimSuffix "-") (.Release.Namespace | sha256sum | trunc 8) -}}
+{{- else -}}
+{{- $runtime -}}
+{{- end -}}
+{{- end -}}

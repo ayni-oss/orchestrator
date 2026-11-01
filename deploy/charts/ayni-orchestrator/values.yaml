@@ -84,3 +84,27 @@ observability:
   collector:
     enabled: false
     image: otel/opentelemetry-collector-contrib:0.147.0@sha256:e7c92c715f28ff142f3bcaccd4fc5603cf4c71276ef09954a38eb4038500a5a5
+
+runtimePreparation:
+  enabled: false
+  authoritySecretName: workflow-runtime-authority
+  storageClassName: ""
+  # Public Internet access is explicit. Private destinations require reviewed CIDRs.
+  publicEgress: false
+  profile:
+    profile_id: rootless-podman-vfs-userns-v1
+    qualified: false
+    platform: linux/arm64
+    worker_image: ""
+    executor_image: ""
+    verifier_image: ""
+    trusted_cli_sha256: ""
+    max_cpu_millis: 2000
+    max_memory_mib: 2048
+    max_storage_mib: 8192
+    max_seconds: 1800
+    max_builds: 1
+
+# Explicit administrator provisioning capability, separate from runtime execution.
+signerProvisioning:
+  enabled: false

@@ -87,6 +87,12 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - name: Test application HMR
         run: pnpm --filter @ayni-orchestrator/web test:hmr
+      - name: Test signer setup privacy and recovery
+        run: node --test apps/web/tests/runtime-signing.browser.mjs
+      - name: Test production signer setup privacy and recovery
+        env:
+          AYNI_PRODUCT_PRODUCTION: "1"
+        run: node --test apps/web/tests/runtime-signing.browser.mjs
       - run: pnpm docs:check
 
   deployment:

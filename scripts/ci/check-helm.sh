@@ -33,6 +33,28 @@ helm template local "$local_chart" --namespace test \
   --set-string ayni-orchestrator.images.controlPlane="$control_image" \
   --set-string ayni-orchestrator.images.conversationSupervisor="$executor_image" > "$local_render"
 
+# Upgrades with reused values may predate runtime preparation entirely. A null
+# capability must remain disabled rather than failing template evaluation.
+helm template legacy "$reusable_chart" --namespace test \
+  --set runtimePreparation=null > "$scratch/legacy-runtime.yaml"
+! grep -q 'name: runtime-preparation-supervisor' "$scratch/legacy-runtime.yaml"
+! grep -q 'ORCHESTRATOR_RUNTIME_PROFILE_JSON' "$scratch/legacy-runtime.yaml"
+
+# Equal release names in independent application namespaces must never share
+# builder storage, signer references, or supervisor authority.
+for runtime_namespace in runtime-live runtime-acceptance; do
+  helm template same-release "$reusable_chart" --namespace "$runtime_namespace" \
+    --set runtimePreparation.enabled=true --set runtimePreparation.profile.qualified=true \
+    --set-string runtimePreparation.profile.worker_image=local/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+    --set-string runtimePreparation.profile.executor_image=ghcr.io/ayni-oss/ayni-builder@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+    --set-string runtimePreparation.profile.verifier_image=local/probe@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
+    > "$scratch/$runtime_namespace.yaml"
+  grep -q "name: $runtime_namespace-runtime" "$scratch/$runtime_namespace.yaml"
+  grep -q "value: $runtime_namespace-runtime" "$scratch/$runtime_namespace.yaml"
+done
+! grep -q 'runtime-live-runtime' "$scratch/runtime-acceptance.yaml"
+! grep -q 'runtime-acceptance-runtime' "$scratch/runtime-live.yaml"
+
 # The reusable chart consumes administrator-owned immutable Secrets and never
 # renders a database, broker, or credential value.
 grep -q 'name: workflow-postgres-migrator' "$reusable_render"
@@ -306,3 +328,5 @@ deployment = document(sys.argv[1], "task-publisher", "Deployment")
 assert 'value: "http://workflow-traces.test.svc:4318/v1/traces"' in deployment
 PYTHON
 done
+
+python3 "$repository_root/scripts/ci/check-signer-provisioning-chart.py"
