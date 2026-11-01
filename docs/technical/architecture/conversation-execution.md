@@ -1,5 +1,10 @@
 # Conversation execution contract
 
+The [alpha context contract](alpha-product.md#project-chat-context-and-capabilities) extends these current
+mechanisms with repository research, project-context retrieval and versioned
+skill/MCP selection. Those product capabilities require implementation and
+qualification; existing bounded tools and deployment grants are not full support.
+
 This is the consolidated M2 entry contract for [configuration and isolated
 sessions](../history/backend-foundation-roadmap.md#m1m2-delivery-scopes). It carries forward the
 [M1 handoff](../research/project-workflow-m1-durable-foundation.md#m2-handoff)

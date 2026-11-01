@@ -1,275 +1,191 @@
 # Roadmap
 
-Ayni Orchestrator is evolving into an open-source software factory for AI agents.
-The next phase turns its technical foundations into a product people can use to
-understand, authorize, observe and improve software delivery.
+Deliver an Ayni-first software factory through project chat, reviewed plans and
+autonomous task execution. Alpha finishes at reviewable pull requests with passing
+Ayni quality and evidence for the requested behavior. It does not merge or deploy.
 
-This roadmap owns agreed direction and milestone scope. Each bounded PR owns its
-requirements, acceptance evidence and delivery status. Start fresh branches from
-current `origin/alpha` and target `alpha`; users retain merge authority.
+The [alpha product contract](docs/technical/architecture/alpha-product.md) owns the
+agreed scope, authority and completion rules. This roadmap owns delivery order and
+milestone acceptance; each PR owns its implementation status and execution evidence.
+Start fresh branches from current `origin/alpha` and target `alpha`.
 
-## Foundation phase archived
+## Alpha scope
 
-The M1–M8 backend implementation phase is closed as a planning phase. Its
-[delivery roadmap](docs/technical/history/backend-foundation-roadmap.md) is archived
-for provenance. Current architecture and operational contracts remain authoritative.
-Archiving the plan changes neither supported behavior nor acceptance requirements.
+- Connect Ayni-configured repositories and reuse or build, certify, publish and verify their locked runtime images.
+- Configure a workspace's available repositories, instructions, contextual resources, skills and MCP capabilities. Projects choose the subset needed for a chunk of changes.
+- Use project chat to research source, develop and validate plans, follow progress, answer questions and review results.
+- Review modular tasks that run independently, sequentially or as a dependency DAG. The plan chooses how tasks map to pull requests within each repository.
+- Authorize agents to inspect, edit, add and delete files, update dependencies and locks, write tests, build, run checks and repair failures within scope and allowance.
+- Coordinate durable work through events while preserving PostgreSQL authority, frozen inputs, explicit permissions and recoverable external effects.
+- Return linked tasks, commits, quality evidence and reviewable PRs to the project. Humans retain merge authority.
 
-Live additional-provider qualification and sustained production capacity remain
-unmeasured in the recorded evidence. Confirm the final committed-source cumulative
-M8 result before claiming local acceptance complete. The
-[operational acceptance contract](docs/technical/operations/operational-acceptance.md)
-continues to govern qualification; implementation completion does not establish
-autonomous coding capability or production readiness.
+Ayni owns tool integrations, environment/lock semantics and quality evaluation.
+Orchestrator consumes those public contracts and owns agent workflow, runtime
+publication, isolation and delivery evidence. Ayni is the first supported runtime
+path; custom containers are future scope, not an alpha support claim.
 
-## Product direction
+## Starting point and gaps
 
-The project is the durable home for intent, decisions, work and outcomes. Chat is
-the first input surface. Future repository events, schedules, API requests and
-agent inputs enter the same scoped workflow with explicit policy and authority.
+The backend contains durable conversations, exact plan approval, isolated attempts,
+managed quality, recovery, dependency selections, publication and execution history.
+The current UI covers configuration, hierarchy, repository catalog/association,
+static Ayni inspection and qualified-profile-gated runtime preparation.
 
-Keep isolated conversations and workers, immutable plan approval, frozen source,
-managed Ayni quality, durable receipts and recoverable draft publication. Execution,
-quality and publication remain separate outcomes. Delivery ends at a reviewable
-draft unless a user explicitly grants further authority.
+The complete alpha journey is not delivered. Current projects associate directly
+with catalog repositories without workspace membership. Planning lacks built-in
+repository research; coding is one bounded file-proposal pass; task preparation
+uses a trusted local helper. Chat/task browser journeys and their cumulative
+acceptance need replacement coverage.
 
-The former console and diagnostic frontend are removed. The example UI has been
-promoted into [apps/web](apps/web/README.md), the sole web application. Preserve its
-shell, typography, themes and components while wiring each delivery slice to
-canonical APIs. Do not introduce parallel products or alternate visual designs.
-The current UI supports workspace/project creation, manual GitHub App setup,
-GHCR/OpenAI credential configuration, workspace OpenAI model/budget selection,
-shared repository onboarding and exact-commit static Ayni inspection. Full adapter
-discovery and full delivery journeys remain planned. Runtime preparation has a
-qualified-profile-gated Kubernetes implementation; project/task handoff remains planned.
-Historical browser acceptance does not qualify current source; each implemented
-journey needs its own replacement coverage.
+Runtime qualification is deployment-specific. The default Docker Desktop profile
+remains disabled after failed network-policy enforcement. The separate native
+arm64 Cilium profile has Node component and supervisor lifecycle evidence; live
+GitHub acquisition, private GHCR happy-path publication and the broader Rust
+workload envelope still need qualification. See
+[runtime packaging](deploy/images/runtime-preparation/README.md) for measured limits
+and exact artifact prerequisites, including the reviewed Ayni Podman fix.
 
-### Product and Ayni responsibilities
+The [M1–M8 foundation roadmap](docs/technical/history/backend-foundation-roadmap.md)
+is historical provenance. Its archival closes a planning phase, not product
+acceptance. Preserve useful mechanisms and evidence; qualify changed source and
+restore missing product capabilities rather than repeating a foundation programme.
 
-Orchestrator connects intent and context, reviewed planning, authorized agent
-execution, verification, delivery and feedback. Models, skills and MCP tools
-are execution capabilities within those responsibilities. The software-factory
-ambition includes product acceptance and outcome feedback; current code-quality
-checks alone do not establish that ambition.
+## Delivery sequence
 
-Ayni owns language/tool integrations, exact environment locks and code-quality
-evaluation. Its planned exact-combination support policy belongs upstream.
-Orchestrator separately qualifies the Ayni release, public contracts, worker
-profile and deployment it admits; a CLI dependency pin alone is insufficient.
-See [repository preparation](docs/technical/architecture/repository-preparation.md#compatibility-and-product-acceptance).
+Each milestone is an observable product increment, delivered through small PRs
+with UI, canonical backend operations, safe failures and focused local evidence.
+A single-task checkpoint does not reduce alpha's required DAG scope. Event,
+context, telemetry and recovery work ship inside these increments.
 
-Keep acceptance criteria and their evidence distinct from code-quality results
-in delivery reviews. Broader product-outcome measurement remains planned and
-must define its observations before advertising success.
+| Milestone | Dependencies | Maintainer can do | Completion evidence |
+| --- | --- | --- | --- |
+| A: Workspace scope and execution-ready repositories | Existing catalog, connections and runtime stages | Make catalog repositories available to a workspace; select a project subset; prepare source and a verified runtime through the product. | Workspace/project subset checks, shared catalog reuse, exact source/lock/image evidence, real registry readback and server-side source preparation without per-task terminal commands. |
+| B: Grounded project chat and plans | A for repository scope; research can proceed while runtime preparation is blocked | Research selected repositories, retrieve project context, apply configured skills/MCP tools and review a versioned plan with a task graph and PR layout. | Real repository reads/search, retained context provenance, isolated project scope, graph validation, exact approval/retry and visible preparation blockers. |
+| C: Autonomous task to reviewable PR | A and B | Approve bounded execution and publication, then follow an agent implementing, writing tests and repairing one real task. | Tool-driven multi-round work, dependency/lock changes where required, managed Ayni pass, acceptance evidence and one recoverable real PR; event-backed dispatch/report/cancellation and browser recovery. |
+| D: Complete project graphs and delivery | C; graph design starts in B | Run standalone, sequential and branching tasks, parallelize ready work, inspect blockers and deliver the plan's chosen PR structure. | Dependency and integration evidence, explicit upstream commits, conflicting changes, failed-upstream blocking, independent-task progress, shared/separate PR linkage and confirmed recovery without duplicate execution/publication. |
+| E: Alpha qualification | A–D | Complete a realistic multi-task project from repository setup and chat to reviewable PRs, including a real change to Orchestrator. | Actual provider, source/registry/forge operations, managed Ayni quality, requested-behavior evidence, current browser coverage and replay across owner restarts/cancellation. Record interventions, resource envelope and all unmet gates. |
 
-### Product surfaces
+### A: Workspace scope and execution-ready repositories
 
-| Surface | User outcome |
-| --- | --- |
-| Workspace overview | Find attention items, compare project progress and understand shared capacity. |
-| Project overview | Understand goals, decisions, approved work, blockers and delivered results without reading every chat. |
-| Conversations | Discuss intent, inspect agent activity and review plans with their originating context. |
-| Work graph | Inspect dependencies, frozen upstream selections and the path blocked by unfinished work. |
-| Execution inspector | Follow each turn and attempt through timing, evidence, failures, recovery and draft publication. |
+Keep the catalog shared and repository identities independent of workspaces.
+Add explicit workspace availability and enforce project selection as a subset.
+Reuse the same repository and verified artifact across workspaces only after each
+workspace makes it available; never share project-private context or authority.
 
-The interface explains the current stage, elapsed time, waiting reason and next
-available action. Infrastructure details are available through inspection. A task
-may finish coding and fail quality; a conversation may wait for a pod, a provider,
-a tool or a human. These states must remain distinguishable.
+Complete runtime acquisition, registry publication and verification on the admitted
+profile. Connect those artifacts to trusted server-side Git/source preparation,
+including dependency ancestry, then freeze each admitted attempt. A configuration
+edit or removal blocks new use as appropriate but cannot rewrite existing attempts.
 
-### Durable events and responsive feedback
+The [repository delivery plan](docs/technical/research/repository-runtime-workspace-delivery.md)
+details setup and handoff scenarios. Missing support, denied access, invalid trust,
+outages and cleanup must remain actionable states rather than fallback execution.
 
-PostgreSQL remains the transactional workflow authority. Committed outbox delivery,
-JetStream transport and idempotent consumers preserve accepted work across replay
-and restarts. Browser updates use a scoped gateway with resumable observation.
+### B: Grounded project chat and plans
 
-Add incremental assistant output and live preparation, model, tool and task
-activity. Distinguish provisional output from accepted results and reconcile after
-reconnect. Token fragments need not become individual durable domain events.
-Disconnecting a browser does not cancel accepted work.
+Project chat supports continuing project progress, not just a single prompt/response.
+Research tools read and search the selected repositories and retrieve earlier
+project decisions and evidence with provenance. Define bounded context selection,
+retrieval and compaction without silently losing original records.
 
-Future event inputs retain origin, scope, deduplication identity and the applicable
-policy revision. A trigger may initiate investigation or propose a plan within its
-grant; receiving an event does not confer approval or execution authority. Begin
-with a bounded repository-event journey before expanding trigger types.
+Workspace instructions, context, versioned skills and scoped MCP grants are real
+execution inputs. Projects select/refine them within workspace authority. Freeze
+the revisions used for planning and execution; importing a skill grants no tool
+permission. Qualify one actual MCP integration and skill-driven scenario.
 
-### Traceability and measurement
+Plans contain objectives, acceptance criteria, modular task specifications,
+dependency edges, repository scope, environment impact, execution/publication
+allowances and the chosen PR grouping/base relationships. Approval binds an exact
+version. An approved plan can authorize subsequent ready tasks within those grants;
+users need not approve each ordinary tool call or repair round.
 
-Every delivery slice includes durable execution history, correlated traces and
-metrics. Link the originating input, workspace, project, conversation, turn, plan,
-task, attempt, provider call, tool invocation and workload generation where relevant.
-Retries, restarts and recovery retain causal relationships; long workflows use
-linked operation traces rather than one indefinitely open span.
+### C: Autonomous task to reviewable PR
 
-Extend the existing OpenTelemetry and operational metrics foundations. Durable
-history explains and recovers accepted work; traces diagnose execution; metrics
-reveal aggregate behavior. Sampled traces and process counters cannot serve as
-authoritative project accounting. Keep sensitive content out of exported telemetry.
+Replace the one-shot file-proposal limitation with a bounded engineering loop.
+Give agents source research, file operations, command execution, test authoring,
+build/test results and iterative repair. Apply reviewed scope and resource limits
+without making a fixed file count the product's engineering capability boundary.
 
-Use these measurement definitions when specifying analytics contracts:
+Handle dependency and Ayni lock changes through trusted validation and a matching
+environment preparation path. Keep previous snapshots/evidence immutable and
+retain candidate revisions before external effects. Workers cannot loosen policy
+to silence findings or certify their own runtime/evidence.
 
-| Unit | Meaning |
-| --- | --- |
-| Turn | One admitted conversation input and its resulting agent execution. |
-| Round | One model invocation and the resulting tool executions, when present. |
-| Attempt | One authorized execution of a task. |
-| Recovery | An explicitly linked continuation or repair with its own authority. |
-| Delivery | A reviewable output with execution, quality and publication recorded separately. |
+Extend existing durable delivery for task commands, reports, authorization,
+cancellation and decisions; replace the corresponding polling/HTTP ownership path.
+Keep broker credentials outside the coding process. See the
+[task event direction](docs/technical/architecture/task-events.md).
 
-| System performance | Workspace and project understanding |
-| --- | --- |
-| Queue age and admission-to-start latency | Approval-to-draft lead time and work in progress |
-| Pod scheduling, startup and source preparation | Time blocked by dependencies or human decisions |
-| Active, idle and queued workers; resource use and restarts | First-attempt quality pass rate, eventual delivery and recovery frequency |
-| Outbox age, broker backlog and redeliveries | Failures by execution stage and classified reason |
-| Provider/tool latency, errors and uncertain effects | Turns, rounds, tool calls and tokens per delivered task |
-| Cancellation latency, cleanup and restart adoption | Rework after review, when review outcomes are captured |
+Ordinary implementation and repair consume the approved allowance without another
+confirmation. Questions, scope changes, exhausted allowance and uncertain external
+effects return to project chat with retained work and an explicit next action.
+Publication may consume a grant reviewed with the plan, but remains a distinct
+accepted operation and outcome. Finish at a reviewable PR; never merge or deploy.
 
-Define cohorts, denominators, time windows and unknown values for every rate.
-Distinguish cancelled, blocked, failed and uncertain outcomes. Aggregate from
-durable identities without counting transport replay as new work. Record cost
-only when supported by explicit pricing or billing evidence, with its provenance.
-Keep resource identifiers in scoped analytics and traces rather than unbounded
-metric labels. Support drill-down from an aggregate to the underlying evidence.
+### D: Complete project graphs and delivery
 
-## Product delivery sequence
+Preserve modular tasks and distinguish logical dependencies from PR layout.
+A task can run alone, be sequenced or have multiple upstream/downstream edges.
+The plan can group tasks into one repository PR or use separate/stacked PRs; tasks,
+attempts, exact commits and PR relationships remain navigable in either case.
 
-These milestones describe planned outcomes. Each requires focused PRs and passing
-evidence before completion; none is declared implemented by this roadmap.
+Prepare downstream source from explicitly selected accepted upstream outcomes.
+Moving branches, upstream retries or a new plan cannot silently rebase an active
+attempt. Integrate same-repository changes in isolation, resolve conflicts within
+authorized work, and require amended review when the intended scope changes.
 
-### Next focus: repository preparation with a usable UI
+Cross-repository edges retain exact source/artifact or contract references and the
+checks that establish compatibility. A Git ancestry check alone proves neither
+cross-repository compatibility nor an integrated product result. Each PR belongs
+to one repository; a project may have several linked PRs.
 
-PR 0 established a [dev-only live editing loop](dev/LIVE.md): frontend HMR, cached
-Rust rebuild/rollout, explicit schema migration/reset and retained-state diagnostics.
-Each product slice uses this loop during implementation and still requires normal
-immutable-image deployment and acceptance evidence.
+Validate the exact assembled source of each PR group with managed Ayni quality
+and its acceptance checks. Passing task checks do not establish integration success.
 
-The first integration foundation adds the new app shell, PostgreSQL-owned named
-connections and credential revisions, manual GitHub App validation and basic
-workspace/project navigation. Hosting owns credential storage/backup encryption;
-there is no application-level encryption. This is partial delivery of the first
-catalog slice, not completed repository onboarding. Subsequent PRs add guided App
-setup, further catalog lifecycle management, runtime registry permission handling and
-combined live qualification. The configuration surface includes GHCR PAT entry,
-OpenAI access/model discovery and workspace connection/model/budget selection;
-selected OpenAI turns freeze credential revisions and use scoped runtime delivery. Each connection is selected explicitly; multiple named
-connections per capability are supported. See
-[connection foundation](docs/technical/architecture/integration-connections.md).
+Show graph readiness, running tasks, blocked edges, questions and delivery status
+alongside chat. Accepted task outcomes update factual project progress; an agent
+summary never substitutes for quality, acceptance evidence or human merge review.
 
+### E: Alpha qualification
 
-The shared source catalog adds GitHub installation/repository discovery, retained
-connect operations and direct project associations, including reuse across workspaces.
-Its source-access checks do not establish runtime readiness. Static Ayni inspection now freezes an exact commit and validates policy, lock,
-locked input digests and public trust requirements using pinned Ayni APIs. Full
-adapter setup assistance, trust-change PRs and cumulative live GitHub qualification
-remain outstanding. Runtime preparation now freezes an exact inspected source,
-registry, signer and qualified Kubernetes profile. Its bounded supervisor handles
-existing immutable artifacts, build, separate offline certification, publication
-readback, independent content/managed checks and cleanup. Registry permission and
-outage findings come from actual operations. The UI retains receipts and offers
-explicit cancellation/recovery; builds and replacement require separate grants.
-Signer setup now supports generated/imported immutable keys, public metadata and
-recovery without retaining private material in browser storage. Committed repository
-trust remains explicit. Profile qualification and enabling signer setup remain
-deployment prerequisites; administrator-provisioned references remain supported. Connecting these verified artifacts to project plans/tasks is next.
-The local Node pipeline and supervisor restart/cleanup gates pass, but the tested
-Docker Desktop cluster does not enforce default-deny NetworkPolicy. Its runtime
-profile remains disabled. A separate, explicitly selected Cilium cluster now passes
-the full native arm64 Node component pipeline, network enforcement and supervisor
-restart/cleanup gates. Its parallel development UI uses fresh configuration; live
-GitHub acquisition and private GHCR publication remain operator/UI acceptance.
+Use the current sole web application, canonical APIs and actual admitted workload
+profile. Cover setup, planning, approval, single/sequential/diamond graphs,
+independent concurrency, environment-changing work, tests, repair, PR layout and
+project feedback. Exercise at least one real Orchestrator change and a project
+that selects multiple repositories from a workspace.
 
-Deliver shared repository integration, Ayni inspection, verified runtime images
-and project selection before expanding product analytics or event inputs. Build
-the UI and canonical backend together in small end-to-end slices. Each slice must
-be runnable locally and expose its actual states, evidence, blockers and next
-actions; backend completion alone does not complete a slice.
+Interrupt browser connections and execution owners at meaningful boundaries.
+Prove scope isolation, exact command recovery, stale-generation rejection,
+provider uncertainty, failed upstreams, cancellation, cleanup and publication
+readback. A broker ACK, fixture patch or passing host check cannot close a product gate.
 
-Repository integrations live alongside workspaces. Projects associate directly
-with catalog repositories, and projects in several workspaces can reuse the same
-connection and verified runtime. Workspace repository membership is not required.
-Association grants only the defined project use; it does not expose credentials
-or another project's conversations. Task attempts freeze the repository identity,
-source commit, lock and runtime artifact rather than following a moving selection.
+Publish the admitted Ayni integration support matrix with exact project shapes,
+platform/tool combinations, execution evidence and blocked or unsupported cases.
 
-| Slice | Maintainer can test through the UI |
-| --- | --- |
-| Shared catalog and project association | Configure source access, connect a repository, create a workspace/project and select the shared repository. Reuse it from a project in another workspace; inspect safe access failures and exact command receipts. |
-| Frozen Ayni inspection and setup | Analyze committed policy and lock at an exact commit. Inspect compatibility, registry and certificate findings; finish configuration and review a narrowly authorized trust PR when required. |
-| Verify an existing runtime | Discover an immutable image, inspect separate environment verification and see ready, missing, invalid and unavailable states without silently replacing an image. |
-| Build, publish and recover | Enable bounded automatic preparation for a missing image, observe build/publication/verification/cleanup and explicitly authorize replacement of an invalid image. Resume after interruption without duplicate effects. |
-| Project conversation to task delivery | Discuss, review and approve an exact plan, select verified repository/runtime evidence, authorize execution and inspect coding, managed quality and draft publication separately. No per-task terminal source preparation is required. |
-| Feedback and cumulative qualification | Follow questions, failures and exact recovery back to the conversation, inspect the full causal chain and repeat the journey across reload, reconnect, concurrent tabs and owner restarts. |
+Record three separate facts for each capability: backend implemented, usable in
+the product, and qualified on the declared deployment. Alpha requires all three
+for every in-scope journey. Existing retired browser profiles must be replaced or
+explicitly superseded by runnable coverage, not bypassed to report success.
 
-The [repository preparation contract](docs/technical/architecture/repository-preparation.md)
-defines gates, authority, shared ownership and frozen evidence. The
-[delivery and acceptance plan](docs/technical/research/repository-runtime-workspace-delivery.md)
-defines slice dependencies, UI coverage, failure cases and qualification limits.
-Initial deployment and administrator Secret provisioning may require local tools;
-the qualified product journey must handle repository setup and task preparation
-without manual database changes, fabricated evidence or local source-pack commands.
+## Acceptance and delivery discipline
 
-### Wider product sequence
+- A task needs passing managed Ayni quality and evidence for its requested behavior. Missing/incomplete required evidence is a blocker; no policy weakening to achieve a green result.
+- Keep execution, quality, acceptance, cleanup and publication outcomes separate. Explain stage, waiting reason, allowance and permitted next action through the UI.
+- Preserve exact approval, source/runtime/context revisions, retained receipts, ownership fencing and recoverable external effects. PostgreSQL remains authoritative.
+- Keep interfaces canonical v1 during alpha. Update source contracts, generated consumers and affected docs together when implementing a contract change.
+- Use bounded event delivery with backpressure and periodic reconciliation. Large sources/evidence use immutable references; provisional text is not accepted outcome evidence.
+- Include causal history, safe traces and resource/usage observations in each slice. Never export credentials or use sampled telemetry as project accounting.
+- Run focused local browser, PostgreSQL, JetStream, loopback and deployed acceptance for affected behavior. PR CI stays lean; reintroducing end-to-end CI requires a separate scope/runtime decision.
+- Each PR links a milestone, states what users can do, records passed/failed/blocked checks and removes superseded active paths only with replacement evidence. Do not create duplicate issue trackers or merge automatically.
 
-| Milestone | Observable outcome and acceptance |
-| --- | --- |
-| Repository preparation and product workspace | Deliver the next-focus slices above, including the shared catalog, project associations, Ayni setup, runtime production and project Chat, Plans and Tasks. Extend the sole example-derived application against canonical APIs; qualify every browser journey. |
-| Observable execution | Add the execution inspector, live progress and incremental assistant text. Explain queue, preparation, model/tool execution, quality and publication stages with timing and evidence. Trace a full journey across API, broker, supervisor and worker, including interruption and replay. Instrument the first workspace slice rather than deferring telemetry to this milestone. |
-| Browser-driven development | Complete the repository-preparation journey through trusted server-side source preparation, verified digest-pinned runtime selection and explicit budgets. Preserve exact approved source and upstream selections; add canonical APIs and browser coverage together. |
-| Project and workspace insight | Ship overviews, attention, dependency visualization and scoped analytics using the measurement definitions above. Demonstrate drill-down, replay-safe counting, pagination and recovery-aware rates with known input cohorts. |
-| Orchestrator self-development | Use a reviewed plan to deliver a real change to Orchestrator through the product, actual agent execution, managed Ayni quality and a retained reviewable draft. Capture human interventions, resource usage, limitations and recovery evidence. Deterministic coding fixtures alone do not satisfy this outcome. |
-| Event-driven entry points | Add a bounded repository-event integration with inspectable trigger policy, origin, deduplication and approval boundaries. Duplicate delivery, reconnect and worker restart do not duplicate tasks or external effects. Design the input contract to admit schedules, API and agent inputs later. |
-| Sustained operation and qualification | Run a defined realistic workload over a recorded duration, concurrency and hardware envelope. Measure throughput, latency, storage growth, saturation, recovery and provider behavior against explicit acceptance thresholds. Complete outstanding provider qualification and cumulative acceptance evidence. One successful self-development task does not establish sustained capacity. |
+## After alpha
 
-The first usable journey starts with shared repository setup and verified runtime
-preparation, then project creation/association, discussion, exact plan approval,
-execution, progress inspection, question/failure recovery and draft review.
-Deliver it through small end-to-end slices. Use its measured behavior to refine
-subsequent scope and capacity targets.
+- Repository events, including GitHub issues, can initiate a project prompt under explicit trigger policy. Milestone links, schedules and other inputs build on the same origin, deduplication and authority contracts.
+- Custom containers require their own execution, verification and support contract.
+- Rich project/workspace analytics, broader provider administration, remote tenancy and multi-user access follow defined product journeys.
+- Design queue, workspace/provider budgets and dispatch rates for growth; thousands of agents and sustained production capacity require measured load qualification, not a transport claim.
+- Automatic merge, deployment and broad business-outcome measurement remain outside alpha.
 
-### Observable execution delivery
-
-Retain accepted activity independently of seven-day watch replay cleanup and
-expose stable, scoped history pages alongside live progress and provisional
-assistant text. Correlate API admission, transport, supervisor, isolated worker,
-provider/tool execution and task source, coding, quality and publication. Keep
-recorded observations, provisional text, accepted outcomes and sampled diagnostics
-distinct. The inspector includes task evidence, phase timing, waiting reasons and
-explicit next actions, with approvals and recovery implemented against canonical
-APIs alongside the next-focus UI slices.
-See the [execution timeline contract](docs/technical/architecture/execution-timeline.md)
-and [combined deployed acceptance](docs/technical/operations/observable-execution-acceptance.md).
-
-### One product workspace
-
-The example UI is the active application in `apps/web`; its duplicate source tree
-and the standalone diagnostic frontend are removed. New repository, preparation,
-conversation and delivery journeys extend this application and its existing design
-system. Keep durable chat, plans, tasks, execution timelines, tracing and exact
-receipts in the backend. Browser acceptance covers reload, reconnect, scope,
-concurrent actions and interrupted-command retries against canonical APIs.
-
-## Delivery discipline
-
-- Define user outcomes, observable states, authority and failure/recovery cases before implementation.
-- Extend canonical v1 contracts in place through alpha; keep generated consumers and documentation synchronized.
-- Validate affected behavior on the explicit Docker Desktop Kubernetes topology and extend cumulative acceptance.
-- Maintain one example-derived frontend; qualify each new journey against canonical APIs before advertising support.
-- Keep system operation and project analytics scoped to the same workspace/project authority as their underlying records.
-- Keep deployment choices explicit and self-hosting practical. Document dependencies, configuration, export and recovery without requiring a proprietary observability service.
-- Keep PR CI lean: Ayni owns ordinary Rust test execution; end-to-end browser, PostgreSQL, JetStream and loopback acceptance stays local for now. Retain local qualification evidence before claiming product behavior.
-- Record actual evidence and blocked checks in each PR. Release publication, merges and destructive cleanup retain their existing authorization boundaries.
-
-## Further scope
-
-Repository onboarding, required source/registry/certificate configuration and
-runtime preparation are in the next focus above. Broader project/workspace
-lifecycle management, provider administration, runtime fleet management and richer
-operations views remain driven by those journeys. Specify capabilities against
-current contracts before adding screens. Multi-user access and tenancy expansion
-need separate scope and decisions.
-
-Ayni remains an independently useful quality CLI and portable environment builder.
-Its [independent roadmap](https://github.com/ayni-oss/ayni/blob/main/ROADMAP.md)
-remains in its own repository.
+Ayni's [independent roadmap](https://github.com/ayni-oss/ayni/blob/main/ROADMAP.md)
+owns its tool, environment and compatibility evolution. Orchestrator-specific
+workflow requirements belong here.

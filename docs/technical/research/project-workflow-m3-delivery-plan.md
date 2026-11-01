@@ -1,5 +1,10 @@
 # M3 delivery plan
 
+> Historical foundation delivery plan. Its dated scope and evidence remain
+> provenance; the active [alpha roadmap](../../../ROADMAP.md) and
+> [product contract](../architecture/alpha-product.md) govern new work.
+> Current behavior is documented in the linked architecture contracts.
+
 Date: 2026-10-21. Status: staged implementation plan. PR #238 combines this contract with the first durable-review slice; the second slice adds structured agent proposals; the third slice adds exact-version approval and atomic task admission; the fourth slice adds the [cumulative acceptance gates](../operations/plan-acceptance.md). Delivery completion requires the final PR's recorded deployed results.
 
 ## What this decides

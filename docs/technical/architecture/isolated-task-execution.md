@@ -1,5 +1,16 @@
 # Isolated task execution
 
+## Planned alpha execution
+
+The [alpha engineering contract](alpha-product.md#reviewed-plans-and-autonomous-execution)
+requires repository research, file and command tools, tests, builds and iterative
+repair, including authorized dependency/lock changes. The one-shot file-proposal
+limits and per-repair confirmations described below remain current behavior, not
+the alpha target. [Task events](task-events.md) defines the planned replacement
+of coding HTTP polling/callback delivery while preserving frozen authority.
+
+## Current execution contract
+
 > UI status: the local product supports configuration and basic workspace/project
 > navigation; see [integration connections](../architecture/integration-connections.md).
 > Conversation/task browser steps below describe the retired UI and remain

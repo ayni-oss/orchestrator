@@ -1,5 +1,15 @@
 # Task execution preparation
 
+## Planned alpha preparation
+
+The [alpha contract](alpha-product.md) requires workspace-scoped project repository
+selection, trusted server-side preparation and bounded autonomous execution grants.
+Current local-helper preparation below remains required until that handoff is
+implemented and qualified. Plans may then grant execution of ready tasks without
+repeated manual starts; prepared evidence alone still grants no execution authority.
+
+## Current preparation contract
+
 A trusted local operator prepares an admitted task for later coding execution.
 PostgreSQL retains either explicit blockers or one immutable prepared attempt.
 Preparation never creates a coding command, worktree, provider call or publication.

@@ -23,6 +23,15 @@ evidence. The [compatibility and acceptance boundary](repository-preparation.md#
 separates upstream tool qualification, Orchestrator integration qualification
 and evidence that requested product behavior works.
 
+## Planned alpha extensions
+
+The [alpha contract](alpha-product.md) defines workspace repository scope, grounded
+project chat, skill/MCP context, autonomous engineering, environment-changing work
+and plan-selected task/PR graphs. The [task event direction](task-events.md) extends
+durable orchestration to coding tasks. Current HTTP callbacks, polling, one-shot
+coding and direct project associations below remain implementation constraints
+until their replacements are delivered and qualified.
+
 ## Runtime boundary
 
 ```mermaid

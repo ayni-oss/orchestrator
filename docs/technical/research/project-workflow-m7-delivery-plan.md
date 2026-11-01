@@ -1,5 +1,10 @@
 # M7 delivery plan
 
+> Historical foundation delivery plan. Its dated scope and evidence remain
+> provenance; the active [alpha roadmap](../../../ROADMAP.md) and
+> [product contract](../architecture/alpha-product.md) govern new work.
+> Current behavior is documented in the linked architecture contracts.
+
 Date: 2026-10-24. Status: staged delivery direction; each pull request owns its acceptance evidence.
 
 ## What this decides

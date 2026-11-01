@@ -1,5 +1,16 @@
 # Task dependencies and concurrent execution
 
+## Planned alpha extension
+
+The [alpha contract](alpha-product.md#task-graphs-and-pr-structure) requires modular
+standalone/sequential/DAG tasks, plan-selected shared/separate/stacked PRs and
+server-side integration. Current preparation below requires a published upstream
+commit and manual integration; it does not implement flexible PR groups or
+cross-repository dependency evidence. Extend the canonical v1 contracts and retain
+exact upstream identities rather than treating this current limitation as alpha scope.
+
+## Current dependency execution
+
 An approved plan freezes each task's `depends_on` keys in the exact reviewed
 version. Keys refer to tasks in that same approval. Validation rejects missing,
 duplicate and self edges and cycles; forward references and diamond graphs are

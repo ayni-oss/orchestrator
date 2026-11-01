@@ -1,115 +1,100 @@
 # Repository preparation and workspace delivery
 
-Status: connection foundation, shared source catalog and project associations are implemented. Exact-commit static Ayni inspection is implemented. Kubernetes runtime preparation and its UI are implemented behind explicit profile qualification. Full adapter setup assistance, project/task runtime handoff and cumulative live-GitHub qualification remain pending. See [integration connections](../architecture/integration-connections.md) for the implemented boundary.
+Status: source connections, shared catalog/direct project associations, static Ayni
+inspection and profile-gated Kubernetes runtime preparation are implemented.
+Workspace repository availability, server-side task handoff and cumulative live
+source/registry qualification remain pending. This plan details
+[roadmap milestone A](../../../ROADMAP.md#a-workspace-scope-and-execution-ready-repositories);
+[the alpha contract](../architecture/alpha-product.md) owns product scope.
 
-Deliver the [roadmap focus](../../../ROADMAP.md#next-focus-repository-preparation-with-a-usable-ui)
-through the [shared repository preparation contract](../architecture/repository-preparation.md).
-Each slice includes canonical v1 APIs, PostgreSQL authority, UI, safe diagnostics
-and local acceptance. Each PR records its own delivery status and evidence.
+## Scope and ownership
 
-## Compatibility and acceptance boundaries
+Keep repository identity and runtime artifacts in the shared catalog. Alpha adds
+workspace availability; projects select only the repositories needed for their
+work from that set. Several workspaces may reuse the same catalog repository and
+verified artifact without sharing project-private context, credentials or grants.
+Current direct associations do not enforce that subset requirement.
 
-Use the [repository preparation contract](../architecture/repository-preparation.md#compatibility-and-product-acceptance)
-for the split between Ayni tool qualification and Orchestrator release/profile
-qualification. Preserve each operation's exact admitted inputs; never infer
-readiness from a version pin or an upstream feature alone.
+Define the forward transition for existing PostgreSQL associations, admission and
+removal before implementation. Preserve retained source, attempt and publication
+provenance. Do not restore historical SQLite APIs or schemas to implement the new
+workspace requirement. The [repository contract](../architecture/repository-preparation.md)
+owns source/runtime gates and the Ayni/Orchestrator compatibility split.
 
-Each delivery review records separate evidence for environment verification,
-managed quality and the task's requested behavior. Source-quality failures may
-coexist with environment compatibility. Broader user/business outcome
-measurement remains planned and is not implied by a successful quality gate.
+## Delivery increments
 
-## Usable increments
-
-| Slice and prerequisite | Browser outcome | Required acceptance |
+| Increment | Browser outcome | Required evidence |
 | --- | --- | --- |
-| Shared catalog and project association; existing hierarchy APIs | Open the new shell, configure source connection references, connect a repository and select it from a project. Reuse that repository from a project in another workspace. | Stable provider identity, no workspace-membership prerequisite, scoped associations, rejected unauthorized use, bounded discovery and exact response-loss retry. |
-| Frozen inspection and setup; catalog slice | Analyze an exact commit and see Ayni inputs, supported tooling and corrective findings. Configure registry/certificate references, inspect operation failures and authorize a trust proposal when needed. | Missing/malformed/unsupported inputs block progress; disabled Ayni stays disabled across restart; access failures stay distinct; duplicate/closed/conflicting trust proposals retain explicit recovery; merged trust is revalidated. |
-| Existing runtime verification; setup gates | Inspect discovery, exact image digest, verification evidence and ready/missing/invalid/unavailable states. | No build on outage or denial; reject wrong platform, lock, signer, protected content or stale artifact; source quality failure cannot be mistaken for invalid environment provenance. |
-| Runtime production; verified contract and qualified build topology | Enable bounded preparation, follow build/publication/readback/verification/cleanup and explicitly request replacement. Inspect retained failed operations and retry decisions. | Real Ayni build and registry pull; separate credentials; guarded publication; uncertain push readback; engine/workload loss, exhausted allowance, stale reports, cancellation and cleanup restart. |
-| Conversation to delivery; artifact admission and trusted source service | Discuss a goal, review/approve a plan, prepare and explicitly start a task, then inspect patch, quality and authorized draft publication. | Project association and approved source cannot be substituted; server verifies source/lock/upstream ancestry; attempt freezes artifact evidence and budgets; no local source-pack command; later selection changes leave the attempt unchanged. |
-| Feedback and qualification; complete journey | Answer worker questions, confirm exact recovery and follow attention to continued outcomes. Navigate from task to shared preparation and retained traces/evidence. | Cross-workspace reuse, independent conversation scope, restart/replay, stable evidence navigation and separate coding/quality/publication outcomes in one cumulative deployed journey. |
+| Workspace availability and project subset | Make catalog repositories available to a workspace; choose a project subset; reuse a repository in another explicitly configured workspace. | Stable identity, rejected out-of-workspace selection, context isolation, exact lost-response retry, removal/active-work rules and a safe transition for retained associations. |
+| Frozen inspection and setup | Inspect one exact commit, understand policy/lock/tool/trust findings and finish required setup. | Supported Ayni contracts, bounded source reads, explicit missing/invalid inputs, retained access failures, reviewed trust changes and fresh inspection of the accepted source. |
+| Reuse or produce a verified runtime | Select an admitted profile, registry, signer and allowance; inspect discovery, build/certification/publication, verification and cleanup. | Actual source acquisition, Ayni build, registry push/readback/pull, separate credentials, wrong-image/trust rejection, uncertain publication recovery and completed cleanup. |
+| Server-side task handoff | Select a ready repository/runtime from a project and prepare the reviewed task without local source-pack commands. | Server verifies scope, Git objects, original lock, upstream ancestry and artifact evidence; attempts freeze exact source/runtime/configuration and allowance. |
+| Connected task checkpoint | Follow one admitted task to isolated execution, retained quality and authorized PR delivery in the same product. | No substituted source/artifact, no duplicate effects on reconnect/restart, explicit blockers, retained evidence navigation and an actual browser/API/worker journey. |
 
-Rows are dependency order, not a requirement for one large PR per row.
-Split rows into smaller end-to-end PRs when needed, while keeping each increment
-testable through its UI. Begin tracing, durable history and safe failure display
-in the catalog slice; do not defer them to final qualification.
+These are increments, not a requirement for one large PR per row. Implement the
+canonical API, UI and focused local acceptance together. Research/planning may
+proceed while runtime preparation is blocked; execution waits for its required
+readiness evidence. Continue through the roadmap's engineering-loop and DAG
+milestones before claiming alpha complete.
 
-## Product interface
+## Runtime and recovery requirements
 
-| Surface | What the maintainer can inspect and do |
+| Case | Required behavior |
 | --- | --- |
-| Shared integrations | Inspect source, registry and certificate status; configure administrator-owned references and test supported capabilities. Read APIs never return credentials. |
-| Repository catalog/details | Connect once, opt into Ayni preparation, analyze, inspect the frozen commit and findings, select setup, view history and request permitted retries. |
-| Runtime inspector | Compare desired revision with verified artifacts, inspect stages/timing/cleanup and review explicit rebuild or trust decisions. |
-| Workspace/project | Create and navigate projects; select catalog repositories directly and inspect linked preparation blockers. |
-| Chat, Plans and Tasks | Discuss, review the exact version/digest, authorize actions and inspect accepted outcomes plus provisional activity. |
-| Evidence/recovery inspector | Follow immutable origin, questions, answers, allowances, attempts, quality and draft references without changing execution authority by reading. |
+| Registry outage, denial or rate limit | Retain the failed stage and next action; never infer image absence or authorize a build from an unavailable observation. |
+| Confirmed image absence | Consume an explicit bounded preparation grant; invalid existing content requires replacement authority. |
+| Source/registry/signer/platform changes | Preserve the frozen operation and fence stale activation. New inputs require applicable new preparation. |
+| Publication response lost | Read back the exact intended candidate and identity before another external action; no blind overwrite or duplicate publication. |
+| Workload loss or owner restart | Adopt only exact owned workloads; retain interruption, generation and allowance decisions. |
+| Cancellation or exhausted allowance | Fence late reports, retain external-effect uncertainty and confirm owned cleanup. |
+| Cleanup incomplete | Show pending cleanup and resume it; never label the artifact ready prematurely. |
+| Workspace/project selection removed | Check active work and retained references; fence new admissions without rewriting frozen attempts or deleting shared catalog resources. |
+| Artifact stale or unavailable | Keep the attempt's exact selection and report a blocker; never substitute a moving tag or unrelated image. |
 
-Design from current user journeys and the retained web example, then implement
-against canonical APIs. The historical BFF and client contracts remain excluded.
-Initial qualification targets the trusted local operator and explicit Docker
-Desktop topology; the UI must not expose private listeners to remote users.
+The environment-changing task path is specified in the
+[alpha contract](../architecture/alpha-product.md#environment-changing-work).
+Preparation must support retained candidate source/lock revisions without
+weakening signing, independent verification or final managed-quality boundaries.
+Do not advertise changed-lock execution until that complete path is qualified.
 
-Administrator deployment, GitHub App installation, Secret provisioning and the
-initial qualified builder topology may require external setup. Document those
-prerequisites before each test journey. Once configured, repository analysis,
-runtime preparation and task source handoff run through the product without
-manual database writes or terminal preparation of each task.
+## Browser and evidence gates
 
-## Cross-cutting browser gates
+- Reload/reconnect reconstructs retained state. Closing the browser does not cancel accepted work.
+- Interrupted retries reuse the exact command scope, bytes and identity. Changed inputs cannot reuse the same command identity.
+- Concurrent tabs reject stale selections; scope changes fence late responses and prevent another project's private data appearing.
+- Show the stage, waiting reason, allowance, safe failure and permitted next action. Provisional output cannot establish completion or grant authority.
+- Trace source, runtime operation, artifact, plan, task, attempt, provider/tool activity, quality and PR relationships without exporting credentials or sensitive raw content.
 
-- Reload/reconnect reconstructs state from retained reads; closing the browser does not cancel accepted work.
-- Persist exact pending-command scope, identity and bytes for interrupted retries; never silently generate another action.
-- Concurrent tabs detect stale selections and approvals rather than overwriting them.
-- Scope switches fence late responses; project views cannot display another project's private data.
-- Every waiting/failure state shows the current stage, evidence, safe reason and permitted next action.
-- Incremental text remains provisional until canonical acceptance; read failures retain loaded evidence and offer retry.
-- Selecting or inspecting an artifact, finding or recovery record cannot authorize execution or publication.
+For each delivered increment, record committed source, explicit deployment/context,
+qualified tool/image identities, prerequisites, commands, browser results, receipts,
+artifact digests and failed/blocked checks. Evidence remains outside agent-writable
+storage. Fixture success is separate from actual provider, registry and forge
+qualification; historical browser coverage does not validate current source.
 
-## Runtime and recovery matrix
+The default Docker Desktop preparation profile remains disabled after a failed
+network-policy negative control. The separately authorized Cilium profile has a
+measured Node component and supervisor lifecycle envelope. Use the
+[runtime packaging evidence](../../../deploy/images/runtime-preparation/README.md)
+for exact CLI/profile prerequisites and remaining live integration gaps. Never
+fall back to another current cluster or imply an unqualified runtime is supported.
 
-| Case | Required invariant |
-| --- | --- |
-| Duplicate connect/analyze/build command | Recover one accepted operation and its receipt; changed bytes under the same key conflict. |
-| Source, registry, certificate or platform changes mid-operation | Preserve frozen history; fence old activation and require applicable new verification. |
-| Confirmed absence versus unavailable registry | Only absence permits opted-in automatic build. Invalid existing content needs explicit replacement authority. |
-| Publication response lost or process restarted | Read back the expected candidate before retry; no blind replacement or duplicate external action. |
-| Owner restart or workload loss | Adopt only the exact owned workload or retain an interruption; replacement uses a new authorized generation and bounded allowance. |
-| Cancellation or deadline | Fence late reports and complete owned cleanup; retain uncertainty about external effects. |
-| Cleanup failure | Expose pending cleanup and resume it after restart; never report ready prematurely. |
-| Several projects sharing a repository | Reuse artifact evidence without sharing transcripts, task authority or credentials; prevent duplicate competing preparation. |
-| Association/catalog removal | Check active operations and retained references; retain provenance and require separate authority for external deletion. |
-| Task runtime becomes stale or unavailable | Retain the frozen selection and report a blocker/failure; never substitute the latest tag or another image. |
+Initial administrator deployment, App installation and signer/profile setup may
+require local tools. Once those prerequisites are configured, repository/runtime
+preparation and task source handoff must run through the product without manual
+database writes or terminal preparation for every task.
 
-## Evidence and completion
+## Completion boundary
 
-For every delivered slice, record the committed source revision, qualified tool
-and image identities, explicit cluster context, prerequisites, commands, retained
-receipts/artifact digests, browser results and failed or blocked checks. Keep
-evidence outside repository-controlled writable storage and exclude secrets and
-raw sensitive content from exported telemetry.
+This milestone finishes when a maintainer can configure workspace availability,
+select a project subset, inspect a real Ayni-enabled repository, reuse or build
+and publish its verified runtime, and hand exact inputs to an isolated task.
+Reuse in another workspace requires that workspace's own availability selection.
+The connected task checkpoint establishes the handoff; complete research,
+autonomous repair, DAGs and flexible PR layout remain required by the wider alpha
+roadmap, not claims of this setup milestone.
 
-Use Docker Desktop Kubernetes with the explicit `docker-desktop` context and
-extend the existing cumulative harness. Restore browser coverage against the new
-UI before advertising support; retired browser evidence cannot qualify current
-source. Mock pages and deterministic coding fixtures establish neither actual
-runtime compatibility nor live-provider delivery.
-
-The focus is complete when a maintainer can connect a real authorized repository,
-inspect its committed Ayni setup, build or reuse and verify its image, select it
-from projects in two workspaces, and deliver approved work through managed quality
-to a reviewable draft. The same journey must expose questions/failures, confirmed
-recovery and retained causal evidence across browser and workload interruption.
-Report live-provider/publication qualification separately from local protocol
-fixtures; record any external authority required for those tests.
-
-Production capacity, remote tenancy, arbitrary runtime types, automatic policy
-bootstrap, merge and deployment remain separate scope. A successful local journey
-does not establish those capabilities.
-
-## Related contracts
-
-- [Project workspace](../architecture/project-workspace.md) records present UI status and the next interface boundary.
-- [Local development](../operations/local-development.md) defines deployment and retained-resource operations.
-- [Operational acceptance](../operations/operational-acceptance.md) and [observable acceptance](../operations/observable-execution-acceptance.md) define existing evidence limits and currently unavailable browser profiles.
+Run focused local browser, PostgreSQL, JetStream and deployed scenarios for affected
+behavior. PR CI remains lean; this plan does not add end-to-end CI gates. Use the
+[local operations guide](../operations/local-development.md) and preserve retained
+resources during restart tests. Destructive cleanup, external release publication,
+merge and deployment are separate authority.

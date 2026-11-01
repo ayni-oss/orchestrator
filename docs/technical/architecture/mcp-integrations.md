@@ -1,5 +1,10 @@
 # Scoped MCP integrations
 
+The [alpha context contract](alpha-product.md#project-chat-context-and-capabilities) extends these current
+mechanisms with repository research, project-context retrieval and versioned
+skill/MCP selection. Those product capabilities require implementation and
+qualification; existing bounded tools and deployment grants are not full support.
+
 > UI status: the local product supports configuration and basic workspace/project
 > navigation; see [integration connections](../architecture/integration-connections.md).
 > Conversation/task browser steps below describe the retired UI and remain

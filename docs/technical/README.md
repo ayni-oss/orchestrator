@@ -7,17 +7,22 @@
 
 The runtime combines the M1 durable foundation with shared immutable agent configuration and isolated conversation sessions with scripted and opt-in OpenAI execution. PostgreSQL owns workflow and session authority; authenticated durable delivery and the trusted-loopback API remain v1 through alpha. Real provider calls retain request identity, uncertainty and nullable usage; bounded read tools retain frozen inputs and invocation evidence.
 
-## Next delivery focus
+## Alpha delivery direction
 
-Shared repository onboarding and verified runtime preparation ship alongside a new
-UI in the [active roadmap](../../ROADMAP.md#next-focus-repository-preparation-with-a-usable-ui).
-Projects select catalog repositories directly and can reuse them across workspaces.
-These documents describe the source catalog, gated Kubernetes runtime preparation
-and the remaining project/task handoff:
+The [roadmap](../../ROADMAP.md#delivery-sequence) sequences usable increments to
+Ayni-first autonomous project delivery. The following planned contracts govern
+that work without implying current API or browser support:
 
-- [Kubernetes runtime preparation](architecture/runtime-preparation.md): stage authority, isolation, publication recovery and profile qualification.
-- [Repository preparation](architecture/repository-preparation.md): ownership, Ayni gates, credentials, immutable artifacts and task handoff.
-- [Repository/runtime workspace delivery](research/repository-runtime-workspace-delivery.md): UI increments, failure/recovery matrix and cumulative qualification.
+- [Alpha product contract](architecture/alpha-product.md): workspace repository availability, project context/chat, engineering autonomy, task graphs, environment changes and plan-selected PR layout.
+- [Task event direction](architecture/task-events.md): extend durable command/report/decision delivery to coding tasks while preserving authority and uncertainty handling.
+- [Project workspace](architecture/project-workspace.md): current UI boundary, intended project surfaces and browser recovery requirements.
+- [Repository delivery plan](research/repository-runtime-workspace-delivery.md): setup, workspace scope, runtime handoff and qualification scenarios.
+
+Current source/runtime mechanisms are described in
+[repository preparation](architecture/repository-preparation.md) and
+[Kubernetes runtime preparation](architecture/runtime-preparation.md). Current
+projects can associate directly with catalog repositories; workspace-subset
+admission is a planned behavior change.
 
 ## Current implementation
 

@@ -1,5 +1,16 @@
 # Task draft publication
 
+## Planned alpha publication
+
+The [alpha delivery contract](alpha-product.md#task-graphs-and-pr-structure) lets
+the reviewed plan group several modular tasks into one repository PR or choose
+separate/stacked PRs. Execution/publication grants may be approved with the plan;
+authoritative publication and uncertain-effect recovery remain distinct. The
+one-task/one-draft flow below is current behavior, not that full PR-group contract.
+Alpha stops at reviewable PRs and never merges or deploys.
+
+## Current publication contract
+
 > UI status: the local product supports configuration and basic workspace/project
 > navigation; see [integration connections](../architecture/integration-connections.md).
 > Conversation/task browser steps below describe the retired UI and remain

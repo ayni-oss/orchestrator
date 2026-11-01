@@ -1,37 +1,45 @@
-# Product workspace status
+# Project workspace
 
-The historical product workspace and contributor console remain removed. The new
-`apps/web` application provides local workspace/project creation and discovery,
-plus manual GitHub App configuration. See [integration connections](integration-connections.md).
-Registry, OpenAI, repository association and delivery screens remain planned.
-[The example-derived application](../../../apps/web/README.md) is the only frontend.
-Its duplicate example and standalone diagnostic UI have been removed.
+Status: configuration, workspace/project creation and rename, shared repository
+catalog/direct project associations, static inspection and gated runtime preparation
+are available in the sole [web application](../../../apps/web/README.md). Project
+chat, plan/task delivery screens and their replacement browser qualification remain
+planned. See [integration connections](integration-connections.md) for current APIs.
 
-Backend discovery, conversations, execution timelines, plans, task evidence,
-recovery and publication continue through canonical v1 APIs. The local
-`dev/ctl gateway` command exposes an allowlisted JSON/SSE adapter without pages,
-static assets or legacy backend wiring. See [the gateway boundary](contributor-console.md).
+## Alpha workspace and project experience
 
-## Further interface
+The [alpha product contract](alpha-product.md) defines the target hierarchy:
+workspaces make repositories and shared capabilities available; a project selects
+the subset needed for a chunk of changes. The catalog remains shared. Workspace
+availability/project-subset enforcement are not implemented by current direct
+catalog-to-project associations.
 
-The [next roadmap focus](../../../ROADMAP.md#next-focus-repository-preparation-with-a-usable-ui)
-delivers repository preparation and the new UI together. Each slice includes a
-usable browser journey against canonical APIs and its own qualification evidence.
-The connection foundation above is delivered; repository association and delivery
-journeys in this table remain planned.
+Project chat is the working surface for ongoing research, plan generation and
+validation, progress, questions and results. Plans and task graphs remain
+inspectable alongside chat. A project may span several repositories; each modular
+task targets one repository and each PR belongs to one repository.
 
-| Surface | Planned user outcome |
+| Surface | Alpha user outcome |
 | --- | --- |
-| Shared repository catalog | Connect a repository once, opt into Ayni setup and inspect access, analysis and runtime history. |
-| Integration setup | Configure source, registry and certificate references; inspect separate probe results and trust-review requirements. |
-| Workspace/project | Create projects and associate shared repositories directly, including the same repository across workspaces. |
-| Runtime inspector | Follow frozen inputs, build/publication/verification/cleanup, safe findings and explicit retries or rebuilds. |
-| Chat, Plans and Tasks | Discuss, approve an exact plan, prepare/start with verified server-side inputs and inspect separate delivery outcomes. |
-| Feedback and evidence | Follow questions, failures and confirmed recovery to the originating conversation and shared preparation evidence. |
+| Workspace settings | Choose available catalog repositories, context, instructions, skills, MCP capabilities and shared defaults. |
+| Project setup | Select the required repository subset and project context; inspect source/runtime readiness and blockers. |
+| Project chat | Research selected source, retrieve earlier decisions, propose/review plans and respond to real execution blockers. |
+| Plan and work graph | Review an exact version, standalone/sequential/DAG tasks, grants and chosen shared/separate/stacked PR layout. |
+| Execution inspector | Follow tool rounds, build/tests, Ayni validation, dependency readiness, cancellation, repair and separate outcomes. |
+| Delivery and feedback | Navigate task/commit/PR relationships and retained evidence; continue project discussion without granting merge authority. |
 
-The [repository preparation contract](repository-preparation.md) owns shared
-catalog scope and authority. The [delivery plan](../research/repository-runtime-workspace-delivery.md)
-owns the UI acceptance matrix, local prerequisites and interruption scenarios.
-The historical example supplies design reference; its data access is not a
-backend implementation. Reload, reconnect, concurrent tabs and scope changes
-must reconstruct retained authority without duplicating commands.
+Keep the existing shell, themes and shared components. All slices extend this one
+application and canonical APIs; no separate diagnostic product or historical BFF
+is required. The gateway remains an allowlisted API adapter without UI assets.
+
+## Browser acceptance
+
+Every implemented journey needs reload/reconnect, exact command retry, stale-tab
+conflicts and scope-switch coverage. Closing a browser cannot cancel accepted
+work. Live output remains provisional until accepted; reads and previews cannot
+grant execution or publication authority.
+
+The [roadmap](../../../ROADMAP.md#delivery-sequence) owns delivery order. The
+[repository delivery plan](../research/repository-runtime-workspace-delivery.md)
+details source/runtime UI cases. Historical console procedures retain provenance
+but do not qualify the current frontend.
