@@ -4,15 +4,19 @@
  import { Input } from '$lib/components/ui/input/index.js';
  import { Label } from '$lib/components/ui/label/index.js';
  import * as NativeSelect from '$lib/components/ui/native-select/index.js';
+ import ProviderConnectionManager from '$lib/components/provider-connection-manager.svelte';
+ import RuntimeSignerManager from '$lib/components/runtime-signer-manager.svelte';
  import Feedback from '$lib/components/feedback.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
  import { rpc, RpcError, type Connection } from '$lib/api';
+ import { trustSnippet } from '$lib/runtime-signing';
  import { inspectionReasons, type Repository, type RepositoryInspection } from '$lib/repositories';
  import { runtimeOverview, runtimeStages, runtimeReasons, onboardingReasons, runtimeRegistryImage, type RepositoryRuntimeRun, type RuntimePreparation, type RuntimeSigner, type RuntimeCommand } from '$lib/runtime-preparation';
- let { repo, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections }: { repo: Repository; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void> } = $props();
+ let { repo, branch = '', checkedCommit, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections }: { repo: Repository; branch?: string; checkedCommit?: string; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void> } = $props();
  let onboarding = $state.raw<RepositoryRuntimeRun | null>(null);
  let deploymentEnabled = $state(false), developmentOnly = $state(false);
  let loaded = $state(false);
+ let integrationSetup = $state<'registry' | 'signer' | null>(null);
  let expanded = $state(false), busy = $state(false), error = $state('');
  let polling = false, mounted = false, historySequence = 0;
  let pending = $state<RuntimeCommand | null>(null);
@@ -32,6 +36,9 @@
  const previousOperations = $derived(operations.filter(value => value.id !== overview.operation?.id));
  const registry = $derived(registries.find(value => value.id === registryId));
  const signer = $derived(signers.find(value => value.id === signerId));
+ const trustedSigners = $derived(signers.filter(value => value.enabled && candidateInspection?.result?.trustKeyIds?.includes(value.keyId)));
+ const signerTrustMissing = $derived(!!signer && candidateInspection?.state === 'completed' &&
+  !!candidateInspection.result?.lockFingerprint && !candidateInspection.result.trustKeyIds?.includes(signer.keyId));
  const destination = $derived(registry?.registryDestination ? `${registry.registryDestination}/${repo.fullName.split('/').at(-1)?.toLowerCase()}` : registries.find(value => value.id === onboarding?.settings.registryConnectionId)?.registryDestination ? `${registries.find(value => value.id === onboarding?.settings.registryConnectionId)?.registryDestination}/${repo.fullName.split('/').at(-1)?.toLowerCase()}` : '');
  const image = $derived(runtimeRegistryImage(onboardingActive || onboardingBlocked ? undefined : overview.operation,destination));
  const onboardingSteps = ['Connect integrations', 'Check repository', 'Review and start', 'Prepare image', 'Verify and finish'];
@@ -50,7 +57,8 @@
  const activeStates = new Set(['pending', 'running', 'stopping', 'cancelling', 'cleanup_pending']);
  const retryStates = new Set(['failed', 'blocked', 'unavailable', 'publication_uncertain']);
  const validAllowance = $derived(Number.isInteger(seconds) && seconds >= 1 && seconds <= 86400 && (!allowBuild || Number.isInteger(builds) && builds >= 1 && builds <= 10));
- const canStart = $derived(!!connection?.enabled && !!connection.activeCredentialRevision && !onboardingActive && !workActive && !!registry?.enabled && !!registry?.activeCredentialRevision && !!signer?.enabled && validAllowance && !pending && !busy);
+ const reviewedCommit = $derived(latestInspection?.state === 'completed' && latestInspection.commitSha === checkedCommit && latestInspection.connectionRevision === connection?.revision ? checkedCommit : undefined);
+ const canStart = $derived(!!connection?.enabled && !!connection.activeCredentialRevision && !onboardingActive && !workActive && !!registry?.enabled && !!registry?.activeCredentialRevision && !!signer?.enabled && validAllowance && !pending && !busy && (!branch || !!reviewedCommit));
  function persist(value: RuntimeCommand | null) { pending = value; rejected = false; if (value) sessionStorage.setItem(storage, JSON.stringify(value)); else sessionStorage.removeItem(storage); }
  async function perform(action: () => Promise<void>) {
   busy = true; error = '';
@@ -93,7 +101,10 @@
   const availableRegistries=registries.filter(value=>value.enabled && value.activeCredentialRevision);
   const availableSigners=signers.filter(value=>value.enabled);
   if (!registryId && availableRegistries.length===1) registryId=availableRegistries[0].id;
+  if (!signerId && trustedSigners.length === 1) signerId = trustedSigners[0].id;
   if (!signerId && availableSigners.length===1) signerId=availableSigners[0].id;
+  if (!availableRegistries.length) integrationSetup = 'registry';
+  else if (!availableSigners.length) integrationSetup = 'signer';
  }
  async function prepareLatest() { restoreSettings(); await start(); }
 
@@ -119,8 +130,8 @@
  }
  async function recover() { if (pending?.method === 'StartRepositoryRuntime') { await rpc('GetRepositoryRuntimeReceipt',{idempotencyKey:pending.request.idempotencyKey}); persist(null); expanded=false; await refresh(); return; } if (pending) { const result = await rpc('GetRuntimePreparationReceipt', { idempotencyKey: pending.request.idempotencyKey }); await accept(result.operation); } }
  async function start() {
-  if (!connection || pending || !registry?.enabled || !registry.activeCredentialRevision || !signer?.enabled || !validAllowance || onboardingActive || workActive) return;
-  persist({method:'StartRepositoryRuntime',request:{idempotencyKey:crypto.randomUUID(),repositoryId:repo.id,expectedConnectionRevision:connection.revision,registryConnectionId:registryId,signerId,platform,maxSeconds:seconds,maxBuilds:allowBuild ? builds : 0,allowBuild,allowReplace:allowBuild && allowReplace}});
+  if (!connection || pending || !registry?.enabled || !registry.activeCredentialRevision || !signer?.enabled || !validAllowance || onboardingActive || workActive || (branch && !reviewedCommit)) return;
+  persist({method:'StartRepositoryRuntime',request:{idempotencyKey:crypto.randomUUID(),repositoryId:repo.id,expectedConnectionRevision:connection.revision,registryConnectionId:registryId,signerId,platform,maxSeconds:seconds,maxBuilds:allowBuild ? builds : 0,allowBuild,allowReplace:allowBuild && allowReplace,...(reviewedCommit ? {branch,expectedCommitSha:reviewedCommit,expectedRegistryRevision:registry.revision,expectedSignerRevision:signer.revision} : {})}});
   await resume();
  }
  async function command(method: 'CancelRuntimePreparation' | 'RetryRuntimePreparation', operation: RuntimePreparation) {
@@ -188,17 +199,17 @@
     {/each}
    </ol>
   {/if}
-  <div class="space-y-2"><h3 class="text-lg font-semibold">{onboardingActive ? 'Preparing repository runtime' : profileRestored ? 'Ready to prepare runtime' : onboardingBlocked ? 'Runtime onboarding needs attention' : checkingDefault ? 'Checking latest default branch' : overview.title}</h3><p class="text-sm text-muted-foreground">{onboardingActive ? ({resolving:'Reading the latest default branch…',inspecting:'Checking the committed Ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') : profileRestored ? 'Runtime building is now enabled. Prepare the latest commit to start a new run.' : onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' : checkingDefault ? "Resolving GitHub’s current default branch and inspecting its latest commit…" : overview.description}</p></div>
+  <div class="space-y-2"><h3 class="text-lg font-semibold">{onboardingActive ? 'Preparing repository runtime' : profileRestored ? 'Ready to prepare runtime' : onboardingBlocked ? 'Runtime onboarding needs attention' : checkingDefault ? 'Checking latest default branch' : overview.title}</h3><p class="text-sm text-muted-foreground">{onboardingActive ? ({resolving:'Checking the branch head…',inspecting:'Checking the committed Ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') : profileRestored ? 'Runtime building is now enabled. Prepare the latest commit to start a new run.' : onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' : checkingDefault ? "Resolving GitHub’s current default branch and inspecting its latest commit…" : overview.description}</p></div>
   {#if candidateInspection}<p class="text-xs text-muted-foreground">Last check: {new Date(Number(candidateInspection.updatedAtUnixMs)).toLocaleString()}{candidateInspection.result?.ayniVersion ? ` · Ayni ${candidateInspection.result.ayniVersion}` : ''}</p>{/if}
   {#if overview.issues.length && !checkingDefault && !onboardingActive}<div class="space-y-2"><h4 class="font-medium">What needs attention</h4><ul class="list-disc space-y-2 break-words pl-5 text-sm">{#each overview.issues as issue (issue)}<li>{issue}</li>{/each}</ul></div>{/if}
   {#if developmentOnly || overview.operation?.developmentOnly}<p class="rounded-md border p-3 text-sm">Local development build mode. Cluster network isolation is not qualified; this result is for local development testing.</p>{/if}
   {#if loaded && !deploymentEnabled && currentStep === 0}<p class="text-sm">Ask your administrator to enable a Kubernetes runtime profile.</p>{/if}
   {#if overview.nextAction && !checkingDefault && !onboardingActive && !onboardingBlocked}<p class="text-sm"><span class="font-medium">Next step:</span> {expanded && !pending ? 'Review the configuration below, then prepare the latest default-branch commit.' : canConfigure ? 'Prepare the latest commit using the reviewed registry and signing settings.' : overview.nextAction}</p>{/if}
   <div class="flex flex-wrap gap-2">
-   {#if canConfigure && !expanded}{#if onboarding?.settings}<Button disabled={!savedSettingsAvailable} onclick={() => perform(prepareLatest)}>Prepare latest commit</Button><Button variant="outline" onclick={() => perform(configure)}>Change runtime settings</Button>{:else}<Button onclick={() => perform(configure)}>Configure runtime</Button>{/if}{/if}
+   {#if canConfigure && !expanded}{#if onboarding?.settings}<Button disabled={!savedSettingsAvailable || (!!branch && !reviewedCommit)} onclick={() => perform(prepareLatest)}>Prepare latest commit</Button><Button variant="outline" onclick={() => perform(configure)}>Change runtime settings</Button>{:else}<Button onclick={() => perform(configure)}>Configure runtime</Button>{/if}{/if}
    {#if overview.operation && retryStates.has(overview.operation.state)}{@const current = overview.operation}<Button disabled={busy || !!pending} onclick={() => perform(() => command('RetryRuntimePreparation',current))}>{current.state === 'publication_uncertain' ? 'Reconcile publication' : 'Retry preparation'}</Button>{/if}
    {#if overview.operation && activeStates.has(overview.operation.state) && overview.operation.state !== 'cancelling'}{@const current = overview.operation}<Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => command('CancelRuntimePreparation',current))}>Cancel preparation</Button>{/if}
-   <Button variant={canConfigure || !!overview.operation ? 'outline' : 'default'} disabled={busy || recheckDisabled || checkingDefault || !!pending || onboardingActive} onclick={() => perform(async () => { await recheckDefaultBranch?.(); await refresh(); })}>Recheck default branch</Button>
+   <Button variant={canConfigure || !!overview.operation ? 'outline' : 'default'} disabled={busy || recheckDisabled || checkingDefault || !!pending || onboardingActive} onclick={() => perform(async () => { await recheckDefaultBranch?.(); await refresh(); })}>{branch ? 'Check branch' : 'Recheck default branch'}</Button>
   </div>
   {#if loaded && !registries.some(value => value.enabled && value.activeCredentialRevision)}<Button variant="link" href="/settings/container-registries">Configure a runtime registry</Button>{/if}
   {#if loaded && !signers.some(value => value.enabled)}<Button variant="link" href="/settings/runtime-signing">Add a signing key</Button>{/if}
@@ -215,15 +226,46 @@
  {#if expanded && !onboardingActive && !pending}
   <section class="space-y-4 rounded-xl border p-5" aria-label="Configure current runtime">
    <h3 class="font-semibold">Prepare and publish the repository runtime</h3>
-   <p class="text-sm text-muted-foreground">Orchestrator will read the latest default branch, check Ayni setup, then verify an existing image or build, certify and publish it within the allowance below. This run continues if you close the browser.</p>
+   {#if reviewedCommit}
+    <p class="text-sm">Reviewed commit <code class="break-all">{reviewedCommit}</code> on {branch || 'the default branch'}.</p>
+   {:else if branch}
+    <p class="text-sm">Check this branch before starting preparation.</p>
+   {/if}
+   <p class="text-sm text-muted-foreground">Orchestrator checks the selected branch and Ayni setup, then verifies an existing image or builds, certifies and publishes one within the allowance below. This run continues if you close the browser.</p>
 
+   {#if integrationSetup === 'registry'}
+    <div class="space-y-3 rounded-md border p-3">
+     <p class="text-sm">Connect a registry so Orchestrator can reuse or publish runtime images.</p>
+     <ProviderConnectionManager capability="container_registry" createOnMount onSaved={value => { registries = [value, ...registries.filter(item => item.id !== value.id)]; registryId = value.id; integrationSetup = signers.some(item => item.enabled) ? null : 'signer'; }} />
+     <Button variant="outline" onclick={() => { integrationSetup = null; }}>Close registry setup</Button>
+    </div>
+   {:else if integrationSetup === 'signer'}
+    <div class="space-y-3 rounded-md border p-3">
+     <p class="text-sm">A signing key certifies images. The repository uses its public key to verify the runtime.</p>
+     <RuntimeSignerManager createOnMount onSaved={value => { signers = [value, ...signers.filter(item => item.id !== value.id)]; signerId = value.id; integrationSetup = null; }} />
+     <Button variant="outline" onclick={() => { integrationSetup = null; }}>Close signing setup</Button>
+    </div>
+   {/if}
    <div class="space-y-2"><Label for={`runtime-registry-${repo.id}`}>Runtime registry</Label><NativeSelect.Root id={`runtime-registry-${repo.id}`} bind:value={registryId} disabled={busy || !!pending}><NativeSelect.Option value="">Choose a registry connection</NativeSelect.Option>{#each registries as value (value.id)}<NativeSelect.Option value={value.id} disabled={!value.enabled || !value.activeCredentialRevision}>{value.displayName} · {value.registryDestination}{!value.enabled ? ' (disabled)' : !value.activeCredentialRevision ? ' (validation required)' : ''}</NativeSelect.Option>{/each}</NativeSelect.Root></div>
    <div class="space-y-2"><Label for={`runtime-signer-${repo.id}`}>Runtime signer</Label><NativeSelect.Root id={`runtime-signer-${repo.id}`} bind:value={signerId} disabled={busy || !!pending}><NativeSelect.Option value="">Choose a signer</NativeSelect.Option>{#each signers as value (value.id)}<NativeSelect.Option value={value.id} disabled={!value.enabled}>{value.keyId}{!value.enabled ? ' (disabled)' : ''}</NativeSelect.Option>{/each}</NativeSelect.Root></div>
    {#if signer}<details class="rounded-md border p-3"><summary class="cursor-pointer text-sm font-medium">Signing key details</summary><div class="space-y-3 pt-3"><InformationTable rows={[{label:'Key name',value:signer.keyId},{label:'Public key',value:signer.publicKey || 'Unavailable',monospace:true}]}/><Button variant="outline" onclick={() => perform(() => navigator.clipboard.writeText(signer!.publicKey))}>Copy public key</Button><p class="text-xs text-muted-foreground">Use this key name and public key together in the repository’s .ayni.toml trust policy.</p></div></details>{/if}
+   {#if signer && signerTrustMissing}
+    <div class="space-y-2 rounded-md border p-3">
+     <p class="text-sm font-medium">The checked commit does not trust this signing key.</p>
+     {#if trustedSigners.length}
+      <p class="text-sm">Choose an enabled key already named in the repository policy.</p>
+      {#each trustedSigners as trusted (trusted.id)}
+       <Button variant="outline" onclick={() => { signerId = trusted.id; }}>Use {trusted.keyId}</Button>
+      {/each}
+     {/if}
+     <p class="text-sm">To use the selected key, add its public entry to the existing trust policy in <code>.ayni.toml</code> and preserve the other keys. Run <code>ayni env lock</code>, commit both files, then recheck the branch.</p>
+     <pre class="overflow-x-auto rounded-md bg-muted p-2 text-xs">{trustSnippet(signer)}</pre>
+    </div>
+   {/if}
    <div class="flex flex-wrap gap-4"><div class="space-y-2"><Label for={`runtime-platform-${repo.id}`}>Runtime platform</Label><NativeSelect.Root id={`runtime-platform-${repo.id}`} bind:value={platform} disabled={busy || !!pending}><NativeSelect.Option value="linux/arm64">Linux arm64</NativeSelect.Option><NativeSelect.Option value="linux/amd64">Linux amd64</NativeSelect.Option></NativeSelect.Root></div><div class="space-y-2"><Label for={`runtime-seconds-${repo.id}`}>Time limit (seconds)</Label><Input id={`runtime-seconds-${repo.id}`} type="number" min={1} max={86400} bind:value={seconds} disabled={busy || !!pending}/></div></div>
    <label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowBuild} onchange={() => { if (!allowBuild) allowReplace = false; }} disabled={busy || !!pending}/>Allow a bounded build if the image is missing</label>
    {#if allowBuild}<div class="space-y-2"><Label for={`runtime-builds-${repo.id}`}>Maximum build attempts</Label><Input id={`runtime-builds-${repo.id}`} type="number" min={1} max={10} bind:value={builds} disabled={busy || !!pending}/><p class="text-xs text-muted-foreground">The qualified deployment resource limits also apply. Interrupted builds consume their retained attempt allowance.</p></div><label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowReplace} disabled={busy || !!pending}/>Also allow replacement if an existing image is invalid</label>{/if}
-   <div class="flex flex-wrap gap-2"><Button disabled={!canStart} onclick={() => perform(start)}>{allowBuild ? 'Build and publish runtime' : 'Check and prepare runtime'}</Button><Button variant="outline" disabled={busy || !!pending} onclick={() => {expanded=false;}}>Close setup</Button><Button variant="link" href="/settings/container-registries">Manage registries</Button><Button variant="link" href="/settings/runtime-signing">Manage signers</Button></div>
+   <div class="flex flex-wrap gap-2"><Button disabled={!canStart} onclick={() => perform(start)}>{allowBuild ? 'Build and publish runtime' : 'Check and prepare runtime'}</Button><Button variant="outline" disabled={busy || !!pending} onclick={() => {expanded=false;}}>Close setup</Button><Button variant="outline" onclick={() => { integrationSetup = 'registry'; }}>Add registry</Button><Button variant="outline" onclick={() => { integrationSetup = 'signer'; }}>Add signing key</Button></div>
   </section>
 
  {/if}

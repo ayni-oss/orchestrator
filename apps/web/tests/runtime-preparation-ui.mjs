@@ -110,9 +110,13 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.ok(retryRequest.idempotencyKey && cancelRequest.idempotencyKey && retryRequest.idempotencyKey!==cancelRequest.idempotencyKey);
  operation={...operation,state:'cancelled',cleanupComplete:true};originalReceipt=operation;
  inspectionId=randomUUID();inspection={...inspection,id:inspectionId,idempotencyKey:randomUUID(),acceptedAtUnixMs:String(Date.now()),updatedAtUnixMs:String(Date.now())};
- await page.route('**/api/ResolveRepositoryDefaultCommit',route=>route.fulfill({json:{defaultBranch:'main',commitSha:inspection.commitSha}}));
+ await page.getByRole('textbox',{name:'Runtime branch',exact:true}).fill('release/next');
+ await page.route('**/api/ResolveRepositoryDefaultCommit',route=>{
+  assert.equal(route.request().postDataJSON().branch,'release/next');
+  return route.fulfill({json:{defaultBranch:'release/next',commitSha:inspection.commitSha}});
+ });
  await page.route('**/api/InspectRepository',route=>route.fulfill({json:{inspection}}));
- await preparation.getByRole('button',{name:'Recheck default branch',exact:true}).click();
+ await preparation.getByRole('button',{name:'Check branch',exact:true}).click();
  await preparation.getByRole('button',{name:'Change runtime settings',exact:true}).click();
  await preparation.getByLabel('Runtime registry',{exact:true}).selectOption(registryId);
  await preparation.getByLabel('Runtime signer',{exact:true}).selectOption(signerId);
@@ -124,6 +128,8 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await page.route('**/api/StartRepositoryRuntime',async route=>{
   buildGrant=route.request().postDataJSON();
   assert.equal(buildGrant.allowBuild,true);assert.equal(buildGrant.allowReplace,true);assert.equal(buildGrant.maxBuilds,2);
+  assert.equal(buildGrant.branch,'release/next');assert.equal(buildGrant.expectedCommitSha,inspection.commitSha);
+  assert.equal(buildGrant.expectedRegistryRevision,'1');assert.equal(buildGrant.expectedSignerRevision,'1');
   assert.equal('inspectionId' in buildGrant,false);assert.equal(buildGrant.registryConnectionId,registryId);
   assert.notEqual(buildGrant.idempotencyKey,startRequest.idempotencyKey);
   operation={...operation,id:randomUUID(),idempotencyKey:buildGrant.idempotencyKey,state:'pending',stage:'acquire_source',generation:'1',safeReason:'',contentVerified:false,managedCompatible:false,maxBuilds:buildGrant.maxBuilds,allowBuild:buildGrant.allowBuild,allowReplace:buildGrant.allowReplace};
@@ -141,6 +147,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await preparation.getByRole('button',{name:'Dismiss rejected command',exact:true}).click();
  assert.equal(await page.evaluate(id=>sessionStorage.getItem(`ayni.runtime.preparation.pending.${id}`),repositoryId),null);
  await preparation.screenshot({path:'/tmp/runtime-preparation-ui.png'});
+ await page.getByRole('textbox',{name:'Runtime branch',exact:true}).fill('');
  for(const method of ['ListRepositoryInspections','ListConnections','ListRuntimeSigners','ListRuntimePreparations','GetRuntimePreparation','GetRuntimePreparationReceipt','StartRepositoryRuntime','GetRepositoryRuntime','GetRepositoryRuntimeReceipt','RetryRuntimePreparation','CancelRuntimePreparation','ResolveRepositoryDefaultCommit','InspectRepository']) await page.unroute(`**/api/${method}`);
  console.log('runtime-preparation-ui: intercepted UI contract coverage passed for explicit grants, lost-response receipt recovery, current-generation publication reconciliation, separate cleanup gate and cancellation; no registry/build qualification claimed.');
 }
@@ -216,7 +223,7 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).check();
  await preparation.getByRole('button',{name:'Build and publish runtime',exact:true}).click();
  await preparation.getByRole('heading',{name:'Preparing repository runtime',exact:true}).waitFor();
- await preparation.getByText('Reading the latest default branch…',{exact:true}).waitFor();
+ await preparation.getByText('Checking the branch head…',{exact:true}).waitFor();
  run={...run,state:'inspecting',commitSha:'c'.repeat(40)};
  await preparation.getByText('Checking the committed Ayni policy, lock and build inputs…',{exact:true}).waitFor();
  run={...run,state:'blocked',safeReason:'runtime_profile_unavailable'};

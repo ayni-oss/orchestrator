@@ -11,6 +11,8 @@
  let { repo, connection }: { repo: Repository; connection?: Connection } = $props();
  let expanded = $state(false);
  let commitSha = $state('');
+ let branch = $state('');
+ let checked = $state<{branch: string; sha: string} | null>(null);
  let busy = $state(false);
  let error = $state('');
  let inspectionLoaded = $state(false);
@@ -19,6 +21,7 @@
  let inspections = $state.raw<RepositoryInspection[]>([]);
  let next = $state('');
  const storageKey = $derived(`ayni.repository.inspection.pending.${repo.id}`);
+ const branchStorageKey = $derived(`ayni.repository.runtime.branch.${repo.id}`);
  const canInspect = $derived(!!connection?.enabled && !!connection?.activeCredentialRevision);
  const validCommit = $derived(/^[a-f0-9]{40}$/.test(commitSha));
  function persist(value: InspectRequest | null) {
@@ -59,13 +62,16 @@
  async function recheckDefaultBranch() {
   if (!connection || pending) return;
   checkingDefault = true;
+  checked = null;
+  const selectedBranch = branch.trim();
   try {
-   const resolved = await rpc('ResolveRepositoryDefaultCommit', {repositoryId:repo.id, expectedConnectionRevision:connection.revision});
-   if (resolved.safeReason) throw new Error(inspectionReasons[resolved.safeReason] || 'The default branch could not be resolved. Retry when GitHub is available.');
-   if (!/^[a-f0-9]{40}$/.test(resolved.commitSha)) throw new Error('GitHub did not return an exact commit for the default branch.');
+   const resolved = await rpc('ResolveRepositoryDefaultCommit', {repositoryId:repo.id, expectedConnectionRevision:connection.revision,branch:selectedBranch});
+   if (resolved.safeReason) throw new Error(inspectionReasons[resolved.safeReason] || 'The selected branch could not be resolved. Retry when GitHub is available.');
+   if (!/^[a-f0-9]{40}$/.test(resolved.commitSha)) throw new Error('GitHub did not return an exact commit for the selected branch.');
    commitSha = resolved.commitSha;
    persist({idempotencyKey:crypto.randomUUID(), repositoryId:repo.id, expectedConnectionRevision:connection.revision, commitSha:resolved.commitSha});
    await resume();
+   checked = {branch: selectedBranch, sha: resolved.commitSha};
   } finally { checkingDefault = false; }
  }
  async function recover() {
@@ -74,6 +80,8 @@
   await accept(result.inspection);
  }
  onMount(() => {
+  const draft = sessionStorage.getItem(branchStorageKey);
+  if (draft && draft.length <= 255) branch = draft;
   const saved = sessionStorage.getItem(storageKey);
   if (!saved) { void perform(() => load()); return; }
   try {
@@ -92,7 +100,12 @@
    <div class="flex flex-wrap gap-2"><Button disabled={busy} onclick={() => perform(recover)}>Recover inspection</Button><Button variant="outline" disabled={busy} onclick={() => perform(resume)}>Retry same inspection</Button><Button variant="outline" disabled={busy} onclick={() => persist(null)}>Dismiss inspection recovery</Button></div>
   </section>
  {/if}
- <RuntimePreparation {repo} {connection} latestInspection={inspections[0] || null} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || !!pending || !canInspect} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}/>
+ <div class="space-y-2">
+  <Label for={`runtime-branch-${repo.id}`}>Runtime branch</Label>
+  <Input id={`runtime-branch-${repo.id}`} bind:value={branch} oninput={(event) => { checked = null; sessionStorage.setItem(branchStorageKey, event.currentTarget.value); }} placeholder="Default branch" maxlength={255} disabled={busy || !!pending}/>
+  <p class="text-xs text-muted-foreground">Leave empty to use the GitHub default branch. Check the branch before reviewing its commit.</p>
+ </div>
+ <RuntimePreparation {repo} {connection} branch={branch.trim()} checkedCommit={checked?.branch === branch.trim() ? checked?.sha : undefined} latestInspection={inspections[0] || null} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || !!pending || !canInspect} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}/>
  <details bind:open={expanded} class="rounded-xl border p-4">
   <summary class="cursor-pointer text-sm font-medium">Inspect a specific commit</summary>
   <div class="space-y-4 pt-4">

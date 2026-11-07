@@ -16,6 +16,10 @@ pub(super) fn settings(value: v1::StartRepositoryRuntimeRequest) -> Settings {
         max_builds: value.max_builds,
         allow_build: value.allow_build,
         allow_replace: value.allow_replace,
+        branch: value.branch,
+        expected_commit_sha: value.expected_commit_sha,
+        expected_registry_revision: value.expected_registry_revision,
+        expected_signer_revision: value.expected_signer_revision,
     }
 }
 pub(super) fn public(run: Run) -> v1::RepositoryRuntimeRun {
@@ -34,6 +38,10 @@ pub(super) fn public(run: Run) -> v1::RepositoryRuntimeRun {
             max_builds: s.max_builds,
             allow_build: s.allow_build,
             allow_replace: s.allow_replace,
+            branch: s.branch,
+            expected_commit_sha: s.expected_commit_sha,
+            expected_registry_revision: s.expected_registry_revision,
+            expected_signer_revision: s.expected_signer_revision,
         }),
         state: run.state,
         safe_reason: run.safe_reason,
@@ -85,6 +93,7 @@ async fn step(service: &WorkflowGrpc, claim: &Claim) -> Result<(), &'static str>
                     v1::ResolveRepositoryDefaultCommitRequest {
                         repository_id: s.repository_id.clone(),
                         expected_connection_revision: s.expected_connection_revision,
+                        branch: s.branch.clone(),
                     },
                 ))
                 .await
@@ -92,6 +101,9 @@ async fn step(service: &WorkflowGrpc, claim: &Claim) -> Result<(), &'static str>
                 .into_inner();
             if !result.safe_reason.is_empty() {
                 return Err("source_unavailable");
+            }
+            if !s.expected_commit_sha.is_empty() && result.commit_sha != s.expected_commit_sha {
+                return Err("branch_head_changed");
             }
             ("inspecting", result.commit_sha)
         }

@@ -91,6 +91,7 @@ impl Github {
         &self,
         installation: u64,
         repo: u64,
+        branch: &str,
     ) -> Result<(String, String), &'static str> {
         let token = self.installation_token(installation, Some(repo)).await?;
         let metadata = self
@@ -99,6 +100,25 @@ impl Github {
         let metadata = parse_repository(&metadata)?;
         if metadata.provider_repository_id != repo {
             return Err("github_response_invalid");
+        }
+        if !branch.is_empty() {
+            if !safe_path(branch) || branch.len() > 255 {
+                return Err("github_branch_invalid");
+            }
+            let reference = format!("refs/heads/{branch}");
+            let mut url = reqwest::Url::parse("https://api.github.com")
+                .map_err(|_| "github_response_invalid")?;
+            url.path_segments_mut()
+                .map_err(|()| "github_response_invalid")?
+                .extend(["repositories", &repo.to_string(), "git", "ref", "heads"])
+                .extend(branch.split('/'));
+            let value = self.request(Method::GET, url.path(), &token, None).await?;
+            if value["ref"].as_str() != Some(reference.as_str())
+                || value["object"]["type"].as_str() != Some("commit")
+            {
+                return Err("github_response_invalid");
+            }
+            return Ok((branch.to_owned(), default_commit_sha(&value["object"])?));
         }
         let path = default_commit_path(repo, &metadata.default_branch)?;
         let value = self.request(Method::GET, &path, &token, None).await?;

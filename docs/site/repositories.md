@@ -24,7 +24,7 @@ flowchart LR
 2. Install that App on the GitHub account that owns your repository, with **Contents: read** permission and access to that repository.
 3. Open **Settings → Repositories** in the sidebar, expand **Find repositories on GitHub**, and choose the source connection.
 4. Choose **Discover installations**, select the owning account, then choose **Discover repositories**.
-5. Choose **Connect repository** for the repository you want to use.
+5. Choose **Connect repository** for the repository you want to use. If you need a new GitHub App connection, add it in the discovery panel and continue with it selected.
 
 Available repositories appear as compact cards, like projects. Open a connected
 repository card to see its **Source code** and **Ayni runtime** tabs. The card’s
@@ -78,6 +78,11 @@ remain separate from readiness. Deployment prerequisites are checked when a
 preparation is requested.
 
 ## Inspect Ayni setup
+
+Enter a branch in **Runtime branch** and choose **Check branch**. Leave the field
+empty to check the default branch. After checking, the runtime settings show the
+exact commit. If the branch advances after review, check it again before starting
+a new run. A named branch requires a check before preparation.
 
 Open a connected repository card, choose **Ayni runtime**, then expand **Inspect a specific commit**. Paste the full lowercase
 commit SHA from GitHub, and choose **Inspect commit**. The result shows the exact
@@ -135,7 +140,7 @@ Local testing may use an explicitly enabled development profile; the UI labels
 its results **Development runtime ready**, without claiming cluster qualification. In **Configuration**, select a registry connection and set up a signer.
 The committed repository policy must trust that signer.
 
-On the repository’s **Ayni runtime** tab, choose **Configure runtime**. Review the registry, named signer, platform and time/build allowance. A single available registry and signer are selected automatically. Enable building to permit an absent image to be built and published, then choose **Build and publish runtime**. The server checks the latest default-branch commit and continues the complete pipeline without further browser actions. Leave building
+On the repository’s **Ayni runtime** tab, choose **Configure runtime**. Review the registry, named signer, platform and time/build allowance. You can add a registry or signing key from this form and continue with it selected. A single available registry and signer are selected automatically. Enable building to permit an absent image to be built and published, then choose **Build and publish runtime**. The server checks the latest default-branch commit and continues the complete pipeline without further browser actions. Leave building
 disabled to check an existing image. Enable building for a confirmed missing image;
 replacing an invalid image requires the separate replacement choice.
 
