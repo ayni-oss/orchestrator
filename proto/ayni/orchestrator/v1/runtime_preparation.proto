@@ -211,6 +211,10 @@ message StartRepositoryRuntimeRequest {
   uint32 max_builds = 8;
   bool allow_build = 9;
   bool allow_replace = 10;
+  string branch = 11;
+  string expected_commit_sha = 12;
+  uint64 expected_registry_revision = 13;
+  uint64 expected_signer_revision = 14;
 }
 message RepositoryRuntimeRun {
   string id = 1;

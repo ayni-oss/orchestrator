@@ -111,10 +111,11 @@ export function runtimeOverview(input: {
  nextAction:issues.length ? 'Resolve the issue shown above, then recheck the default branch.' : 'Configure a runtime for the checked commit.'};
 }
 
-export type RepositoryRuntimeSettings = Omit<StartRuntimeRequest,'idempotencyKey'|'inspectionId'> & {expectedConnectionRevision: string};
+export type RepositoryRuntimeSettings = Omit<StartRuntimeRequest,'idempotencyKey'|'inspectionId'> & {expectedConnectionRevision: string; branch?: string; expectedCommitSha?: string; expectedRegistryRevision?: string; expectedSignerRevision?: string};
 export type RepositoryRuntimeRun = {id:string; idempotencyKey:string; settings:RepositoryRuntimeSettings; state:string; safeReason?:string; commitSha?:string; inspectionId?:string; preparationId?:string};
 export const onboardingReasons: Record<string,string> = {
- source_unavailable: 'The latest default branch could not be read. Check the GitHub connection and repository access, then prepare again.',
+ branch_head_changed: 'The branch advanced after review. Check the branch and review its new commit before starting again.',
+ source_unavailable: 'The selected branch could not be read. Check the GitHub connection and repository access, then prepare again.',
  configuration_changed: 'The source, registry or signing configuration changed. Review the current settings before preparing again.',
  inspection_failed: 'The repository inspection could not complete. Check source access and prepare again.',
  inspection_findings: 'The repository setup needs changes. Resolve the inspection issues shown below, then prepare the latest commit.',

@@ -24,7 +24,7 @@ flowchart LR
 2. Install that App on the GitHub account that owns your repository, with **Contents: read** permission and access to that repository.
 3. Open **Settings → Repositories** in the sidebar, expand **Find repositories on GitHub**, and choose the source connection.
 4. Choose **Discover installations**, select the owning account, then choose **Discover repositories**.
-5. Choose **Connect repository** for the repository you want to use.
+5. Choose **Connect repository** for the repository you want to use. If you need a new GitHub App connection, add it in the discovery panel and continue with it selected.
 
 Available repositories appear as compact cards, like projects. Open a connected
 repository card to see its **Source code** and **Ayni runtime** tabs. The card’s
@@ -60,7 +60,7 @@ the saved App connection or its installation access.
 
 Open a repository card and choose **Ayni runtime**. The tab loads saved status
 without starting a preparation. It shows the inspected commit, known setup issues
-and the next step together. Choose **Configure runtime** to review the registry, named signing key, platform and allowance. **Build and publish runtime** starts one server-owned run: it reads the latest default branch, inspects Ayni setup, then builds if needed, certifies, publishes and verifies the image. A missing setup input or disabled build profile stops the run with an actionable issue. Current progress and recovery controls stay visible. Previous preparations and inspection attempts are collapsed into history. Inspection findings include their
+and the next step together. Choose **Configure runtime** to review the registry, named signing key, platform and allowance. **Build and publish runtime** starts one server-owned run: it reads the latest default branch, inspects Ayni setup, then builds if needed, certifies, publishes and verifies the image. A missing setup input or disabled build profile stops the run with an actionable issue. The step list highlights the current part of onboarding, from integration setup to verification. Open preparation details for technical evidence and history. Current progress and recovery controls stay visible. Previous preparations and inspection attempts are collapsed into history. Inspection findings include their
 saved date and Ayni version. Choose **Recheck default branch** to resolve GitHub’s
 current default branch and inspect its latest commit. Each click resolves the
 branch again; cached repository metadata and a previously entered SHA do not
@@ -78,6 +78,11 @@ remain separate from readiness. Deployment prerequisites are checked when a
 preparation is requested.
 
 ## Inspect Ayni setup
+
+Enter a branch in **Runtime branch** and choose **Check branch**. Leave the field
+empty to check the default branch. After checking, the runtime settings show the
+exact commit. If the branch advances after review, check it again before starting
+a new run. A named branch requires a check before preparation.
 
 Open a connected repository card, choose **Ayni runtime**, then expand **Inspect a specific commit**. Paste the full lowercase
 commit SHA from GitHub, and choose **Inspect commit**. The result shows the exact
@@ -97,13 +102,13 @@ key name, such as `project-2026`. This name is the actual trust-policy key name,
 not a separate display label or a generated fingerprint. You can add multiple named
 keys and manage each one from the list. Choose
 **Generate a new key** to let the server create and store a private key, or
-**Import an existing key** to paste or select a file containing the raw value of
+**Generate with backup** to create a key in your browser, download its private seed once, and save the signer using that seed. Store the download in a trusted secret store. You can copy the public key from the signer list at any time. Choose **Import an existing key** to paste or select a file containing the raw value of
 `AYNI_ENV_CERTIFICATE_SIGNING_KEY`: 64 lowercase hexadecimal characters, with an
 optional final newline. Do not include an environment assignment or quotes.
 
 The server stores the key in an immutable signing Secret and returns its public
 identity. Imported private material is cleared after submission and is never saved
-in browser storage. Generated private keys are never returned to the browser.
+in browser storage. The server never returns private keys. Browser generation keeps the seed in memory until you save or close the form.
 If a response is interrupted, reload and choose **Recover signer setup**. Recovery
 continues the same request. If an import needs material again, re-enter the same
 seed; a different seed cannot replace that retained identity. If a rejected setup
@@ -135,7 +140,7 @@ Local testing may use an explicitly enabled development profile; the UI labels
 its results **Development runtime ready**, without claiming cluster qualification. In **Configuration**, select a registry connection and set up a signer.
 The committed repository policy must trust that signer.
 
-On the repository’s **Ayni runtime** tab, choose **Configure runtime**. Review the registry, named signer, platform and time/build allowance. A single available registry and signer are selected automatically. Enable building to permit an absent image to be built and published, then choose **Build and publish runtime**. The server checks the latest default-branch commit and continues the complete pipeline without further browser actions. Leave building
+On the repository’s **Ayni runtime** tab, choose **Configure runtime**. Review the registry, named signer, platform and time/build allowance. You can add a registry or signing key from this form and continue with it selected. A single available registry and signer are selected automatically. Enable building to permit an absent image to be built and published, then choose **Build and publish runtime**. The server checks the latest default-branch commit and continues the complete pipeline without further browser actions. Leave building
 disabled to check an existing image. Enable building for a confirmed missing image;
 replacing an invalid image requires the separate replacement choice.
 

@@ -79,6 +79,13 @@ edit or removal blocks new use as appropriate but cannot rewrite existing attemp
 
 Repository onboarding should retain reviewed settings and carry one bounded run from the latest default branch through inspection, build, certification, publication and verification. Keep current progress, deployment blockers and the confirmed registry image visible; later runs may reuse reviewed settings without granting recurring builds.
 
+Show runtime progress as five onboarding steps, with technical evidence under
+details. The first UI increment adds this progress view and a browser-generated
+signing key backup. The branch check can bind a run to the exact reviewed commit and integration
+revisions. Repository onboarding reuses the shared GitHub App, registry and
+signer setup forms. Continue with server-retained progress before review, then
+add reviewed trust PRs and merge reconciliation.
+
 The [repository delivery plan](docs/technical/research/repository-runtime-workspace-delivery.md)
 details setup and handoff scenarios. Missing support, denied access, invalid trust,
 outages and cleanup must remain actionable states rather than fallback execution.

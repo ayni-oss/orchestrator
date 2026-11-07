@@ -185,6 +185,8 @@ message ListRepositoryInspectionsResponse {
 message ResolveRepositoryDefaultCommitRequest {
   string repository_id = 1;
   uint64 expected_connection_revision = 2;
+  // Empty selects the provider default. Otherwise resolve an exact branch ref.
+  string branch = 3;
 }
 message ResolveRepositoryDefaultCommitResponse {
   string default_branch = 1;

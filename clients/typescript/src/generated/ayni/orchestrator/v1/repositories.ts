@@ -217,6 +217,8 @@ export interface ListRepositoryInspectionsResponse {
 export interface ResolveRepositoryDefaultCommitRequest {
   repositoryId: string;
   expectedConnectionRevision: string;
+  /** Empty selects the provider default. Otherwise resolve an exact branch ref. */
+  branch: string;
 }
 
 export interface ResolveRepositoryDefaultCommitResponse {
@@ -3704,7 +3706,7 @@ export const ListRepositoryInspectionsResponse: MessageFns<ListRepositoryInspect
 };
 
 function createBaseResolveRepositoryDefaultCommitRequest(): ResolveRepositoryDefaultCommitRequest {
-  return { repositoryId: "", expectedConnectionRevision: "0" };
+  return { repositoryId: "", expectedConnectionRevision: "0", branch: "" };
 }
 
 export const ResolveRepositoryDefaultCommitRequest: MessageFns<ResolveRepositoryDefaultCommitRequest> = {
@@ -3714,6 +3716,9 @@ export const ResolveRepositoryDefaultCommitRequest: MessageFns<ResolveRepository
     }
     if (message.expectedConnectionRevision !== "0") {
       writer.uint32(16).uint64(message.expectedConnectionRevision);
+    }
+    if (message.branch !== "") {
+      writer.uint32(26).string(message.branch);
     }
     return writer;
   },
@@ -3747,6 +3752,14 @@ export const ResolveRepositoryDefaultCommitRequest: MessageFns<ResolveRepository
             message.expectedConnectionRevision = reader.uint64().toString();
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.branch = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3771,6 +3784,7 @@ export const ResolveRepositoryDefaultCommitRequest: MessageFns<ResolveRepository
         : isSet(object.expected_connection_revision)
         ? globalThis.String(object.expected_connection_revision)
         : "0",
+      branch: isSet(object.branch) ? globalThis.String(object.branch) : "",
     };
   },
 
@@ -3782,6 +3796,9 @@ export const ResolveRepositoryDefaultCommitRequest: MessageFns<ResolveRepository
     if (message.expectedConnectionRevision !== "0") {
       obj.expectedConnectionRevision = message.expectedConnectionRevision;
     }
+    if (message.branch !== "") {
+      obj.branch = message.branch;
+    }
     return obj;
   },
 
@@ -3792,6 +3809,7 @@ export const ResolveRepositoryDefaultCommitRequest: MessageFns<ResolveRepository
     const message = createBaseResolveRepositoryDefaultCommitRequest();
     message.repositoryId = object.repositoryId ?? "";
     message.expectedConnectionRevision = object.expectedConnectionRevision ?? "0";
+    message.branch = object.branch ?? "";
     return message;
   },
 };

@@ -186,7 +186,11 @@ impl v1::repository_service_server::RepositoryService for WorkflowGrpc {
         let result = match github::Github::new(&source) {
             Ok(client) => tokio::time::timeout(
                 Duration::from_secs(20),
-                client.default_commit(repo.installation_id, repo.provider_repository_id),
+                client.default_commit(
+                    repo.installation_id,
+                    repo.provider_repository_id,
+                    &value.branch,
+                ),
             )
             .await
             .unwrap_or(Err("github_unavailable")),

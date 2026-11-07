@@ -1,4 +1,5 @@
 <script lang="ts">
+ import GithubConnectionManager from '$lib/components/github-connection-manager.svelte';
  import RepositoryCard from '$lib/components/repository-card.svelte';
  import { onMount } from 'svelte';
  import PageHeader from '$lib/components/page-header.svelte';
@@ -16,6 +17,7 @@
  let connectionId=$state('');let installationId=$state('');let busy=$state(true);let error=$state('');let notice=$state('');
  let nextCatalog=$state('');let nextHistory=$state('');let nextInstallations=$state(0);let nextRepositories=$state(0);
  let pending=$state<ConnectRequest|null>(null);
+ let sourceSetup=$state(false);
  let search=$state('');let discoveryOpen=$state(false);
  const matchingCatalog=$derived(catalog.filter(repo=>repo.fullName.toLowerCase().includes(search.toLowerCase())));
  const available=$derived(discovered.filter(repo=>!catalog.some(c=>c.providerRepositoryId===repo.providerRepositoryId)&&repo.fullName.toLowerCase().includes(search.toLowerCase())));
@@ -34,7 +36,7 @@
  async function resume(){if(!pending)return;try{const result=await rpc('ConnectRepository',pending);await accept(result.operation);}catch(e){if(e instanceof RpcError&&e.status===400)persist(null);throw e;}}
  async function connect(repo:GithubRepository){if(!source||pending)return;persist({idempotencyKey:crypto.randomUUID(),connectionId,expectedConnectionRevision:source.revision,installationId,providerRepositoryId:repo.providerRepositoryId});await resume();}
  async function recover(){if(!pending)return;const result=await rpc('GetRepositoryOperation',{idempotencyKey:pending.idempotencyKey});await accept(result.operation);}
- onMount(()=>{void perform(async()=>{const saved=sessionStorage.getItem(storageKey);if(saved)pending=JSON.parse(saved);await load();if(!catalog.length)discoveryOpen=true;});});
+ onMount(()=>{void perform(async()=>{const saved=sessionStorage.getItem(storageKey);if(saved)pending=JSON.parse(saved);await load();if(!catalog.length)discoveryOpen=true;if(discoveryOpen&&!connections.some(c=>c.enabled&&c.activeCredentialRevision))sourceSetup=true;});});
 </script>
 <PageHeader title="Repositories" description="Connect a repository once and use it from projects across workspaces." />
 <div class="space-y-6">
@@ -44,7 +46,14 @@
  {#if pending}<InformationCard title="Recover repository connection"><p>The request is retained with its original source and repository selection. Recover its status or retry the same request.</p><code class="break-all text-xs">{pending.idempotencyKey}</code><div class="flex flex-wrap gap-3"><Button disabled={busy} onclick={()=>perform(recover)}>Recover status</Button><Button variant="outline" disabled={busy} onclick={()=>perform(resume)}>Retry same connection</Button><Button variant="outline" disabled={busy} onclick={()=>persist(null)}>Dismiss recovery</Button></div></InformationCard>{/if}
  <details bind:open={discoveryOpen} class="rounded-xl border bg-card p-5"><summary class="cursor-pointer font-semibold">Find repositories on GitHub</summary><div class="space-y-4 pt-4">
   <div class="space-y-2"><Label for="repository-source">GitHub App connection</Label><NativeSelect.Root id="repository-source" class="w-full" bind:value={connectionId} onchange={changeSource} disabled={busy||!!pending}><NativeSelect.Option value="">Choose a source connection</NativeSelect.Option>{#each connections as c (c.id)}<NativeSelect.Option value={c.id} disabled={!c.enabled||!c.activeCredentialRevision}>{c.displayName}{!c.enabled?' (disabled)':!c.activeCredentialRevision?' (validation required)':''}</NativeSelect.Option>{/each}</NativeSelect.Root></div>
-  <Button disabled={busy||!source||!!pending} onclick={()=>perform(()=>findInstallations())}>Discover installations</Button><Button variant="link" href="/settings/source-control/github">Manage source connections</Button>
+  <Button disabled={busy||!source||!!pending} onclick={()=>perform(()=>findInstallations())}>Discover installations</Button><Button variant="outline" disabled={busy||!!pending} onclick={()=>{sourceSetup=true;}}>Add GitHub App connection</Button>
+  {#if sourceSetup}
+   <div class="space-y-3 rounded-md border p-3">
+    <p class="text-sm">Connect a GitHub App so Orchestrator can discover repositories it can read.</p>
+    <GithubConnectionManager createOnMount onSaved={value=>{connections=[value,...connections.filter(c=>c.id!==value.id)];changeSource();connectionId=value.id;sourceSetup=false;}}/>
+    <Button variant="outline" onclick={()=>{sourceSetup=false;}}>Close GitHub setup</Button>
+   </div>
+  {/if}
   {#if installations.length}<div class="space-y-2"><Label for="repository-installation">GitHub installation</Label><NativeSelect.Root id="repository-installation" class="w-full" bind:value={installationId} onchange={()=>{discovered=[];nextRepositories=0;}} disabled={busy||!!pending}><NativeSelect.Option value="">Choose an installation</NativeSelect.Option>{#each installations as installation (installation.installationId)}<NativeSelect.Option value={installation.installationId} disabled={installation.suspended}>{installation.accountLogin} · {installation.installationId}{installation.suspended?' (suspended)':''}</NativeSelect.Option>{/each}</NativeSelect.Root></div><Button disabled={busy||!installationId||!!pending} onclick={()=>perform(()=>findRepositories())}>Discover repositories</Button>{/if}
   {#if nextInstallations}<Button variant="outline" disabled={busy||!!pending} onclick={()=>perform(()=>findInstallations(true))}>More installations</Button>{/if}
   {#if nextRepositories}<Button variant="outline" disabled={busy||!!pending} onclick={()=>perform(()=>findRepositories(true))}>More repositories</Button>{/if}

@@ -236,6 +236,10 @@ export interface StartRepositoryRuntimeRequest {
   maxBuilds: number;
   allowBuild: boolean;
   allowReplace: boolean;
+  branch: string;
+  expectedCommitSha: string;
+  expectedRegistryRevision: string;
+  expectedSignerRevision: string;
 }
 
 export interface RepositoryRuntimeRun {
@@ -4009,6 +4013,10 @@ function createBaseStartRepositoryRuntimeRequest(): StartRepositoryRuntimeReques
     maxBuilds: 0,
     allowBuild: false,
     allowReplace: false,
+    branch: "",
+    expectedCommitSha: "",
+    expectedRegistryRevision: "0",
+    expectedSignerRevision: "0",
   };
 }
 
@@ -4043,6 +4051,18 @@ export const StartRepositoryRuntimeRequest: MessageFns<StartRepositoryRuntimeReq
     }
     if (message.allowReplace !== false) {
       writer.uint32(80).bool(message.allowReplace);
+    }
+    if (message.branch !== "") {
+      writer.uint32(90).string(message.branch);
+    }
+    if (message.expectedCommitSha !== "") {
+      writer.uint32(98).string(message.expectedCommitSha);
+    }
+    if (message.expectedRegistryRevision !== "0") {
+      writer.uint32(104).uint64(message.expectedRegistryRevision);
+    }
+    if (message.expectedSignerRevision !== "0") {
+      writer.uint32(112).uint64(message.expectedSignerRevision);
     }
     return writer;
   },
@@ -4140,6 +4160,38 @@ export const StartRepositoryRuntimeRequest: MessageFns<StartRepositoryRuntimeReq
             message.allowReplace = reader.bool();
             continue;
           }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.branch = reader.string();
+            continue;
+          }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.expectedCommitSha = reader.string();
+            continue;
+          }
+          case 13: {
+            if (tag !== 104) {
+              break;
+            }
+
+            message.expectedRegistryRevision = reader.uint64().toString();
+            continue;
+          }
+          case 14: {
+            if (tag !== 112) {
+              break;
+            }
+
+            message.expectedSignerRevision = reader.uint64().toString();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -4200,6 +4252,22 @@ export const StartRepositoryRuntimeRequest: MessageFns<StartRepositoryRuntimeReq
         : isSet(object.allow_replace)
         ? globalThis.Boolean(object.allow_replace)
         : false,
+      branch: isSet(object.branch) ? globalThis.String(object.branch) : "",
+      expectedCommitSha: isSet(object.expectedCommitSha)
+        ? globalThis.String(object.expectedCommitSha)
+        : isSet(object.expected_commit_sha)
+        ? globalThis.String(object.expected_commit_sha)
+        : "",
+      expectedRegistryRevision: isSet(object.expectedRegistryRevision)
+        ? globalThis.String(object.expectedRegistryRevision)
+        : isSet(object.expected_registry_revision)
+        ? globalThis.String(object.expected_registry_revision)
+        : "0",
+      expectedSignerRevision: isSet(object.expectedSignerRevision)
+        ? globalThis.String(object.expectedSignerRevision)
+        : isSet(object.expected_signer_revision)
+        ? globalThis.String(object.expected_signer_revision)
+        : "0",
     };
   },
 
@@ -4235,6 +4303,18 @@ export const StartRepositoryRuntimeRequest: MessageFns<StartRepositoryRuntimeReq
     if (message.allowReplace !== false) {
       obj.allowReplace = message.allowReplace;
     }
+    if (message.branch !== "") {
+      obj.branch = message.branch;
+    }
+    if (message.expectedCommitSha !== "") {
+      obj.expectedCommitSha = message.expectedCommitSha;
+    }
+    if (message.expectedRegistryRevision !== "0") {
+      obj.expectedRegistryRevision = message.expectedRegistryRevision;
+    }
+    if (message.expectedSignerRevision !== "0") {
+      obj.expectedSignerRevision = message.expectedSignerRevision;
+    }
     return obj;
   },
 
@@ -4253,6 +4333,10 @@ export const StartRepositoryRuntimeRequest: MessageFns<StartRepositoryRuntimeReq
     message.maxBuilds = object.maxBuilds ?? 0;
     message.allowBuild = object.allowBuild ?? false;
     message.allowReplace = object.allowReplace ?? false;
+    message.branch = object.branch ?? "";
+    message.expectedCommitSha = object.expectedCommitSha ?? "";
+    message.expectedRegistryRevision = object.expectedRegistryRevision ?? "0";
+    message.expectedSignerRevision = object.expectedSignerRevision ?? "0";
     return message;
   },
 };

@@ -16,6 +16,10 @@ async fn repository_onboarding_retains_one_grant_and_recovers_fenced_steps() -> 
         max_builds: 1,
         allow_build: true,
         allow_replace: false,
+        branch: "release".into(),
+        expected_commit_sha: "a".repeat(40),
+        expected_registry_revision: 1,
+        expected_signer_revision: 1,
     };
     let command = key();
     let original = f

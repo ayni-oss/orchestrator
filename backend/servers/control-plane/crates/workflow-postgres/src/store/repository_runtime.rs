@@ -13,6 +13,14 @@ pub struct Settings {
     pub max_builds: u32,
     pub allow_build: bool,
     pub allow_replace: bool,
+    #[serde(default)]
+    pub branch: String,
+    #[serde(default)]
+    pub expected_commit_sha: String,
+    #[serde(default)]
+    pub expected_registry_revision: u64,
+    #[serde(default)]
+    pub expected_signer_revision: u64,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Run {
@@ -55,7 +63,34 @@ fn validate_settings(settings: &Settings) -> Result<(), StoreError> {
     {
         return Err(StoreError::InvalidInput("runtime_allowance"));
     }
+    if (!settings.branch.is_empty() && settings.expected_commit_sha.is_empty())
+        || (!settings.expected_commit_sha.is_empty()
+            && (settings.expected_commit_sha.len() != 40
+                || !settings
+                    .expected_commit_sha
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                || settings.expected_registry_revision == 0
+                || settings.expected_signer_revision == 0))
+    {
+        return Err(StoreError::InvalidInput("runtime_source_selection"));
+    }
     Ok(())
+}
+fn reviewed_revisions(
+    settings: &Settings,
+    registry: i64,
+    signer: i64,
+) -> Result<(u64, u64), StoreError> {
+    let registry_revision = u64::try_from(registry).map_err(|_| StoreError::CorruptState)?;
+    let signer_revision = u64::try_from(signer).map_err(|_| StoreError::CorruptState)?;
+    if !settings.expected_commit_sha.is_empty()
+        && (settings.expected_registry_revision != registry_revision
+            || settings.expected_signer_revision != signer_revision)
+    {
+        return Err(StoreError::ConfigurationRevisionConflict);
+    }
+    Ok((registry_revision, signer_revision))
 }
 impl WorkflowStore {
     /// Retain reviewed settings and original receipt, serializing starts per repository.
@@ -73,7 +108,9 @@ impl WorkflowStore {
         let tx = client.transaction().await?;
         connections::serialize_key(&tx, key).await?;
         if let Some(row)=tx.query_opt("SELECT safe_request,receipt FROM workflow_repository_runtime_runs WHERE idempotency_key=$1",&[&key]).await? {
-            if row.get::<_,String>("safe_request")!=safe { return Err(StoreError::IdempotencyConflict); }
+            let saved: Settings = serde_json::from_str(&row.get::<_, String>("safe_request"))
+                .map_err(|_| StoreError::CorruptState)?;
+            if saved != settings { return Err(StoreError::IdempotencyConflict); }
             let run=decode(&row.get::<_,String>("receipt"))?;tx.commit().await?;driver.abort();return Ok(run);
         }
         connections::serialize_key(&tx, &settings.repository_id).await?;
@@ -95,14 +132,14 @@ impl WorkflowStore {
             )
             .await?
             .ok_or(StoreError::ConfigurationRevisionConflict)?;
+        let (registry_revision, signer_revision) =
+            reviewed_revisions(&settings, registry.get(0), signer.get(0))?;
         let run = Run {
             id: new_id(),
             idempotency_key: key.into(),
             settings,
-            registry_revision: u64::try_from(registry.get::<_, i64>(0))
-                .map_err(|_| StoreError::CorruptState)?,
-            signer_revision: u64::try_from(signer.get::<_, i64>(0))
-                .map_err(|_| StoreError::CorruptState)?,
+            registry_revision,
+            signer_revision,
             state: "resolving".into(),
             safe_reason: String::new(),
             commit_sha: String::new(),

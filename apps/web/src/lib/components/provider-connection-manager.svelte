@@ -8,7 +8,7 @@
  import InformationTable from '$lib/components/information-table.svelte';
  import Feedback from '$lib/components/feedback.svelte';
  import { rpc, RpcError, reasonText, type Connection, type Operation } from '$lib/api';
- let { capability }: { capability: 'llm' | 'container_registry' } = $props();
+ let { capability, createOnMount = false, onSaved }: { capability: 'llm' | 'container_registry'; createOnMount?: boolean; onSaved?: (connection: Connection) => void } = $props();
  const registry=$derived(capability==='container_registry');
  const provider=$derived(registry?'GitHub Container Registry':'OpenAI');
  const storageKey=$derived(`ayni.connection.${capability}.pending`);
@@ -24,12 +24,12 @@
  async function load(append=false){const result=await rpc('ListConnections',{afterId:append?next:'',limit:50});const values=(result.connections||[]).filter((c:Connection)=>c.capability===capability);connections=append?[...connections,...values]:values;next=result.nextAfterId||'';}
  async function inspect(c:Connection,append=false){const current=++generation;if(!append){selected=c;name=c.displayName;destination=c.registryDestination||'';pushUsername=c.pushUsername||'';pullUsername=c.pullUsername||'';clearCredentials();history=[];}const result=await rpc('ListConnectionOperations',{connectionId:c.id,afterId:append?historyNext:'',limit:50});if(current!==generation)return;history=append?[...history,...(result.operations||[])]:result.operations||[];historyNext=result.nextAfterId||'';}
  async function refresh(){await load();if(selected){const c=connections.find(c=>c.id===selected?.id);if(c)await inspect(c);}}
- async function accept(op:Operation){await load();await inspect(op.connection);notice=op.kind==='enable'?(op.connection.enabled?'Connection enabled.':'Connection disabled.'):op.state==='completed'?'Credentials validated and activated.':op.state==='failed'?'Candidate validation failed. The previous active credential is preserved.':op.state==='superseded'?'This operation was superseded. Refresh before making changes.':'Credentials saved. Validate the candidate before use.';if(op.safeReason)notice+=` ${reasonText[op.safeReason]||op.safeReason}`;}
+ async function accept(op:Operation){await load();await inspect(op.connection);notice=op.kind==='enable'?(op.connection.enabled?'Connection enabled.':'Connection disabled.'):op.state==='completed'?'Credentials validated and activated.':op.state==='failed'?'Candidate validation failed. The previous active credential is preserved.':op.state==='superseded'?'This operation was superseded. Refresh before making changes.':'Credentials saved. Validate the candidate before use.';if(op.safeReason)notice+=` ${reasonText[op.safeReason]||op.safeReason}`;if(op.state==='completed'&&op.connection.enabled&&op.connection.activeCredentialRevision)onSaved?.(op.connection);}
  function create(){++generation;selected=null;history=[];name='';destination='';pushUsername='';pullUsername='';clearCredentials();error='';notice='';open=true;}
  async function save(event:SubmitEvent){event.preventDefault();if(pendingKey)return;const key=crypto.randomUUID();const request={idempotencyKey:key,connectionId:selected?.id||'',expectedRevision:selected?.revision||'0',displayName:name,provider:registry?'github':'openai',capability,registryDestination:registry?destination:'',pushUsername:registry?pushUsername:'',pullUsername:registry?pullUsername:'',pushToken,pullToken,apiKey};clearCredentials();persist(key);await perform(async()=>{try{const result=await rpc('SaveProviderConnection',request);persist('');open=false;await accept(result.operation);}catch(e){if(e instanceof RpcError && e.status===400)persist('');throw e;}finally{request.pushToken='';request.pullToken='';request.apiKey='';}});}
  async function recover(){await perform(async()=>{const result=await rpc('GetConnectionOperation',{idempotencyKey:pendingKey});persist('');open=false;await accept(result.operation);});}
  async function toggle(){if(!selected)return;const key=crypto.randomUUID();persist(key);const result=await rpc('SetConnectionEnabled',{idempotencyKey:key,connectionId:selected.id,expectedRevision:selected.revision,enabled:!selected.enabled});persist('');await accept(result.operation);}
- onMount(()=>{pendingKey=sessionStorage.getItem(storageKey)||'';void perform(refresh);});
+ onMount(()=>{pendingKey=sessionStorage.getItem(storageKey)||'';if(createOnMount&&!pendingKey)create();void perform(refresh);});
 </script>
 <div class="space-y-4">
  <div class="flex items-center justify-between gap-3"><h2 class="text-lg font-semibold">Connections</h2><Button disabled={busy||!!pendingKey} onclick={create}>Add {provider} connection</Button></div>
