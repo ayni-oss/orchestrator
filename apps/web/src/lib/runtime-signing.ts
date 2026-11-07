@@ -28,3 +28,16 @@ export const provisioningReasons:Record<string,string>={
 export function trustSnippet(signer:Pick<RuntimeSigner,'keyId'|'publicKey'>):string {
  return `[environment.certificate.trusted_keys]\n${JSON.stringify(signer.keyId)} = ${JSON.stringify(signer.publicKey)}`;
 }
+
+/** Export only the raw Ed25519 seed expected by the signer import API. */
+export async function generateSigningSeed(): Promise<string> {
+ const key = await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify']);
+ const { d } = await crypto.subtle.exportKey('jwk', key.privateKey);
+ if (!d || !/^[A-Za-z0-9_-]{43}$/.test(d)) throw new Error('Unexpected Ed25519 seed format');
+ const bytes = Uint8Array.from(atob(d.replaceAll('-', '+').replaceAll('_', '/') + '='), char => char.charCodeAt(0));
+ try {
+  return signingSeed(Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join(''));
+ } finally {
+  bytes.fill(0);
+ }
+}

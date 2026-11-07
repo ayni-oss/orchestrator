@@ -8,25 +8,27 @@
  import {Input} from '$lib/components/ui/input/index.js';
  import {Label} from '$lib/components/ui/label/index.js';
  import {rpc,RpcError} from '$lib/api';
- import {provisionIntent,provisioningReasons,signingSeed,trustSnippet,validateSignerFields,type RuntimeSigner as Signer,type ProvisionIntent,type ProvisionOperation,type ProvisionResult} from '$lib/runtime-signing';
+ import {generateSigningSeed,provisionIntent,provisioningReasons,signingSeed,trustSnippet,validateSignerFields,type RuntimeSigner as Signer,type ProvisionIntent,type ProvisionOperation,type ProvisionResult} from '$lib/runtime-signing';
  type Save={idempotencyKey:string;id:string;expectedRevision:string;displayName:string;keyId:string;publicKey:string;secretName:string;secretUid:string};
  type Pending={method:'SaveRuntimeSigner'|'SetRuntimeSignerEnabled';request:Save|{idempotencyKey:string;id:string;expectedRevision:string;enabled:boolean}};
  let editorOpen=$state(false);
  let signers=$state.raw<Signer[]>([]);let next=$state('');let busy=$state(true);let error=$state('');let notice=$state('');
  let selected=$state('');let selectedRevision=$state('0');let name=$state('');let keyId=$state('');let publicKey=$state('');let secretName=$state('');let secretUid=$state('');
- let mode=$state<'generate'|'import'|'manual'>('generate');let seed=$state('');let seedFile=$state<HTMLInputElement|null>(null);let privateReadGeneration=0;
+ type SignerMode = 'generate'|'backup'|'import'|'manual';
+ let backupDownloaded=$state(false);
+ let mode=$state<SignerMode>('generate');let seed=$state('');let seedFile=$state<HTMLInputElement|null>(null);let privateReadGeneration=0;
  let pending=$state<Pending|null>(null);let setup=$state<ProvisionIntent|null>(null);let operation=$state.raw<ProvisionOperation|null>(null);let receiptMissing=$state(false);let inputRejected=$state(false);
  const storage='ayni.runtime.signer.pending';const setupStorage='ayni.runtime.signer.provisioning.pending';
  const hasPending=$derived(!!pending||!!setup);
  const canCorrect=$derived(!!setup&&inputRejected&&receiptMissing);
  const canResume=$derived(!!setup&&(operation?.state==='awaiting_material'||receiptMissing));
- function clearPrivate(){privateReadGeneration++;seed='';if(seedFile)seedFile.value='';}
+ function clearPrivate(){privateReadGeneration++;seed='';backupDownloaded=false;if(seedFile)seedFile.value='';}
  function persist(value:Pending|null){pending=value;if(value)sessionStorage.setItem(storage,JSON.stringify(value));else sessionStorage.removeItem(storage);}
  function retainSetup(value:ProvisionIntent|null){setup=value;if(value)sessionStorage.setItem(setupStorage,JSON.stringify(value));else sessionStorage.removeItem(setupStorage);}
  async function perform(action:()=>Promise<void>){busy=true;error='';try{await action();}catch(e){error=e instanceof RpcError&&e.status===409?'This signer or retained command has changed. Recover the original command, then refresh before making another update.':e instanceof RpcError&&e.status===404?'No receipt was found. Retry the original update if its response was interrupted.':'Signer configuration could not be loaded or saved. Recover a retained command before retrying.';}finally{busy=false;}}
  async function load(append=false){const result=await rpc('ListRuntimeSigners',{afterId:append?next:'',limit:50});signers=append?[...signers,...(result.signers||[])]:result.signers||[];next=result.nextAfterId||'';}
  function select(value:Signer|null){editorOpen=true;clearPrivate();selected=value?.id||'';selectedRevision=value?.revision||'0';name=value?.keyId||'';keyId=value?.keyId||'';publicKey=value?.publicKey||'';secretName=value?.secretName||'';secretUid=value?.secretUid||'';mode=value?'manual':'generate';notice='';error='';}
- function changeMode(value:'generate'|'import'|'manual'){clearPrivate();mode=value;error='';notice='';}
+ function changeMode(value:SignerMode){clearPrivate();mode=value;error='';notice='';}
  function closeEditor(){select(null);editorOpen=false;}
  async function accept(value:Signer){
   // A completed public response is enough to display the identity safely even
@@ -58,12 +60,14 @@
  async function submitSetup(){
   let material='';let request:(ProvisionIntent&{signingSeed:string})|null=null;busy=true;error='';
   try{
+   if(mode==='backup'&&!backupDownloaded)return;
    if(!setup||canCorrect){keyId=name;validateSignerFields(name,keyId);}
-   const intent=setup?(canCorrect?{...setup,displayName:name,keyId}:setup):{idempotencyKey:crypto.randomUUID(),displayName:name,keyId,mode:mode as 'generate'|'import'};
+   const intent:ProvisionIntent=setup?(canCorrect?{...setup,displayName:name,keyId}:setup):{idempotencyKey:crypto.randomUUID(),displayName:name,keyId,mode:mode==='generate'?'generate':'import'};
    if(intent.mode==='import')material=signingSeed(seed);
    if(!setup||canCorrect)retainSetup(intent);
    inputRejected=false;receiptMissing=false;
    clearPrivate();
+   mode=intent.mode;
    request={...intent,signingSeed:material};
    await acceptSetup(await rpc('ProvisionRuntimeSigner',request));
   }catch(cause){if(cause instanceof RpcError&&cause.status===400)inputRejected=true;error=cause instanceof Error&&!(cause instanceof RpcError)&&(!setup||canCorrect)?cause.message:setupError(cause);}
@@ -74,6 +78,40 @@
   try{await acceptSetup(await rpc('RecoverRuntimeSignerProvisioning',{idempotencyKey:setup.idempotencyKey}));}
   catch(cause){if(cause instanceof RpcError&&cause.status===404){receiptMissing=true;operation=null;notice=inputRejected?'The rejected setup has no receipt. Correct its key name, then resume with the same recovery key.':'No setup receipt was found. Resume the same request below; its key name and recovery key stay unchanged.';}else error=setupError(cause);}
   finally{clearPrivate();busy=false;}
+ }
+ async function downloadBackup() {
+  if (busy || hasPending || mode !== 'backup' || backupDownloaded) return;
+  const generation = privateReadGeneration;
+  busy = true;
+  error = '';
+  try {
+   validateSignerFields(name, name);
+   const generated = await generateSigningSeed();
+   if (generation !== privateReadGeneration) return;
+   const url = URL.createObjectURL(new Blob([generated + '\n'], { type: 'application/octet-stream' }));
+   try {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name + '.ed25519-seed';
+    link.click();
+   } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+   }
+   seed = generated;
+   backupDownloaded = true;
+  } catch {
+   error = 'Could not generate a backup. Check the key name or choose server generation or import.';
+  } finally {
+   busy = false;
+  }
+ }
+ async function copyPublicKey(value: Signer) {
+  try {
+   await navigator.clipboard.writeText(value.publicKey);
+   notice = 'Public key copied.';
+  } catch {
+   error = 'Select and copy the displayed public key.';
+  }
  }
  async function readSeedFile(event:Event){
   const input=event.currentTarget as HTMLInputElement;const file=input.files?.[0];clearPrivate();if(!file)return;
@@ -104,13 +142,22 @@
  {#if editorOpen||setup}
  <InformationCard title={selected?'Update signer reference':setup?'Resume signer setup':'Add signing key'}>
   <form class="space-y-4" onsubmit={event=>{event.preventDefault();if(mode==='manual')void perform(save);else void submitSetup();}}>
-   <div class="space-y-2"><Label for="signer-name">Name</Label><Input id="signer-name" bind:value={name} required maxlength={120} disabled={busy||!!pending||(!!setup&&!canCorrect)}/><p class="text-xs text-muted-foreground">Use this exact name in .ayni.toml with the public key. Use letters, numbers, dots, underscores or hyphens.</p></div>
+   <div class="space-y-2"><Label for="signer-name">Name</Label><Input id="signer-name" bind:value={name} required maxlength={120} disabled={busy||backupDownloaded||!!pending||(!!setup&&!canCorrect)}/><p class="text-xs text-muted-foreground">Use this exact name in .ayni.toml with the public key. Use letters, numbers, dots, underscores or hyphens.</p></div>
    {#if !setup}<fieldset disabled={busy||!!pending||!!selected} class="space-y-2"><legend class="text-sm font-medium">Signing key</legend><div class="flex flex-wrap gap-4 text-sm">
     <label class="flex items-center gap-2"><input type="radio" name="signer-mode" value="generate" checked={mode==='generate'} onchange={()=>changeMode('generate')}/>Generate a new key</label>
+    <label class="flex items-center gap-2"><input type="radio" name="signer-mode" value="backup" checked={mode==='backup'} onchange={()=>changeMode('backup')}/>Generate with backup</label>
     <label class="flex items-center gap-2"><input type="radio" name="signer-mode" value="import" checked={mode==='import'} onchange={()=>changeMode('import')}/>Import an existing key</label>
     <label class="flex items-center gap-2"><input type="radio" name="signer-mode" value="manual" checked={mode==='manual'} onchange={()=>changeMode('manual')}/>Advanced: existing Secret reference</label>
    </div></fieldset>{/if}
    {#if mode==='generate'}<p class="text-sm text-muted-foreground">The server generates the key and stores it in an immutable signing Secret. The private key is never returned to this browser.</p>{/if}
+   {#if mode==='backup'&&!setup}
+    <p class="text-sm text-muted-foreground">The signing key certifies runtime images. Download the private key once and store it in a trusted secret store. The public key remains available for your repository trust policy.</p>
+    {#if backupDownloaded}
+     <p role="status" class="text-sm">Download requested. Check that you have the file before saving the signer.</p>
+    {:else}
+     <Button type="button" variant="outline" disabled={busy} onclick={downloadBackup}>Download private key</Button>
+    {/if}
+   {/if}
    {#if mode==='import'&&(!setup||canResume)}<div class="space-y-4">
     <p class="text-sm text-muted-foreground">{setup?'Re-enter the same seed to resume this retained identity.':'Import the raw value of AYNI_ENV_CERTIFICATE_SIGNING_KEY. Use 64 lowercase hexadecimal characters, without an environment assignment or quotes.'}</p>
     <div class="space-y-2"><Label for="signer-seed">{setup?'Same private signing seed':'Private signing seed'}</Label><Input id="signer-seed" type="password" autocomplete="off" bind:value={seed} maxlength={65} disabled={busy} aria-describedby="signer-seed-help"/><p id="signer-seed-help" class="text-xs text-muted-foreground">Paste the seed or choose its raw file. It is cleared after submission and is never saved in browser storage.</p></div>
@@ -123,7 +170,7 @@
     <p class="text-sm text-muted-foreground">Use a public key and immutable Secret reference already provisioned by the administrator. Secret access is checked during preparation.</p>
    </div>{/if}
    <p class="text-sm text-muted-foreground">Setting up a signer does not change repository trust or authorize a build. Review and commit the public policy, regenerate the lock, then inspect that commit.</p>
-   <div class="flex flex-wrap gap-2">{#if !setup}<Button type="submit" disabled={busy||!!pending}>{mode==='manual'?'Save signer reference':mode==='import'?'Import signer':'Generate signer'}</Button>{:else if canResume&&setup.mode==='import'}<Button type="submit" disabled={busy}>Resume signer setup</Button>{/if}<Button type="button" variant="outline" disabled={busy||hasPending} onclick={closeEditor}>Cancel</Button></div>
+   <div class="flex flex-wrap gap-2">{#if !setup}<Button type="submit" disabled={busy||!!pending||(mode==='backup'&&!backupDownloaded)}>{mode==='backup'?'Save signer':mode==='manual'?'Save signer reference':mode==='import'?'Import signer':'Generate signer'}</Button>{:else if canResume&&setup.mode==='import'}<Button type="submit" disabled={busy}>Resume signer setup</Button>{/if}<Button type="button" variant="outline" disabled={busy||hasPending} onclick={closeEditor}>Cancel</Button></div>
   </form>
  </InformationCard>
  {/if}
@@ -134,7 +181,7 @@
  {#each signers as item(item.id)}<InformationCard title={item.keyId} status={item.enabled?'enabled':'disabled'}>
   <InformationTable rows={[{label:'Public key',value:item.publicKey,monospace:true},{label:'Secret name',value:item.secretName},{label:'Secret UID',value:item.secretUid,monospace:true},{label:'Configuration revision',value:item.revision}]}/>
   <details class="space-y-3"><summary class="cursor-pointer text-sm font-medium">Repository trust policy</summary><pre class="overflow-x-auto rounded-lg bg-muted p-3 text-xs">{trustSnippet(item)}</pre><Button variant="outline" onclick={()=>copyTrust(item)}>Copy public trust policy</Button><p class="text-xs text-muted-foreground">Merge this public entry into the existing environment.certificate.trusted_keys configuration in .ayni.toml, preserving other keys. If that configuration uses inline tables, edit the existing entry rather than adding a duplicate table. Commit the policy and regenerated lock, then inspect the new commit.</p></details>
-  <div class="flex flex-wrap gap-2"><Button variant="outline" disabled={busy||hasPending} onclick={()=>select(item)}>Edit {item.keyId}</Button><Button variant="outline" disabled={busy||hasPending} onclick={()=>perform(()=>toggle(item))}>{item.enabled?'Disable':'Enable'} {item.keyId}</Button></div>
+  <div class="flex flex-wrap gap-2"><Button variant="outline" onclick={()=>copyPublicKey(item)}>Copy public key</Button><Button variant="outline" disabled={busy||hasPending} onclick={()=>select(item)}>Edit {item.keyId}</Button><Button variant="outline" disabled={busy||hasPending} onclick={()=>perform(()=>toggle(item))}>{item.enabled?'Disable':'Enable'} {item.keyId}</Button></div>
  </InformationCard>{/each}
  {#if next}<Button variant="outline" disabled={busy} onclick={()=>perform(()=>load(true))}>More signers</Button>{/if}
 </div>

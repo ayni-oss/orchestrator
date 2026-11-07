@@ -60,7 +60,7 @@ the saved App connection or its installation access.
 
 Open a repository card and choose **Ayni runtime**. The tab loads saved status
 without starting a preparation. It shows the inspected commit, known setup issues
-and the next step together. Choose **Configure runtime** to review the registry, named signing key, platform and allowance. **Build and publish runtime** starts one server-owned run: it reads the latest default branch, inspects Ayni setup, then builds if needed, certifies, publishes and verifies the image. A missing setup input or disabled build profile stops the run with an actionable issue. Current progress and recovery controls stay visible. Previous preparations and inspection attempts are collapsed into history. Inspection findings include their
+and the next step together. Choose **Configure runtime** to review the registry, named signing key, platform and allowance. **Build and publish runtime** starts one server-owned run: it reads the latest default branch, inspects Ayni setup, then builds if needed, certifies, publishes and verifies the image. A missing setup input or disabled build profile stops the run with an actionable issue. The step list highlights the current part of onboarding, from integration setup to verification. Open preparation details for technical evidence and history. Current progress and recovery controls stay visible. Previous preparations and inspection attempts are collapsed into history. Inspection findings include their
 saved date and Ayni version. Choose **Recheck default branch** to resolve GitHub’s
 current default branch and inspect its latest commit. Each click resolves the
 branch again; cached repository metadata and a previously entered SHA do not
@@ -97,13 +97,13 @@ key name, such as `project-2026`. This name is the actual trust-policy key name,
 not a separate display label or a generated fingerprint. You can add multiple named
 keys and manage each one from the list. Choose
 **Generate a new key** to let the server create and store a private key, or
-**Import an existing key** to paste or select a file containing the raw value of
+**Generate with backup** to create a key in your browser, download its private seed once, and save the signer using that seed. Store the download in a trusted secret store. You can copy the public key from the signer list at any time. Choose **Import an existing key** to paste or select a file containing the raw value of
 `AYNI_ENV_CERTIFICATE_SIGNING_KEY`: 64 lowercase hexadecimal characters, with an
 optional final newline. Do not include an environment assignment or quotes.
 
 The server stores the key in an immutable signing Secret and returns its public
 identity. Imported private material is cleared after submission and is never saved
-in browser storage. Generated private keys are never returned to the browser.
+in browser storage. The server never returns private keys. Browser generation keeps the seed in memory until you save or close the form.
 If a response is interrupted, reload and choose **Recover signer setup**. Recovery
 continues the same request. If an import needs material again, re-enter the same
 seed; a different seed cannot replace that retained identity. If a rejected setup

@@ -34,6 +34,19 @@
  const signer = $derived(signers.find(value => value.id === signerId));
  const destination = $derived(registry?.registryDestination ? `${registry.registryDestination}/${repo.fullName.split('/').at(-1)?.toLowerCase()}` : registries.find(value => value.id === onboarding?.settings.registryConnectionId)?.registryDestination ? `${registries.find(value => value.id === onboarding?.settings.registryConnectionId)?.registryDestination}/${repo.fullName.split('/').at(-1)?.toLowerCase()}` : '');
  const image = $derived(runtimeRegistryImage(onboardingActive || onboardingBlocked ? undefined : overview.operation,destination));
+ const onboardingSteps = ['Connect integrations', 'Check repository', 'Review and start', 'Prepare image', 'Verify and finish'];
+ const currentStep = $derived.by(() => {
+  const operation = overview.operation;
+  if (onboardingActive) return onboarding?.state === 'admitting' ? 2 : 1;
+  if (!onboardingBlocked && operation) {
+   return operation.state === 'ready' || ['pull_final', 'verify_content', 'verify_compatibility', 'cleanup'].includes(operation.stage) ? 4 : 3;
+  }
+  if (!deploymentEnabled || !connection?.enabled || !connection.activeCredentialRevision ||
+   !registries.some(value => value.enabled && value.activeCredentialRevision) ||
+   !signers.some(value => value.enabled)) return 0;
+  if (checkingDefault || !latestInspection || overview.issues.length) return 1;
+  return 2;
+ });
  const activeStates = new Set(['pending', 'running', 'stopping', 'cancelling', 'cleanup_pending']);
  const retryStates = new Set(['failed', 'blocked', 'unavailable', 'publication_uncertain']);
  const validAllowance = $derived(Number.isInteger(seconds) && seconds >= 1 && seconds <= 86400 && (!allowBuild || Number.isInteger(builds) && builds >= 1 && builds <= 10));
@@ -166,11 +179,20 @@
 {/snippet}
 <section class="space-y-5" data-runtime-preparation={repo.id} aria-label={`Runtime preparation for ${repo.fullName}`}>
  <section class="space-y-4 rounded-xl border bg-card p-5" aria-label="Runtime status" aria-live="polite">
+  {#if loaded}
+   <ol aria-label="Runtime onboarding steps" class="grid gap-2 sm:grid-cols-5">
+    {#each onboardingSteps as step, index (step)}
+     <li aria-current={index === currentStep ? 'step' : undefined} class="rounded-md border px-2 py-1.5 text-xs" class:font-semibold={index === currentStep} class:bg-muted={index === currentStep}>
+      <span class="tabular-nums">{index}.</span> {step}
+     </li>
+    {/each}
+   </ol>
+  {/if}
   <div class="space-y-2"><h3 class="text-lg font-semibold">{onboardingActive ? 'Preparing repository runtime' : profileRestored ? 'Ready to prepare runtime' : onboardingBlocked ? 'Runtime onboarding needs attention' : checkingDefault ? 'Checking latest default branch' : overview.title}</h3><p class="text-sm text-muted-foreground">{onboardingActive ? ({resolving:'Reading the latest default branch…',inspecting:'Checking the committed Ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') : profileRestored ? 'Runtime building is now enabled. Prepare the latest commit to start a new run.' : onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' : checkingDefault ? "Resolving GitHub’s current default branch and inspecting its latest commit…" : overview.description}</p></div>
   {#if candidateInspection}<p class="text-xs text-muted-foreground">Last check: {new Date(Number(candidateInspection.updatedAtUnixMs)).toLocaleString()}{candidateInspection.result?.ayniVersion ? ` · Ayni ${candidateInspection.result.ayniVersion}` : ''}</p>{/if}
   {#if overview.issues.length && !checkingDefault && !onboardingActive}<div class="space-y-2"><h4 class="font-medium">What needs attention</h4><ul class="list-disc space-y-2 break-words pl-5 text-sm">{#each overview.issues as issue (issue)}<li>{issue}</li>{/each}</ul></div>{/if}
   {#if developmentOnly || overview.operation?.developmentOnly}<p class="rounded-md border p-3 text-sm">Local development build mode. Cluster network isolation is not qualified; this result is for local development testing.</p>{/if}
-  {#if overview.operation}<InformationTable rows={[{label:'Content verification',value:overview.operation.contentVerified ? 'Verified' : 'Not verified'},{label:'Managed compatibility',value:overview.operation.managedCompatible ? 'Verified' : 'Not verified'},{label:'Cleanup',value:overview.operation.cleanupComplete ? 'Complete' : 'Not complete'}]}/>{/if}
+  {#if loaded && !deploymentEnabled && currentStep === 0}<p class="text-sm">Ask your administrator to enable a Kubernetes runtime profile.</p>{/if}
   {#if overview.nextAction && !checkingDefault && !onboardingActive && !onboardingBlocked}<p class="text-sm"><span class="font-medium">Next step:</span> {expanded && !pending ? 'Review the configuration below, then prepare the latest default-branch commit.' : canConfigure ? 'Prepare the latest commit using the reviewed registry and signing settings.' : overview.nextAction}</p>{/if}
   <div class="flex flex-wrap gap-2">
    {#if canConfigure && !expanded}{#if onboarding?.settings}<Button disabled={!savedSettingsAvailable} onclick={() => perform(prepareLatest)}>Prepare latest commit</Button><Button variant="outline" onclick={() => perform(configure)}>Change runtime settings</Button>{:else}<Button onclick={() => perform(configure)}>Configure runtime</Button>{/if}{/if}
@@ -182,7 +204,10 @@
   {#if loaded && !signers.some(value => value.enabled)}<Button variant="link" href="/settings/runtime-signing">Add a signing key</Button>{/if}
   {#if onboarding?.settings && !savedSettingsAvailable && !onboardingActive}<p class="text-sm">The saved registry or signing key is unavailable. Change runtime settings to choose enabled connections.</p>{/if}
   {#if onboarding?.settings && !expanded}<p class="text-xs text-muted-foreground">Reviewed allowance: {onboarding.settings.allowBuild ? `up to ${onboarding.settings.maxBuilds} build(s)` : 'existing images only'} · {onboarding.settings.maxSeconds} seconds · {onboarding.settings.platform}. Each preparation is a separate bounded run.</p>{/if}
-  {#if image}<div class="space-y-2 border-t pt-3"><p class="text-sm font-medium">{image.confirmed ? 'Registry image available' : 'Image destination'}</p><code class="block break-all text-xs">{image.reference || image.destination}</code>{#if !image.confirmed}<p class="text-xs text-muted-foreground">No published image is confirmed by this status yet.</p>{/if}<a class="text-sm text-primary underline underline-offset-4" href={image.url} target="_blank" rel="noreferrer">Open registry package</a></div>{/if}
+  {#if image}<div class="space-y-2 border-t pt-3"><p class="text-sm font-medium">{image.confirmed ? 'Registry image available' : 'Image destination'}</p><code class="block break-all text-xs">{image.reference || image.destination}</code>{#if !image.confirmed}<p class="text-xs text-muted-foreground">No published image is confirmed by this status yet.</p>{/if}{#if image.reference && overview.operation?.state === 'ready'}
+   {@const reference = image.reference}
+   <Button variant="outline" onclick={() => perform(() => navigator.clipboard.writeText(reference))}>Copy image reference</Button>
+  {/if}<a class="text-sm text-primary underline underline-offset-4" href={image.url} target="_blank" rel="noreferrer">Open registry package</a></div>{/if}
   <p class="text-xs text-muted-foreground">Prepare latest commit runs the complete pipeline using the reviewed settings. Recheck only inspects source. Runtime readiness applies to the exact commit and platform shown.</p>
  </section>
  {#if error && !pending}<Feedback kind="error" title="Preparation needs attention" message={error}/>{/if}
@@ -194,7 +219,7 @@
 
    <div class="space-y-2"><Label for={`runtime-registry-${repo.id}`}>Runtime registry</Label><NativeSelect.Root id={`runtime-registry-${repo.id}`} bind:value={registryId} disabled={busy || !!pending}><NativeSelect.Option value="">Choose a registry connection</NativeSelect.Option>{#each registries as value (value.id)}<NativeSelect.Option value={value.id} disabled={!value.enabled || !value.activeCredentialRevision}>{value.displayName} · {value.registryDestination}{!value.enabled ? ' (disabled)' : !value.activeCredentialRevision ? ' (validation required)' : ''}</NativeSelect.Option>{/each}</NativeSelect.Root></div>
    <div class="space-y-2"><Label for={`runtime-signer-${repo.id}`}>Runtime signer</Label><NativeSelect.Root id={`runtime-signer-${repo.id}`} bind:value={signerId} disabled={busy || !!pending}><NativeSelect.Option value="">Choose a signer</NativeSelect.Option>{#each signers as value (value.id)}<NativeSelect.Option value={value.id} disabled={!value.enabled}>{value.keyId}{!value.enabled ? ' (disabled)' : ''}</NativeSelect.Option>{/each}</NativeSelect.Root></div>
-   {#if signer}<details class="rounded-md border p-3"><summary class="cursor-pointer text-sm font-medium">Signing key details</summary><div class="space-y-3 pt-3"><InformationTable rows={[{label:'Key name',value:signer.keyId},{label:'Public key',value:signer.publicKey || 'Unavailable',monospace:true}]}/><p class="text-xs text-muted-foreground">Use this key name and public key together in the repository’s .ayni.toml trust policy.</p></div></details>{/if}
+   {#if signer}<details class="rounded-md border p-3"><summary class="cursor-pointer text-sm font-medium">Signing key details</summary><div class="space-y-3 pt-3"><InformationTable rows={[{label:'Key name',value:signer.keyId},{label:'Public key',value:signer.publicKey || 'Unavailable',monospace:true}]}/><Button variant="outline" onclick={() => perform(() => navigator.clipboard.writeText(signer!.publicKey))}>Copy public key</Button><p class="text-xs text-muted-foreground">Use this key name and public key together in the repository’s .ayni.toml trust policy.</p></div></details>{/if}
    <div class="flex flex-wrap gap-4"><div class="space-y-2"><Label for={`runtime-platform-${repo.id}`}>Runtime platform</Label><NativeSelect.Root id={`runtime-platform-${repo.id}`} bind:value={platform} disabled={busy || !!pending}><NativeSelect.Option value="linux/arm64">Linux arm64</NativeSelect.Option><NativeSelect.Option value="linux/amd64">Linux amd64</NativeSelect.Option></NativeSelect.Root></div><div class="space-y-2"><Label for={`runtime-seconds-${repo.id}`}>Time limit (seconds)</Label><Input id={`runtime-seconds-${repo.id}`} type="number" min={1} max={86400} bind:value={seconds} disabled={busy || !!pending}/></div></div>
    <label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowBuild} onchange={() => { if (!allowBuild) allowReplace = false; }} disabled={busy || !!pending}/>Allow a bounded build if the image is missing</label>
    {#if allowBuild}<div class="space-y-2"><Label for={`runtime-builds-${repo.id}`}>Maximum build attempts</Label><Input id={`runtime-builds-${repo.id}`} type="number" min={1} max={10} bind:value={builds} disabled={busy || !!pending}/><p class="text-xs text-muted-foreground">The qualified deployment resource limits also apply. Interrupted builds consume their retained attempt allowance.</p></div><label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowReplace} disabled={busy || !!pending}/>Also allow replacement if an existing image is invalid</label>{/if}

@@ -4,6 +4,7 @@ import {createServer} from 'node:http';
 import {createServer as createSocket} from 'node:net';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
+import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {chromium} from 'playwright';
@@ -41,6 +42,7 @@ test('multiple named signers survive reload, edit independently and recover with
    if(!operation){operation={id:randomUUID(),idempotencyKey:data.idempotencyKey,displayName:data.displayName,keyId:data.keyId,mode:data.mode,secretName:`ayni-runtime-signer-${randomUUID()}`,state:'pending',safeReason:'',publicKey:'',secretUid:'',signerId:''};operations.set(data.idempotencyKey,operation);}
    if(disabled){operation.safeReason='signer_provisioning_disabled';return send({operation});}
    if(data.mode==='generate')return send(complete(operation));
+   if(data.keyId==='backup.fixture'&&/^[0-9a-f]{64}$/.test(data.signingSeed))return send(complete(operation));
    if(data.signingSeed!==seed)return send({message:`signer_provisioning_conflict ${data.signingSeed}`},409);
    if(operation.state==='pending'){operation.state='awaiting_material';operation.safeReason='signer_provisioning_inputs_required';await new Promise(resolve=>{releaseImport=resolve;gateway.emit('import-pending');});return send({message:`interrupted import ${data.signingSeed}`},503);}
    return send(complete(operation));
@@ -128,9 +130,28 @@ test('multiple named signers survive reload, edit independently and recover with
   await page.getByRole('button',{name:'Recover signer setup',exact:true}).click();await page.getByText(/rejected setup has no receipt/).waitFor();
   await fill('corrected.fixture','corrected.fixture');await page.getByRole('button',{name:'Resume signer setup',exact:true}).click();await page.getByRole('region',{name:'corrected.fixture',exact:true}).waitFor();
   const correctedRequest=requests.filter(value=>value.method==='/api/ProvisionRuntimeSigner').at(-1).data;assert.equal(correctedRequest.idempotencyKey,rejectedIntent.idempotencyKey);assert.equal(correctedRequest.keyId,'corrected.fixture');
+  await page.getByRole('button',{name:'Add signing key',exact:true}).click();
+  await fill('Backup key','backup.fixture');
+  await page.getByRole('radio',{name:'Generate with backup',exact:true}).check();
+  assert.equal(await page.getByRole('button',{name:'Save signer',exact:true}).isDisabled(),true);
+  const downloadEvent=page.waitForEvent('download');
+  await page.getByRole('button',{name:'Download private key',exact:true}).click();
+  const download=await downloadEvent;
+  assert.equal(download.suggestedFilename(),'backup.fixture.ed25519-seed');
+  const backupSeed=(await readFile(await download.path(),'utf8')).trim();
+  assert.match(backupSeed,/^[0-9a-f]{64}$/);
+  assert.equal(await page.getByRole('button',{name:'Download private key',exact:true}).count(),0);
+  const containsBackup=()=>page.evaluate(value=>[...Object.values(localStorage),...Object.values(sessionStorage),document.body.innerText,...Array.from(document.querySelectorAll('input'),input=>input.value)].some(text=>text.includes(value)),backupSeed);
+  assert.equal(await containsBackup(),false);
+  await page.getByRole('button',{name:'Save signer',exact:true}).click();
+  await page.getByRole('region',{name:'backup.fixture',exact:true}).waitFor();
+  const backupRequest=requests.find(value=>value.method==='/api/ProvisionRuntimeSigner'&&value.data.keyId==='backup.fixture').data;
+  assert.equal(backupRequest.mode,'import');
+  assert.ok(backupRequest.signingSeed===backupSeed,'the downloaded seed must match the imported seed');
+  assert.equal(await containsBackup(),false);
   await page.getByRole('button',{name:'Add signing key',exact:true}).click();await fill('Disabled setup','disabled.fixture');disabled=true;
   await page.getByRole('button',{name:'Generate signer',exact:true}).click();await page.getByText('Signer setup is disabled in this deployment. Ask the administrator to enable it, then recover this setup.',{exact:true}).waitFor();
-  assert.equal(generated,2);assert.equal(imported,1);await privateAbsent();
+  assert.equal(generated,2);assert.equal(imported,2);await privateAbsent();
   assert.equal(requests.some(value=>/RuntimePreparation|StartTask/.test(value.method)),false);
   await page.screenshot({path:'/tmp/runtime-signing-setup-browser.png',fullPage:true});
  }finally{
