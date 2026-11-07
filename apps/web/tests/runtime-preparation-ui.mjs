@@ -94,7 +94,10 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await preparation.getByRole('region',{name:'Runtime status',exact:true}).getByText('Cleanup is incomplete. The supervisor will keep trying; refresh history to check progress. This runtime cannot become ready until cleanup is confirmed.',{exact:true}).waitFor();
  assert.equal(await preparation.getByRole('button',{name:'Retry cleanup',exact:true}).count(),0);
  assert.equal(await preparation.getByText('Runtime ready',{exact:true}).count(),0);
- await preparation.getByRole('region',{name:'Runtime status',exact:true}).getByText('Not complete',{exact:true}).waitFor();
+ await preparation.getByRole('list',{name:'Runtime onboarding steps'}).locator('[aria-current=step]').getByText('Verify and finish',{exact:false}).waitFor();
+ await preparation.getByText('Current preparation details',{exact:true}).click();
+ await preparation.getByRole('article',{name:`Runtime preparation ${operationId}`}).getByText('Not complete',{exact:true}).waitFor();
+ await preparation.getByText('Current preparation details',{exact:true}).click();
  await preparation.getByText('Registry image available',{exact:true}).waitFor();
  assert.equal(await preparation.getByRole('link',{name:'Open registry package',exact:true}).getAttribute('href'),'https://github.com/orgs/fixture/packages/container/package/runtime');
  await preparation.getByText(`ghcr.io/fixture/runtime@${hash}`,{exact:true}).waitFor();
