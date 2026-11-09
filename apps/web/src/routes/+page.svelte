@@ -20,7 +20,7 @@
 {#snippet workspaceActions()}
  {#if data.workspace}
   <CreateProject workspaceId={data.workspace.id} />
-  <ActionMenu label={`${data.workspace.displayName} actions`} actions={hierarchyActions('workspace', data.workspace.id, () => renameDialog?.show())} />
+  <ActionMenu size="icon" label={`${data.workspace.displayName} actions`} actions={hierarchyActions('workspace', data.workspace.id, () => renameDialog?.show())} />
  {/if}
 {/snippet}
 {#snippet overviewActions()}<CreateWorkspaceDialog showTrigger />{/snippet}
