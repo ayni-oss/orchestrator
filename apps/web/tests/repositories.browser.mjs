@@ -89,8 +89,7 @@ test('repository catalog and project associations use retained canonical receipt
   const workspaceCard=workspaceLink.locator('..');
   await workspaceCard.getByRole('button').click();
   await page.getByRole('menuitem',{name:'Workspace settings',exact:true}).click();
-  await page.getByRole('button',{name:'Rename workspace',exact:true}).click();
-  await page.getByRole('textbox',{name:'Name',exact:true}).fill('Renamed browser workspace');
+  await page.getByRole('textbox',{name:'Workspace name',exact:true}).fill('Renamed browser workspace');
   let renameRequest,renameReceipt,acknowledge;const lostRename=new Promise(resolve=>{acknowledge=resolve;});
   await page.route('**/api/RenameWorkspace',async route=>{renameRequest=route.request().postDataJSON();const response=await route.fetch();assert.equal(response.status(),200);renameReceipt=(await response.json()).commandId;await route.abort('failed');acknowledge();});
   await page.getByRole('button',{name:'Save name',exact:true}).click();await lostRename;
