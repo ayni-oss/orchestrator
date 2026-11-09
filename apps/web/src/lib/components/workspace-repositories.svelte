@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { RefreshCw } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { toast } from 'svelte-sonner';
   import { rpc, RpcError } from '$lib/api';
@@ -114,6 +115,19 @@
 </script>
 
 <InformationCard title="Workspace repositories">
+  {#snippet headerAction()}
+    <Button
+      variant="outline"
+      size="icon"
+      disabled={busy || !!pending}
+      aria-label="Refresh workspace repositories"
+      title="Refresh workspace repositories"
+      aria-busy={loading}
+      onclick={() => perform(loadRepositories)}
+    >
+      <RefreshCw class={loading ? 'size-4 motion-safe:animate-spin' : 'size-4'} aria-hidden="true" />
+    </Button>
+  {/snippet}
   {#if error}<Feedback kind="error" title="Workspace repositories need attention" message={error} />{/if}
   {#if pending && !busy}
     <div class="space-y-2">
@@ -151,9 +165,7 @@
       <p class="text-sm text-muted-foreground">Connect a repository in the catalog to add it here.</p>
     {/if}
   </fieldset>
-  <div class="flex flex-wrap gap-2">
-    <Button variant="link" href="/repositories">Open repository catalog</Button>
-    {#if nextCatalog}<Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => loadCatalog(true))}>More catalog repositories</Button>{/if}
-    <Button variant="outline" disabled={busy || !!pending} onclick={() => perform(loadRepositories)}>Refresh workspace repositories</Button>
-  </div>
+  {#if nextCatalog}
+    <Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => loadCatalog(true))}>More catalog repositories</Button>
+  {/if}
 </InformationCard>

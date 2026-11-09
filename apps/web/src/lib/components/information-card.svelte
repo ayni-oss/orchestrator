@@ -5,9 +5,10 @@
   import StatusBadge from "$lib/components/status-badge.svelte";
   import { statusTone, type StatusTone } from "$lib/presentation.js";
 
-  let { title, titleAccessory, href, navigationHref, status, tone, actions = [], danger = false, headingLevel = 3, children }: {
+  let { title, titleAccessory, headerAction, href, navigationHref, status, tone, actions = [], danger = false, headingLevel = 3, children }: {
     title: string;
     titleAccessory?: Snippet;
+    headerAction?: Snippet;
     href?: string;
     navigationHref?: string;
     status?: string;
@@ -33,9 +34,10 @@
     </Card.Title>
     <div class="ml-auto flex shrink-0 items-center gap-3">
       {#if status}<StatusBadge {status} tone={tone ?? statusTone(status)} />{/if}
+      {#if headerAction}<div class="relative z-20">{@render headerAction()}</div>{/if}
       {#if actions.length}
         <ActionMenu label={`${title} actions`} {actions} triggerClass="relative z-20" />
-      {:else}
+      {:else if !headerAction}
         <span class="size-7 shrink-0" aria-hidden="true"></span>
       {/if}
     </div>
