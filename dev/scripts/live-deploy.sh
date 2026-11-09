@@ -21,8 +21,8 @@ if [[ "${AYNI_ORCHESTRATOR_LIVE_MIGRATE:-false}" == true ]]; then
       -l app.kubernetes.io/name=ayni-orchestrator-control-plane --timeout=2m
   fi
 fi
-# Reuse provider/fixture grants on subsequent reloads; never reset them implicitly.
-helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reuse-values \
+# Keep explicit provider and fixture settings while using the current chart defaults.
+helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-then-reuse-values \
   --kube-context "$context" --namespace "$namespace" \
   --set-string "ayni-orchestrator.images.controlPlane=$1" \
   --set-string "ayni-orchestrator.images.conversationSupervisor=$2" \
