@@ -138,15 +138,15 @@
   <fieldset class="space-y-2" disabled={busy || !!pending} aria-busy={busy}>
     <legend class="text-sm font-medium">Select repositories</legend>
     {#if loading}
-      <div class="grid grid-cols-2 gap-2 rounded-md border border-input p-2 dark:bg-input/30" aria-hidden="true">
-        <Skeleton class="h-5 w-3/4" />
-        <Skeleton class="h-5 w-2/3" />
+      <div class="grid grid-cols-2 gap-2" aria-hidden="true">
+        <Skeleton class="h-10 border border-input" />
+        <Skeleton class="h-10 border border-input" />
       </div>
     {:else if membershipLoaded && repositories.length}
-      <div class="grid grid-cols-2 gap-2 rounded-md border border-input dark:bg-input/30">
+      <div class="grid grid-cols-2 gap-2">
         {#each repositories as repository (repository.id)}
           {@const selected = memberIds.has(repository.id)}
-          <label class="flex min-w-0 cursor-pointer items-center gap-2 rounded-md p-2 text-sm hover:bg-muted/50">
+          <label class="flex min-w-0 cursor-pointer items-center gap-2 rounded-md border border-input p-2 text-sm hover:bg-muted/50 dark:bg-input/30 dark:hover:bg-input/50">
             <input
               type="checkbox"
               value={repository.id}
