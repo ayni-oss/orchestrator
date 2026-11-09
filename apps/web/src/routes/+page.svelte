@@ -2,7 +2,9 @@
  import type { PageProps } from './$types';
  import { Layers } from '@lucide/svelte';
  import PageHeader from '$lib/components/page-header.svelte';
+ import ActionMenu from '$lib/components/action-menu.svelte';
  import HierarchyCard from '$lib/components/hierarchy-card.svelte';
+ import { workspaceActions } from '$lib/hierarchy-actions';
  import CreateProject from '$lib/components/create-project.svelte';
  import CreateWorkspaceDialog from '$lib/components/create-workspace-dialog.svelte';
  import { Button } from '$lib/components/ui/button/index.js';
@@ -13,15 +15,24 @@
  const projects=$derived(data.projects.filter(project=>`${project.displayName} ${project.goal}`.toLowerCase().includes(search.toLowerCase())));
  const workspaces=$derived(data.workspaces.filter(workspace=>workspace.displayName.toLowerCase().includes(search.toLowerCase())));
 </script>
-<PageHeader eyebrow={data.workspace?.displayName??'Workspaces'} title={label} description={data.workspace?'Give your work a goal. Build the plan from there.':'Choose a workspace to explore its projects.'}>
- {#snippet actions()}{#if data.workspace}<CreateProject workspaceId={data.workspace.id}/>{:else}<CreateWorkspaceDialog showTrigger/>{/if}{/snippet}
-</PageHeader>
+{#snippet workspaceHeaderActions()}
+ {#if data.workspace}
+  <CreateProject workspaceId={data.workspace.id} />
+  <ActionMenu size="icon" label={`${data.workspace.displayName} actions`} actions={workspaceActions(data.workspace.id)} />
+ {/if}
+{/snippet}
+{#snippet overviewActions()}<CreateWorkspaceDialog showTrigger />{/snippet}
+<PageHeader
+ eyebrow={data.workspace ? label : 'Overview'}
+ title={data.workspace?.displayName ?? label}
+ actions={data.workspace ? workspaceHeaderActions : overviewActions}
+/>
 {#if data.error}<section role="alert" class="space-y-4 rounded-xl border p-6"><h2>{label} couldn’t be loaded</h2><p>{data.error}</p><Button variant="outline" onclick={()=>location.reload()}>Try again</Button></section>
 {:else}
  <div class="mb-6 flex flex-wrap items-center justify-between gap-4"><p class="text-sm text-muted-foreground">{count} {count===1?(data.workspace?'project':'workspace'):label.toLowerCase()}</p><Input class="max-w-xs" bind:value={search} aria-label={`Search ${label.toLowerCase()}`} placeholder={`Search ${label.toLowerCase()}…`}/></div>
  <div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
  {#if data.workspace}
-  {#each projects as project (project.id)}<HierarchyCard kind="project" id={project.id} name={project.displayName} resourceVersion={project.resourceVersion} workspaceId={data.workspace.id} description={project.goal} href={`/projects/${project.id}/repositories?workspace=${data.workspace.id}`}/>{/each}
+  {#each projects as project (project.id)}<HierarchyCard kind="project" id={project.id} name={project.displayName} resourceVersion={project.resourceVersion} workspaceId={data.workspace.id} description={project.goal} href={`/projects/${project.id}/settings?workspace=${data.workspace.id}`}/>{/each}
  {:else}
   {#each workspaces as workspace (workspace.id)}<HierarchyCard kind="workspace" id={workspace.id} name={workspace.displayName} resourceVersion={workspace.resourceVersion} href={`/?workspace=${workspace.id}`}/>{/each}
  {/if}

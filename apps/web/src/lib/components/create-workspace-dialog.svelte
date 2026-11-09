@@ -24,7 +24,7 @@
   }catch(cause){error=cause instanceof Error?cause.message:'Workspace could not be created.';}finally{saving=false;}
  }
 </script>
-{#if showTrigger}<Button onclick={()=>open=true}><Plus size={16}/>Create workspace</Button>{/if}
+{#if showTrigger}<Button size="icon" aria-label="Create workspace" title="Create workspace" onclick={()=>open=true}><Plus aria-hidden="true" /></Button>{/if}
 <Dialog.Root bind:open><Dialog.Content class="sm:max-w-xl"><Dialog.Header><Dialog.Title>Create workspace</Dialog.Title><Dialog.Description>Create a workspace for your projects.</Dialog.Description></Dialog.Header>
  <form onsubmit={create} class="space-y-5">
   <div class="space-y-2"><Label for="new-workspace-name">Workspace name</Label><Input id="new-workspace-name" bind:value={name} required maxlength={120} autocomplete="off" disabled={!!pending} /></div>

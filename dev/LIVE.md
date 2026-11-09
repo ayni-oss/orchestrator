@@ -7,13 +7,22 @@ still required; live debug builds are development evidence only.
 
 ## Start
 
-Install the pinned prerequisites in the [local development guide](../docs/technical/operations/local-development.md),
-then install workspace dependencies and start the loop:
+Start Docker Desktop and enable Kubernetes in its settings. Wait for Kubernetes
+to be ready. Install Make, Python 3 and the pinned prerequisites in the
+[local development guide](../docs/technical/operations/local-development.md),
+then run these commands from the repository root:
 
 ```sh
-pnpm install --frozen-lockfile
-dev/ctl live
+kubectl config current-context
+kubectl --context docker-desktop get --raw=/readyz
+make dev
 ```
+
+The first command should print `docker-desktop` and the second should print
+`ok`. If another context is active, select `docker-desktop` yourself before
+starting. The live loop checks the context and leaves your selection alone.
+`make dev` installs the locked frontend dependencies and runs `dev/ctl live`
+in the foreground.
 
 The default namespace is **ayni-orchestrator-live**, separate from ordinary dev and
 acceptance deployments. Set `AYNI_ORCHESTRATOR_NAMESPACE` consistently for every
@@ -21,12 +30,34 @@ command when selecting another disposable local namespace. Only the explicitly
 selected `docker-desktop` context is allowed. Namespace names must start with
 `ayni-orchestrator-` and fit the 54-character parent/session bound.
 
-Open http://127.0.0.1:5174. The UI and gateway ports must be free; configure them
+Run `make dev-status` from a second terminal. Wait for `"phase": "ready"` before
+opening http://127.0.0.1:5174. The UI and gateway ports must be free. Configure them
 with `AYNI_ORCHESTRATOR_LIVE_UI_PORT` (default 5174) and
 `AYNI_ORCHESTRATOR_LIVE_GATEWAY_PORT` (default 3000). Edit the existing application
 in `apps/web` to exercise HMR. Inspect backend build/rollout state with
 `dev/ctl live status` and the terminal; no extra UI or server is required. The
 application forwards only allowlisted requests to the loopback API gateway.
+
+## Smoke-test the web app and backend
+
+1. On the home page, create a workspace with a test name.
+2. Open that workspace and create a project.
+3. Reload the page and reopen the workspace. Confirm that the project is still
+   listed. This exercises writes and reads through the web app, local gateway,
+   Kubernetes control plane and PostgreSQL. The test records remain in the
+   selected namespace.
+
+To check the backend independently, run this from the second terminal:
+
+```sh
+AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-live dev/ctl check
+```
+
+Use your selected live namespace if you overrode the default. If the UI reports
+an API error, check the live terminal and `make dev-status` for build or rollout
+errors.
+
+## Rebuilds and shutdown
 
 Rust edits are detected by content, including additions and deletions. The loop
 builds affected component images with pinned Linux Rust and BuildKit Cargo caches,

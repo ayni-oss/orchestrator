@@ -483,6 +483,42 @@ impl v1::repository_service_server::RepositoryService for WorkflowGrpc {
             next_after_id: next,
         }))
     }
+    async fn list_workspace_repositories(
+        &self,
+        request: Request<v1::ListWorkspaceRepositoriesRequest>,
+    ) -> Result<Response<v1::ListWorkspaceRepositoriesResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let (items, next) = self
+            .store
+            .list_workspace_repositories(&value.workspace_id, &value.after_id, value.limit)
+            .await
+            .map_err(|error| context.store(&error))?;
+        Ok(context.response(v1::ListWorkspaceRepositoriesResponse {
+            repositories: items.into_iter().map(repository).collect(),
+            next_after_id: next,
+        }))
+    }
+
+    async fn set_workspace_repository(
+        &self,
+        request: Request<v1::SetWorkspaceRepositoryRequest>,
+    ) -> Result<Response<v1::SetWorkspaceRepositoryResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let command_id = self
+            .store
+            .set_workspace_repository(
+                &value.idempotency_key,
+                &value.workspace_id,
+                &value.repository_id,
+                value.available,
+            )
+            .await
+            .map_err(|error| context.store(&error))?;
+        Ok(context.response(v1::SetWorkspaceRepositoryResponse { command_id }))
+    }
+
     async fn associate_project_repository(
         &self,
         request: Request<v1::AssociateProjectRepositoryRequest>,

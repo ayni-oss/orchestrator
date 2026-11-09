@@ -89,7 +89,11 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
         let value = request.into_inner();
         let result = self
             .store
-            .get_agent_configuration(&value.workspace_id, &value.revision_id)
+            .get_scoped_agent_configuration(
+                &value.workspace_id,
+                &value.project_id,
+                &value.revision_id,
+            )
             .await
             .map_err(|error| context.store(&error))?;
         Ok(context.response(v1::GetAgentConfigurationResponse {
@@ -123,8 +127,9 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
         };
         let result = self
             .store
-            .update_agent_configuration(
+            .update_scoped_agent_configuration(
                 &value.idempotency_key,
+                &value.project_id,
                 &value.expected_revision_id,
                 &proposed,
             )

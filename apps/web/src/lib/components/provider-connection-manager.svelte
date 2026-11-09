@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { toast } from 'svelte-sonner';
  import { onMount } from 'svelte';
  import { Button } from '$lib/components/ui/button/index.js';
  import { Input } from '$lib/components/ui/input/index.js';
@@ -16,7 +17,7 @@
  let selected=$state<Connection|null>(null);
  let name=$state(''); let destination=$state(''); let pushUsername=$state(''); let pullUsername=$state('');
  let pushToken=$state(''); let pullToken=$state(''); let apiKey=$state('');
- let open=$state(false); let busy=$state(true); let error=$state(''); let notice=$state('');
+ let open=$state(false); let busy=$state(true); let error=$state('');
  let pendingKey=$state(''); let next=$state(''); let historyNext=$state(''); let generation=0;
  function clearCredentials(){pushToken='';pullToken='';apiKey='';}
  function persist(key:string){pendingKey=key;if(key)sessionStorage.setItem(storageKey,key);else sessionStorage.removeItem(storageKey);}
@@ -24,8 +25,8 @@
  async function load(append=false){const result=await rpc('ListConnections',{afterId:append?next:'',limit:50});const values=(result.connections||[]).filter((c:Connection)=>c.capability===capability);connections=append?[...connections,...values]:values;next=result.nextAfterId||'';}
  async function inspect(c:Connection,append=false){const current=++generation;if(!append){selected=c;name=c.displayName;destination=c.registryDestination||'';pushUsername=c.pushUsername||'';pullUsername=c.pullUsername||'';clearCredentials();history=[];}const result=await rpc('ListConnectionOperations',{connectionId:c.id,afterId:append?historyNext:'',limit:50});if(current!==generation)return;history=append?[...history,...(result.operations||[])]:result.operations||[];historyNext=result.nextAfterId||'';}
  async function refresh(){await load();if(selected){const c=connections.find(c=>c.id===selected?.id);if(c)await inspect(c);}}
- async function accept(op:Operation){await load();await inspect(op.connection);notice=op.kind==='enable'?(op.connection.enabled?'Connection enabled.':'Connection disabled.'):op.state==='completed'?'Credentials validated and activated.':op.state==='failed'?'Candidate validation failed. The previous active credential is preserved.':op.state==='superseded'?'This operation was superseded. Refresh before making changes.':'Credentials saved. Validate the candidate before use.';if(op.safeReason)notice+=` ${reasonText[op.safeReason]||op.safeReason}`;if(op.state==='completed'&&op.connection.enabled&&op.connection.activeCredentialRevision)onSaved?.(op.connection);}
- function create(){++generation;selected=null;history=[];name='';destination='';pushUsername='';pullUsername='';clearCredentials();error='';notice='';open=true;}
+ async function accept(op:Operation){await load();await inspect(op.connection);const message=op.kind==='enable'?(op.connection.enabled?'Connection enabled.':'Connection disabled.'):op.state==='completed'?'Credentials validated and activated.':op.state==='failed'?'Candidate validation failed. The previous active credential is preserved.':op.state==='superseded'?'This operation was superseded. Refresh before making changes.':'Credentials saved. Validate the candidate before use.';const notify=op.state==='failed'||op.state==='superseded'?toast.warning:op.state==='completed'?toast.success:toast.info;notify(message,{description:op.safeReason?(reasonText[op.safeReason]||op.safeReason):undefined});if(op.state==='completed'&&op.connection.enabled&&op.connection.activeCredentialRevision)onSaved?.(op.connection);}
+ function create(){++generation;selected=null;history=[];name='';destination='';pushUsername='';pullUsername='';clearCredentials();error='';open=true;}
  async function save(event:SubmitEvent){event.preventDefault();if(pendingKey)return;const key=crypto.randomUUID();const request={idempotencyKey:key,connectionId:selected?.id||'',expectedRevision:selected?.revision||'0',displayName:name,provider:registry?'github':'openai',capability,registryDestination:registry?destination:'',pushUsername:registry?pushUsername:'',pullUsername:registry?pullUsername:'',pushToken,pullToken,apiKey};clearCredentials();persist(key);await perform(async()=>{try{const result=await rpc('SaveProviderConnection',request);persist('');open=false;await accept(result.operation);}catch(e){if(e instanceof RpcError && e.status===400)persist('');throw e;}finally{request.pushToken='';request.pullToken='';request.apiKey='';}});}
  async function recover(){await perform(async()=>{const result=await rpc('GetConnectionOperation',{idempotencyKey:pendingKey});persist('');open=false;await accept(result.operation);});}
  async function toggle(){if(!selected)return;const key=crypto.randomUUID();persist(key);const result=await rpc('SetConnectionEnabled',{idempotencyKey:key,connectionId:selected.id,expectedRevision:selected.revision,enabled:!selected.enabled});persist('');await accept(result.operation);}
@@ -34,7 +35,6 @@
 <div class="space-y-4">
  <div class="flex items-center justify-between gap-3"><h2 class="text-lg font-semibold">Connections</h2><Button disabled={busy||!!pendingKey} onclick={create}>Add {provider} connection</Button></div>
  {#if error}<Feedback kind="error" title="Connection needs attention" message={error}/>{/if}
- {#if notice}<Feedback title="Connection update" message={notice}/>{/if}
  {#if pendingKey}<InformationCard title="Recover a submitted command"><p>Check the retained receipt before submitting credentials again.</p><code>{pendingKey}</code><div class="flex gap-3"><Button disabled={busy} onclick={recover}>Recover operation</Button><Button variant="outline" disabled={busy} onclick={()=>persist('')}>Abandon recovery</Button></div></InformationCard>{/if}
  {#if !connections.length}<p class="text-sm text-muted-foreground">Add a named {provider} connection to get started.</p>{/if}
  {#each connections as c (c.id)}<InformationCard title={c.displayName} status={c.status}>

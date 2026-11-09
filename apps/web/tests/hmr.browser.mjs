@@ -31,8 +31,9 @@ test('the application itself retains browser state through component and theme C
   await page.evaluate(()=>{window.hmrSentinel='retained';});
   const source=join(directory,'src/routes/+page.svelte');
   const originalSource=await readFile(source,'utf8');
-  assert.ok(originalSource.includes('title={label}'),'home page title binding must be found before testing HMR');
-  await writeFile(source,originalSource.replace('title={label}','title="Updated projects"'));
+  const titleBinding='title={data.workspace?.displayName ?? label}';
+  assert.ok(originalSource.includes(titleBinding),'home page title binding must be found before testing HMR');
+  await writeFile(source,originalSource.replace(titleBinding,'title="Updated projects"'));
   await page.getByRole('heading',{name:'Updated projects',exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>window.hmrSentinel),'retained');
   const css=join(directory,'src/app.css');await writeFile(css,(await readFile(css,'utf8'))+'\n:root { --primary: rgb(12, 34, 56); }\n');

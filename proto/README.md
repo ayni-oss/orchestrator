@@ -20,7 +20,7 @@ The trusted-loopback control-plane listener registers only:
 
 `workflow.proto` defines server-issued command receipts, scheduling/dispatch/execution/presentation states, messages, turns, activities, bounded terminal summaries, snapshots, history records, updates, and watch frames. Removed workflow RPCs have no compatibility adapter.
 
-`RepositoryService` provides GitHub discovery, catalog connection and project
+`RepositoryService` provides GitHub discovery, catalog connection, workspace availability and project
 associations, plus read-only `ResolveRepositoryDefaultCommit` and explicit `InspectRepository`, `GetRepositoryInspection` and
 `ListRepositoryInspections` for frozen static Ayni findings. A completed inspection
 never establishes runtime readiness or authorizes preparation or execution.

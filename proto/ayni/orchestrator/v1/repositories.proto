@@ -9,6 +9,8 @@ service RepositoryService {
   rpc GetRepositoryOperation(GetRepositoryOperationRequest) returns (GetRepositoryOperationResponse);
   rpc ListRepositoryOperations(ListRepositoryOperationsRequest) returns (ListRepositoryOperationsResponse);
   rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse);
+  rpc ListWorkspaceRepositories(ListWorkspaceRepositoriesRequest) returns (ListWorkspaceRepositoriesResponse);
+  rpc SetWorkspaceRepository(SetWorkspaceRepositoryRequest) returns (SetWorkspaceRepositoryResponse);
   rpc AssociateProjectRepository(AssociateProjectRepositoryRequest) returns (AssociateProjectRepositoryResponse);
   rpc ListProjectRepositories(ListProjectRepositoriesRequest) returns (ListProjectRepositoriesResponse);
   rpc ResolveRepositoryDefaultCommit(ResolveRepositoryDefaultCommitRequest) returns (ResolveRepositoryDefaultCommitResponse);
@@ -103,6 +105,25 @@ message ListRepositoriesRequest {
 message ListRepositoriesResponse {
   repeated Repository repositories = 1;
   string next_after_id = 2;
+}
+message ListWorkspaceRepositoriesRequest {
+  string workspace_id = 1;
+  string after_id = 2;
+  uint32 limit = 3;
+}
+message ListWorkspaceRepositoriesResponse {
+  repeated Repository repositories = 1;
+  string next_after_id = 2;
+}
+message SetWorkspaceRepositoryRequest {
+  string idempotency_key = 1;
+  string workspace_id = 2;
+  string repository_id = 3;
+  // Removal is rejected while a project in the workspace uses the repository.
+  bool available = 4;
+}
+message SetWorkspaceRepositoryResponse {
+  string command_id = 1;
 }
 message AssociateProjectRepositoryRequest {
   string idempotency_key = 1;

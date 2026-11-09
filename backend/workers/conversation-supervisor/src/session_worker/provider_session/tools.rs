@@ -66,7 +66,7 @@ impl ProviderLoop {
             .ok_or(StatusCode::BAD_REQUEST)?;
         let mut sources = BTreeMap::new();
         sources.insert(
-            "read_workspace_instructions".into(),
+            "read_project_instructions".into(),
             json!({"revision_id":config.revision_id,"instructions":config.instructions}),
         );
         sources.insert("read_conversation_history".into(),json!({"records":input.context.iter().map(|record|json!({"message_id":record.message_id,"sequence":record.sequence,"role":record.role,"content":record.content})).collect::<Vec<_>>()}));

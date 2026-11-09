@@ -7,7 +7,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {chromium} from 'playwright';
 import {exerciseRuntimePreparation} from './runtime-preparation-ui.mjs';
 
-test('repository catalog and project associations use retained canonical receipts', {timeout:120000}, async()=>{
+test('repository catalog and workspace availability and project settings use canonical APIs', {timeout:120000}, async()=>{
  const fixture=process.env.AYNI_REPOSITORY_FIXTURE;
  assert.ok(fixture,'run through the repository PostgreSQL/browser gate');
  const server=createServer();server.listen(0,'127.0.0.1');await once(server,'listening');const port=server.address().port;await new Promise(resolve=>server.close(resolve));
@@ -52,18 +52,16 @@ test('repository catalog and project associations use retained canonical receipt
   const inspectionConflict=await page.request.post(`${origin}/api/InspectRepository`,{headers:{'x-console-request':'1'},data:{...inspectionRequest,commitSha:'c'.repeat(40)}});
   assert.equal(inspectionConflict.status(),409);
   await inspectionCard.screenshot({path:'/tmp/repository-inspection-browser.png'});
-  await page.getByRole('link',{name:'Back to repositories',exact:true}).click();
-  await page.getByText('Find repositories on GitHub',{exact:true}).click();
-  await page.getByLabel('GitHub App connection',{exact:true}).selectOption(process.env.AYNI_REPOSITORY_SOURCE);
-  await page.getByRole('button',{name:'Discover installations',exact:true}).click();
+  await page.getByRole('navigation',{name:'Breadcrumb'}).getByRole('link',{name:'Repositories',exact:true}).click();
+  const sourceConnection=page.getByLabel('Source control connection',{exact:true});
+  await sourceConnection.selectOption(process.env.AYNI_REPOSITORY_SOURCE);
   await page.getByRole('alert').filter({hasText:'Repository needs attention'}).getByText('The saved App key is invalid. Update the source connection.',{exact:true}).waitFor();
   // Provider fixtures exercise the selection UI; source verification still uses the real backend
   // and must reject the synthetic private key rather than connecting a false-ready repository.
   await page.route('**/api/ListGithubInstallations',route=>route.fulfill({json:{installations:[{installationId:'123',accountLogin:'fixture',suspended:false}]}}));
   await page.route('**/api/ListGithubRepositories',route=>route.fulfill({json:{repositories:[{providerRepositoryId:'424243',fullName:'fixture/not-connected',defaultBranch:'main',private:true}]}}));
-  await page.getByRole('button',{name:'Discover installations',exact:true}).click();
-  await page.getByLabel('GitHub installation',{exact:true}).selectOption('123');
-  await page.getByRole('button',{name:'Discover repositories',exact:true}).click();
+  await sourceConnection.selectOption('');
+  await sourceConnection.selectOption(process.env.AYNI_REPOSITORY_SOURCE);
   let connectRequest;let confirm;const lost=new Promise(resolve=>{confirm=resolve;});
   await page.route('**/api/ConnectRepository',async route=>{connectRequest=route.request().postDataJSON();const response=await route.fetch();assert.equal(response.status(),200);assert.equal((await response.json()).operation.state,'failed');await route.abort('failed');confirm();});
   await page.getByRole('button',{name:'Connect repository',exact:true}).click();await lost;
@@ -89,42 +87,39 @@ test('repository catalog and project associations use retained canonical receipt
    await Promise.all([page.waitForURL(new URL(destination,origin).href),next.click()]);
   }
   const workspaceCard=workspaceLink.locator('..');
-  await workspaceCard.getByRole('button').click();await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
-  await page.getByRole('textbox',{name:'Name',exact:true}).fill('Renamed browser workspace');
+  await workspaceCard.getByRole('button').click();
+  await page.getByRole('menuitem',{name:'Workspace settings',exact:true}).click();
   let renameRequest,renameReceipt,acknowledge;const lostRename=new Promise(resolve=>{acknowledge=resolve;});
   await page.route('**/api/RenameWorkspace',async route=>{renameRequest=route.request().postDataJSON();const response=await route.fetch();assert.equal(response.status(),200);renameReceipt=(await response.json()).commandId;await route.abort('failed');acknowledge();});
-  await page.getByRole('button',{name:'Save name',exact:true}).click();await lostRename;
+  await page.getByRole('textbox',{name:'Workspace name',exact:true}).fill('Renamed browser workspace');await lostRename;
   await page.unroute('**/api/RenameWorkspace');await page.reload();
   const [renamed]=await Promise.all([page.waitForResponse(r=>r.url().endsWith('/api/RenameWorkspace')),page.getByRole('button',{name:'Retry rename',exact:true}).click()]);
   assert.equal((await renamed.json()).commandId,renameReceipt);
-  await workspaceCard.getByRole('heading',{name:'Renamed browser workspace',exact:true}).waitFor();
+  await page.getByRole('heading',{name:'Renamed browser workspace',level:1,exact:true}).waitFor();
+  await page.getByRole('textbox',{name:'Workspace name',exact:true}).locator('..').getByText('Saved',{exact:true}).waitFor();
+  const workspaceRepository=page.getByRole('checkbox',{name:'fixture/browser-repository',exact:true})
+   .and(page.locator(`input[value="${fixture}"]`));
+  await workspaceRepository.click();
+  await workspaceRepository.and(page.locator(':checked')).waitFor();
   const staleRename=await page.request.post(`${origin}/api/RenameWorkspace`,{headers:{'x-console-request':'1'},data:{...renameRequest,idempotencyKey:crypto.randomUUID(),displayName:'Stale'}});assert.equal(staleRename.status(),409);
-  await page.locator(`main a[href="/?workspace=${a}"]`).click();
-  await page.getByRole('heading',{name:'Projects',exact:true}).waitFor();
-  const projectLink=page.locator(`main a[href="/projects/${pa}/repositories?workspace=${a}"]`);
+  await page.getByRole('navigation',{name:'Breadcrumb'}).getByRole('link',{name:'Renamed browser workspace',exact:true}).click();
+  await page.getByRole('heading',{name:'Renamed browser workspace',level:1,exact:true}).waitFor();
+  const projectLink=page.locator(`main a[href="/projects/${pa}/settings?workspace=${a}"]`);
   await projectLink.locator('..').getByRole('button').click();
-  await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
-  await page.getByRole('textbox',{name:'Name',exact:true}).fill('Renamed browser project');
-  await page.getByRole('button',{name:'Save name',exact:true}).click();
-  await page.getByRole('heading',{name:'Renamed browser project',exact:true}).waitFor();
-  await projectLink.locator('..').getByRole('button').click();
-  await page.getByRole('menuitem',{name:'Repositories',exact:true}).click();
-  await page.goto(`${origin}/projects/${pa}/repositories?workspace=${a}`);
-  await page.getByLabel('Catalog repository',{exact:true}).selectOption(fixture);
-  let firstReceipt;let associationRequest;let confirmAssociation;const lostAssociation=new Promise(resolve=>{confirmAssociation=resolve;});
-  await page.route('**/api/AssociateProjectRepository',async route=>{associationRequest=route.request().postDataJSON();const response=await route.fetch();assert.equal(response.status(),200);firstReceipt=(await response.json()).commandId;await route.abort('failed');confirmAssociation();});
-  await page.getByRole('button',{name:'Attach repository',exact:true}).click();await lostAssociation;
-  await page.unroute('**/api/AssociateProjectRepository');await page.reload();
-  const [retry]=await Promise.all([page.waitForResponse(r=>r.url().endsWith('/api/AssociateProjectRepository')),page.getByRole('button',{name:'Recover association',exact:true}).click()]);
-  assert.equal((await retry.json()).commandId,firstReceipt);
-  await page.getByRole('region',{name:'fixture/browser-repository',exact:true}).waitFor();
-  await page.goto(`${origin}/projects/${pb}/repositories?workspace=${b}`);
-  await page.getByText('No repositories attached to this project.',{exact:true}).waitFor();
-  await page.getByLabel('Catalog repository',{exact:true}).selectOption(fixture);
-  await page.getByRole('button',{name:'Attach repository',exact:true}).click();
-  await page.getByRole('region',{name:'fixture/browser-repository',exact:true}).waitFor();
+  assert.equal(await page.getByRole('menuitem',{name:'Rename',exact:true}).count(),0);
+  await page.getByRole('menuitem',{name:'Project settings',exact:true}).click();
+  await page.getByRole('textbox',{name:'Project name',exact:true}).fill('Renamed browser project');
+  await page.getByRole('heading',{name:'Renamed browser project',level:1,exact:true}).waitFor();
+  const projectRepos=await page.request.post(`${origin}/api/ListProjectRepositories`,{headers:{'x-console-request':'1'},data:{workspaceId:a,projectId:pa}});
+  assert.equal(projectRepos.status(),200);
+  assert.ok((await projectRepos.json()).repositories.some(repo=>repo.id===fixture));
+  const otherRepos=await page.request.post(`${origin}/api/ListProjectRepositories`,{headers:{'x-console-request':'1'},data:{workspaceId:b,projectId:pb}});
+  assert.equal(otherRepos.status(),200);
+  assert.equal((await otherRepos.json()).repositories?.length ?? 0,0);
   const scoped=await page.request.post(`${origin}/api/ListProjectRepositories`,{headers:{'x-console-request':'1'},data:{workspaceId:a,projectId:pb}});assert.equal(scoped.status(),404);
-  const original=await page.request.post(`${origin}/api/AssociateProjectRepository`,{headers:{'x-console-request':'1'},data:associationRequest});assert.equal((await original.json()).commandId,firstReceipt);
+  await page.goto(`${origin}/projects/${pa}/repositories?workspace=${a}`);
+  await page.waitForURL(`**/projects/${pa}/settings?workspace=${a}`);
+  await page.getByRole('region',{name:'Agent configuration',exact:true}).waitFor();
   assert.equal((await page.locator('body').innerText()).includes('synthetic-repository-browser-key'),false);
   await page.screenshot({path:'/tmp/repository-project-browser.png',fullPage:true});
   // Canonical durable onboarding through real PostgreSQL/gRPC/gateway. The
@@ -135,12 +130,12 @@ test('repository catalog and project associations use retained canonical receipt
   assert.equal(runtimeReceipt.state,'resolving');
   await page.goto(`${origin}/repositories/${fixture}?tab=runtime`);
   await page.getByRole('heading',{name:'Runtime onboarding needs attention',exact:true}).waitFor();
-  await page.getByText('The latest default branch could not be read. Check the GitHub connection and repository access, then prepare again.',{exact:true}).waitFor();
+  await page.getByText('The selected branch could not be read. Check the GitHub connection and repository access, then prepare again.',{exact:true}).waitFor();
   const recovered=await page.request.post(`${origin}/api/GetRepositoryRuntimeReceipt`,{headers:{'x-console-request':'1'},data:{idempotencyKey:runtimeSettings.idempotencyKey}});
   assert.equal(recovered.status(),200);assert.deepEqual((await recovered.json()).run,runtimeReceipt);
   const currentRun=await page.request.post(`${origin}/api/GetRepositoryRuntime`,{headers:{'x-console-request':'1'},data:{repositoryId:fixture}});
   assert.equal((await currentRun.json()).run.safeReason,'source_unavailable');
   await exerciseRuntimePreparation(page,origin,fixture);
-  console.log('repository-browser: real PostgreSQL/gRPC/gateway catalog, exact loss/reload recovery, rejected false readiness, shared cross-workspace associations and scope rejection passed; GitHub provider discovery uses fixtures.');
+  console.log('repository-browser: real PostgreSQL/gRPC/gateway catalog, exact loss/reload recovery, rejected false readiness, inherited workspace repository availability and scope rejection passed; GitHub provider discovery uses fixtures.');
  } finally {await browser?.close();try{process.kill(-child.pid,'SIGTERM');}catch{}}
 });

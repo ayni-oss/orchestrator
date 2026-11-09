@@ -8,9 +8,9 @@ The supported Docker Desktop stack contains one Ayni control plane, PostgreSQL 1
 
 ## Live code changes
 
-Use `dev/ctl live` for a dev-only diagnostic UI with frontend HMR and cached Rust
-rebuild/rollout on Docker Desktop. See [live development](LIVE.md) for migration
-barriers, explicit reset, retained-state behavior and acceptance limits.
+Use `make dev` from the repository root to run the web app with hot reload and
+cached Rust rebuilds on Docker Desktop Kubernetes. See the
+[live quickstart](LIVE.md#start) for startup, smoke testing and shutdown.
 
 ## Deploy and exercise
 

@@ -8,12 +8,12 @@ The duplicate example and standalone diagnostic frontend have been removed.
 Canonical APIs support workspace/project creation, manual GitHub App credentials,
 GHCR PAT connections, OpenAI key validation/model discovery and explicit workspace
 connection/model/budget selection. Historical BFF/API wiring is not restored.
-Shared GitHub repository discovery/catalog and direct project associations are available.
+Connect repositories in the shared GitHub catalog, then add them in Workspace settings.
+Projects can attach only repositories available to their workspace.
 Exact-commit static Ayni inspection provides retained findings and retry recovery.
 Runtime preparation, signer setup, stage evidence and recovery are available behind
 an explicitly qualified Kubernetes profile. Guided App setup, full adapter discovery
-and project/task runtime handoff remain outstanding. Current direct project
-associations do not yet enforce planned workspace repository availability.
+and project/task runtime handoff remain outstanding.
 See the [alpha UI contract](../../docs/technical/architecture/project-workspace.md)
 for project chat, plans, task graphs and delivery journeys still to implement.
 
@@ -42,7 +42,9 @@ Repository catalog UI: `/repositories`. Available repositories use the same comp
 Opening a connected repository shows Source code and Ayni runtime tabs. Source code covers connection status and
 GitHub integration details; Ayni runtime covers exact-commit inspection and
 preparation. Switching tabs preserves in-progress selections. Technical inspection
-metadata and connection history are collapsed by default. Project cards link to
+metadata is collapsed by default. Selecting a source control connection
+automatically discovers repositories through its single active GitHub App
+installation. Project cards link to
 `/projects/:id/repositories?workspace=:workspaceId`. Repository connect and project
 association requests retain their exact non-secret bytes and idempotency key across
 reload; scope changes create a fresh component instance. **Connected** describes
@@ -50,11 +52,13 @@ historical source access and never authorizes task execution.
 
 ### Workspace and project navigation
 
-The sidebar provides a workspace dropdown with a separate create button, and an
-always-visible workspace settings link that is disabled without a selection.
+The sidebar provides a workspace dropdown with a separate create button. Open
+Workspace settings using the three dots beside a workspace in the dropdown.
+The dropdown and workspace cards offer the same actions.
 The home page lists workspace cards; opening one lists its project cards. Both
-use a whole-card link and a separate top-right three-dot menu for repositories
-and rename. Workspace menus also open workspace settings. The sidebar groups
+use a whole-card link and a separate top-right three-dot menu. Workspace menus
+open Workspace settings, where you can rename the workspace. Project menus
+offer Repositories and Rename. The sidebar groups
 Repositories and Configuration under Settings at the bottom. Sidebar items share
 one component for hover, focus, selected and disabled states. A single Projects
 parent opens the project list, with indented links to each workspace project below

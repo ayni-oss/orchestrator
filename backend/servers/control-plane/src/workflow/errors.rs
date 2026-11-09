@@ -111,6 +111,11 @@ impl RequestContext {
                 v1::ErrorReason::FailedPrecondition,
                 "configuration revision changed",
             ),
+            StoreError::WorkspaceRepositoryInUse => self.status(
+                Code::FailedPrecondition,
+                v1::ErrorReason::FailedPrecondition,
+                "This repository is attached to a project in this workspace.",
+            ),
             StoreError::Database(_) => self.status(
                 Code::Unavailable,
                 v1::ErrorReason::Internal,

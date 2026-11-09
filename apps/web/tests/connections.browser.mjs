@@ -31,11 +31,12 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   const workspaceResult=await createdWorkspace.json();
   assert.equal(workspaceResult.workspace.displayName,workspace);
   const workspaceId=workspaceResult.workspace.id;
-  await page.getByRole('heading',{name:'Projects',exact:true}).waitFor();
+  await page.getByRole('heading',{name:workspace,level:1,exact:true}).waitFor();
   await page.getByRole('button',{name:'New project',exact:true}).click();
   await page.getByLabel('Project name',{exact:true}).fill('Product acceptance');
   await page.getByLabel('Goal',{exact:true}).fill('Verify retained hierarchy through the product');
-  await page.getByRole('dialog').getByRole('button',{name:'Create project',exact:true}).click();
+  const [createdProject] = await Promise.all([page.waitForResponse(response=>response.url().endsWith('/api/CreateProject')),page.getByRole('dialog').getByRole('button',{name:'Create project',exact:true}).click()]);
+  const projectId=(await createdProject.json()).project.id;
   await page.getByText('Verify retained hierarchy through the product',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Configuration',exact:true}).click();
   await page.getByRole('link',{name:'Source control',exact:true}).click();
@@ -112,13 +113,19 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
    await page.getByRole('button',{name:`Inspect ${displayName}`,exact:true}).waitFor();
    for(const secret of providerSecrets)assert.equal((await page.locator('body').innerText()).includes(secret),false);
   }
-  await page.goto(`${origin}/workspace/settings?workspace=${workspaceId}`);
+  await page.goto(`${origin}/projects/${projectId}/settings?workspace=${workspaceId}`);
   await page.getByLabel('OpenAI connection',{exact:true}).selectOption(process.env.AYNI_BROWSER_CONNECTION_ID);
+  const savedResponse=page.waitForResponse(response=>response.url().endsWith('/api/UpdateAgentConfiguration'));
   await page.getByLabel('Model',{exact:true}).selectOption('fixture-model');
+  await page.getByLabel('Instructions',{exact:true}).fill('Draft instructions');
   await page.getByLabel('Instructions',{exact:true}).fill('Browser-selected provider');
-  const [saved]=await Promise.all([page.waitForResponse(response=>response.url().endsWith('/api/UpdateAgentConfiguration')),page.getByRole('button',{name:'Save workspace configuration',exact:true}).click()]);
-  assert.equal(saved.status(),200);assert.equal((await saved.json()).configuration.connectionId,process.env.AYNI_BROWSER_CONNECTION_ID);
-  await page.reload();await page.waitForFunction(id=>document.querySelector('#workspace-connection')?.value===id,process.env.AYNI_BROWSER_CONNECTION_ID);
+  const saved=await savedResponse;
+  assert.equal(saved.status(),200);
+  const {configuration}=await saved.json();
+  assert.equal(configuration.connectionId,process.env.AYNI_BROWSER_CONNECTION_ID);
+  assert.equal(configuration.instructions,'Browser-selected provider');
+  await page.getByLabel('Instructions',{exact:true}).locator('..').getByText('Saved',{exact:true}).waitFor();
+  await page.reload();await page.waitForFunction(id=>document.querySelector('#project-connection')?.value===id,process.env.AYNI_BROWSER_CONNECTION_ID);
   assert.equal(await page.getByLabel('OpenAI connection',{exact:true}).inputValue(),process.env.AYNI_BROWSER_CONNECTION_ID);
   assert.equal(await page.getByLabel('Model',{exact:true}).inputValue(),'fixture-model');
   for(const secret of providerSecrets)assert.equal(await page.evaluate(secret=>[...Object.values(localStorage),...Object.values(sessionStorage)].some(value=>value.includes(secret)),secret),false);
@@ -149,7 +156,7 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   await page.screenshot({path:'/tmp/runtime-signing-browser.png',fullPage:true});
   await page.evaluate(()=>window.scrollTo(0,0));
   await page.screenshot({path:'/tmp/integrations-product.png',fullPage:true});
-  console.log('product-browser: hierarchy, lost-response recovery, reload, redaction, validation, concurrent stale-write rejection and origin boundary, GHCR/OpenAI credential recovery and workspace model selection passed');
+  console.log('product-browser: hierarchy, lost-response recovery, reload, redaction, validation, concurrent stale-write rejection and origin boundary, GHCR/OpenAI credential recovery and project model selection passed');
  } catch(error) { if(browser){const pages=browser.contexts()[0]?.pages()||[];if(pages[0]){await pages[0].screenshot({path:'/tmp/integrations-browser-failure.png',fullPage:true});console.error('Product alert:',await pages[0].getByRole('alert').allTextContents());}}throw error;
  } finally {if(browser)await browser.close();if(child.exitCode===null){process.kill(-child.pid,'SIGTERM');await once(child,'exit');}}
 });

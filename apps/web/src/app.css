@@ -205,3 +205,16 @@
 /* Match sidebar/constants.ts without inline styles, which the app CSP forbids. */
 [data-slot="sidebar-wrapper"] { --sidebar-width: 16rem; --sidebar-width-icon: 3rem; }
 [data-sidebar="sidebar"][data-mobile="true"] { --sidebar-width: 18rem; }
+
+/* Use the app palette even when Sonner and the app use different theme settings. */
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled="true"] button[data-close-button] {
+  color: var(--popover-foreground);
+  background: var(--popover);
+  border-color: var(--border);
+}
+
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled="true"] button[data-close-button]:hover {
+  color: var(--accent-foreground);
+  background: var(--accent);
+  border-color: var(--border);
+}

@@ -43,7 +43,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await page.getByRole('menuitem',{name:'Ayni runtime',exact:true}).click();
  await page.getByRole('tab',{name:'Ayni runtime',exact:true}).waitFor();
  assert.equal(await page.getByRole('tab',{name:'Ayni runtime',exact:true}).getAttribute('aria-selected'),'true');
- await page.getByRole('link',{name:'Back to repositories',exact:true}).click();
+ await page.getByRole('navigation',{name:'Breadcrumb'}).getByRole('link',{name:'Repositories',exact:true}).click();
  await repositoryLink.click();
  await page.getByRole('heading',{name:'Source code connected',exact:true}).waitFor();
  assert.equal(await page.getByRole('button',{name:'Configure runtime',exact:true}).isVisible(),false);

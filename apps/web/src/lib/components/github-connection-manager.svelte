@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { toast } from 'svelte-sonner';
  import { onMount } from 'svelte';
  import { Button } from '$lib/components/ui/button/index.js';
  import { Input } from '$lib/components/ui/input/index.js';
@@ -9,13 +10,12 @@
  import InformationTable from '$lib/components/information-table.svelte';
  import Feedback from '$lib/components/feedback.svelte';
  import { rpc, RpcError, reasonText, type Connection, type Operation } from '$lib/api';
- let { createOnMount = false, onSaved }: { createOnMount?: boolean; onSaved?: (connection: Connection) => void } = $props();
  let connections = $state.raw<Connection[]>([]);
  let history = $state.raw<Operation[]>([]);
  let selected = $state<Connection | null>(null);
  let name = $state(''); let appId = $state(''); let pem = $state('');
  let open=$state(false);
- let busy = $state(true); let error = $state(''); let notice = $state('');
+ let busy = $state(true); let error = $state('');
  let pendingKey = $state(''); let next = $state(''); let historyNext = $state('');
  let selectionGeneration = 0;
  const storageKey = 'ayni.connection.pending';
@@ -41,11 +41,12 @@
    try { await action(); } catch (e) { error = e instanceof Error ? e.message : 'Service unavailable. Retry the read.'; }
    finally { busy = false; }
  }
- async function accept(operation: Operation) {
+ async function accept(operation: Operation, messageOverride?: string) {
    const message = operation.kind === 'enable' ? (operation.connection.enabled ? 'Connection enabled.' : 'Connection disabled.') : ({ accepted: 'Candidate validation is pending.', completed: 'GitHub App verified.', failed: 'Candidate validation failed.', superseded: 'This candidate was superseded. Refresh the connection.' }[operation.state] || 'Operation recorded.');
-   notice = `${message} ${reasonText[operation.safeReason || ''] || ''}`;
+   const notify = operation.state === 'failed' || operation.state === 'superseded' ? toast.warning
+     : operation.state === 'completed' ? toast.success : toast.info;
+   notify(messageOverride ?? message, { description: reasonText[operation.safeReason || ''] });
    await load(); await inspect(operation.connection);
-   if (operation.state === 'completed' && operation.connection.enabled && operation.connection.activeCredentialRevision) onSaved?.(operation.connection);
  }
  async function save(event: SubmitEvent) {
    event.preventDefault();
@@ -56,8 +57,7 @@
    await perform(async () => {
      try {
        const result = await rpc('SaveGithubConnection', request);
-       request.privateKeyPem = ''; persistKey(''); open=false; await accept(result.operation);
-       notice = 'Credentials saved. Validate the candidate to activate this connection.';
+       request.privateKeyPem = ''; persistKey(''); open=false; await accept(result.operation, 'Credentials saved. Validate the candidate to activate this connection.');
      } catch (e) {
        if (e instanceof RpcError && e.status === 400) persistKey('');
        throw e;
@@ -70,13 +70,12 @@
      persistKey(''); open=false; await accept(result.operation);
    });
  }
- function createNew() { open=true; ++selectionGeneration; selected = null; name = ''; appId = ''; pem = ''; history = []; notice = ''; error = ''; }
- onMount(() => { pendingKey = sessionStorage.getItem(storageKey) || ''; if (createOnMount && !pendingKey) createNew(); void perform(refresh); });
+ function createNew() { open=true; ++selectionGeneration; selected = null; name = ''; appId = ''; pem = ''; history = [];  error = ''; }
+ onMount(() => { pendingKey = sessionStorage.getItem(storageKey) || ''; void perform(refresh); });
 </script>
 <div class="space-y-4">
  <div class="flex items-center justify-between gap-3"><h2 class="text-lg font-semibold">GitHub App</h2><Button disabled={busy||!!pendingKey} onclick={createNew}>Add GitHub App</Button></div>
  {#if error}<Feedback kind="error" title="Connection needs attention" message={error}/><Button variant="outline" disabled={busy} onclick={()=>perform(refresh)}>Refresh</Button>{/if}
- {#if notice}<Feedback title="Connection update" message={notice}/>{/if}
  {#if pendingKey}<InformationCard title="Recover a submitted command"><p>The response was interrupted. Check its retained receipt before submitting credentials again.</p><code>{pendingKey}</code><div class="flex gap-3"><Button disabled={busy} onclick={recover}>Recover operation</Button><Button variant="outline" disabled={busy} onclick={()=>persistKey('')}>Abandon recovery</Button></div></InformationCard>{/if}
  {#if !connections.length}<p class="text-sm text-muted-foreground">Add a GitHub App to connect your repositories.</p>{/if}
  {#each connections as c (c.id)}

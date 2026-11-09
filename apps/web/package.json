@@ -16,6 +16,7 @@
     "@sveltejs/kit": "3.0.0",
     "@sveltejs/adapter-node": "6.0.0",
     "svelte": "5.57.1",
+    "svelte-sonner": "1.2.3",
     "@fontsource-variable/jetbrains-mono": "5.3.0",
     "@fontsource/libre-baskerville": "5.2.0",
     "@fontsource-variable/space-grotesk": "5.2.0",

@@ -801,7 +801,8 @@ fn tool_invocations_valid(tools: &[super::v1::ToolInvocationEvidence]) -> bool {
                 && ids.insert(&tool.invocation_id)
                 && (matches!(
                     tool.name.as_str(),
-                    "read_workspace_instructions"
+                    "read_project_instructions"
+                        | "read_workspace_instructions"
                         | "read_project_status"
                         | "read_conversation_history"
                 ) || (tool.name.starts_with("mcp_") && simple_identifier(&tool.name)))

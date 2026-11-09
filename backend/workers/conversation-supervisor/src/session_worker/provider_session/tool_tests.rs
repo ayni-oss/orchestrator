@@ -11,7 +11,7 @@ async fn tool_fixture() -> Fixture {
             if round==0 {
                 serde_json::json!({"id":"resp_tools","model":"fixture-model","status":"completed","output":[
                     {"type":"message","role":"assistant","content":[{"type":"output_text","text":"Reading scoped inputs."}]},
-                    {"type":"function_call","call_id":"call_instructions","name":"read_workspace_instructions","arguments":"{}"},
+                    {"type":"function_call","call_id":"call_instructions","name":"read_project_instructions","arguments":"{}"},
                     {"type":"function_call","call_id":"call_project","name":"read_project_status","arguments":"{}"},
                     {"type":"function_call","call_id":"call_history","name":"read_conversation_history","arguments":"{}"}
                 ],"usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}).to_string()
@@ -404,7 +404,7 @@ fn retains(state: &WorkerState, table: &str, command_id: &str) -> bool {
 #[tokio::test]
 #[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
 async fn unknown_usage_blocks_tools_and_paid_continuations_requires_loopback() {
-    let fixture=fixture(r#"{"id":"resp_unknown_tools","model":"fixture-model","status":"completed","output":[{"type":"function_call","call_id":"call_instructions","name":"read_workspace_instructions","arguments":"{}"}]}"#,Duration::ZERO).await;
+    let fixture=fixture(r#"{"id":"resp_unknown_tools","model":"fixture-model","status":"completed","output":[{"type":"function_call","call_id":"call_instructions","name":"read_project_instructions","arguments":"{}"}]}"#,Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
     let state = worker(&directory.path().join("ledger.sqlite"), &fixture.url, None);
     let prepared = prepare(
@@ -516,7 +516,7 @@ async fn preparation_replays_exact_retained_request_even_when_new_catalog_exceed
 #[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
 async fn reasoning_with_tool_calls_is_rejected_without_losing_usage_or_running_tools_requires_loopback()
  {
-    let fixture=fixture(r#"{"id":"resp_reasoning_tools","model":"fixture-model","status":"completed","output":[{"type":"reasoning","summary":[{"text":"private reasoning"}]},{"type":"function_call","call_id":"call_instructions","name":"read_workspace_instructions","arguments":"{}"}],"usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}"#,Duration::ZERO).await;
+    let fixture=fixture(r#"{"id":"resp_reasoning_tools","model":"fixture-model","status":"completed","output":[{"type":"reasoning","summary":[{"text":"private reasoning"}]},{"type":"function_call","call_id":"call_instructions","name":"read_project_instructions","arguments":"{}"}],"usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}"#,Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
     let state = worker(&directory.path().join("ledger.sqlite"), &fixture.url, None);
     let prepared = prepare(

@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { toast } from 'svelte-sonner';
  import {onMount} from 'svelte';
  import InformationCard from '$lib/components/information-card.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
@@ -12,7 +13,7 @@
  type Save={idempotencyKey:string;id:string;expectedRevision:string;displayName:string;keyId:string;publicKey:string;secretName:string;secretUid:string};
  type Pending={method:'SaveRuntimeSigner'|'SetRuntimeSignerEnabled';request:Save|{idempotencyKey:string;id:string;expectedRevision:string;enabled:boolean}};
  let editorOpen=$state(false);
- let signers=$state.raw<Signer[]>([]);let next=$state('');let busy=$state(true);let error=$state('');let notice=$state('');
+ let signers=$state.raw<Signer[]>([]);let next=$state('');let busy=$state(true);let error=$state('');
  let selected=$state('');let selectedRevision=$state('0');let name=$state('');let keyId=$state('');let publicKey=$state('');let secretName=$state('');let secretUid=$state('');
  type SignerMode = 'generate'|'backup'|'import'|'manual';
  let backupDownloaded=$state(false);
@@ -27,15 +28,15 @@
  function retainSetup(value:ProvisionIntent|null){setup=value;if(value)sessionStorage.setItem(setupStorage,JSON.stringify(value));else sessionStorage.removeItem(setupStorage);}
  async function perform(action:()=>Promise<void>){busy=true;error='';try{await action();}catch(e){error=e instanceof RpcError&&e.status===409?'This signer or retained command has changed. Recover the original command, then refresh before making another update.':e instanceof RpcError&&e.status===404?'No receipt was found. Retry the original update if its response was interrupted.':'Signer configuration could not be loaded or saved. Recover a retained command before retrying.';}finally{busy=false;}}
  async function load(append=false){const result=await rpc('ListRuntimeSigners',{afterId:append?next:'',limit:50});signers=append?[...signers,...(result.signers||[])]:result.signers||[];next=result.nextAfterId||'';}
- function select(value:Signer|null){editorOpen=true;clearPrivate();selected=value?.id||'';selectedRevision=value?.revision||'0';name=value?.keyId||'';keyId=value?.keyId||'';publicKey=value?.publicKey||'';secretName=value?.secretName||'';secretUid=value?.secretUid||'';mode=value?'manual':'generate';notice='';error='';}
- function changeMode(value:SignerMode){clearPrivate();mode=value;error='';notice='';}
+ function select(value:Signer|null){editorOpen=true;clearPrivate();selected=value?.id||'';selectedRevision=value?.revision||'0';name=value?.keyId||'';keyId=value?.keyId||'';publicKey=value?.publicKey||'';secretName=value?.secretName||'';secretUid=value?.secretUid||'';mode=value?'manual':'generate';error='';}
+ function changeMode(value:SignerMode){clearPrivate();mode=value;error='';}
  function closeEditor(){select(null);editorOpen=false;}
  async function accept(value:Signer){
   // A completed public response is enough to display the identity safely even
   // when the following list refresh is unavailable. It never enables a second
   // generate submission: another key requires an explicit Add signing key action.
   signers=[value,...signers.filter(signer=>signer.id!==value.id)];select(value);persist(null);
-  try{await load();select(signers.find(signer=>signer.id===value.id)||value);}catch{notice='The signing identity was saved. Refresh the list when the service is available.';}
+  try{await load();select(signers.find(signer=>signer.id===value.id)||value);}catch{toast.warning('The signing identity was saved. Refresh the list when the service is available.');}
   editorOpen=false;
  }
  async function retry(){if(!pending)return;const result=await rpc(pending.method,pending.request);await accept(result.signer);}
@@ -55,7 +56,7 @@
   const intent=setup;if(!intent)return;
   if(result.operation.idempotencyKey!==intent.idempotencyKey||result.operation.mode!==intent.mode||result.operation.keyId!==intent.keyId)throw new Error('setup identity mismatch');
   operation=result.operation;receiptMissing=false;
-  if(result.signer&&result.operation.state==='completed'){await accept(result.signer);retainSetup(null);operation=null;onSaved?.(result.signer);notice=`Signing identity ${result.signer.displayName} configured. Merge its public entry into the repository trust policy, commit it and regenerate the lock before inspecting again.`;}
+  if(result.signer&&result.operation.state==='completed'){await accept(result.signer);retainSetup(null);operation=null;onSaved?.(result.signer);toast.success(`Signing identity ${result.signer.displayName} configured`, { description: 'Merge its public entry into the repository trust policy, commit it and regenerate the lock before inspecting again.' });}
  }
  async function submitSetup(){
   let material='';let request:(ProvisionIntent&{signingSeed:string})|null=null;busy=true;error='';
@@ -76,7 +77,7 @@
  async function recoverSetup(){
   if(!setup)return;busy=true;error='';clearPrivate();
   try{await acceptSetup(await rpc('RecoverRuntimeSignerProvisioning',{idempotencyKey:setup.idempotencyKey}));}
-  catch(cause){if(cause instanceof RpcError&&cause.status===404){receiptMissing=true;operation=null;notice=inputRejected?'The rejected setup has no receipt. Correct its key name, then resume with the same recovery key.':'No setup receipt was found. Resume the same request below; its key name and recovery key stay unchanged.';}else error=setupError(cause);}
+  catch(cause){if(cause instanceof RpcError&&cause.status===404){receiptMissing=true;operation=null;toast.warning(inputRejected?'The rejected setup has no receipt. Correct its key name, then resume with the same recovery key.':'No setup receipt was found. Resume the same request below with the same key name and recovery key.');}else error=setupError(cause);}
   finally{clearPrivate();busy=false;}
  }
  async function downloadBackup() {
@@ -108,7 +109,7 @@
  async function copyPublicKey(value: Signer) {
   try {
    await navigator.clipboard.writeText(value.publicKey);
-   notice = 'Public key copied.';
+   toast.success('Public key copied');
   } catch {
    error = 'Select and copy the displayed public key.';
   }
@@ -119,7 +120,7 @@
   try{if(file.size<64||file.size>65)throw new Error('Signing seed files must contain 64 lowercase hexadecimal characters, with at most one final newline.');const value=new TextDecoder('utf-8',{fatal:true}).decode(await file.arrayBuffer());const normalized=signingSeed(value);if(generation===privateReadGeneration)seed=normalized;}
   catch{if(generation===privateReadGeneration){clearPrivate();error='Choose a raw signing seed file containing exactly 64 lowercase hexadecimal characters, with at most one final newline.';}}
  }
- async function copyTrust(value:Signer){try{await navigator.clipboard.writeText(trustSnippet(value));notice='Public trust policy copied. Commit it and regenerate the repository lock before inspecting again.';}catch{error='Copy the displayed public trust policy into the repository policy.';}}
+ async function copyTrust(value:Signer){try{await navigator.clipboard.writeText(trustSnippet(value));toast.success('Public trust policy copied', { description: 'Commit it and regenerate the repository lock before inspecting again.' });}catch{error='Copy the displayed public trust policy into the repository policy.';}}
  onMount(()=>{void perform(async()=>{
   const saved=sessionStorage.getItem(storage);if(saved){const value=JSON.parse(saved);if(!['SaveRuntimeSigner','SetRuntimeSignerEnabled'].includes(value.method)||typeof value.request?.idempotencyKey!=='string')throw new Error('invalid public command');pending=value;}
   const savedSetup=sessionStorage.getItem(setupStorage);if(savedSetup){const value=provisionIntent(JSON.parse(savedSetup));if(!value)throw new Error('invalid public setup');setup=value;name=value.keyId;keyId=value.keyId;mode=value.mode;}
@@ -129,7 +130,6 @@
 <div class="mx-auto max-w-4xl space-y-6">
  <div class="flex flex-wrap items-center justify-between gap-3"><h2 class="text-lg font-semibold">Signing keys</h2><Button disabled={busy||hasPending} onclick={()=>select(null)}>Add signing key</Button></div>
  {#if error}<Feedback kind="error" title="Signer needs attention" message={error}/>{/if}
- {#if notice}<Feedback title="Signer update" message={notice}/>{/if}
  {#if pending}<InformationCard title="Recover signer update"><p class="text-sm">The exact public reference update is retained across reloads.</p><div class="flex flex-wrap gap-2"><Button disabled={busy} onclick={()=>perform(recover)}>Recover signer update</Button><Button variant="outline" disabled={busy} onclick={()=>perform(retry)}>Retry signer update</Button><Button variant="outline" disabled={busy} onclick={()=>persist(null)}>Dismiss signer recovery</Button></div></InformationCard>{/if}
  {#if setup}<InformationCard title="Recover signer setup" status={operation?.state||'response unknown'}>
   <p class="text-sm">{setup.displayName} · Key ID {setup.keyId} · {setup.mode==='generate'?'Generate a key':'Import a key'}. Recovery continues this exact setup.</p>

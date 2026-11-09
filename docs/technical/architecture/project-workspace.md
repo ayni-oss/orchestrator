@@ -1,7 +1,7 @@
 # Project workspace
 
 Status: configuration, workspace/project creation and rename, shared repository
-catalog/direct project associations, static inspection and gated runtime preparation
+catalog with workspace availability and project subsets, static inspection and gated runtime preparation
 are available in the sole [web application](../../../apps/web/README.md). Project
 chat, plan/task delivery screens and their replacement browser qualification remain
 planned. See [integration connections](integration-connections.md) for current APIs.
@@ -10,9 +10,8 @@ planned. See [integration connections](integration-connections.md) for current A
 
 The [alpha product contract](alpha-product.md) defines the target hierarchy:
 workspaces make repositories and shared capabilities available; a project selects
-the subset needed for a chunk of changes. The catalog remains shared. Workspace
-availability/project-subset enforcement are not implemented by current direct
-catalog-to-project associations.
+the subset needed for a chunk of changes. The catalog remains shared. Workspace settings manages availability, and project repository selection is
+limited to that workspace’s repositories.
 
 Project chat is the working surface for ongoing research, plan generation and
 validation, progress, questions and results. Plans and task graphs remain
