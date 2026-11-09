@@ -294,6 +294,44 @@ impl WorkflowStore {
     }
 }
 
+async fn validate_connection(
+    tx: &Transaction<'_>,
+    proposed: &AgentConfiguration,
+) -> Result<(), StoreError> {
+    if proposed.connection_id.is_empty() {
+        return Ok(());
+    }
+    let row=tx.query_opt("SELECT enabled,active_credential_revision,models FROM workflow_connections WHERE id=$1 AND provider='openai' AND capability='llm' FOR SHARE",&[&proposed.connection_id]).await?.ok_or(StoreError::NotFound)?;
+    let active: String = row.get(1);
+    let models: Vec<String> =
+        serde_json::from_str(row.get(2)).map_err(|_| StoreError::CorruptState)?;
+    if !row.get::<_, bool>(0) || active.is_empty() || !models.contains(&proposed.model) {
+        return Err(StoreError::InvalidInput("connection_model_unavailable"));
+    }
+    Ok(())
+}
+
+const fn configuration_scope<'a>(
+    project: &'a str,
+    workspace: &'a str,
+) -> (&'static str, &'static str, &'static str, &'a str) {
+    if project.is_empty() {
+        (
+            "workflow_agent_configuration_heads",
+            "workflow_configuration_receipts",
+            "workspace_id",
+            workspace,
+        )
+    } else {
+        (
+            "workflow_project_configuration_heads",
+            "workflow_project_configuration_receipts",
+            "project_id",
+            project,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -322,43 +360,5 @@ mod tests {
         value.max_total_tokens = 10240;
         value.instructions = "a".repeat(16385);
         assert!(validate_configuration(&value).is_err());
-    }
-}
-
-async fn validate_connection(
-    tx: &Transaction<'_>,
-    proposed: &AgentConfiguration,
-) -> Result<(), StoreError> {
-    if proposed.connection_id.is_empty() {
-        return Ok(());
-    }
-    let row=tx.query_opt("SELECT enabled,active_credential_revision,models FROM workflow_connections WHERE id=$1 AND provider='openai' AND capability='llm' FOR SHARE",&[&proposed.connection_id]).await?.ok_or(StoreError::NotFound)?;
-    let active: String = row.get(1);
-    let models: Vec<String> =
-        serde_json::from_str(row.get(2)).map_err(|_| StoreError::CorruptState)?;
-    if !row.get::<_, bool>(0) || active.is_empty() || !models.contains(&proposed.model) {
-        return Err(StoreError::InvalidInput("connection_model_unavailable"));
-    }
-    Ok(())
-}
-
-fn configuration_scope<'a>(
-    project: &'a str,
-    workspace: &'a str,
-) -> (&'static str, &'static str, &'static str, &'a str) {
-    if project.is_empty() {
-        (
-            "workflow_agent_configuration_heads",
-            "workflow_configuration_receipts",
-            "workspace_id",
-            workspace,
-        )
-    } else {
-        (
-            "workflow_project_configuration_heads",
-            "workflow_project_configuration_receipts",
-            "project_id",
-            project,
-        )
     }
 }
