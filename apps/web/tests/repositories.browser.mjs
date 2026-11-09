@@ -52,7 +52,7 @@ test('repository catalog and project associations use retained canonical receipt
   const inspectionConflict=await page.request.post(`${origin}/api/InspectRepository`,{headers:{'x-console-request':'1'},data:{...inspectionRequest,commitSha:'c'.repeat(40)}});
   assert.equal(inspectionConflict.status(),409);
   await inspectionCard.screenshot({path:'/tmp/repository-inspection-browser.png'});
-  await page.getByRole('link',{name:'Back to repositories',exact:true}).click();
+  await page.getByRole('navigation',{name:'Breadcrumb'}).getByRole('link',{name:'Repositories',exact:true}).click();
   const sourceConnection=page.getByLabel('Source control connection',{exact:true});
   await sourceConnection.selectOption(process.env.AYNI_REPOSITORY_SOURCE);
   await page.getByRole('alert').filter({hasText:'Repository needs attention'}).getByText('The saved App key is invalid. Update the source connection.',{exact:true}).waitFor();

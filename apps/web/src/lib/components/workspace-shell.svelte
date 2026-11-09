@@ -13,8 +13,8 @@
   import * as Dropdown from "$lib/components/ui/dropdown-menu/index.js";
   import ThemeToggle from "$lib/components/theme-toggle.svelte";
   import AppBreadcrumb from "$lib/components/app-breadcrumb.svelte";
-  let { data, title = "Projects", back, children }: {
-    data: WorkspaceData; title?: string; back?: { href: string; label: string }; children: Snippet;
+  let { data, title = "Projects", breadcrumbs, children }: {
+    data: WorkspaceData; title?: string; breadcrumbs: { href: string; label: string }[]; children: Snippet;
   } = $props();
   let sidebarOpen = $state(false);
   const compactViewport = new MediaQuery("(width <= 800px)");
@@ -142,7 +142,7 @@
       >
         {#if sidebarCollapsed}<PanelLeftOpen class="size-5" />{:else}<PanelLeftClose class="size-5" />{/if}
       </Button>
-      <AppBreadcrumb context={page.url.pathname.startsWith('/settings') ? 'Configuration' : data.workspace?.displayName ?? 'Workspace'} {title} {back} />
+      <AppBreadcrumb items={breadcrumbs} />
       <ThemeToggle />
     </header>
     <main id="main-content">{@render children()}</main>
