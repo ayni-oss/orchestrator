@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Delete } from "@lucide/svelte";
+  import { ChevronLeft } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button/index.js";
 
   let { context, title, back }: {
@@ -15,7 +15,7 @@
   <strong aria-current="page">{title}</strong>
   {#if back}
     <Button variant="ghost" size="icon" href={back.href} aria-label={back.label} title={back.label}>
-      <Delete class="size-5" aria-hidden="true" />
+      <ChevronLeft class="size-5" aria-hidden="true" />
     </Button>
   {/if}
 </nav>
