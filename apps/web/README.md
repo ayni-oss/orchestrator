@@ -43,7 +43,8 @@ Opening a connected repository shows Source code and Ayni runtime tabs. Source c
 GitHub integration details; Ayni runtime covers exact-commit inspection and
 preparation. Switching tabs preserves in-progress selections. Technical inspection
 metadata is collapsed by default. Selecting a source control connection
-automatically discovers its GitHub installations. Project cards link to
+automatically discovers repositories through its single active GitHub App
+installation. Project cards link to
 `/projects/:id/repositories?workspace=:workspaceId`. Repository connect and project
 association requests retain their exact non-secret bytes and idempotency key across
 reload; scope changes create a fresh component instance. **Connected** describes

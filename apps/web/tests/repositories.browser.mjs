@@ -53,7 +53,7 @@ test('repository catalog and project associations use retained canonical receipt
   assert.equal(inspectionConflict.status(),409);
   await inspectionCard.screenshot({path:'/tmp/repository-inspection-browser.png'});
   await page.getByRole('link',{name:'Back to repositories',exact:true}).click();
-  const sourceConnection=page.getByLabel('Source Control Connection',{exact:true});
+  const sourceConnection=page.getByLabel('Source control connection',{exact:true});
   await sourceConnection.selectOption(process.env.AYNI_REPOSITORY_SOURCE);
   await page.getByRole('alert').filter({hasText:'Repository needs attention'}).getByText('The saved App key is invalid. Update the source connection.',{exact:true}).waitFor();
   // Provider fixtures exercise the selection UI; source verification still uses the real backend
@@ -62,8 +62,6 @@ test('repository catalog and project associations use retained canonical receipt
   await page.route('**/api/ListGithubRepositories',route=>route.fulfill({json:{repositories:[{providerRepositoryId:'424243',fullName:'fixture/not-connected',defaultBranch:'main',private:true}]}}));
   await sourceConnection.selectOption('');
   await sourceConnection.selectOption(process.env.AYNI_REPOSITORY_SOURCE);
-  await page.getByLabel('GitHub installation',{exact:true}).selectOption('123');
-  await page.getByRole('button',{name:'Discover repositories',exact:true}).click();
   let connectRequest;let confirm;const lost=new Promise(resolve=>{confirm=resolve;});
   await page.route('**/api/ConnectRepository',async route=>{connectRequest=route.request().postDataJSON();const response=await route.fetch();assert.equal(response.status(),200);assert.equal((await response.json()).operation.state,'failed');await route.abort('failed');confirm();});
   await page.getByRole('button',{name:'Connect repository',exact:true}).click();await lost;
