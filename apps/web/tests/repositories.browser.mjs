@@ -53,15 +53,15 @@ test('repository catalog and project associations use retained canonical receipt
   assert.equal(inspectionConflict.status(),409);
   await inspectionCard.screenshot({path:'/tmp/repository-inspection-browser.png'});
   await page.getByRole('link',{name:'Back to repositories',exact:true}).click();
-  await page.getByText('Find repositories on GitHub',{exact:true}).click();
-  await page.getByLabel('GitHub App connection',{exact:true}).selectOption(process.env.AYNI_REPOSITORY_SOURCE);
-  await page.getByRole('button',{name:'Discover installations',exact:true}).click();
+  const sourceConnection=page.getByLabel('Source Control Connection',{exact:true});
+  await sourceConnection.selectOption(process.env.AYNI_REPOSITORY_SOURCE);
   await page.getByRole('alert').filter({hasText:'Repository needs attention'}).getByText('The saved App key is invalid. Update the source connection.',{exact:true}).waitFor();
   // Provider fixtures exercise the selection UI; source verification still uses the real backend
   // and must reject the synthetic private key rather than connecting a false-ready repository.
   await page.route('**/api/ListGithubInstallations',route=>route.fulfill({json:{installations:[{installationId:'123',accountLogin:'fixture',suspended:false}]}}));
   await page.route('**/api/ListGithubRepositories',route=>route.fulfill({json:{repositories:[{providerRepositoryId:'424243',fullName:'fixture/not-connected',defaultBranch:'main',private:true}]}}));
-  await page.getByRole('button',{name:'Discover installations',exact:true}).click();
+  await sourceConnection.selectOption('');
+  await sourceConnection.selectOption(process.env.AYNI_REPOSITORY_SOURCE);
   await page.getByLabel('GitHub installation',{exact:true}).selectOption('123');
   await page.getByRole('button',{name:'Discover repositories',exact:true}).click();
   let connectRequest;let confirm;const lost=new Promise(resolve=>{confirm=resolve;});

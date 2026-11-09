@@ -9,7 +9,6 @@
  import InformationTable from '$lib/components/information-table.svelte';
  import Feedback from '$lib/components/feedback.svelte';
  import { rpc, RpcError, reasonText, type Connection, type Operation } from '$lib/api';
- let { createOnMount = false, onSaved }: { createOnMount?: boolean; onSaved?: (connection: Connection) => void } = $props();
  let connections = $state.raw<Connection[]>([]);
  let history = $state.raw<Operation[]>([]);
  let selected = $state<Connection | null>(null);
@@ -45,7 +44,6 @@
    const message = operation.kind === 'enable' ? (operation.connection.enabled ? 'Connection enabled.' : 'Connection disabled.') : ({ accepted: 'Candidate validation is pending.', completed: 'GitHub App verified.', failed: 'Candidate validation failed.', superseded: 'This candidate was superseded. Refresh the connection.' }[operation.state] || 'Operation recorded.');
    notice = `${message} ${reasonText[operation.safeReason || ''] || ''}`;
    await load(); await inspect(operation.connection);
-   if (operation.state === 'completed' && operation.connection.enabled && operation.connection.activeCredentialRevision) onSaved?.(operation.connection);
  }
  async function save(event: SubmitEvent) {
    event.preventDefault();
@@ -71,7 +69,7 @@
    });
  }
  function createNew() { open=true; ++selectionGeneration; selected = null; name = ''; appId = ''; pem = ''; history = []; notice = ''; error = ''; }
- onMount(() => { pendingKey = sessionStorage.getItem(storageKey) || ''; if (createOnMount && !pendingKey) createNew(); void perform(refresh); });
+ onMount(() => { pendingKey = sessionStorage.getItem(storageKey) || ''; void perform(refresh); });
 </script>
 <div class="space-y-4">
  <div class="flex items-center justify-between gap-3"><h2 class="text-lg font-semibold">GitHub App</h2><Button disabled={busy||!!pendingKey} onclick={createNew}>Add GitHub App</Button></div>

@@ -42,7 +42,8 @@ Repository catalog UI: `/repositories`. Available repositories use the same comp
 Opening a connected repository shows Source code and Ayni runtime tabs. Source code covers connection status and
 GitHub integration details; Ayni runtime covers exact-commit inspection and
 preparation. Switching tabs preserves in-progress selections. Technical inspection
-metadata and connection history are collapsed by default. Project cards link to
+metadata is collapsed by default. Selecting a source control connection
+automatically discovers its GitHub installations. Project cards link to
 `/projects/:id/repositories?workspace=:workspaceId`. Repository connect and project
 association requests retain their exact non-secret bytes and idempotency key across
 reload; scope changes create a fresh component instance. **Connected** describes
