@@ -7,10 +7,12 @@
 		ref = $bindable(null),
 		class: className,
 		inset,
+		showChevron = true,
 		children,
 		...restProps
 	}: DropdownMenuPrimitive.SubTriggerProps & {
 		inset?: boolean;
+		showChevron?: boolean;
 	} = $props();
 </script>
 
@@ -25,5 +27,5 @@
 	{...restProps}
 >
 	{@render children?.()}
-	<ChevronRightIcon class="cn-rtl-flip ml-auto" />
+	{#if showChevron}<ChevronRightIcon class="cn-rtl-flip ml-auto" />{/if}
 </DropdownMenuPrimitive.SubTrigger>

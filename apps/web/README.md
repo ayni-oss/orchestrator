@@ -51,7 +51,8 @@ historical source access and never authorizes task execution.
 ### Workspace and project navigation
 
 The sidebar provides a workspace dropdown with a separate create button. Open
-Workspace settings using the three dots beside the selected workspace.
+Workspace settings using the three dots beside a workspace in the dropdown.
+The dropdown and workspace cards offer the same actions.
 The home page lists workspace cards; opening one lists its project cards. Both
 use a whole-card link and a separate top-right three-dot menu for repositories
 and rename. Workspace menus also open workspace settings. The sidebar groups
