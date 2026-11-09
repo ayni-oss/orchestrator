@@ -97,6 +97,9 @@ test('repository catalog and project associations use retained canonical receipt
   const [renamed]=await Promise.all([page.waitForResponse(r=>r.url().endsWith('/api/RenameWorkspace')),page.getByRole('button',{name:'Retry rename',exact:true}).click()]);
   assert.equal((await renamed.json()).commandId,renameReceipt);
   await page.getByRole('heading',{name:'Renamed browser workspace',level:1,exact:true}).waitFor();
+  await page.getByLabel('Connected repository',{exact:true}).selectOption(fixture);
+  await page.getByRole('button',{name:'Add repository',exact:true}).click();
+  await page.getByRole('button',{name:/^Remove /}).waitFor();
   const staleRename=await page.request.post(`${origin}/api/RenameWorkspace`,{headers:{'x-console-request':'1'},data:{...renameRequest,idempotencyKey:crypto.randomUUID(),displayName:'Stale'}});assert.equal(staleRename.status(),409);
   await page.getByRole('navigation',{name:'Breadcrumb'}).getByRole('link',{name:'Renamed browser workspace',exact:true}).click();
   await page.getByRole('heading',{name:'Renamed browser workspace',level:1,exact:true}).waitFor();
@@ -109,7 +112,7 @@ test('repository catalog and project associations use retained canonical receipt
   await projectLink.locator('..').getByRole('button').click();
   await page.getByRole('menuitem',{name:'Repositories',exact:true}).click();
   await page.goto(`${origin}/projects/${pa}/repositories?workspace=${a}`);
-  await page.getByLabel('Catalog repository',{exact:true}).selectOption(fixture);
+  await page.getByLabel('Workspace repository',{exact:true}).selectOption(fixture);
   let firstReceipt;let associationRequest;let confirmAssociation;const lostAssociation=new Promise(resolve=>{confirmAssociation=resolve;});
   await page.route('**/api/AssociateProjectRepository',async route=>{associationRequest=route.request().postDataJSON();const response=await route.fetch();assert.equal(response.status(),200);firstReceipt=(await response.json()).commandId;await route.abort('failed');confirmAssociation();});
   await page.getByRole('button',{name:'Attach repository',exact:true}).click();await lostAssociation;
@@ -119,9 +122,11 @@ test('repository catalog and project associations use retained canonical receipt
   await page.getByRole('region',{name:'fixture/browser-repository',exact:true}).waitFor();
   await page.goto(`${origin}/projects/${pb}/repositories?workspace=${b}`);
   await page.getByText('No repositories attached to this project.',{exact:true}).waitFor();
-  await page.getByLabel('Catalog repository',{exact:true}).selectOption(fixture);
-  await page.getByRole('button',{name:'Attach repository',exact:true}).click();
-  await page.getByRole('region',{name:'fixture/browser-repository',exact:true}).waitFor();
+  const otherWorkspaceRepository = page.getByLabel('Workspace repository',{exact:true});
+  await otherWorkspaceRepository.and(page.locator(':enabled')).waitFor();
+  assert.equal(await otherWorkspaceRepository.locator(`option[value="${fixture}"]`).count(),0);
+  const denied=await page.request.post(`${origin}/api/AssociateProjectRepository`,{headers:{'x-console-request':'1'},data:{...associationRequest,idempotencyKey:crypto.randomUUID(),workspaceId:b,projectId:pb}});
+  assert.equal(denied.status(),404);
   const scoped=await page.request.post(`${origin}/api/ListProjectRepositories`,{headers:{'x-console-request':'1'},data:{workspaceId:a,projectId:pb}});assert.equal(scoped.status(),404);
   const original=await page.request.post(`${origin}/api/AssociateProjectRepository`,{headers:{'x-console-request':'1'},data:associationRequest});assert.equal((await original.json()).commandId,firstReceipt);
   assert.equal((await page.locator('body').innerText()).includes('synthetic-repository-browser-key'),false);
@@ -134,7 +139,7 @@ test('repository catalog and project associations use retained canonical receipt
   assert.equal(runtimeReceipt.state,'resolving');
   await page.goto(`${origin}/repositories/${fixture}?tab=runtime`);
   await page.getByRole('heading',{name:'Runtime onboarding needs attention',exact:true}).waitFor();
-  await page.getByText('The latest default branch could not be read. Check the GitHub connection and repository access, then prepare again.',{exact:true}).waitFor();
+  await page.getByText('The selected branch could not be read. Check the GitHub connection and repository access, then prepare again.',{exact:true}).waitFor();
   const recovered=await page.request.post(`${origin}/api/GetRepositoryRuntimeReceipt`,{headers:{'x-console-request':'1'},data:{idempotencyKey:runtimeSettings.idempotencyKey}});
   assert.equal(recovered.status(),200);assert.deepEqual((await recovered.json()).run,runtimeReceipt);
   const currentRun=await page.request.post(`${origin}/api/GetRepositoryRuntime`,{headers:{'x-console-request':'1'},data:{repositoryId:fixture}});

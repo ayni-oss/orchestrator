@@ -49,11 +49,10 @@ catalog repository available; their project-private chats, work and grants remai
 separate. Removing availability must check active work and retain provenance;
 existing admitted attempts keep their frozen scope and new use is fenced.
 
-Current APIs allow direct catalog-to-project associations without workspace
-membership. Workspace availability and project-subset enforcement are planned
-changes, not a property of the present API. Do not restore legacy SQLite schemas
-or silently invalidate retained associations; the implementation must define a
-reviewed forward transition for current PostgreSQL records and admission rules.
+Workspace settings manages which connected catalog repositories are available.
+Project attachment requires membership in that workspace. Migration 0040 seeds
+membership from existing project associations. Removing availability is blocked
+while any project in the workspace still has the repository attached.
 
 ## Project chat, context and capabilities
 

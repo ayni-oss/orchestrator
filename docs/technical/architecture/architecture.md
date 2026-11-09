@@ -11,7 +11,7 @@ The M1 runtime extends the PostgreSQL application authority with authenticated d
 The complete M1 contract and later-slice boundary are defined in the [durable foundation contract](../research/project-workflow-m1-durable-foundation.md).
 
 [Shared repository preparation](repository-preparation.md) provides the catalog,
-project associations, exact-commit inspection and profile-gated runtime
+workspace availability, project associations, exact-commit inspection and profile-gated runtime
 preparation. Automatic project/task runtime handoff remains planned. The
 [delivery plan](../research/repository-runtime-workspace-delivery.md) defines
 qualification and remaining journey coverage. PostgreSQL authority, frozen
@@ -29,7 +29,7 @@ The [alpha contract](alpha-product.md) defines workspace repository scope, groun
 project chat, skill/MCP context, autonomous engineering, environment-changing work
 and plan-selected task/PR graphs. The [task event direction](task-events.md) extends
 durable orchestration to coding tasks. Current HTTP callbacks, polling, one-shot
-coding and direct project associations below remain implementation constraints
+coding remain implementation constraints
 until their replacements are delivered and qualified.
 
 ## Runtime boundary

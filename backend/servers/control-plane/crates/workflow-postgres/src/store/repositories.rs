@@ -1,6 +1,7 @@
 //! Shared source catalog. Immutable receipts never assert runtime readiness.
 use super::{
-    StoreError, WorkflowStore, connections, new_id, require_project, validate_id, validate_key,
+    StoreError, WorkflowStore, connections, new_id, require_project, require_workspace,
+    validate_id, validate_key,
 };
 use serde::{Deserialize, Serialize};
 use tokio_postgres::{Row, Transaction};
@@ -370,7 +371,100 @@ impl WorkflowStore {
         driver.abort();
         Ok(page(values, limit, |v| &v.id))
     }
-    /// Associate a catalog repository directly with one project; never confer integration administration.
+    /// List the catalog repositories made available to a workspace.
+    ///
+    /// # Errors
+    /// Reject invalid bounds, missing workspace and database errors.
+    pub async fn list_workspace_repositories(
+        &self,
+        workspace: &str,
+        after: &str,
+        limit: u32,
+    ) -> Result<(Vec<Repository>, String), StoreError> {
+        validate_id(workspace, "workspace_id")?;
+        let limit = page_bounds(after, limit)?;
+        let (mut client, driver) = crate::connect(&self.database_url).await?;
+        let tx = client.transaction().await?;
+        require_workspace(&tx, workspace).await?;
+        let rows = tx.query(
+            "SELECT r.* FROM workflow_workspace_repositories a JOIN workflow_repositories r ON r.id=a.repository_id
+             WHERE a.workspace_id=$1 AND a.repository_id>$2 ORDER BY a.repository_id LIMIT $3",
+            &[&workspace, &after, &(limit + 1)],
+        ).await?;
+        let items = rows.iter().map(repository).collect::<Result<Vec<_>, _>>()?;
+        tx.commit().await?;
+        driver.abort();
+        Ok(page(items, limit, |item| &item.id))
+    }
+
+    /// Set catalog availability without changing existing project associations.
+    ///
+    /// # Errors
+    /// Reject missing resources, conflicting retries and removal while in use.
+    pub async fn set_workspace_repository(
+        &self,
+        key: &str,
+        workspace: &str,
+        repo: &str,
+        available: bool,
+    ) -> Result<String, StoreError> {
+        validate_key(key)?;
+        validate_id(workspace, "workspace_id")?;
+        validate_id(repo, "repository_id")?;
+        let safe = serde_json::to_string(&("workspace_repository", workspace, repo, available))
+            .map_err(|_| StoreError::CorruptState)?;
+        let (mut client, driver) = crate::connect(&self.database_url).await?;
+        let tx = client.transaction().await?;
+        connections::serialize_key(&tx, key).await?;
+        require_workspace(&tx, workspace).await?;
+        if let Some(row) = tx.query_opt(
+            "SELECT command_id,safe_request FROM workflow_repository_association_receipts WHERE idempotency_key=$1",
+            &[&key],
+        ).await? {
+            if row.get::<_, String>("safe_request") != safe {
+                return Err(StoreError::IdempotencyConflict);
+            }
+            let command = row.get(0);
+            tx.commit().await?;
+            driver.abort();
+            return Ok(command);
+        }
+        lock_workspace_repository(&tx, workspace, repo).await?;
+        if tx
+            .query_opt("SELECT id FROM workflow_repositories WHERE id=$1", &[&repo])
+            .await?
+            .is_none()
+        {
+            return Err(StoreError::NotFound);
+        }
+        if available {
+            tx.execute(
+                "INSERT INTO workflow_workspace_repositories (workspace_id,repository_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+                &[&workspace, &repo],
+            ).await?;
+        } else {
+            if tx.query_opt(
+                "SELECT 1 FROM workflow_project_repositories WHERE workspace_id=$1 AND repository_id=$2 LIMIT 1",
+                &[&workspace, &repo],
+            ).await?.is_some() {
+                return Err(StoreError::WorkspaceRepositoryInUse);
+            }
+            tx.execute(
+                "DELETE FROM workflow_workspace_repositories WHERE workspace_id=$1 AND repository_id=$2",
+                &[&workspace, &repo],
+            ).await?;
+        }
+        let command = new_id();
+        tx.execute(
+            "INSERT INTO workflow_repository_association_receipts (idempotency_key,command_id,safe_request,repository_id) VALUES ($1,$2,$3,$4)",
+            &[&key, &command, &safe, &repo],
+        ).await?;
+        tx.commit().await?;
+        driver.abort();
+        Ok(command)
+    }
+
+    /// Associate a repository available to the project’s workspace with one project.
     /// # Errors
     /// Reject invalid scope, missing resources, conflicting retries and unavailable source connections.
     pub async fn associate_repository(
@@ -403,6 +497,13 @@ impl WorkflowStore {
             if row.get::<_,String>("safe_request")!=safe {return Err(StoreError::IdempotencyConflict);}
             let command=row.get(0);tx.commit().await?;driver.abort();return Ok((resource,command));
         }
+        lock_workspace_repository(&tx, workspace, repo).await?;
+        if tx.query_opt(
+            "SELECT 1 FROM workflow_workspace_repositories WHERE workspace_id=$1 AND repository_id=$2",
+            &[&workspace, &repo],
+        ).await?.is_none() {
+            return Err(StoreError::NotFound);
+        }
         let c = connections::locked(&tx, &resource.connection_id).await?;
         if !c.enabled || c.active_credential_revision.is_empty() {
             return Err(StoreError::ConfigurationRevisionConflict);
@@ -414,4 +515,18 @@ impl WorkflowStore {
         driver.abort();
         Ok((resource, command))
     }
+}
+
+async fn lock_workspace_repository(
+    tx: &Transaction<'_>,
+    workspace: &str,
+    repo: &str,
+) -> Result<(), StoreError> {
+    // Serialize removal with attachment. The foreign key also protects direct SQL writes.
+    tx.query_one(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1 || ':' || $2, 40))",
+        &[&workspace, &repo],
+    )
+    .await?;
+    Ok(())
 }

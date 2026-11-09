@@ -524,6 +524,18 @@ async fn repository_rpc(
             list_repositories,
             v1::ListRepositoriesRequest
         ),
+        "ListWorkspaceRepositories" => forward!(
+            body,
+            gateway.repositories(),
+            list_workspace_repositories,
+            v1::ListWorkspaceRepositoriesRequest
+        ),
+        "SetWorkspaceRepository" => forward!(
+            body,
+            gateway.repositories(),
+            set_workspace_repository,
+            v1::SetWorkspaceRepositoryRequest
+        ),
         "AssociateProjectRepository" => forward!(
             body,
             gateway.repositories(),

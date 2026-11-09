@@ -39,6 +39,8 @@ mod tests {
         "GetRepositoryOperation",
         "ListRepositoryOperations",
         "ListRepositories",
+        "ListWorkspaceRepositories",
+        "SetWorkspaceRepository",
         "AssociateProjectRepository",
         "ListProjectRepositories",
         "ResolveRepositoryDefaultCommit",

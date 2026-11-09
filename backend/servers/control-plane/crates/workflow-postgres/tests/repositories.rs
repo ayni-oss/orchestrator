@@ -147,6 +147,68 @@ async fn exact_retries(
     );
     Ok(repo)
 }
+async fn workspace_memberships(
+    store: &WorkflowStore,
+    repo: &Repository,
+    workspace_a: &str,
+    workspace_b: &str,
+    project_a: &str,
+    project_b: &str,
+) -> TestResult {
+    assert!(matches!(
+        store
+            .associate_repository(&key(), workspace_a, project_a, &repo.id)
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    let grant = key();
+    let receipt = store
+        .set_workspace_repository(&grant, workspace_a, &repo.id, true)
+        .await?;
+    assert_eq!(
+        store
+            .set_workspace_repository(&grant, workspace_a, &repo.id, true)
+            .await?,
+        receipt
+    );
+    assert!(matches!(
+        store
+            .set_workspace_repository(&grant, workspace_a, &repo.id, false)
+            .await,
+        Err(StoreError::IdempotencyConflict)
+    ));
+    assert_eq!(
+        store
+            .list_workspace_repositories(workspace_a, "", 50)
+            .await?
+            .0,
+        vec![repo.clone()]
+    );
+    assert!(
+        store
+            .list_workspace_repositories(workspace_b, "", 50)
+            .await?
+            .0
+            .is_empty()
+    );
+    store
+        .set_workspace_repository(&key(), workspace_b, &repo.id, true)
+        .await?;
+    store
+        .set_workspace_repository(&key(), workspace_b, &repo.id, false)
+        .await?;
+    assert!(matches!(
+        store
+            .associate_repository(&key(), workspace_b, project_b, &repo.id)
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    store
+        .set_workspace_repository(&key(), workspace_b, &repo.id, true)
+        .await?;
+    Ok(())
+}
+
 async fn associations(store: &WorkflowStore, repo: &Repository, connection: &str) -> TestResult {
     let a = store.create_workspace(&key(), "Catalog A").await?.resource;
     let b = store.create_workspace(&key(), "Catalog B").await?.resource;
@@ -158,6 +220,7 @@ async fn associations(store: &WorkflowStore, repo: &Repository, connection: &str
         .create_project(&key(), &b.id, "B project", "Reuse shared source")
         .await?
         .resource;
+    workspace_memberships(store, repo, &a.id, &b.id, &pa.id, &pb.id).await?;
     let command = key();
     let first = store
         .associate_repository(&command, &a.id, &pa.id, &repo.id)
@@ -166,6 +229,12 @@ async fn associations(store: &WorkflowStore, repo: &Repository, connection: &str
         .associate_repository(&command, &a.id, &pa.id, &repo.id)
         .await?;
     assert_eq!(first, retry);
+    assert!(matches!(
+        store
+            .set_workspace_repository(&key(), &a.id, &repo.id, false)
+            .await,
+        Err(StoreError::WorkspaceRepositoryInUse)
+    ));
     assert!(matches!(
         store
             .associate_repository(&command, &b.id, &pb.id, &repo.id)

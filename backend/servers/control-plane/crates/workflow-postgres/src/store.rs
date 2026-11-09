@@ -65,6 +65,8 @@ pub enum StoreError {
     IdempotencyConflict,
     #[error("CONFIGURATION_REVISION_CONFLICT")]
     ConfigurationRevisionConflict,
+    #[error("workspace repository is attached to a project")]
+    WorkspaceRepositoryInUse,
     #[error("TASK_EXECUTION_CONFLICT")]
     TaskExecutionConflict,
     #[error("TASK_ALREADY_PREPARED")]

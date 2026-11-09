@@ -1,24 +1,21 @@
 # Repository preparation and workspace delivery
 
-Status: source connections, shared catalog/direct project associations, static Ayni
+Status: source connections, shared catalog with workspace availability and project subsets, static Ayni
 inspection and profile-gated Kubernetes runtime preparation are implemented.
-Workspace repository availability, server-side task handoff and cumulative live
-source/registry qualification remain pending. This plan details
+Server-side task handoff and cumulative live source/registry qualification remain pending. This plan details
 [roadmap milestone A](../../../ROADMAP.md#a-workspace-scope-and-execution-ready-repositories);
 [the alpha contract](../architecture/alpha-product.md) owns product scope.
 
 ## Scope and ownership
 
-Keep repository identity and runtime artifacts in the shared catalog. Alpha adds
-workspace availability; projects select only the repositories needed for their
+Keep repository identity and runtime artifacts in the shared catalog. Workspace settings controls
+availability, and projects select only the repositories needed for their
 work from that set. Several workspaces may reuse the same catalog repository and
 verified artifact without sharing project-private context, credentials or grants.
-Current direct associations do not enforce that subset requirement.
 
-Define the forward transition for existing PostgreSQL associations, admission and
-removal before implementation. Preserve retained source, attempt and publication
-provenance. Do not restore historical SQLite APIs or schemas to implement the new
-workspace requirement. The [repository contract](../architecture/repository-preparation.md)
+Migration 0040 preserves existing project associations by adding their repositories
+to workspace availability. Repositories attached to a project cannot be removed
+from workspace availability. The [repository contract](../architecture/repository-preparation.md)
 owns source/runtime gates and the Ayni/Orchestrator compatibility split.
 
 ## Delivery increments

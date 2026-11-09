@@ -8,12 +8,12 @@ The duplicate example and standalone diagnostic frontend have been removed.
 Canonical APIs support workspace/project creation, manual GitHub App credentials,
 GHCR PAT connections, OpenAI key validation/model discovery and explicit workspace
 connection/model/budget selection. Historical BFF/API wiring is not restored.
-Shared GitHub repository discovery/catalog and direct project associations are available.
+Connect repositories in the shared GitHub catalog, then add them in Workspace settings.
+Projects can attach only repositories available to their workspace.
 Exact-commit static Ayni inspection provides retained findings and retry recovery.
 Runtime preparation, signer setup, stage evidence and recovery are available behind
 an explicitly qualified Kubernetes profile. Guided App setup, full adapter discovery
-and project/task runtime handoff remain outstanding. Current direct project
-associations do not yet enforce planned workspace repository availability.
+and project/task runtime handoff remain outstanding.
 See the [alpha UI contract](../../docs/technical/architecture/project-workspace.md)
 for project chat, plans, task graphs and delivery journeys still to implement.
 

@@ -4,7 +4,7 @@ Status: shared repository discovery, catalog connection and project associations
 
 ## What this decides
 
-- Repository integrations form a shared catalog. Alpha adds workspace availability; projects select a subset of their workspace repositories. Current direct catalog associations do not yet enforce that requirement.
+- Repository integrations form a shared catalog. Workspace settings selects available catalog entries, and projects can attach only repositories available to their workspace.
 - Onboarding produces verified, immutable runtime artifacts through explicit source, tooling, trust, registry and execution gates.
 - PostgreSQL owns commands, receipts, generations and accepted evidence. Scoped workers perform external operations under trusted supervision.
 - The new UI ships with each backend slice. Maintainers can inspect and exercise each delivered journey locally.
@@ -30,8 +30,8 @@ The [roadmap](../../../ROADMAP.md#a-workspace-scope-and-execution-ready-reposito
 | --- | --- |
 | Integration connection | Shared source, registry or signing capability with safe status and PostgreSQL credential revision references. |
 | Repository | Stable provider repository identity and source connection reference, independent of any workspace. |
-| Workspace availability (planned) | Catalog repositories available for projects in a workspace; several workspaces may reuse the same catalog identity. |
-| Project association | Selected project repositories. Current associations are direct; alpha enforces selection from workspace availability. |
+| Workspace availability | Catalog repositories available for projects in a workspace; several workspaces may reuse the same catalog identity. |
+| Project association | Selected project repositories, limited to those available in the workspace. |
 | Source observation | Exact repository commit, inspected policy/lock bytes or protected references, and their digests. |
 | Environment revision | Immutable Ayni contract, lock identity, platform, builder, destination and trust expectations. |
 | Preparation operation | Frozen inputs, bounded allowance, generation, stage, workload binding, receipts, findings and cleanup state. |
@@ -40,8 +40,8 @@ The [roadmap](../../../ROADMAP.md#a-workspace-scope-and-execution-ready-reposito
 
 The [alpha product contract](alpha-product.md#workspace-project-and-task-scope) owns
 workspace availability and project-subset semantics, including changes/removal.
-The forward transition must preserve current retained PostgreSQL associations and
-attempt provenance; prior SQLite membership schemas are not implementation requirements.
+Migration 0040 preserves retained PostgreSQL project associations by adding their
+repositories to workspace availability.
 
 An association does not expose credentials, another project's history or integration administration.
 Define local-operator grants before exposing mutations; remote tenancy and multi-user access remain separate scope.

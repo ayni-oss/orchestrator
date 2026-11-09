@@ -68,7 +68,7 @@ context, telemetry and recovery work ship inside these increments.
 ### A: Workspace scope and execution-ready repositories
 
 Keep the catalog shared and repository identities independent of workspaces.
-Add explicit workspace availability and enforce project selection as a subset.
+Workspace settings manages catalog availability, and project attachment enforces the workspace subset.
 Reuse the same repository and verified artifact across workspaces only after each
 workspace makes it available; never share project-private context or authority.
 

@@ -3,7 +3,7 @@ use thiserror::Error;
 use tokio_postgres::{Client, Transaction};
 
 pub const MIGRATION_LOCK_ID: i64 = 4_702_199_126_064_921;
-pub const CURRENT_SCHEMA_VERSION: i64 = 39;
+pub const CURRENT_SCHEMA_VERSION: i64 = 40;
 
 const MIGRATION_1: &str = include_str!("../migrations/0001_durable_foundation.sql");
 const MIGRATION_2: &str = include_str!("../migrations/0002_report_acceptance.sql");
@@ -15,6 +15,7 @@ const MIGRATION_7: &str = include_str!("../migrations/0007_broker_capacity.sql")
 const MIGRATION_8: &str = include_str!("../migrations/0008_agent_configuration.sql");
 const MIGRATION_24: &str = include_str!("../migrations/0024_task_source_retention.sql");
 const MIGRATION_39: &str = include_str!("../migrations/0039_repository_runtime_onboarding.sql");
+const MIGRATION_40: &str = include_str!("../migrations/0040_workspace_repositories.sql");
 const MIGRATION_38: &str = include_str!("../migrations/0038_runtime_signer_provisioning.sql");
 const MIGRATION_37: &str = include_str!("../migrations/0037_registry_organizations.sql");
 const MIGRATION_36: &str = include_str!("../migrations/0036_runtime_preparations.sql");
@@ -163,7 +164,7 @@ async fn apply_pending_migrations(
     Ok(())
 }
 
-const fn pending_migrations() -> [(i64, &'static str, &'static str); 37] {
+const fn pending_migrations() -> [(i64, &'static str, &'static str); 38] {
     [
         (3_i64, MIGRATION_3, "M1 transport quarantine"),
         (4_i64, MIGRATION_4, "M1 watch retention"),
@@ -262,6 +263,7 @@ const fn pending_migrations() -> [(i64, &'static str, &'static str); 37] {
             MIGRATION_39,
             "Durable repository runtime onboarding",
         ),
+        (40_i64, MIGRATION_40, "Workspace repository membership"),
     ]
 }
 
@@ -348,6 +350,7 @@ async fn validate_inner(client: &Client) -> Result<(), MigrationError> {
         (37_i64, MIGRATION_37),
         (38_i64, MIGRATION_38),
         (39_i64, MIGRATION_39),
+        (40_i64, MIGRATION_40),
     ];
     if rows.len() != migrations.len() {
         return Err(MigrationError::InvalidHistory);
@@ -424,6 +427,7 @@ async fn validate_checksum(transaction: &Transaction<'_>) -> Result<(), Migratio
         (37_i64, MIGRATION_37),
         (38_i64, MIGRATION_38),
         (39_i64, MIGRATION_39),
+        (40_i64, MIGRATION_40),
     ] {
         let checksum: String = transaction
             .query_one(
@@ -504,6 +508,8 @@ async fn apply_runtime_privileges(
              REVOKE ALL ON workflow_repository_inspections FROM PUBLIC, {role};\
              GRANT SELECT, INSERT ON workflow_repository_inspections TO {role};\
              GRANT UPDATE (state,safe_reason,result,updated_at_unix_ms) ON workflow_repository_inspections TO {role};\
+             REVOKE ALL ON workflow_workspace_repositories FROM PUBLIC, {role};\
+             GRANT SELECT, INSERT, DELETE ON workflow_workspace_repositories TO {role};\
              REVOKE ALL ON workflow_repositories,workflow_repository_operations,workflow_project_repositories,workflow_repository_association_receipts FROM PUBLIC, {role};\
              GRANT SELECT, INSERT ON workflow_repositories,workflow_repository_operations,workflow_project_repositories,workflow_repository_association_receipts TO {role};\
              GRANT UPDATE (state,safe_reason,result,updated_at_unix_ms) ON workflow_repository_operations TO {role};\
@@ -559,7 +565,7 @@ fn validate_role_name(runtime_role: &str) -> Result<(), MigrationError> {
 }
 
 const SCHEMA_MANIFEST_CHECKSUM: &str =
-    "sha256:7d35c00c5eb2eb096defea3900b893f92f265ed1d051b7c42b259a4b804b9331";
+    "sha256:5ed302439c6fec3ae2f7ea2ba59f0d60ecd52a0a066178c95d2a15b7fc31f832";
 
 async fn validate_schema(transaction: &Transaction<'_>) -> Result<(), MigrationError> {
     let manifest: String = transaction
@@ -663,10 +669,10 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                            current_user, table_name, 'UPDATE,TRUNCATE,REFERENCES,TRIGGER' \
                        ) \
                        AND has_table_privilege(current_user, table_name, 'DELETE') \
-                           = (table_name IN ('public.workflow_execution_progress','public.workflow_history_snapshots','public.workflow_transport_quarantine','public.workflow_updates','public.workflow_activities','public.workflow_pending_reports')) \
+                           = (table_name IN ('public.workflow_workspace_repositories','public.workflow_execution_progress','public.workflow_history_snapshots','public.workflow_transport_quarantine','public.workflow_updates','public.workflow_activities','public.workflow_pending_reports')) \
                    ) \
                    FROM unnest(ARRAY[ \
-                       'public.workflow_repository_runtime_runs','public.workflow_hierarchy_rename_receipts','public.workflow_repositories','public.workflow_repository_operations','public.workflow_repository_inspections','public.workflow_runtime_preparations','public.workflow_runtime_preparation_selections','public.workflow_runtime_preparation_attempts','public.workflow_runtime_preparation_receipts','public.workflow_runtime_signer_provisioning','public.workflow_runtime_signers','public.workflow_runtime_signer_revisions','public.workflow_runtime_signer_receipts','public.workflow_project_repositories','public.workflow_repository_association_receipts','public.workflow_connection_credentials', 'public.workflow_connections', 'public.workflow_connection_operations', 'public.workflow_workspaces', 'public.workflow_projects', \
+                       'public.workflow_workspace_repositories','public.workflow_repository_runtime_runs','public.workflow_hierarchy_rename_receipts','public.workflow_repositories','public.workflow_repository_operations','public.workflow_repository_inspections','public.workflow_runtime_preparations','public.workflow_runtime_preparation_selections','public.workflow_runtime_preparation_attempts','public.workflow_runtime_preparation_receipts','public.workflow_runtime_signer_provisioning','public.workflow_runtime_signers','public.workflow_runtime_signer_revisions','public.workflow_runtime_signer_receipts','public.workflow_project_repositories','public.workflow_repository_association_receipts','public.workflow_connection_credentials', 'public.workflow_connections', 'public.workflow_connection_operations', 'public.workflow_workspaces', 'public.workflow_projects', \
                        'public.workflow_conversations', 'public.workflow_command_receipts', \
                        'public.workflow_messages', 'public.workflow_turns', \
                        'public.workflow_activities', 'public.workflow_updates', 'public.workflow_execution_timeline', 'public.workflow_execution_progress', \
