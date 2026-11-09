@@ -32,9 +32,12 @@
     );
     if (!clickedConfiguration) configurationOpen = false;
   }
-  afterNavigate(() => {
+  function closeConfiguration() {
+    configurationOpen = false;
+  }
+  afterNavigate(({ type }) => {
     sidebarOpen = false;
-    configurationOpen = page.url.pathname.startsWith('/settings');
+    if (type !== 'enter') closeConfiguration();
   });
 </script>
 {#snippet workspaceOption(workspace: Workspace)}
@@ -119,12 +122,12 @@
   {#if sidebarOpen}<Button variant="ghost" class="mobile-backdrop" onclick={() => sidebarOpen = false} aria-label="Close workspace navigation"></Button>{/if}
   {#if configurationOpen}
     <nav id="configuration-navigation" class="configuration-navigation" aria-label="Configuration navigation">
-      <div class="configuration-heading"><h2>Configuration</h2><Button variant="ghost" onclick={() => configurationOpen = false} aria-label="Close configuration navigation"><X size={17} /></Button></div>
+      <div class="configuration-heading"><h2>Configuration</h2><Button variant="ghost" onclick={closeConfiguration} aria-label="Close configuration navigation"><X size={17} /></Button></div>
       <p class="configuration-group">Integrations</p>
-      <SidebarItem href="/settings/source-control" active={page.url.pathname.startsWith('/settings/source-control')}><GitBranch />Source control</SidebarItem>
-      <SidebarItem href="/settings/container-registries" active={page.url.pathname.startsWith('/settings/container-registries')}><Package />Container registries</SidebarItem>
-      <SidebarItem href="/settings/runtime-signing" active={page.url.pathname.startsWith('/settings/runtime-signing')}><Package />Runtime signing</SidebarItem>
-      <SidebarItem href="/settings/llm-providers" active={page.url.pathname.startsWith('/settings/llm-providers')}><BrainCircuit />LLM providers</SidebarItem>
+      <SidebarItem href="/settings/source-control" onclick={closeConfiguration} active={page.url.pathname.startsWith('/settings/source-control')}><GitBranch />Source control</SidebarItem>
+      <SidebarItem href="/settings/container-registries" onclick={closeConfiguration} active={page.url.pathname.startsWith('/settings/container-registries')}><Package />Container registries</SidebarItem>
+      <SidebarItem href="/settings/runtime-signing" onclick={closeConfiguration} active={page.url.pathname.startsWith('/settings/runtime-signing')}><Package />Runtime signing</SidebarItem>
+      <SidebarItem href="/settings/llm-providers" onclick={closeConfiguration} active={page.url.pathname.startsWith('/settings/llm-providers')}><BrainCircuit />LLM providers</SidebarItem>
     </nav>
   {/if}
   <CreateWorkspaceDialog bind:open={createWorkspaceOpen} />
