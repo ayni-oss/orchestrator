@@ -1,18 +1,7 @@
-<script module lang="ts">
-  export type InformationCardAction = {
-    label: string;
-    onSelect: () => void;
-    disabled?: boolean;
-    destructive?: boolean;
-  };
-</script>
-
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { EllipsisVertical } from "@lucide/svelte";
   import * as Card from "$lib/components/ui/card/index.js";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
+  import ActionMenu, { type ActionMenuItem } from "$lib/components/action-menu.svelte";
   import StatusBadge from "$lib/components/status-badge.svelte";
   import { statusTone, type StatusTone } from "$lib/presentation.js";
 
@@ -23,7 +12,7 @@
     navigationHref?: string;
     status?: string;
     tone?: StatusTone;
-    actions?: InformationCardAction[];
+    actions?: ActionMenuItem[];
     danger?: boolean;
     headingLevel?: 2 | 3;
     children: Snippet;
@@ -45,18 +34,7 @@
     <div class="ml-auto flex shrink-0 items-center gap-3">
       {#if status}<StatusBadge {status} tone={tone ?? statusTone(status)} />{/if}
       {#if actions.length}
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger>
-            {#snippet child({ props })}
-              <Button {...props} class="relative z-20" variant="ghost" size="icon-sm" aria-label={`${title} actions`}><EllipsisVertical aria-hidden="true" /></Button>
-            {/snippet}
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="end" preventScroll={false}>
-            {#each actions as action (action.label)}
-              <DropdownMenu.Item onSelect={action.onSelect} disabled={action.disabled ?? false} variant={action.destructive ? "destructive" : "default"}>{action.label}</DropdownMenu.Item>
-            {/each}
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
+        <ActionMenu label={`${title} actions`} {actions} triggerClass="relative z-20" />
       {:else}
         <span class="size-7 shrink-0" aria-hidden="true"></span>
       {/if}

@@ -8,7 +8,7 @@
  import { Label } from '$lib/components/ui/label/index.js';
  import { Textarea } from '$lib/components/ui/textarea/index.js';
  import * as Dialog from '$lib/components/ui/dialog/index.js';
- let { workspaceId, label="New project" }: {workspaceId:string;label?:string}=$props();let open=$state(false);
+ let { workspaceId }: {workspaceId:string}=$props();let open=$state(false);
  let name=$state('');let goal=$state('');let saving=$state(false);let error=$state('');
  let pending=$state<Record<string,string>|null>(null);
  const storageKey='ayni.project.pending';
@@ -24,7 +24,7 @@
   }catch(cause){error=cause instanceof Error?cause.message:'Project could not be created.';}finally{saving=false;}
  }
 </script>
-<Button onclick={()=>open=true}><Plus size={16}/>{label}</Button>
+<Button size="icon" aria-label="New project" title="New project" onclick={()=>open=true}><Plus aria-hidden="true" /></Button>
 <Dialog.Root bind:open><Dialog.Content class="sm:max-w-xl"><Dialog.Header><Dialog.Title>Create project</Dialog.Title><Dialog.Description>Describe your goal.</Dialog.Description></Dialog.Header>
  <form onsubmit={create} class="space-y-5">
   <div class="space-y-2"><Label for="new-project-name">Project name</Label><Input id="new-project-name" bind:value={name} required maxlength={120} autocomplete="off" disabled={!!pending} /></div>
