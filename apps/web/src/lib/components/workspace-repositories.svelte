@@ -135,6 +135,7 @@
           <label class="flex min-w-0 cursor-pointer items-center gap-2 rounded-md p-2 text-sm hover:bg-muted/50">
             <input
               type="checkbox"
+              value={repository.id}
               class="size-4 shrink-0 accent-primary"
               checked={selected}
               onclick={(event) => {

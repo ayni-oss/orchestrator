@@ -97,7 +97,8 @@ test('repository catalog and project associations use retained canonical receipt
   assert.equal((await renamed.json()).commandId,renameReceipt);
   await page.getByRole('heading',{name:'Renamed browser workspace',level:1,exact:true}).waitFor();
   await page.getByRole('textbox',{name:'Workspace name',exact:true}).locator('..').getByText('Saved',{exact:true}).waitFor();
-  const workspaceRepository=page.getByRole('checkbox',{name:'fixture/browser-repository',exact:true});
+  const workspaceRepository=page.getByRole('checkbox',{name:'fixture/browser-repository',exact:true})
+   .and(page.locator(`input[value="${fixture}"]`));
   await workspaceRepository.click();
   await workspaceRepository.and(page.locator(':checked')).waitFor();
   const staleRename=await page.request.post(`${origin}/api/RenameWorkspace`,{headers:{'x-console-request':'1'},data:{...renameRequest,idempotencyKey:crypto.randomUUID(),displayName:'Stale'}});assert.equal(staleRename.status(),409);
