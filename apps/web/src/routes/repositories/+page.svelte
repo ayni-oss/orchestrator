@@ -68,7 +68,7 @@
  async function recover(){if(!pending)return;const result=await rpc('GetRepositoryOperation',{idempotencyKey:pending.idempotencyKey});await accept(result.operation);}
  onMount(()=>{void loadGrid(async()=>{const saved=sessionStorage.getItem(storageKey);if(saved)pending=JSON.parse(saved);await load();});});
 </script>
-<PageHeader title="Repositories" />
+<PageHeader eyebrow="Source code" title="Repositories" />
 <div class="space-y-6">
  {#if error}<Feedback kind="error" title="Repository needs attention" message={error}/>{/if}
  {#if notice}<Feedback title="Repository update" message={notice}/>{/if}
