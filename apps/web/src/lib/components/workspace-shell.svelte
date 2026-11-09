@@ -24,6 +24,14 @@
   let workspaceToRename = $state<Workspace>();
   let renameOpen = $state(false);
   let configurationOpen = $state(page.url.pathname.startsWith("/settings"));
+  function closeConfigurationOnOutsideClick(event: MouseEvent) {
+    if (!configurationOpen) return;
+    const clickedConfiguration = event.composedPath().some(target =>
+      target instanceof Element &&
+      target.matches('#configuration-navigation, [aria-controls="configuration-navigation"]')
+    );
+    if (!clickedConfiguration) configurationOpen = false;
+  }
   afterNavigate(() => {
     sidebarOpen = false;
     configurationOpen = page.url.pathname.startsWith('/settings');
@@ -60,6 +68,7 @@
     </Dropdown.Sub>
   </div>
 {/snippet}
+<svelte:document onclickcapture={closeConfigurationOnOutsideClick} />
 <a class="skip" href="#main-content">Skip to content</a>
 <div class:configuration-open={configurationOpen} class:sidebar-collapsed={sidebarCollapsed} class="workspace-shell">
   <aside id="workspace-navigation" class:mobile-open={sidebarOpen} aria-label="Workspace navigation">
