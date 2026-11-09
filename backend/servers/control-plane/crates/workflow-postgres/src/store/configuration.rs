@@ -216,21 +216,8 @@ impl WorkflowStore {
         );
         let (mut client, driver) = crate::connect(&self.database_url).await?;
         let tx = client.transaction().await?;
-        let (heads, receipts, scope_column, scope_id) = if project.is_empty() {
-            (
-                "workflow_agent_configuration_heads",
-                "workflow_configuration_receipts",
-                "workspace_id",
-                proposed.workspace_id.as_str(),
-            )
-        } else {
-            (
-                "workflow_project_configuration_heads",
-                "workflow_project_configuration_receipts",
-                "project_id",
-                project,
-            )
-        };
+        let (heads, receipts, scope_column, scope_id) =
+            configuration_scope(project, &proposed.workspace_id);
         let head = tx.query_opt(&format!("SELECT revision_id FROM {heads} WHERE workspace_id=$1 AND {scope_column}=$2 FOR UPDATE"), &[&proposed.workspace_id,&scope_id]).await?.ok_or(StoreError::NotFound)?;
         let replay = tx.query_opt(&format!("SELECT request_digest,revision_id FROM {receipts} WHERE {scope_column}=$1 AND idempotency_key=$2"), &[&scope_id,&key]).await?;
         let revision = if let Some(row) = replay {
@@ -240,16 +227,7 @@ impl WorkflowStore {
             if head.get::<_, String>(0) != expected_revision {
                 return Err(StoreError::ConfigurationRevisionConflict);
             }
-            if !proposed.connection_id.is_empty() {
-                let row=tx.query_opt("SELECT enabled,active_credential_revision,models FROM workflow_connections WHERE id=$1 AND provider='openai' AND capability='llm' FOR SHARE",&[&proposed.connection_id]).await?.ok_or(StoreError::NotFound)?;
-                let active: String = row.get(1);
-                let models: Vec<String> =
-                    serde_json::from_str(row.get(2)).map_err(|_| StoreError::CorruptState)?;
-                if !row.get::<_, bool>(0) || active.is_empty() || !models.contains(&proposed.model)
-                {
-                    return Err(StoreError::InvalidInput("connection_model_unavailable"));
-                }
-            }
+            validate_connection(&tx, proposed).await?;
             let revision = support::new_id();
             let input = i64::try_from(proposed.max_input_tokens)
                 .map_err(|_| StoreError::InvalidInput("max_input_tokens"))?;
@@ -344,5 +322,43 @@ mod tests {
         value.max_total_tokens = 10240;
         value.instructions = "a".repeat(16385);
         assert!(validate_configuration(&value).is_err());
+    }
+}
+
+async fn validate_connection(
+    tx: &Transaction<'_>,
+    proposed: &AgentConfiguration,
+) -> Result<(), StoreError> {
+    if proposed.connection_id.is_empty() {
+        return Ok(());
+    }
+    let row=tx.query_opt("SELECT enabled,active_credential_revision,models FROM workflow_connections WHERE id=$1 AND provider='openai' AND capability='llm' FOR SHARE",&[&proposed.connection_id]).await?.ok_or(StoreError::NotFound)?;
+    let active: String = row.get(1);
+    let models: Vec<String> =
+        serde_json::from_str(row.get(2)).map_err(|_| StoreError::CorruptState)?;
+    if !row.get::<_, bool>(0) || active.is_empty() || !models.contains(&proposed.model) {
+        return Err(StoreError::InvalidInput("connection_model_unavailable"));
+    }
+    Ok(())
+}
+
+fn configuration_scope<'a>(
+    project: &'a str,
+    workspace: &'a str,
+) -> (&'static str, &'static str, &'static str, &'a str) {
+    if project.is_empty() {
+        (
+            "workflow_agent_configuration_heads",
+            "workflow_configuration_receipts",
+            "workspace_id",
+            workspace,
+        )
+    } else {
+        (
+            "workflow_project_configuration_heads",
+            "workflow_project_configuration_receipts",
+            "project_id",
+            project,
+        )
     }
 }
