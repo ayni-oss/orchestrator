@@ -25,7 +25,7 @@
 {/snippet}
 {#snippet overviewActions()}<CreateWorkspaceDialog showTrigger />{/snippet}
 <PageHeader
- eyebrow={data.workspace ? label : undefined}
+ eyebrow={data.workspace ? label : 'Overview'}
  title={data.workspace?.displayName ?? label}
  actions={data.workspace ? workspaceActions : overviewActions}
 />
