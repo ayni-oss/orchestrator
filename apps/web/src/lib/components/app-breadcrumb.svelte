@@ -15,7 +15,7 @@
   <strong aria-current="page">{title}</strong>
   {#if back}
     <Button variant="ghost" size="icon" href={back.href} aria-label={back.label} title={back.label}>
-      <ChevronLeft class="size-5" aria-hidden="true" />
+      <ChevronLeft class="size-4" aria-hidden="true" />
     </Button>
   {/if}
 </nav>
