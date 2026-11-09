@@ -4,7 +4,7 @@
   import type { WorkspaceData } from "$lib/workspace-types";
   import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { Layers, Plus, ChevronDown, Check, Settings2, PanelLeftClose, PanelLeftOpen, Menu, X, GitBranch, Package, BrainCircuit, PanelsTopLeft } from "@lucide/svelte";
+  import { Layers, Plus, ChevronDown, EllipsisVertical, Settings2, PanelLeftClose, PanelLeftOpen, Menu, X, GitBranch, Package, BrainCircuit, PanelsTopLeft } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import SidebarItem from "$lib/components/sidebar-item.svelte";
   import CreateWorkspaceDialog from "$lib/components/create-workspace-dialog.svelte";
@@ -22,6 +22,29 @@
     configurationOpen = page.url.pathname.startsWith('/settings');
   });
 </script>
+{#snippet workspaceOption(workspace: WorkspaceData["workspaces"][number])}
+  {@const selected = workspace.id === data.workspace?.id}
+  <div role="presentation" class="flex items-center gap-1">
+    <Dropdown.Item
+      class="min-w-0 flex-1"
+      aria-current={selected ? "true" : undefined}
+      onSelect={() => { void goto(`/?workspace=${workspace.id}`); }}
+    >
+      <span class="truncate">{workspace.displayName}</span>
+    </Dropdown.Item>
+    {#if selected}
+      <Dropdown.Item
+        class="w-8 justify-center"
+        aria-label="Workspace settings"
+        title="Workspace settings"
+        textValue="Workspace settings"
+        onSelect={() => { void goto(`/workspace/settings?workspace=${workspace.id}`); }}
+      >
+        <EllipsisVertical aria-hidden="true" />
+      </Dropdown.Item>
+    {/if}
+  </div>
+{/snippet}
 <a class="skip" href="#main-content">Skip to content</a>
 <div class:configuration-open={configurationOpen} class:sidebar-collapsed={sidebarCollapsed} class="workspace-shell">
   <aside id="workspace-navigation" class:mobile-open={sidebarOpen} aria-label="Workspace navigation">
@@ -42,10 +65,10 @@
         <Dropdown.Content align="start" class="min-w-52">
           <Dropdown.Label>Workspaces</Dropdown.Label>
           {#if data.workspace && !data.workspaces.some(workspace => workspace.id === data.workspace?.id)}
-            <Dropdown.Item onSelect={() => { void goto(`/?workspace=${data.workspace?.id}`); }}>{data.workspace.displayName}<Check class="ml-auto size-4" /></Dropdown.Item>
+            {@render workspaceOption(data.workspace)}
           {/if}
           {#each data.workspaces as workspace (workspace.id)}
-            <Dropdown.Item onSelect={() => { void goto(`/?workspace=${workspace.id}`); }}>{workspace.displayName}{#if workspace.id === data.workspace?.id}<Check class="ml-auto size-4" />{/if}</Dropdown.Item>
+            {@render workspaceOption(workspace)}
           {/each}
           <Dropdown.Separator />
           <Dropdown.Item onSelect={() => { void goto('/'); }}>All workspaces</Dropdown.Item>
