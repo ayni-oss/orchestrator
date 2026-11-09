@@ -37,22 +37,29 @@ future extension with a separate contract. Ayni remains independently useful.
 | --- | --- |
 | Shared catalog repository | Stable source identity and integration reference, reusable without duplicating remote repositories or exposing credentials. |
 | Workspace | Available repositories and shared instructions, context, skills, MCP/provider capabilities and resource defaults. |
-| Project | A chunk of changes, its goal, selected subset of workspace repositories, project context, chat, plans, tasks and results. |
+| Project | A chunk of changes, its goal, agent/model configuration, project context, chat, plans, tasks and results. |
 | Plan version | Reviewed task graph, acceptance criteria, repository/environment impact, PR layout and execution/publication grants. |
 | Task | Modular approved work targeting one repository, with an objective, expected checks, dependencies and bounded authority. |
 | Attempt | One execution with frozen source, runtime, upstream selections, configuration/context revisions and allowance. |
 | PR delivery group | The plan's selection of tasks delivered through one PR in one repository; groups can have explicit base/dependency relationships. |
 
-A project does not inherit every workspace repository as execution scope. It picks
-the repositories needed for its work. Multiple workspaces may make the same
-catalog repository available; their project-private chats, work and grants remain
-separate. Removing availability must check active work and retain provenance;
-existing admitted attempts keep their frozen scope and new use is fenced.
+All workspace repositories are available to every project's conversation research.
+Workspace settings manage the environment and connected repository availability;
+projects own goals, model selection, instructions and agent budgets. Workspaces do
+not own agents. Each request prepares fresh read context with immutable repository
+snapshots and discovered skills. The conversation selects the repositories needed
+for the requested work, and each task acquires only its reviewed source scope and
+dependencies. Availability alone never authorizes writes or execution.
 
-Workspace settings manages which connected catalog repositories are available.
-Project attachment requires membership in that workspace. Migration 0040 seeds
-membership from existing project associations. Removing availability is blocked
-while any project in the workspace still has the repository attached.
+Multiple workspaces may reuse one catalog repository. Chats and task grants remain
+project-scoped. Removing membership affects future discovery; existing admitted
+attempts keep their frozen scope and provenance. Migration 0040 seeds workspace
+membership from prior attachments; migration 0041 makes project availability
+inherited and migrates model configuration to independent project heads.
+
+Fresh source research, skill discovery and automated task source selection still
+need implementation and qualification. The settings and membership APIs alone do
+not establish that execution flow.
 
 ## Project chat, context and capabilities
 

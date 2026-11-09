@@ -153,7 +153,7 @@ async fn preparation_freezes_one_attempt_preserves_origin_and_never_dispatches()
     config.revision_id.clear();
     config.instructions = "Later configuration".into();
     store
-        .update_agent_configuration(&key(), &prior, &config)
+        .update_scoped_agent_configuration(&key(), &project.id, &prior, &config)
         .await?;
     let reopened = WorkflowStore::new(runtime_url.clone());
     assert_eq!(

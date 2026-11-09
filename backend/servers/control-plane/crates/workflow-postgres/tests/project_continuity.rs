@@ -381,7 +381,10 @@ async fn command_bytes(client: &tokio_postgres::Client, turn: &str) -> Result<Ve
 async fn assessments_require_bounded_consent_coalesce_and_replay_without_extra_turns() -> Result {
     let _authority = FIXTURE_AUTHORITY.lock().await;
     let f = fixture().await?;
-    let configuration = f.store.get_agent_configuration(&f.workspace.id, "").await?;
+    let configuration = f
+        .store
+        .get_scoped_agent_configuration(&f.workspace.id, &f.project.id, "")
+        .await?;
     let consent_key = key();
     let consent = f
         .store
@@ -465,7 +468,12 @@ async fn assessments_require_bounded_consent_coalesce_and_replay_without_extra_t
         ..configuration.clone()
     };
     let current = reopened
-        .update_agent_configuration(&key(), &configuration.revision_id, &changed)
+        .update_scoped_agent_configuration(
+            &key(),
+            f.scope().project,
+            &configuration.revision_id,
+            &changed,
+        )
         .await?;
     assert_eq!(
         reopened.admit_outcome_assessments(32).await?,
@@ -537,7 +545,10 @@ async fn an_old_attempts_new_outcome_enters_the_bounded_assessment_selection() -
             )
             .await?;
     }
-    let configuration = f.store.get_agent_configuration(&f.workspace.id, "").await?;
+    let configuration = f
+        .store
+        .get_scoped_agent_configuration(&f.workspace.id, &f.project.id, "")
+        .await?;
     f.store
         .authorize_outcome_assessments(f.scope(), &key(), &configuration.revision_id, 1)
         .await?;
@@ -564,7 +575,10 @@ async fn an_old_attempts_new_outcome_enters_the_bounded_assessment_selection() -
 }
 
 async fn cleanup_origin(f: &Fixture) -> Result {
-    let configuration = f.store.get_agent_configuration(&f.workspace.id, "").await?;
+    let configuration = f
+        .store
+        .get_scoped_agent_configuration(&f.workspace.id, &f.project.id, "")
+        .await?;
     f.store
         .authorize_outcome_assessments(f.scope(), &key(), &configuration.revision_id, 0)
         .await?;

@@ -186,7 +186,7 @@ impl WorkflowStore {
             }
             retained
         } else {
-            let row=tx.query_one("SELECT revision_id FROM workflow_agent_configuration_heads WHERE workspace_id=$1 FOR SHARE", &[&scope.workspace]).await?;
+            let row=tx.query_one("SELECT revision_id FROM workflow_project_configuration_heads WHERE workspace_id=$1 AND project_id=$2 FOR SHARE", &[&scope.workspace,&scope.project]).await?;
             if row.get::<_, String>(0) != expected_configuration {
                 return Err(StoreError::ConfigurationRevisionConflict);
             }
@@ -221,7 +221,7 @@ impl WorkflowStore {
         .await?;
         let candidates=tx.query(
             "WITH latest AS (SELECT DISTINCT ON(conversation_id) * FROM workflow_assessment_authorizations ORDER BY conversation_id,created_at DESC,id DESC)
-             SELECT a.id,a.workspace_id,a.project_id,a.conversation_id FROM latest a JOIN workflow_agent_configuration_heads h ON h.workspace_id=a.workspace_id AND h.revision_id=a.configuration_revision_id
+             SELECT a.id,a.workspace_id,a.project_id,a.conversation_id FROM latest a JOIN workflow_project_configuration_heads h ON h.workspace_id=a.workspace_id AND h.project_id=a.project_id AND h.revision_id=a.configuration_revision_id
              WHERE a.max_assessments>(SELECT count(*) FROM workflow_outcome_assessments s WHERE s.authorization_id=a.id)
              AND COALESCE((SELECT max(cursor) FROM workflow_updates u WHERE u.conversation_id=a.conversation_id),0)>COALESCE((SELECT max(observed_cursor) FROM workflow_assessment_scans z WHERE z.authorization_id=a.id),-1)
              AND NOT EXISTS(SELECT 1 FROM workflow_turns t WHERE t.conversation_id=a.conversation_id AND t.execution_state NOT IN('completed','failed')) ORDER BY a.id LIMIT $1", &[&i64::from(limit)]).await?;
@@ -243,9 +243,9 @@ impl WorkflowStore {
             )
             .await?;
             // Keep the reviewed configuration stable through normal input freezing.
-            tx.query_one("SELECT revision_id FROM workflow_agent_configuration_heads WHERE workspace_id=$1 FOR SHARE", &[&workspace]).await?;
+            tx.query_one("SELECT revision_id FROM workflow_project_configuration_heads WHERE workspace_id=$1 AND project_id=$2 FOR SHARE", &[&workspace,&project]).await?;
             let still_authorized: bool = tx.query_one(
-                "SELECT EXISTS(SELECT 1 FROM workflow_assessment_authorizations a WHERE a.id=$1 AND a.id=(SELECT id FROM workflow_assessment_authorizations WHERE conversation_id=$2 ORDER BY created_at DESC,id DESC LIMIT 1) AND a.configuration_revision_id=(SELECT revision_id FROM workflow_agent_configuration_heads WHERE workspace_id=$3) AND a.max_assessments>(SELECT count(*) FROM workflow_outcome_assessments WHERE authorization_id=a.id))",
+                "SELECT EXISTS(SELECT 1 FROM workflow_assessment_authorizations a WHERE a.id=$1 AND a.id=(SELECT id FROM workflow_assessment_authorizations WHERE conversation_id=$2 ORDER BY created_at DESC,id DESC LIMIT 1) AND a.configuration_revision_id=(SELECT revision_id FROM workflow_project_configuration_heads WHERE workspace_id=$3 AND project_id=a.project_id) AND a.max_assessments>(SELECT count(*) FROM workflow_outcome_assessments WHERE authorization_id=a.id))",
                 &[&authorization,&conversation,&workspace],
             ).await?.get(0);
             if !still_authorized {

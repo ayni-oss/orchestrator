@@ -96,7 +96,12 @@ async fn configured_fixture() -> Result<(Fixture, String), Box<dyn std::error::E
     proposed.connection_id = save.connection_id.clone();
     fixture
         .store
-        .update_agent_configuration(&key(), &current.revision_id, &proposed)
+        .update_scoped_agent_configuration(
+            &key(),
+            &fixture.project,
+            &current.revision_id,
+            &proposed,
+        )
         .await?;
     Ok((fixture, save.connection_id))
 }

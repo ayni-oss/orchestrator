@@ -100,7 +100,7 @@
       {#if data.workspace && data.projects.length}
         <ul class="sidebar-label ml-5 mt-1 space-y-1 border-l border-border pl-2">
           {#each data.projects as project (project.id)}
-            <li><SidebarItem href={`/projects/${project.id}/repositories?workspace=${data.workspace.id}`} active={page.params.id===project.id}><span class="min-w-0 truncate">{project.displayName}</span></SidebarItem></li>
+            <li><SidebarItem href={`/projects/${project.id}/settings?workspace=${data.workspace.id}`} active={page.params.id===project.id}><span class="min-w-0 truncate">{project.displayName}</span></SidebarItem></li>
           {/each}
           {#if data.nextProject}<li><SidebarItem href={`/?workspace=${data.workspace.id}&afterProject=${data.nextProject}`}>More projects</SidebarItem></li>{/if}
         </ul>

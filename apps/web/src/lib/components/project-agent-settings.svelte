@@ -10,7 +10,7 @@
   import FieldSaved from '$lib/components/field-saved.svelte';
   import { rpc, type Connection } from '$lib/api';
 
-  let { workspaceId }: { workspaceId: string } = $props();
+  let { workspaceId, projectId }: { workspaceId: string; projectId: string } = $props();
   const budgets = [
     { key: 'maxInputTokens', id: 'max-input', label: 'Input token budget', min: 1, max: 1000000 },
     { key: 'maxOutputTokens', id: 'max-output', label: 'Output token budget', min: 1, max: 100000 },
@@ -19,7 +19,7 @@
   ] as const;
   type Draft = Record<typeof budgets[number]['key'] | 'connectionId' | 'model' | 'instructions', string>;
   type Configuration = Draft & { workspaceId: string; revisionId: string; provider: string };
-  type Update = { idempotencyKey: string; expectedRevisionId: string; configuration: Configuration };
+  type Update = { projectId: string; idempotencyKey: string; expectedRevisionId: string; configuration: Configuration };
 
   let configuration = $state.raw<Configuration | null>(null);
   let draft = $state<Draft>({
@@ -36,7 +36,7 @@
   let due = false;
   let disposed = false;
 
-  const storageKey = $derived(`ayni.workspace.${workspaceId}.configuration.pending`);
+  const storageKey = $derived(`ayni.project.${projectId}.configuration.pending`);
   const selected = $derived(connections.find(connection => connection.id === draft.connectionId));
   const models = $derived(selected?.models ?? []);
   const overBudget = $derived(Number(draft.maxTotalTokens) < Number(draft.maxInputTokens) + Number(draft.maxOutputTokens));
@@ -51,7 +51,7 @@
     loading = true;
     error = '';
     try {
-      const result = await rpc('GetAgentConfiguration', { workspaceId, revisionId: '' });
+      const result = await rpc('GetAgentConfiguration', { workspaceId, projectId, revisionId: '' });
       configuration = result.configuration;
       applyDraft(pending?.configuration ?? result.configuration);
       const values: Connection[] = [];
@@ -96,6 +96,7 @@
     due = false;
     if (!fields.some(key => draft[key] !== configuration?.[key])) return;
     pending = {
+      projectId,
       idempotencyKey: crypto.randomUUID(),
       expectedRevisionId: configuration.revisionId,
       configuration: { ...draft, workspaceId, revisionId: '', provider: 'openai' },
@@ -170,7 +171,7 @@
       <fieldset class="space-y-5" disabled={loading || (!!pending && !saving)}>
         <div class="space-y-2">
           {#snippet connectionControl()}
-            <NativeSelect.Root id="workspace-connection" class="w-full" value={draft.connectionId} onchange={event => edit('connectionId', event.currentTarget.value)}>
+            <NativeSelect.Root id="project-connection" class="w-full" value={draft.connectionId} onchange={event => edit('connectionId', event.currentTarget.value)}>
               <NativeSelect.Option value="" disabled>Select a connection</NativeSelect.Option>
               {#each connections as connection (connection.id)}
                 <NativeSelect.Option value={connection.id} disabled={!connection.enabled || !connection.activeCredentialRevision}>
@@ -179,23 +180,23 @@
               {/each}
             </NativeSelect.Root>
           {/snippet}
-          {@render field('workspace-connection', 'OpenAI connection', 'connectionId', connectionControl)}
+          {@render field('project-connection', 'OpenAI connection', 'connectionId', connectionControl)}
           <p class="text-xs text-muted-foreground"><a class="underline" href="/settings/llm-providers/openai">Manage OpenAI connections</a></p>
         </div>
         {#snippet modelControl()}
-          <NativeSelect.Root id="workspace-model" class="w-full" value={draft.model} onchange={event => edit('model', event.currentTarget.value)} disabled={!selected}>
+          <NativeSelect.Root id="project-model" class="w-full" value={draft.model} onchange={event => edit('model', event.currentTarget.value)} disabled={!selected}>
             <NativeSelect.Option value="" disabled>Select a discovered model</NativeSelect.Option>
             {#each models as model (model)}<NativeSelect.Option value={model}>{model}</NativeSelect.Option>{/each}
           </NativeSelect.Root>
         {/snippet}
-        {@render field('workspace-model', 'Model', 'model', modelControl)}
+        {@render field('project-model', 'Model', 'model', modelControl)}
         {#if draft.connectionId !== configuration.connectionId && !draft.model}
           <p class="text-sm text-muted-foreground">Select a model to save the new connection.</p>
         {/if}
         {#snippet instructionsControl()}
-          <Textarea id="workspace-instructions" value={draft.instructions} oninput={event => edit('instructions', event.currentTarget.value)} maxlength={16384} rows={5} />
+          <Textarea id="project-instructions" value={draft.instructions} oninput={event => edit('instructions', event.currentTarget.value)} maxlength={16384} rows={5} />
         {/snippet}
-        {@render field('workspace-instructions', 'Instructions', 'instructions', instructionsControl)}
+        {@render field('project-instructions', 'Instructions', 'instructions', instructionsControl)}
         <div class="grid gap-4 sm:grid-cols-2">
           {#each budgets as { key, id, label, min, max } (key)}
             {#snippet numberControl()}

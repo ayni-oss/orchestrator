@@ -41,10 +41,11 @@ remain dated provenance. A change that cannot preserve admitted work requires an
 explicit retained-state decision; the v1 rule never authorizes silently rewriting
 receipts, replacing frozen inputs, or deleting retained stores.
 
-## Shared configuration and frozen inputs
+## Project configuration and frozen inputs
 
-A workspace owns one current agent configuration and immutable configuration
-revisions. All its projects and conversations share that configuration. One
+A project owns one current agent configuration and immutable configuration
+revisions. Its conversations share that configuration; other projects have independent heads.
+Workspace settings own repository availability and environment configuration. One
 revision identifies the complete snapshot: instructions, provider, model,
 input/output/total token limits and session idle timeout. Instructions and
 provider binding do not acquire independent interface versions.
@@ -124,7 +125,7 @@ The initial tool set consists only of scoped reads:
 
 | Tool | Allowed input and output |
 | --- | --- |
-| `read_workspace_instructions` | Read the instructions in the turn's frozen configuration revision. |
+| `read_project_instructions` | Read the instructions in the turn's frozen configuration revision. |
 | `read_project_status` | Read the originating project's objective, factual status, bounded task lifecycle facts and accepted outcomes at a retained snapshot. No other conversation transcript, plan or reasoning. |
 | `read_conversation_history` | Read bounded accepted history from the originating conversation through the frozen eligibility boundary. |
 
@@ -171,3 +172,19 @@ gRPC, JetStream, context manifests, logs and retained transcripts.
 Exercise affected runtime behavior on the explicit Docker Desktop Kubernetes
 context and report blocked checks. Scripted fixtures cannot establish real
 provider recovery or latency.
+
+## Repository research and task scope
+
+All projects automatically inherit their workspace's available connected repositories.
+There is no project repository attachment step. Workspace membership bounds discovery;
+removing membership changes future availability without rewriting historical receipts.
+Project settings choose the model, provider connection, instructions and budgets.
+Migration 41 seeds each existing project with its previous workspace configuration;
+subsequent changes are independent and prior turn inputs remain immutable.
+
+The next execution layer must prepare fresh, immutable read context across those
+repositories for each request, discover applicable skills and permit bounded source
+reads. The conversation then selects only the repositories needed by each reviewed
+task. This research preparation is not yet implemented: current conversation inputs
+still contain messages and project facts, and task source preparation remains explicit.
+Do not treat inherited catalog availability as evidence of grounded source research.

@@ -71,7 +71,12 @@ async fn session_expiry_replacement_and_stale_reports_preserve_frozen_turns() ->
     proposed.instructions = "Instructions for later turns".into();
     proposed.revision_id.clear();
     let changed = store
-        .update_agent_configuration(&key(), &frozen.configuration.revision_id, &proposed)
+        .update_scoped_agent_configuration(
+            &key(),
+            &project.id,
+            &frozen.configuration.revision_id,
+            &proposed,
+        )
         .await?;
     let second = store
         .send_message(

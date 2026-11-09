@@ -17,8 +17,8 @@ The [roadmap](ROADMAP.md) defines executable milestones and acceptance; the
 ## Product responsibilities
 
 Workspaces define available repositories and shared context, instructions, skills
-and MCP capabilities. Projects select the repositories needed for a chunk of
-changes. Project chat researches source, validates plans, follows progress and
+and MCP capabilities. Projects own goals and model settings and inherit workspace repository availability.
+Conversations select repository scope for individual tasks. Project chat researches source, validates plans, follows progress and
 resolves questions. Approved agents should inspect, edit, write tests, build and
 repair within their scope and allowance, including dependency/environment changes.
 Workspace repository scope and the full engineering loop remain planned.
@@ -36,9 +36,8 @@ Execution, quality, acceptance and PR publication remain separate outcomes.
 ## Current delivery boundary
 
 The sole [web application](apps/web/README.md) provides workspace/project creation,
-named GitHub/GHCR/OpenAI configuration, repository discovery/catalog, direct project
-associations and exact-commit static Ayni inspection. Workspace repository
-availability is not yet enforced; project chat, plan review and complete task
+named GitHub/GHCR/OpenAI configuration, repository discovery/catalog, workspace
+availability, project model settings and exact-commit static Ayni inspection; project chat, plan review and complete task
 browser journeys remain planned.
 
 Runtime preparation implements bounded Kubernetes build, separate certification,

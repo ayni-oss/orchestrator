@@ -9,7 +9,7 @@ const retainedEffect = suffix => {
 };
 const counters = { anthropicCalls:0, anthropicModes:{}, mcpReads: 0, mcpEffects: retainedEffect(''), mcpLostEffects: retainedEffect('-lost'), mcpCancelledEffects: retainedEffect('-cancel'), calls: 0, modes: {}, requestIds: [], toolContinuations: 0 };
 const mcpTools = mode => mode === 'mcp-lost' ? ['mcp_fixture_lost'] : mode === 'mcp-cancel' ? ['mcp_fixture_cancel'] : ['mcp_fixture_read', 'mcp_fixture_write'];
-const toolNames = ['read_workspace_instructions', 'read_project_status', 'read_conversation_history'];
+const toolNames = ['read_project_instructions', 'read_project_status', 'read_conversation_history'];
 const validTools = tools => tools === undefined || (Array.isArray(tools) && (tools.length >= 3 && tools.length <= 9) && new Set(tools.map(tool => tool.name)).size === tools.length && toolNames.every(name => tools.some(tool => tool.name === name)) && tools.every(tool => {
   if (tool.type !== 'function' || tool.strict !== true || tool.parameters?.type !== 'object' || tool.parameters?.additionalProperties !== false) return false;
   if (toolNames.includes(tool.name)) return Object.keys(tool.parameters.properties || {}).length === 0 && Array.isArray(tool.parameters.required) && tool.parameters.required.length === 0;
@@ -128,7 +128,7 @@ const server = http.createServer(async (request, response) => {
       for (const item of outputs) {
         const value = JSON.parse(item.output);
         switch (expected.get(item.call_id)) {
-          case 'read_workspace_instructions': if (typeof value.instructions !== 'string' || !value.revision_id) throw new Error(); break;
+          case 'read_project_instructions': if (typeof value.instructions !== 'string' || !value.revision_id) throw new Error(); break;
           case 'read_project_status': if (typeof value.objective !== 'string' || !value.project_id || !value.status) throw new Error(); break;
           case 'read_conversation_history': if (!Array.isArray(value.records) || !value.records.some(record => record.role === 'user' && record.content.includes('fixture:tools'))) throw new Error(); break;
           default: throw new Error();

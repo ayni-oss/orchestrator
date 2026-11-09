@@ -358,7 +358,7 @@ impl WorkflowStore {
             validate_id(workspace, "workspace_id")?;
             validate_id(project, "project_id")?;
             require_project(&tx, workspace, project).await?;
-            tx.query("SELECT r.* FROM workflow_repositories r JOIN workflow_project_repositories a ON a.repository_id=r.id WHERE a.workspace_id=$1 AND a.project_id=$2 AND r.id>$3 ORDER BY r.id LIMIT $4",&[&workspace,&project,&after,&(limit+1)]).await?
+            tx.query("SELECT r.* FROM workflow_repositories r JOIN workflow_workspace_repositories a ON a.repository_id=r.id WHERE a.workspace_id=$1 AND r.id>$2 ORDER BY r.id LIMIT $3",&[&workspace,&after,&(limit+1)]).await?
         } else {
             tx.query(
                 "SELECT * FROM workflow_repositories WHERE id>$1 ORDER BY id LIMIT $2",
@@ -397,10 +397,10 @@ impl WorkflowStore {
         Ok(page(items, limit, |item| &item.id))
     }
 
-    /// Set catalog availability without changing existing project associations.
+    /// Set repository availability for every project in the workspace.
     ///
     /// # Errors
-    /// Reject missing resources, conflicting retries and removal while in use.
+    /// Reject missing resources and conflicting retries.
     pub async fn set_workspace_repository(
         &self,
         key: &str,
@@ -443,12 +443,6 @@ impl WorkflowStore {
                 &[&workspace, &repo],
             ).await?;
         } else {
-            if tx.query_opt(
-                "SELECT 1 FROM workflow_project_repositories WHERE workspace_id=$1 AND repository_id=$2 LIMIT 1",
-                &[&workspace, &repo],
-            ).await?.is_some() {
-                return Err(StoreError::WorkspaceRepositoryInUse);
-            }
             tx.execute(
                 "DELETE FROM workflow_workspace_repositories WHERE workspace_id=$1 AND repository_id=$2",
                 &[&workspace, &repo],

@@ -32,7 +32,7 @@
  <div class="mb-6 flex flex-wrap items-center justify-between gap-4"><p class="text-sm text-muted-foreground">{count} {count===1?(data.workspace?'project':'workspace'):label.toLowerCase()}</p><Input class="max-w-xs" bind:value={search} aria-label={`Search ${label.toLowerCase()}`} placeholder={`Search ${label.toLowerCase()}…`}/></div>
  <div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
  {#if data.workspace}
-  {#each projects as project (project.id)}<HierarchyCard kind="project" id={project.id} name={project.displayName} resourceVersion={project.resourceVersion} workspaceId={data.workspace.id} description={project.goal} href={`/projects/${project.id}/repositories?workspace=${data.workspace.id}`}/>{/each}
+  {#each projects as project (project.id)}<HierarchyCard kind="project" id={project.id} name={project.displayName} resourceVersion={project.resourceVersion} workspaceId={data.workspace.id} description={project.goal} href={`/projects/${project.id}/settings?workspace=${data.workspace.id}`}/>{/each}
  {:else}
   {#each workspaces as workspace (workspace.id)}<HierarchyCard kind="workspace" id={workspace.id} name={workspace.displayName} resourceVersion={workspace.resourceVersion} href={`/?workspace=${workspace.id}`}/>{/each}
  {/if}

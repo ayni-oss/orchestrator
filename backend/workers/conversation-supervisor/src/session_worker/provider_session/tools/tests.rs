@@ -7,7 +7,7 @@ fn execution() -> ProviderLoop {
         response: None,
         usage: TokenUsage::default(),
         sources: BTreeMap::from([(
-            "read_workspace_instructions".into(),
+            "read_project_instructions".into(),
             json!({"instructions":"frozen"}),
         )]),
         tools: BTreeMap::new(),
@@ -20,7 +20,7 @@ fn execution() -> ProviderLoop {
 fn call(id: &str, args: &str) -> FunctionCall {
     FunctionCall {
         call_id: id.into(),
-        name: "read_workspace_instructions".into(),
+        name: "read_project_instructions".into(),
         arguments: args.into(),
     }
 }
@@ -65,7 +65,7 @@ fn invocation_count_argument_size_and_output_size_are_hard_bounds() {
         Err("provider_tool_rejected")
     );
     execution.sources.insert(
-        "read_workspace_instructions".into(),
+        "read_project_instructions".into(),
         json!({"instructions":"x".repeat(32768)}),
     );
     assert_eq!(

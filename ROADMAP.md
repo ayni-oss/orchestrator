@@ -12,7 +12,7 @@ Start fresh branches from current `origin/alpha` and target `alpha`.
 ## Alpha scope
 
 - Connect Ayni-configured repositories and reuse or build, certify, publish and verify their locked runtime images.
-- Configure a workspace's available repositories, instructions, contextual resources, skills and MCP capabilities. Projects choose the subset needed for a chunk of changes.
+- Configure a workspace's available repositories, instructions, contextual resources, skills and MCP capabilities. Projects own goals and model settings; conversations select task repository scope from workspace availability.
 - Use project chat to research source, develop and validate plans, follow progress, answer questions and review results.
 - Review modular tasks that run independently, sequentially or as a dependency DAG. The plan chooses how tasks map to pull requests within each repository.
 - Authorize agents to inspect, edit, add and delete files, update dependencies and locks, write tests, build, run checks and repair failures within scope and allowance.
@@ -31,8 +31,7 @@ managed quality, recovery, dependency selections, publication and execution hist
 The current UI covers configuration, hierarchy, repository catalog/association,
 static Ayni inspection and qualified-profile-gated runtime preparation.
 
-The complete alpha journey is not delivered. Current projects associate directly
-with catalog repositories without workspace membership. Planning lacks built-in
+The complete alpha journey is not delivered. Projects inherit workspace repository membership and have independent model configuration. Planning lacks built-in
 repository research; coding is one bounded file-proposal pass; task preparation
 uses a trusted local helper. Chat/task browser journeys and their cumulative
 acceptance need replacement coverage.
@@ -59,7 +58,7 @@ context, telemetry and recovery work ship inside these increments.
 
 | Milestone | Dependencies | Maintainer can do | Completion evidence |
 | --- | --- | --- | --- |
-| A: Workspace scope and execution-ready repositories | Existing catalog, connections and runtime stages | Make catalog repositories available to a workspace; select a project subset; prepare source and a verified runtime through the product. | Workspace/project subset checks, shared catalog reuse, exact source/lock/image evidence, real registry readback and server-side source preparation without per-task terminal commands. |
+| A: Workspace scope and execution-ready repositories | Existing catalog, connections and runtime stages | Make catalog repositories available to a workspace; make every workspace repository available to project research; prepare source and a verified runtime through the product. | Workspace membership and task subset checks, shared catalog reuse, exact source/lock/image evidence, real registry readback and server-side source preparation without per-task terminal commands. |
 | B: Grounded project chat and plans | A for repository scope; research can proceed while runtime preparation is blocked | Research selected repositories, retrieve project context, apply configured skills/MCP tools and review a versioned plan with a task graph and PR layout. | Real repository reads/search, retained context provenance, isolated project scope, graph validation, exact approval/retry and visible preparation blockers. |
 | C: Autonomous task to reviewable PR | A and B | Approve bounded execution and publication, then follow an agent implementing, writing tests and repairing one real task. | Tool-driven multi-round work, dependency/lock changes where required, managed Ayni pass, acceptance evidence and one recoverable real PR; event-backed dispatch/report/cancellation and browser recovery. |
 | D: Complete project graphs and delivery | C; graph design starts in B | Run standalone, sequential and branching tasks, parallelize ready work, inspect blockers and deliver the plan's chosen PR structure. | Dependency and integration evidence, explicit upstream commits, conflicting changes, failed-upstream blocking, independent-task progress, shared/separate PR linkage and confirmed recovery without duplicate execution/publication. |

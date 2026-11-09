@@ -106,6 +106,7 @@ message AgentConfiguration {
   string connection_id = 10;
 }
 message GetAgentConfigurationRequest {
+  string project_id = 3;
   string workspace_id = 1;
   // Empty selects the current revision.
   string revision_id = 2;
@@ -114,6 +115,7 @@ message GetAgentConfigurationResponse {
   AgentConfiguration configuration = 1;
 }
 message UpdateAgentConfigurationRequest {
+  string project_id = 4;
   string idempotency_key = 1;
   string expected_revision_id = 2;
   // revision_id must be empty; the server assigns the immutable identity.

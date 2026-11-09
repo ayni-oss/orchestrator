@@ -251,7 +251,7 @@ async fn provider_configuration_preserves_credentials_and_freezes_workspace_admi
     proposed.provider = "openai".into();
     proposed.model = "fixture-model".into();
     let update = store
-        .update_agent_configuration(&key(), &initial.revision_id, &proposed)
+        .update_scoped_agent_configuration(&key(), &project.id, &initial.revision_id, &proposed)
         .await?;
     let first = store
         .send_message(

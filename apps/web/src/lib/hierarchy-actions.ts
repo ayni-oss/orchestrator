@@ -7,9 +7,9 @@ export function workspaceActions(id: string) {
   }];
 }
 
-export function projectActions(id: string, workspaceId: string | undefined, rename: () => void) {
+export function projectActions(id: string, workspaceId: string | undefined) {
   return [{
-    label: 'Repositories',
-    onSelect: () => { void goto(`/projects/${id}/repositories?workspace=${workspaceId}`); },
-  }, { label: 'Rename', onSelect: rename }];
+    label: 'Project settings',
+    onSelect: () => { void goto(`/projects/${id}/settings?workspace=${workspaceId}`); },
+  }];
 }

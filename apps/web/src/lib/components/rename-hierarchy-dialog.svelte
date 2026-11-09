@@ -77,9 +77,9 @@
  <Button type="submit" disabled={saving||!draft.trim()}>{saving?'Saving…':pending?'Retry rename':'Save name'}</Button>
 {/snippet}
 {#if inline}
- <InformationCard title="Rename workspace">
+ <InformationCard title={kind === 'workspace' ? 'Rename workspace' : 'Rename project'}>
   <div class="space-y-2">
-   <Label for={`rename-${kind}-${id}`}>Workspace name</Label>
+   <Label for={`rename-${kind}-${id}`}>{kind === 'workspace' ? 'Workspace name' : 'Project name'}</Label>
    <div class="relative">
     <Input id={`rename-${kind}-${id}`} value={draft} oninput={event=>scheduleSave(event.currentTarget.value)} required maxlength={120} readonly={!!pending||saving} />
     <FieldSaved revision={savedRevision}/>

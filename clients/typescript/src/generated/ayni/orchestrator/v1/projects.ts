@@ -104,6 +104,7 @@ export interface AgentConfiguration {
 }
 
 export interface GetAgentConfigurationRequest {
+  projectId: string;
   workspaceId: string;
   /** Empty selects the current revision. */
   revisionId: string;
@@ -114,6 +115,7 @@ export interface GetAgentConfigurationResponse {
 }
 
 export interface UpdateAgentConfigurationRequest {
+  projectId: string;
   idempotencyKey: string;
   expectedRevisionId: string;
   /** revision_id must be empty; the server assigns the immutable identity. */
@@ -1564,11 +1566,14 @@ export const AgentConfiguration: MessageFns<AgentConfiguration> = {
 };
 
 function createBaseGetAgentConfigurationRequest(): GetAgentConfigurationRequest {
-  return { workspaceId: "", revisionId: "" };
+  return { projectId: "", workspaceId: "", revisionId: "" };
 }
 
 export const GetAgentConfigurationRequest: MessageFns<GetAgentConfigurationRequest> = {
   encode(message: GetAgentConfigurationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.projectId !== "") {
+      writer.uint32(26).string(message.projectId);
+    }
     if (message.workspaceId !== "") {
       writer.uint32(10).string(message.workspaceId);
     }
@@ -1591,6 +1596,14 @@ export const GetAgentConfigurationRequest: MessageFns<GetAgentConfigurationReque
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
           case 1: {
             if (tag !== 10) {
               break;
@@ -1621,6 +1634,11 @@ export const GetAgentConfigurationRequest: MessageFns<GetAgentConfigurationReque
 
   fromJSON(object: any): GetAgentConfigurationRequest {
     return {
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
       workspaceId: isSet(object.workspaceId)
         ? globalThis.String(object.workspaceId)
         : isSet(object.workspace_id)
@@ -1636,6 +1654,9 @@ export const GetAgentConfigurationRequest: MessageFns<GetAgentConfigurationReque
 
   toJSON(message: GetAgentConfigurationRequest): unknown {
     const obj: any = {};
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
     if (message.workspaceId !== "") {
       obj.workspaceId = message.workspaceId;
     }
@@ -1650,6 +1671,7 @@ export const GetAgentConfigurationRequest: MessageFns<GetAgentConfigurationReque
   },
   fromPartial(object: DeepPartial<GetAgentConfigurationRequest>): GetAgentConfigurationRequest {
     const message = createBaseGetAgentConfigurationRequest();
+    message.projectId = object.projectId ?? "";
     message.workspaceId = object.workspaceId ?? "";
     message.revisionId = object.revisionId ?? "";
     return message;
@@ -1728,11 +1750,14 @@ export const GetAgentConfigurationResponse: MessageFns<GetAgentConfigurationResp
 };
 
 function createBaseUpdateAgentConfigurationRequest(): UpdateAgentConfigurationRequest {
-  return { idempotencyKey: "", expectedRevisionId: "", configuration: undefined };
+  return { projectId: "", idempotencyKey: "", expectedRevisionId: "", configuration: undefined };
 }
 
 export const UpdateAgentConfigurationRequest: MessageFns<UpdateAgentConfigurationRequest> = {
   encode(message: UpdateAgentConfigurationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.projectId !== "") {
+      writer.uint32(34).string(message.projectId);
+    }
     if (message.idempotencyKey !== "") {
       writer.uint32(10).string(message.idempotencyKey);
     }
@@ -1758,6 +1783,14 @@ export const UpdateAgentConfigurationRequest: MessageFns<UpdateAgentConfiguratio
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
           case 1: {
             if (tag !== 10) {
               break;
@@ -1796,6 +1829,11 @@ export const UpdateAgentConfigurationRequest: MessageFns<UpdateAgentConfiguratio
 
   fromJSON(object: any): UpdateAgentConfigurationRequest {
     return {
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
       idempotencyKey: isSet(object.idempotencyKey)
         ? globalThis.String(object.idempotencyKey)
         : isSet(object.idempotency_key)
@@ -1812,6 +1850,9 @@ export const UpdateAgentConfigurationRequest: MessageFns<UpdateAgentConfiguratio
 
   toJSON(message: UpdateAgentConfigurationRequest): unknown {
     const obj: any = {};
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
     if (message.idempotencyKey !== "") {
       obj.idempotencyKey = message.idempotencyKey;
     }
@@ -1829,6 +1870,7 @@ export const UpdateAgentConfigurationRequest: MessageFns<UpdateAgentConfiguratio
   },
   fromPartial(object: DeepPartial<UpdateAgentConfigurationRequest>): UpdateAgentConfigurationRequest {
     const message = createBaseUpdateAgentConfigurationRequest();
+    message.projectId = object.projectId ?? "";
     message.idempotencyKey = object.idempotencyKey ?? "";
     message.expectedRevisionId = object.expectedRevisionId ?? "";
     message.configuration = (object.configuration !== undefined && object.configuration !== null)

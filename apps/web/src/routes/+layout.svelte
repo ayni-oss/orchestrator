@@ -5,7 +5,7 @@
  import WorkspaceShell from '$lib/components/workspace-shell.svelte';
  import '../app.css';
  let { data, children } = $props();
- const title=$derived(page.url.pathname.startsWith('/repositories')?'Repositories':page.url.pathname.startsWith('/projects/')?'Project repositories':page.url.pathname.startsWith('/settings/runtime-signing')?'Runtime signing':page.url.pathname.startsWith('/settings/container-registries')?'Container registries':page.url.pathname.startsWith('/settings/llm-providers')?'LLM providers':page.url.pathname.startsWith('/settings')?'Source control':page.url.pathname.startsWith('/workspace/settings')?'Workspace settings':data.workspace?'Projects':'Workspaces');
+ const title=$derived(page.url.pathname.startsWith('/repositories')?'Repositories':page.url.pathname.startsWith('/projects/')?'Project settings':page.url.pathname.startsWith('/settings/runtime-signing')?'Runtime signing':page.url.pathname.startsWith('/settings/container-registries')?'Container registries':page.url.pathname.startsWith('/settings/llm-providers')?'LLM providers':page.url.pathname.startsWith('/settings')?'Source control':page.url.pathname.startsWith('/workspace/settings')?'Workspace settings':data.workspace?'Projects':'Workspaces');
  const breadcrumbs=$derived.by(() => {
   const workspaces = { href: '/', label: 'Workspaces' };
   const workspace = data.workspace && {
@@ -17,6 +17,7 @@
    case '/': return workspace ? [workspaces, { ...current, label: workspace.label }] : [current];
    case '/workspace/settings':
    case '/projects/[id]/repositories':
+   case '/projects/[id]/settings':
     return workspace ? [workspaces, workspace, current] : [workspaces, current];
    case '/repositories/[id]':
     return [{ href: '/repositories', label: 'Repositories' }, { ...current, label: 'Repository' }];

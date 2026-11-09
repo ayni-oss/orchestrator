@@ -177,8 +177,8 @@ async fn preparation_result(
         serde_json::from_slice(&row.get::<_, Vec<u8>>(0)).map_err(|_| StoreError::CorruptState)?;
     let configuration = tx
         .query_opt(
-            "SELECT revision_id FROM workflow_agent_configuration_heads WHERE workspace_id=$1",
-            &[&scope.workspace],
+            "SELECT revision_id FROM workflow_project_configuration_heads WHERE workspace_id=$1 AND project_id=$2",
+            &[&scope.workspace, &scope.project],
         )
         .await?
         .map(|row| row.get::<_, String>(0))
@@ -188,7 +188,7 @@ async fn preparation_result(
         dependency_blockers(tx, scope, &row.get::<_, String>(4), &specification, inputs).await?,
     );
     if configuration.is_empty() {
-        blockers.push("Workspace agent configuration must be selected".into());
+        blockers.push("Project agent configuration must be selected".into());
     }
     let command = support::new_id();
     let attempt = if blockers.is_empty() {

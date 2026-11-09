@@ -51,7 +51,7 @@ pub struct FunctionCall {
 #[must_use]
 pub fn scoped_tools() -> Value {
     let mut tools = [
-        ("read_workspace_instructions", "Read this turn's frozen workspace instructions."),
+        ("read_project_instructions", "Read this turn's frozen project instructions."),
         ("read_project_status", "Read the originating project's retained factual status snapshot."),
         ("read_conversation_history", "Read accepted originating-conversation history through the frozen eligibility boundary."),
     ].into_iter().map(|(name, description)| json!({

@@ -26,6 +26,10 @@ async fn immutable_configuration_freezes_admission_and_isolates_conversations() 
         .create_project(&key(), &workspace.id, "Project", "configuration isolation")
         .await?
         .resource;
+    let other_project = store
+        .create_project(&key(), &workspace.id, "Other project", "Independent model")
+        .await?
+        .resource;
     let a = store
         .create_conversation(&key(), &workspace.id, &project.id, "A")
         .await?
@@ -34,7 +38,9 @@ async fn immutable_configuration_freezes_admission_and_isolates_conversations() 
         .create_conversation(&key(), &workspace.id, &project.id, "B")
         .await?
         .resource;
-    let initial = store.get_agent_configuration(&workspace.id, "").await?;
+    let initial = store
+        .get_scoped_agent_configuration(&workspace.id, &project.id, "")
+        .await?;
     assert_eq!(initial.provider, "scripted");
     let first = store
         .send_message(&key(), &workspace.id, &project.id, &a.id, "Only A")
@@ -68,18 +74,34 @@ async fn immutable_configuration_freezes_admission_and_isolates_conversations() 
     };
     let update_key = key();
     let updated = store
-        .update_agent_configuration(&update_key, &initial.revision_id, &proposed)
+        .update_scoped_agent_configuration(
+            &update_key,
+            &project.id,
+            &initial.revision_id,
+            &proposed,
+        )
         .await?;
+    assert_eq!(
+        store
+            .get_scoped_agent_configuration(&workspace.id, &other_project.id, "")
+            .await?,
+        initial
+    );
     assert_ne!(updated.revision_id, initial.revision_id);
     assert_eq!(
         store
-            .update_agent_configuration(&update_key, &initial.revision_id, &proposed)
+            .update_scoped_agent_configuration(
+                &update_key,
+                &project.id,
+                &initial.revision_id,
+                &proposed
+            )
             .await?,
         updated
     );
     assert_eq!(
         store
-            .get_agent_configuration(&workspace.id, &initial.revision_id)
+            .get_scoped_agent_configuration(&workspace.id, &project.id, &initial.revision_id)
             .await?,
         initial
     );
@@ -92,14 +114,19 @@ async fn immutable_configuration_freezes_admission_and_isolates_conversations() 
     );
     assert!(matches!(
         store
-            .update_agent_configuration(&key(), &initial.revision_id, &proposed)
+            .update_scoped_agent_configuration(&key(), &project.id, &initial.revision_id, &proposed)
             .await,
         Err(StoreError::ConfigurationRevisionConflict)
     ));
     proposed.instructions = "Changed retry payload".into();
     assert!(matches!(
         store
-            .update_agent_configuration(&update_key, &initial.revision_id, &proposed)
+            .update_scoped_agent_configuration(
+                &update_key,
+                &project.id,
+                &initial.revision_id,
+                &proposed
+            )
             .await,
         Err(StoreError::IdempotencyConflict)
     ));
@@ -168,8 +195,8 @@ async fn immutable_configuration_freezes_admission_and_isolates_conversations() 
     let k1 = key();
     let k2 = key();
     let (one, two) = tokio::join!(
-        store.update_agent_configuration(&k1, &updated.revision_id, &proposed),
-        store.update_agent_configuration(&k2, &updated.revision_id, &proposed)
+        store.update_scoped_agent_configuration(&k1, &project.id, &updated.revision_id, &proposed),
+        store.update_scoped_agent_configuration(&k2, &project.id, &updated.revision_id, &proposed)
     );
     assert_eq!(usize::from(one.is_ok()) + usize::from(two.is_ok()), 1);
     assert!(
@@ -190,10 +217,12 @@ async fn immutable_configuration_freezes_admission_and_isolates_conversations() 
     let retained = store
         .get_turn_inputs(&workspace.id, &project.id, &a.id, &admitted.turn_id)
         .await?;
-    let current = store.get_agent_configuration(&workspace.id, "").await?;
+    let current = store
+        .get_scoped_agent_configuration(&workspace.id, &project.id, "")
+        .await?;
     proposed.instructions = "Later configuration".into();
     store
-        .update_agent_configuration(&key(), &current.revision_id, &proposed)
+        .update_scoped_agent_configuration(&key(), &project.id, &current.revision_id, &proposed)
         .await?;
     assert_eq!(
         store
@@ -213,7 +242,9 @@ async fn immutable_configuration_freezes_admission_and_isolates_conversations() 
             .await?,
         retained
     );
-    let current = store.get_agent_configuration(&workspace.id, "").await?;
+    let current = store
+        .get_scoped_agent_configuration(&workspace.id, &project.id, "")
+        .await?;
     let scripted = AgentConfiguration {
         connection_id: String::new(),
         revision_id: String::new(),
@@ -222,7 +253,7 @@ async fn immutable_configuration_freezes_admission_and_isolates_conversations() 
         ..current.clone()
     };
     store
-        .update_agent_configuration(&key(), &current.revision_id, &scripted)
+        .update_scoped_agent_configuration(&key(), &project.id, &current.revision_id, &scripted)
         .await?;
     prove_large_context(&store, &runtime_url, &workspace.id, &project.id).await?;
     Ok(())
@@ -298,7 +329,7 @@ async fn prove_large_context(
             .map(|c| c.revision_id.as_str()),
         Some(
             store
-                .get_agent_configuration(workspace_id, "")
+                .get_scoped_agent_configuration(workspace_id, project_id, "")
                 .await?
                 .revision_id
                 .as_str()

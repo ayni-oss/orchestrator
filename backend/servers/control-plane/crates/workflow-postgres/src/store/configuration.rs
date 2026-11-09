@@ -20,7 +20,7 @@ pub(super) async fn freeze_turn_inputs(
     turn: &str,
 ) -> Result<(), StoreError> {
     // Lock the same head as updates. Admission observes exactly one committed revision.
-    let row = tx.query_one("SELECT revision_id FROM workflow_agent_configuration_heads WHERE workspace_id=$1 FOR SHARE", &[&workspace]).await?;
+    let row = tx.query_one("SELECT revision_id FROM workflow_project_configuration_heads WHERE workspace_id=$1 AND project_id=(SELECT project_id FROM workflow_turns WHERE id=$2) FOR SHARE", &[&workspace,&turn]).await?;
     let revision: String = row.get(0);
     let configuration=tx.query_one("SELECT connection_id FROM workflow_agent_configurations WHERE workspace_id=$1 AND revision_id=$2",&[&workspace,&revision]).await?;
     let connection: String = configuration.get(0);
@@ -127,16 +127,37 @@ impl WorkflowStore {
         workspace: &str,
         revision: &str,
     ) -> Result<AgentConfiguration, StoreError> {
+        self.get_scoped_agent_configuration(workspace, "", revision)
+            .await
+    }
+
+    /// Read the current or retained configuration inside the requested project.
+    /// # Errors
+    /// Returns invalid scope, missing configuration or database errors.
+    pub async fn get_scoped_agent_configuration(
+        &self,
+        workspace: &str,
+        project: &str,
+        revision: &str,
+    ) -> Result<AgentConfiguration, StoreError> {
         support::validate_id(workspace, "workspace_id")?;
+        if !project.is_empty() {
+            support::validate_id(project, "project_id")?;
+        }
         if !revision.is_empty() {
             support::validate_id(revision, "revision_id")?;
         }
         let (client, driver) = crate::connect(&self.database_url).await?;
+        let head = if project.is_empty() {
+            "SELECT revision_id FROM workflow_agent_configuration_heads WHERE workspace_id=$1 AND $3=''"
+        } else {
+            "SELECT revision_id FROM workflow_project_configuration_heads WHERE workspace_id=$1 AND project_id=$3"
+        };
         let query = format!(
-            "SELECT {COLUMNS} FROM workflow_agent_configurations WHERE workspace_id=$1 AND revision_id=COALESCE(NULLIF($2,''),(SELECT revision_id FROM workflow_agent_configuration_heads WHERE workspace_id=$1))"
+            "SELECT {COLUMNS} FROM workflow_agent_configurations WHERE workspace_id=$1 AND revision_id=COALESCE(NULLIF($2,''),({head})) AND EXISTS ({head}) AND ($3='' OR EXISTS (SELECT 1 FROM workflow_project_configuration_revisions r WHERE r.project_id=$3 AND r.revision_id=workflow_agent_configurations.revision_id))"
         );
         let row = client
-            .query_opt(&query, &[&workspace, &revision])
+            .query_opt(&query, &[&workspace, &revision, &project])
             .await?
             .ok_or(StoreError::NotFound)?;
         let result = configuration(&row)?;
@@ -155,7 +176,24 @@ impl WorkflowStore {
         expected_revision: &str,
         proposed: &AgentConfiguration,
     ) -> Result<AgentConfiguration, StoreError> {
+        self.update_scoped_agent_configuration(key, "", expected_revision, proposed)
+            .await
+    }
+
+    /// Replace a project configuration using an immutable revision and retry receipt.
+    /// # Errors
+    /// Returns invalid input, missing scope, conflicting revision or database errors.
+    pub async fn update_scoped_agent_configuration(
+        &self,
+        key: &str,
+        project: &str,
+        expected_revision: &str,
+        proposed: &AgentConfiguration,
+    ) -> Result<AgentConfiguration, StoreError> {
         support::validate_key(key)?;
+        if !project.is_empty() {
+            support::validate_id(project, "project_id")?;
+        }
         support::validate_id(expected_revision, "expected_revision_id")?;
         if !proposed.revision_id.is_empty() {
             return Err(StoreError::InvalidInput("revision_id_is_server_assigned"));
@@ -178,8 +216,23 @@ impl WorkflowStore {
         );
         let (mut client, driver) = crate::connect(&self.database_url).await?;
         let tx = client.transaction().await?;
-        let head = tx.query_opt("SELECT revision_id FROM workflow_agent_configuration_heads WHERE workspace_id=$1 FOR UPDATE", &[&proposed.workspace_id]).await?.ok_or(StoreError::NotFound)?;
-        let replay = tx.query_opt("SELECT request_digest,revision_id FROM workflow_configuration_receipts WHERE workspace_id=$1 AND idempotency_key=$2", &[&proposed.workspace_id,&key]).await?;
+        let (heads, receipts, scope_column, scope_id) = if project.is_empty() {
+            (
+                "workflow_agent_configuration_heads",
+                "workflow_configuration_receipts",
+                "workspace_id",
+                proposed.workspace_id.as_str(),
+            )
+        } else {
+            (
+                "workflow_project_configuration_heads",
+                "workflow_project_configuration_receipts",
+                "project_id",
+                project,
+            )
+        };
+        let head = tx.query_opt(&format!("SELECT revision_id FROM {heads} WHERE workspace_id=$1 AND {scope_column}=$2 FOR UPDATE"), &[&proposed.workspace_id,&scope_id]).await?.ok_or(StoreError::NotFound)?;
+        let replay = tx.query_opt(&format!("SELECT request_digest,revision_id FROM {receipts} WHERE {scope_column}=$1 AND idempotency_key=$2"), &[&scope_id,&key]).await?;
         let revision = if let Some(row) = replay {
             support::ensure_digest(&row.get::<_, Vec<u8>>(0), &digest)?;
             row.get::<_, String>(1)
@@ -207,8 +260,17 @@ impl WorkflowStore {
             let idle = i64::try_from(proposed.idle_timeout_seconds)
                 .map_err(|_| StoreError::InvalidInput("idle_timeout_seconds"))?;
             tx.execute("INSERT INTO workflow_agent_configurations (workspace_id,revision_id,instructions,provider,model,max_input_tokens,max_output_tokens,max_total_tokens,idle_timeout_seconds,connection_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", &[&proposed.workspace_id,&revision,&proposed.instructions,&proposed.provider,&proposed.model,&input,&output,&total,&idle,&proposed.connection_id]).await?;
-            tx.execute("UPDATE workflow_agent_configuration_heads SET revision_id=$2 WHERE workspace_id=$1", &[&proposed.workspace_id,&revision]).await?;
-            tx.execute("INSERT INTO workflow_configuration_receipts (workspace_id,idempotency_key,request_digest,revision_id) VALUES ($1,$2,$3,$4)", &[&proposed.workspace_id,&key,&&digest[..],&revision]).await?;
+            tx.execute(
+                &format!("UPDATE {heads} SET revision_id=$2 WHERE {scope_column}=$1"),
+                &[&scope_id, &revision],
+            )
+            .await?;
+            if project.is_empty() {
+                tx.execute("INSERT INTO workflow_configuration_receipts (workspace_id,idempotency_key,request_digest,revision_id) VALUES ($1,$2,$3,$4)", &[&proposed.workspace_id,&key,&&digest[..],&revision]).await?;
+            } else {
+                tx.execute("INSERT INTO workflow_project_configuration_revisions(workspace_id,project_id,revision_id) VALUES ($1,$2,$3)", &[&proposed.workspace_id,&project,&revision]).await?;
+                tx.execute("INSERT INTO workflow_project_configuration_receipts (workspace_id,project_id,idempotency_key,request_digest,revision_id) VALUES ($1,$2,$3,$4,$5)", &[&proposed.workspace_id,&project,&key,&&digest[..],&revision]).await?;
+            }
             revision
         };
         let query = format!(

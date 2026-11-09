@@ -229,12 +229,19 @@ async fn associations(store: &WorkflowStore, repo: &Repository, connection: &str
         .associate_repository(&command, &a.id, &pa.id, &repo.id)
         .await?;
     assert_eq!(first, retry);
-    assert!(matches!(
+    store
+        .set_workspace_repository(&key(), &a.id, &repo.id, false)
+        .await?;
+    assert!(
         store
-            .set_workspace_repository(&key(), &a.id, &repo.id, false)
-            .await,
-        Err(StoreError::WorkspaceRepositoryInUse)
-    ));
+            .list_repositories(Some((&a.id, &pa.id)), "", 50)
+            .await?
+            .0
+            .is_empty()
+    );
+    store
+        .set_workspace_repository(&key(), &a.id, &repo.id, true)
+        .await?;
     assert!(matches!(
         store
             .associate_repository(&command, &b.id, &pb.id, &repo.id)
