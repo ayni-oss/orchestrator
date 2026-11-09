@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { toast } from 'svelte-sonner';
  import { onMount } from 'svelte';
  import { Button } from '$lib/components/ui/button/index.js';
  import { Input } from '$lib/components/ui/input/index.js';
@@ -13,7 +14,7 @@
  let configuration=$state<Configuration|null>(null);let connections=$state.raw<Connection[]>([]);
  let connectionId=$state('');let model=$state('');let instructions=$state('');
  let input=$state('8192');let output=$state('2048');let total=$state('10240');let idle=$state('300');
- let busy=$state(true);let error=$state('');let notice=$state('');let pending=$state('');
+ let busy=$state(true);let error=$state('');let pending=$state('');
  const storageKey=$derived(`ayni.workspace.${workspaceId}.configuration.pending`);
  const selected=$derived(connections.find(c=>c.id===connectionId));
  const models=$derived(selected?.models||[]);
@@ -21,12 +22,11 @@
  function apply(c:Configuration){configuration=c;connectionId=c.connectionId||'';model=c.model==='scripted'?'':c.model;instructions=c.instructions;input=c.maxInputTokens;output=c.maxOutputTokens;total=c.maxTotalTokens;idle=c.idleTimeoutSeconds;}
  async function load(){const result=await rpc('GetAgentConfiguration',{workspaceId,revisionId:''});apply(result.configuration);const values:Connection[]=[];let afterId='';let pages=0;do{pages++;const result=await rpc('ListConnections',{afterId,limit:100});values.push(...(result.connections||[]).filter((c:Connection)=>c.capability==='llm'));afterId=result.nextAfterId||'';}while(afterId&&pages<20);connections=values;}
  async function submit(event:SubmitEvent){event.preventDefault();if(!configuration||pending||!selected?.enabled||!selected.activeCredentialRevision)return;const request={idempotencyKey:crypto.randomUUID(),expectedRevisionId:configuration.revisionId,configuration:{workspaceId,revisionId:'',connectionId,provider:'openai',model,instructions,maxInputTokens:input,maxOutputTokens:output,maxTotalTokens:total,idleTimeoutSeconds:idle}};pending=JSON.stringify(request);sessionStorage.setItem(storageKey,pending);await recover();}
- async function recover(){await perform(async()=>{const result=await rpc('UpdateAgentConfiguration',JSON.parse(pending));pending='';sessionStorage.removeItem(storageKey);apply(result.configuration);notice='Workspace configuration saved. New turns use this connection and budget.';});}
+ async function recover(){await perform(async()=>{const result=await rpc('UpdateAgentConfiguration',JSON.parse(pending));pending='';sessionStorage.removeItem(storageKey);apply(result.configuration);toast.success('Workspace configuration saved', { description: 'New turns use this connection and budget.' });});}
  onMount(()=>{pending=sessionStorage.getItem(storageKey)||'';void perform(load);});
 </script>
 <div class="space-y-6">
  {#if error}<Feedback kind="error" title="Configuration needs attention" message={error}/>{/if}
- {#if notice}<Feedback title="Workspace updated" message={notice}/>{/if}
  {#if pending}<InformationCard title="Recover a configuration update"><p>Retry the retained command to recover its original result.</p><div class="flex gap-3"><Button disabled={busy} onclick={recover}>Recover update</Button><Button disabled={busy} variant="outline" onclick={()=>{pending='';sessionStorage.removeItem(storageKey);}}>Abandon recovery</Button></div></InformationCard>{/if}
  {#if configuration}<InformationCard title="Agent configuration"><form onsubmit={submit} class="space-y-5">
   <div class="space-y-2"><Label for="workspace-connection">OpenAI connection</Label><NativeSelect.Root id="workspace-connection" class="w-full" bind:value={connectionId} onchange={()=>model=''} required disabled={busy||!!pending}><NativeSelect.Option value="" disabled>Select a connection</NativeSelect.Option>{#each connections as c (c.id)}<NativeSelect.Option value={c.id} disabled={!c.enabled||!c.activeCredentialRevision}>{c.displayName}{!c.enabled?' (disabled)':!c.activeCredentialRevision?' (validation required)':''}</NativeSelect.Option>{/each}</NativeSelect.Root><p class="text-xs text-muted-foreground"><a class="underline" href="/settings/llm-providers/openai">Manage OpenAI connections</a></p></div>

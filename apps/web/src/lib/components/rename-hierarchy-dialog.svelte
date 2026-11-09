@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { toast } from 'svelte-sonner';
  import { onMount } from 'svelte';
  import { invalidateAll } from '$app/navigation';
  import { rpc } from '$lib/api';
@@ -31,6 +32,7 @@
    }
    await rpc(kind==='workspace'?'RenameWorkspace':'RenameProject',pending);
    sessionStorage.removeItem(storageKey);pending=null;open=false;await invalidateAll();
+   toast.success(kind==='workspace'?'Workspace renamed':'Project renamed');
   }catch(cause){error=cause instanceof Error?cause.message:'The name could not be saved.';}finally{saving=false;}
  }
  function discard(){sessionStorage.removeItem(storageKey);pending=null;open=false;void invalidateAll();}

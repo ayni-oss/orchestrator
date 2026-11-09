@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { Toaster } from 'svelte-sonner';
  import { onMount } from 'svelte';
  import { page } from '$app/state';
  import WorkspaceShell from '$lib/components/workspace-shell.svelte';
@@ -32,3 +33,4 @@
 </script>
 <svelte:head><title>{title} · Ayni Orchestrator</title></svelte:head>
 <WorkspaceShell {data} {title} {breadcrumbs}>{@render children()}</WorkspaceShell>
+<Toaster closeButton pauseWhenPageIsHidden style="--normal-bg: var(--popover); --normal-text: var(--popover-foreground); --normal-border: var(--border); --border-radius: var(--radius);" />

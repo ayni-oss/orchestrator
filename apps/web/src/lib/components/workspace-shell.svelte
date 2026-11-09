@@ -8,8 +8,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import SidebarItem from "$lib/components/sidebar-item.svelte";
   import CreateWorkspaceDialog from "$lib/components/create-workspace-dialog.svelte";
-  import RenameHierarchyDialog from "$lib/components/rename-hierarchy-dialog.svelte";
-  import { hierarchyActions } from "$lib/hierarchy-actions";
+  import { workspaceActions } from "$lib/hierarchy-actions";
   import * as Dropdown from "$lib/components/ui/dropdown-menu/index.js";
   import ThemeToggle from "$lib/components/theme-toggle.svelte";
   import AppBreadcrumb from "$lib/components/app-breadcrumb.svelte";
@@ -21,8 +20,6 @@
   let collapsePreference = $state<boolean>();
   const sidebarCollapsed = $derived(collapsePreference ?? compactViewport.current);
   let createWorkspaceOpen = $state(false);
-  let workspaceToRename = $state<Workspace>();
-  let renameOpen = $state(false);
   let configurationOpen = $state(page.url.pathname.startsWith("/settings"));
   function closeConfigurationOnOutsideClick(event: MouseEvent) {
     if (!configurationOpen) return;
@@ -60,11 +57,7 @@
         <EllipsisVertical aria-hidden="true" />
       </Dropdown.SubTrigger>
       <Dropdown.SubContent>
-        {#each hierarchyActions('workspace', workspace.id, () => {
-          workspaceToRename = workspace;
-          renameOpen = true;
-          sidebarOpen = false;
-        }) as action (action.label)}
+        {#each workspaceActions(workspace.id) as action (action.label)}
           <Dropdown.Item onSelect={action.onSelect}>{action.label}</Dropdown.Item>
         {/each}
       </Dropdown.SubContent>
@@ -131,15 +124,6 @@
     </nav>
   {/if}
   <CreateWorkspaceDialog bind:open={createWorkspaceOpen} />
-  {#if renameOpen && workspaceToRename}
-    <RenameHierarchyDialog
-      kind="workspace"
-      id={workspaceToRename.id}
-      name={workspaceToRename.displayName}
-      resourceVersion={workspaceToRename.resourceVersion}
-      bind:open={renameOpen}
-    />
-  {/if}
   <div class="main-shell">
     <header class="topbar">
       <Button variant="ghost" class="mobile-toggle" onclick={() => sidebarOpen = !sidebarOpen} aria-label="Toggle workspace navigation" aria-expanded={sidebarOpen} aria-controls="workspace-navigation">{#if sidebarOpen}<PanelLeftClose size={20} />{:else}<Menu size={20} />{/if}</Button>

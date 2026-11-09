@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { toast } from 'svelte-sonner';
  import { RefreshCw } from '@lucide/svelte';
  import RepositoryCard from '$lib/components/repository-card.svelte';
  import { onMount } from 'svelte';
@@ -15,7 +16,7 @@
  import { repositoryReasons, type Repository, type RepositoryOperation, type GithubInstallation, type GithubRepository, type ConnectRequest } from '$lib/repositories';
  let connections=$state.raw<Connection[]>([]);let catalog=$state.raw<Repository[]>([]);
  let discovered=$state.raw<GithubRepository[]>([]);
- let connectionId=$state('');let installationId=$state('');let busy=$state(true);let error=$state('');let notice=$state('');
+ let connectionId=$state('');let installationId=$state('');let busy=$state(true);let error=$state('');
  let nextCatalog=$state('');let nextRepositories=$state(0);
  let pending=$state<ConnectRequest|null>(null);
  let refreshing=$state(false);
@@ -41,7 +42,7 @@
  async function loadCatalog(append=false){const result=await rpc('ListRepositories',{afterId:append?nextCatalog:'',limit:50});catalog=append?[...catalog,...(result.repositories||[])]:result.repositories||[];nextCatalog=result.nextAfterId||'';}
  function changeSource(id:string) {
   connectionId=id;
-  installationId='';discovered=[];nextRepositories=0;error='';notice='';
+  installationId='';discovered=[];nextRepositories=0;error='';
   if (id) void loadGrid(discoverSource);
  }
  async function discoverSource() {
@@ -54,15 +55,15 @@
   }
   const [installation] = installations;
   if (!installation) {
-   notice = 'No installations found. Install this GitHub App on the account that owns your repositories.';
+   toast.warning('No installations found', { description: 'Install this GitHub App on the account that owns your repositories.' });
    return;
   }
   if (installation.suspended) throw new Error('This GitHub App installation is suspended. Restore it on GitHub, then select the connection again.');
   installationId = installation.installationId;
   await findRepositories();
  }
- async function findRepositories(append=false){if(!source||!installationId)return;const result=await rpc('ListGithubRepositories',{connectionId,expectedConnectionRevision:source.revision,installationId,page:append?nextRepositories:1});if(result.safeReason)throw new Error(repositoryReasons[result.safeReason]||'Repository discovery failed.');discovered=[...new Map((append?[...discovered,...(result.repositories||[])]:result.repositories||[]).map((v:GithubRepository)=>[v.providerRepositoryId,v])).values()] as GithubRepository[];nextRepositories=result.nextPage||0;if(!discovered.length)notice='No repositories found. Check which repositories this installation can access.';}
- async function accept(op:RepositoryOperation){notice=op.state==='completed'?`${op.repository?.fullName||'Repository'} connected. Ayni inspection and runtime preparation are still required.`:repositoryReasons[op.safeReason||'']||'Source access is awaiting completion.';if(op.state!=='accepted')persist(null);await loadCatalog();}
+ async function findRepositories(append=false){if(!source||!installationId)return;const result=await rpc('ListGithubRepositories',{connectionId,expectedConnectionRevision:source.revision,installationId,page:append?nextRepositories:1});if(result.safeReason)throw new Error(repositoryReasons[result.safeReason]||'Repository discovery failed.');discovered=[...new Map((append?[...discovered,...(result.repositories||[])]:result.repositories||[]).map((v:GithubRepository)=>[v.providerRepositoryId,v])).values()] as GithubRepository[];nextRepositories=result.nextPage||0;if(!discovered.length)toast.info('No repositories found', { description: 'Check which repositories this installation can access.' });}
+ async function accept(op:RepositoryOperation){if(op.state==='completed')toast.success(`${op.repository?.fullName||'Repository'} connected`, { description: 'Ayni inspection and runtime preparation are still required.' });else toast.info(repositoryReasons[op.safeReason||'']||'Source access is awaiting completion.');if(op.state!=='accepted')persist(null);await loadCatalog();}
  async function resume(){if(!pending)return;try{const result=await rpc('ConnectRepository',pending);await accept(result.operation);}catch(e){if(e instanceof RpcError&&e.status===400)persist(null);throw e;}}
  async function connect(repo:GithubRepository){if(!source||pending)return;persist({idempotencyKey:crypto.randomUUID(),connectionId,expectedConnectionRevision:source.revision,installationId,providerRepositoryId:repo.providerRepositoryId});await resume();}
  async function recover(){if(!pending)return;const result=await rpc('GetRepositoryOperation',{idempotencyKey:pending.idempotencyKey});await accept(result.operation);}
@@ -71,7 +72,6 @@
 <PageHeader eyebrow="Source code" title="Repositories" />
 <div class="space-y-6">
  {#if error}<Feedback kind="error" title="Repository needs attention" message={error}/>{/if}
- {#if notice}<Feedback title="Repository update" message={notice}/>{/if}
  {#if pending}<InformationCard title="Recover repository connection"><p>The request is retained with its original source and repository selection. Recover its status or retry the same request.</p><code class="break-all text-xs">{pending.idempotencyKey}</code><div class="flex flex-wrap gap-3"><Button disabled={busy} onclick={()=>perform(recover)}>Recover status</Button><Button variant="outline" disabled={busy} onclick={()=>perform(resume)}>Retry same connection</Button><Button variant="outline" disabled={busy} onclick={()=>persist(null)}>Dismiss recovery</Button></div></InformationCard>{/if}
  <div class="space-y-4">
   <div class="space-y-2">

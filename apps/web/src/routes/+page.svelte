@@ -4,36 +4,29 @@
  import PageHeader from '$lib/components/page-header.svelte';
  import ActionMenu from '$lib/components/action-menu.svelte';
  import HierarchyCard from '$lib/components/hierarchy-card.svelte';
- import RenameHierarchyDialog from '$lib/components/rename-hierarchy-dialog.svelte';
- import { hierarchyActions } from '$lib/hierarchy-actions';
+ import { workspaceActions } from '$lib/hierarchy-actions';
  import CreateProject from '$lib/components/create-project.svelte';
  import CreateWorkspaceDialog from '$lib/components/create-workspace-dialog.svelte';
  import { Button } from '$lib/components/ui/button/index.js';
  import { Input } from '$lib/components/ui/input/index.js';
  let {data}:PageProps=$props();let search=$state('');
- let renameDialog=$state<RenameHierarchyDialog>();
  const label=$derived(data.workspace?'Projects':'Workspaces');
  const count=$derived(data.workspace?data.projects.length:data.workspaces.length);
  const projects=$derived(data.projects.filter(project=>`${project.displayName} ${project.goal}`.toLowerCase().includes(search.toLowerCase())));
  const workspaces=$derived(data.workspaces.filter(workspace=>workspace.displayName.toLowerCase().includes(search.toLowerCase())));
 </script>
-{#snippet workspaceActions()}
+{#snippet workspaceHeaderActions()}
  {#if data.workspace}
   <CreateProject workspaceId={data.workspace.id} />
-  <ActionMenu size="icon" label={`${data.workspace.displayName} actions`} actions={hierarchyActions('workspace', data.workspace.id, () => renameDialog?.show())} />
+  <ActionMenu size="icon" label={`${data.workspace.displayName} actions`} actions={workspaceActions(data.workspace.id)} />
  {/if}
 {/snippet}
 {#snippet overviewActions()}<CreateWorkspaceDialog showTrigger />{/snippet}
 <PageHeader
  eyebrow={data.workspace ? label : 'Overview'}
  title={data.workspace?.displayName ?? label}
- actions={data.workspace ? workspaceActions : overviewActions}
+ actions={data.workspace ? workspaceHeaderActions : overviewActions}
 />
-{#if data.workspace}
- {#key data.workspace.id}
-  <RenameHierarchyDialog bind:this={renameDialog} kind="workspace" id={data.workspace.id} name={data.workspace.displayName} resourceVersion={data.workspace.resourceVersion} />
- {/key}
-{/if}
 {#if data.error}<section role="alert" class="space-y-4 rounded-xl border p-6"><h2>{label} couldn’t be loaded</h2><p>{data.error}</p><Button variant="outline" onclick={()=>location.reload()}>Try again</Button></section>
 {:else}
  <div class="mb-6 flex flex-wrap items-center justify-between gap-4"><p class="text-sm text-muted-foreground">{count} {count===1?(data.workspace?'project':'workspace'):label.toLowerCase()}</p><Input class="max-w-xs" bind:value={search} aria-label={`Search ${label.toLowerCase()}`} placeholder={`Search ${label.toLowerCase()}…`}/></div>

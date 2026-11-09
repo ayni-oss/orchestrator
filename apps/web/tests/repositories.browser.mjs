@@ -87,7 +87,9 @@ test('repository catalog and project associations use retained canonical receipt
    await Promise.all([page.waitForURL(new URL(destination,origin).href),next.click()]);
   }
   const workspaceCard=workspaceLink.locator('..');
-  await workspaceCard.getByRole('button').click();await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
+  await workspaceCard.getByRole('button').click();
+  await page.getByRole('menuitem',{name:'Workspace settings',exact:true}).click();
+  await page.getByRole('button',{name:'Rename workspace',exact:true}).click();
   await page.getByRole('textbox',{name:'Name',exact:true}).fill('Renamed browser workspace');
   let renameRequest,renameReceipt,acknowledge;const lostRename=new Promise(resolve=>{acknowledge=resolve;});
   await page.route('**/api/RenameWorkspace',async route=>{renameRequest=route.request().postDataJSON();const response=await route.fetch();assert.equal(response.status(),200);renameReceipt=(await response.json()).commandId;await route.abort('failed');acknowledge();});
@@ -95,9 +97,9 @@ test('repository catalog and project associations use retained canonical receipt
   await page.unroute('**/api/RenameWorkspace');await page.reload();
   const [renamed]=await Promise.all([page.waitForResponse(r=>r.url().endsWith('/api/RenameWorkspace')),page.getByRole('button',{name:'Retry rename',exact:true}).click()]);
   assert.equal((await renamed.json()).commandId,renameReceipt);
-  await workspaceCard.getByRole('heading',{name:'Renamed browser workspace',exact:true}).waitFor();
+  await page.getByRole('heading',{name:'Renamed browser workspace',level:1,exact:true}).waitFor();
   const staleRename=await page.request.post(`${origin}/api/RenameWorkspace`,{headers:{'x-console-request':'1'},data:{...renameRequest,idempotencyKey:crypto.randomUUID(),displayName:'Stale'}});assert.equal(staleRename.status(),409);
-  await page.locator(`main a[href="/?workspace=${a}"]`).click();
+  await page.getByRole('navigation',{name:'Breadcrumb'}).getByRole('link',{name:'Renamed browser workspace',exact:true}).click();
   await page.getByRole('heading',{name:'Renamed browser workspace',level:1,exact:true}).waitFor();
   const projectLink=page.locator(`main a[href="/projects/${pa}/repositories?workspace=${a}"]`);
   await projectLink.locator('..').getByRole('button').click();
