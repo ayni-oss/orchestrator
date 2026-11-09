@@ -31,7 +31,7 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   const workspaceResult=await createdWorkspace.json();
   assert.equal(workspaceResult.workspace.displayName,workspace);
   const workspaceId=workspaceResult.workspace.id;
-  await page.getByRole('heading',{name:'Projects',exact:true}).waitFor();
+  await page.getByRole('heading',{name:workspace,level:1,exact:true}).waitFor();
   await page.getByRole('button',{name:'New project',exact:true}).click();
   await page.getByLabel('Project name',{exact:true}).fill('Product acceptance');
   await page.getByLabel('Goal',{exact:true}).fill('Verify retained hierarchy through the product');

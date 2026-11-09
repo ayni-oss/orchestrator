@@ -37,7 +37,7 @@
  onMount(() => { void load(); });
 </script>
 <Button variant="link" class="mb-4 px-0" href="/repositories">Back to repositories</Button>
-<PageHeader title={repo?.fullName || 'Repository'} description={repo ? `${repo.private ? 'Private repository' : 'Public repository'} · Default branch: ${repo.defaultBranch}` : undefined}/>
+<PageHeader eyebrow={repo ? "Repository" : undefined} title={repo?.fullName ?? "Repository"} description={repo ? `${repo.private ? 'Private repository' : 'Public repository'} · Default branch: ${repo.defaultBranch}` : undefined}/>
 <div class="max-w-5xl space-y-5">
  {#if busy}<p role="status" class="text-sm text-muted-foreground">Loading repository…</p>{:else if error}<Feedback kind="error" title="Repository unavailable" message={error}/><Button variant="outline" onclick={load}>Try again</Button>
  {:else if repo}

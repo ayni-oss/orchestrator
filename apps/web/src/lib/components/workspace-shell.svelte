@@ -75,7 +75,6 @@
         </Dropdown.Content>
       </Dropdown.Root>
     </div>
-    <SidebarItem label="Workspace settings" href={data.workspace ? `/workspace/settings?workspace=${data.workspace.id}` : '/'} disabled={!data.workspace} active={title==='Workspace settings'}><Settings2 /><span class="sidebar-label">Workspace settings</span></SidebarItem>
     <nav aria-label="Projects" class="mt-7 min-h-0 overflow-y-auto">
       <SidebarItem label="Projects" href={data.workspace ? `/?workspace=${data.workspace.id}` : '/'} disabled={!data.workspace} active={title==='Projects'}><Layers /><span class="sidebar-label">Projects</span></SidebarItem>
       {#if data.workspace && data.projects.length}

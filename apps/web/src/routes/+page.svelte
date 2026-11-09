@@ -13,7 +13,7 @@
  const projects=$derived(data.projects.filter(project=>`${project.displayName} ${project.goal}`.toLowerCase().includes(search.toLowerCase())));
  const workspaces=$derived(data.workspaces.filter(workspace=>workspace.displayName.toLowerCase().includes(search.toLowerCase())));
 </script>
-<PageHeader eyebrow={data.workspace?.displayName??'Workspaces'} title={label} description={data.workspace?'Give your work a goal. Build the plan from there.':'Choose a workspace to explore its projects.'}>
+<PageHeader eyebrow={data.workspace ? label : undefined} title={data.workspace?.displayName ?? label} description={data.workspace?'Give your work a goal. Build the plan from there.':'Choose a workspace to explore its projects.'}>
  {#snippet actions()}{#if data.workspace}<CreateProject workspaceId={data.workspace.id}/>{:else}<CreateWorkspaceDialog showTrigger/>{/if}{/snippet}
 </PageHeader>
 {#if data.error}<section role="alert" class="space-y-4 rounded-xl border p-6"><h2>{label} couldn’t be loaded</h2><p>{data.error}</p><Button variant="outline" onclick={()=>location.reload()}>Try again</Button></section>
