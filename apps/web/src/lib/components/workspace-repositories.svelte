@@ -6,8 +6,6 @@
   import InformationCard from '$lib/components/information-card.svelte';
   import Feedback from '$lib/components/feedback.svelte';
   import { Button } from '$lib/components/ui/button/index.js';
-  import { Label } from '$lib/components/ui/label/index.js';
-  import * as NativeSelect from '$lib/components/ui/native-select/index.js';
 
   let { workspaceId }: { workspaceId: string } = $props();
   type MembershipChange = {
@@ -19,13 +17,15 @@
   let catalog = $state.raw<Repository[]>([]);
   let members = $state.raw<Repository[]>([]);
   let nextCatalog = $state('');
-  let repositoryId = $state('');
   let pending = $state<MembershipChange | null>(null);
   let busy = $state(true);
   let error = $state('');
   const storageKey = $derived(`ayni.workspace.${workspaceId}.repository.pending`);
   const memberIds = $derived(new Set(members.map(repository => repository.id)));
-  const choices = $derived(catalog.filter(repository => !memberIds.has(repository.id)));
+  const repositories = $derived([
+    ...catalog,
+    ...members.filter(repository => !catalog.some(entry => entry.id === repository.id)),
+  ]);
 
   async function perform(action: () => Promise<void>) {
     busy = true;
@@ -72,7 +72,6 @@
       throw cause;
     }
     clearPending();
-    repositoryId = '';
     toast.success(change.available ? 'Repository added to workspace' : 'Repository removed from workspace');
     await loadMembers();
   }
@@ -97,7 +96,6 @@
 </script>
 
 <InformationCard title="Workspace repositories">
-  <p class="text-sm text-muted-foreground">Add connected repositories so projects in this workspace can use them.</p>
   {#if error}<Feedback kind="error" title="Workspace repositories need attention" message={error} />{/if}
   {#if pending}
     <div class="space-y-2">
@@ -105,31 +103,33 @@
       <Button variant="outline" disabled={busy} onclick={() => perform(retry)}>Retry repository change</Button>
     </div>
   {/if}
-  <div class="space-y-2">
-    <Label for="workspace-repository">Connected repository</Label>
-    <NativeSelect.Root id="workspace-repository" class="w-full" bind:value={repositoryId} disabled={busy || !!pending}>
-      <NativeSelect.Option value="">Choose a repository</NativeSelect.Option>
-      {#each choices as repository (repository.id)}
-        <NativeSelect.Option value={repository.id}>{repository.fullName}</NativeSelect.Option>
-      {/each}
-    </NativeSelect.Root>
-  </div>
+  <fieldset class="space-y-2" disabled={busy || !!pending} aria-busy={busy}>
+    <legend class="text-sm font-medium">Select repositories</legend>
+    {#if repositories.length}
+      <div class="grid grid-cols-2 gap-2">
+        {#each repositories as repository (repository.id)}
+          {@const selected = memberIds.has(repository.id)}
+          <label class="flex min-w-0 cursor-pointer items-center gap-2 rounded-md border border-border p-2 text-sm hover:bg-muted/50">
+            <input
+              type="checkbox"
+              class="size-4 shrink-0 accent-primary"
+              checked={selected}
+              onclick={(event) => {
+                event.preventDefault();
+                changeMembership(repository.id, !selected);
+              }}
+            />
+            <span class="min-w-0 [overflow-wrap:anywhere]">{repository.fullName}</span>
+          </label>
+        {/each}
+      </div>
+    {:else if !busy}
+      <p class="text-sm text-muted-foreground">Connect a repository in the catalog to add it here.</p>
+    {/if}
+  </fieldset>
   <div class="flex flex-wrap gap-2">
-    <Button disabled={busy || !!pending || !choices.some(repository => repository.id === repositoryId)} onclick={() => changeMembership(repositoryId, true)}>Add repository</Button>
     <Button variant="link" href="/repositories">Open repository catalog</Button>
     {#if nextCatalog}<Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => loadCatalog(true))}>More catalog repositories</Button>{/if}
     <Button variant="outline" disabled={busy || !!pending} onclick={() => perform(async () => { await Promise.all([loadCatalog(), loadMembers()]); })}>Refresh workspace repositories</Button>
   </div>
-  {#if members.length}
-    <ul class="divide-y divide-border">
-      {#each members as repository (repository.id)}
-        <li class="flex items-center justify-between gap-3 py-2">
-          <span class="min-w-0 break-words">{repository.fullName}</span>
-          <Button variant="ghost" disabled={busy || !!pending} aria-label={`Remove ${repository.fullName}`} onclick={() => changeMembership(repository.id, false)}>Remove</Button>
-        </li>
-      {/each}
-    </ul>
-  {:else if !busy}
-    <p class="text-sm text-muted-foreground">No repositories are available to this workspace yet.</p>
-  {/if}
 </InformationCard>

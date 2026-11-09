@@ -97,9 +97,9 @@ test('repository catalog and project associations use retained canonical receipt
   const [renamed]=await Promise.all([page.waitForResponse(r=>r.url().endsWith('/api/RenameWorkspace')),page.getByRole('button',{name:'Retry rename',exact:true}).click()]);
   assert.equal((await renamed.json()).commandId,renameReceipt);
   await page.getByRole('heading',{name:'Renamed browser workspace',level:1,exact:true}).waitFor();
-  await page.getByLabel('Connected repository',{exact:true}).selectOption(fixture);
-  await page.getByRole('button',{name:'Add repository',exact:true}).click();
-  await page.getByRole('button',{name:/^Remove /}).waitFor();
+  const workspaceRepository=page.getByRole('checkbox',{name:'fixture/browser-repository',exact:true});
+  await workspaceRepository.click();
+  await workspaceRepository.and(page.locator(':checked')).waitFor();
   const staleRename=await page.request.post(`${origin}/api/RenameWorkspace`,{headers:{'x-console-request':'1'},data:{...renameRequest,idempotencyKey:crypto.randomUUID(),displayName:'Stale'}});assert.equal(staleRename.status(),409);
   await page.getByRole('navigation',{name:'Breadcrumb'}).getByRole('link',{name:'Renamed browser workspace',exact:true}).click();
   await page.getByRole('heading',{name:'Renamed browser workspace',level:1,exact:true}).waitFor();
