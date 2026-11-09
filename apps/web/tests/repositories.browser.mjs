@@ -89,14 +89,14 @@ test('repository catalog and project associations use retained canonical receipt
   const workspaceCard=workspaceLink.locator('..');
   await workspaceCard.getByRole('button').click();
   await page.getByRole('menuitem',{name:'Workspace settings',exact:true}).click();
-  await page.getByRole('textbox',{name:'Workspace name',exact:true}).fill('Renamed browser workspace');
   let renameRequest,renameReceipt,acknowledge;const lostRename=new Promise(resolve=>{acknowledge=resolve;});
   await page.route('**/api/RenameWorkspace',async route=>{renameRequest=route.request().postDataJSON();const response=await route.fetch();assert.equal(response.status(),200);renameReceipt=(await response.json()).commandId;await route.abort('failed');acknowledge();});
-  await page.getByRole('button',{name:'Save name',exact:true}).click();await lostRename;
+  await page.getByRole('textbox',{name:'Workspace name',exact:true}).fill('Renamed browser workspace');await lostRename;
   await page.unroute('**/api/RenameWorkspace');await page.reload();
   const [renamed]=await Promise.all([page.waitForResponse(r=>r.url().endsWith('/api/RenameWorkspace')),page.getByRole('button',{name:'Retry rename',exact:true}).click()]);
   assert.equal((await renamed.json()).commandId,renameReceipt);
   await page.getByRole('heading',{name:'Renamed browser workspace',level:1,exact:true}).waitFor();
+  await page.getByRole('textbox',{name:'Workspace name',exact:true}).locator('..').getByText('Saved',{exact:true}).waitFor();
   const workspaceRepository=page.getByRole('checkbox',{name:'fixture/browser-repository',exact:true});
   await workspaceRepository.click();
   await workspaceRepository.and(page.locator(':checked')).waitFor();

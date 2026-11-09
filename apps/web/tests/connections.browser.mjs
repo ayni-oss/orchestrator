@@ -114,10 +114,16 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   }
   await page.goto(`${origin}/workspace/settings?workspace=${workspaceId}`);
   await page.getByLabel('OpenAI connection',{exact:true}).selectOption(process.env.AYNI_BROWSER_CONNECTION_ID);
+  const savedResponse=page.waitForResponse(response=>response.url().endsWith('/api/UpdateAgentConfiguration'));
   await page.getByLabel('Model',{exact:true}).selectOption('fixture-model');
+  await page.getByLabel('Instructions',{exact:true}).fill('Draft instructions');
   await page.getByLabel('Instructions',{exact:true}).fill('Browser-selected provider');
-  const [saved]=await Promise.all([page.waitForResponse(response=>response.url().endsWith('/api/UpdateAgentConfiguration')),page.getByRole('button',{name:'Save workspace configuration',exact:true}).click()]);
-  assert.equal(saved.status(),200);assert.equal((await saved.json()).configuration.connectionId,process.env.AYNI_BROWSER_CONNECTION_ID);
+  const saved=await savedResponse;
+  assert.equal(saved.status(),200);
+  const {configuration}=await saved.json();
+  assert.equal(configuration.connectionId,process.env.AYNI_BROWSER_CONNECTION_ID);
+  assert.equal(configuration.instructions,'Browser-selected provider');
+  await page.getByLabel('Instructions',{exact:true}).locator('..').getByText('Saved',{exact:true}).waitFor();
   await page.reload();await page.waitForFunction(id=>document.querySelector('#workspace-connection')?.value===id,process.env.AYNI_BROWSER_CONNECTION_ID);
   assert.equal(await page.getByLabel('OpenAI connection',{exact:true}).inputValue(),process.env.AYNI_BROWSER_CONNECTION_ID);
   assert.equal(await page.getByLabel('Model',{exact:true}).inputValue(),'fixture-model');

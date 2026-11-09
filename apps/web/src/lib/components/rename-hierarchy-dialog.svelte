@@ -1,9 +1,10 @@
 <script lang="ts">
  import { toast } from 'svelte-sonner';
- import { onMount } from 'svelte';
+ import { onMount, onDestroy } from 'svelte';
  import { invalidateAll } from '$app/navigation';
  import { rpc } from '$lib/api';
  import * as Dialog from '$lib/components/ui/dialog/index.js';
+ import FieldSaved from '$lib/components/field-saved.svelte';
  import InformationCard from '$lib/components/information-card.svelte';
  import { Button } from '$lib/components/ui/button/index.js';
  import { Input } from '$lib/components/ui/input/index.js';
@@ -14,6 +15,15 @@
  let open=$state(false);
  let draft=$state(''), saving=$state(false), error=$state('');
  let pending=$state<Record<string,string>|null>(null);
+ let saveTimer: ReturnType<typeof setTimeout> | undefined;
+ let savedRevision=$state(0);
+ onDestroy(()=>clearTimeout(saveTimer));
+ function scheduleSave(value: string) {
+  draft=value;
+  savedRevision=0;
+  clearTimeout(saveTimer);
+  if(value.trim()&&value.trim()!==name) saveTimer=setTimeout(()=>void save(),500);
+ }
  const storageKey=$derived(`ayni.rename.${kind}.${id}`);
  onMount(()=>{
   if(inline)draft=name;
@@ -25,8 +35,8 @@
   }catch{sessionStorage.removeItem(storageKey);}}
  });
  export function show(){if(!pending)draft=name;error='';open=true;}
- async function save(event:SubmitEvent){
-  event.preventDefault();if(saving)return;saving=true;error='';
+ async function save(event?:SubmitEvent){
+  event?.preventDefault();if(saving)return;saving=true;error='';
   try{
    if(!pending){
     pending={idempotencyKey:crypto.randomUUID(),workspaceId:workspaceId??id,expectedResourceVersion:resourceVersion,displayName:draft.trim(),...(kind==='project'?{projectId:id}:{})};
@@ -34,8 +44,8 @@
    }
    await rpc(kind==='workspace'?'RenameWorkspace':'RenameProject',pending);
    sessionStorage.removeItem(storageKey);pending=null;open=false;await invalidateAll();
-   if(inline)draft=name;
-   toast.success(kind==='workspace'?'Workspace renamed':'Project renamed');
+   if(inline){draft=name;savedRevision=Date.now();}
+   else toast.success(kind==='workspace'?'Workspace renamed':'Project renamed');
   }catch(cause){error=cause instanceof Error?cause.message:'The name could not be saved.';}finally{saving=false;}
  }
  async function discard(){
@@ -52,26 +62,37 @@
  }
 </script>
 {#snippet renameForm()}
- <form onsubmit={save} class="space-y-5"><div class="space-y-2"><Label for={`rename-${kind}-${id}`}>{inline ? 'Workspace name' : 'Name'}</Label><Input id={`rename-${kind}-${id}`} bind:value={draft} required maxlength={120} disabled={!!pending||saving}/></div>
+ <form onsubmit={save} class="space-y-5"><div class="space-y-2"><Label for={`rename-${kind}-${id}`}>Name</Label><Input id={`rename-${kind}-${id}`} bind:value={draft} required maxlength={120} disabled={!!pending||saving}/></div>
  {#if pending}<p class="text-sm text-muted-foreground">Retry uses the saved request. If the name changed elsewhere, close this request and refresh before renaming again.</p>{/if}
  {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
- {#if inline}
-  <div class="flex flex-wrap gap-2">{@render formActions()}</div>
- {:else}
-  <Dialog.Footer>{@render formActions()}</Dialog.Footer>
- {/if}
+ <Dialog.Footer>{@render formActions()}</Dialog.Footer>
  </form>
 {/snippet}
 {#snippet formActions()}
  {#if pending}
   <Button type="button" variant="outline" disabled={saving} onclick={discard}>Close request and refresh</Button>
- {:else if !inline}
+ {:else}
   <Button type="button" variant="outline" onclick={()=>open=false}>Cancel</Button>
  {/if}
- <Button type="submit" disabled={saving||!draft.trim()||(inline&&!pending&&draft.trim()===name)}>{saving?'Saving…':pending?'Retry rename':'Save name'}</Button>
+ <Button type="submit" disabled={saving||!draft.trim()}>{saving?'Saving…':pending?'Retry rename':'Save name'}</Button>
 {/snippet}
 {#if inline}
- <InformationCard title="Rename workspace">{@render renameForm()}</InformationCard>
+ <InformationCard title="Rename workspace">
+  <div class="space-y-2">
+   <Label for={`rename-${kind}-${id}`}>Workspace name</Label>
+   <div class="relative">
+    <Input id={`rename-${kind}-${id}`} value={draft} oninput={event=>scheduleSave(event.currentTarget.value)} required maxlength={120} readonly={!!pending||saving} />
+    <FieldSaved revision={savedRevision}/>
+   </div>
+  </div>
+  {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
+  {#if pending&&!saving}
+   <div class="flex flex-wrap gap-2">
+    <Button variant="outline" onclick={discard}>Close request and refresh</Button>
+    <Button onclick={()=>save()}>Retry rename</Button>
+   </div>
+  {/if}
+ </InformationCard>
 {:else}
  <Dialog.Root bind:open>
   <Dialog.Content class="sm:max-w-lg">
