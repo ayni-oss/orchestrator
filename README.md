@@ -68,11 +68,11 @@ establish autonomous coding, live forge publication or production readiness.
 
 ## Local development and documentation
 
-Use [local development](docs/technical/operations/local-development.md) for the
-explicit cluster contexts, immutable deployment, live editing and retained-state
-operations. `dev/ctl live` runs the sole frontend and backend live loop. Setup and
-runtime qualification have documented prerequisites; the alpha journey must not
-require per-task terminal source-pack preparation.
+With Docker Desktop Kubernetes running, use `make dev` to build and deploy the
+backend and serve the web app at http://127.0.0.1:5174. See the
+[local quickstart](dev/LIVE.md#start) for prerequisites and a browser smoke test,
+and the [local development guide](docs/technical/operations/local-development.md)
+for immutable deployments, runtime qualification and retained-state operations.
 
 - [Contributor preview](docs/site/index.md) explains current local product availability.
 - [Alpha workflow](docs/site/alpha.md) explains the intended workspace, project, task and PR experience.
