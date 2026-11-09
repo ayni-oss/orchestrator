@@ -59,7 +59,9 @@
      <NativeSelect.Option value={c.id} disabled={!c.enabled||!c.activeCredentialRevision}>{c.displayName}{!c.enabled?' (disabled)':!c.activeCredentialRevision?' (validation required)':''}</NativeSelect.Option>
     {/each}
    </NativeSelect.Root>
-   <Button variant="link" class="h-auto px-0" href="/settings/source-control/github">Add GitHub App connection</Button>
+   <div class="flex justify-end">
+    <Button variant="link" class="h-auto px-0" href="/settings/source-control/github">Add GitHub App connection</Button>
+   </div>
   </div>
   {#if installations.length}<div class="space-y-2"><Label for="repository-installation">GitHub installation</Label><NativeSelect.Root id="repository-installation" class="w-full" bind:value={installationId} onchange={()=>{discovered=[];nextRepositories=0;}} disabled={busy||!!pending}><NativeSelect.Option value="">Choose an installation</NativeSelect.Option>{#each installations as installation (installation.installationId)}<NativeSelect.Option value={installation.installationId} disabled={installation.suspended}>{installation.accountLogin} · {installation.installationId}{installation.suspended?' (suspended)':''}</NativeSelect.Option>{/each}</NativeSelect.Root></div><Button disabled={busy||!installationId||!!pending} onclick={()=>perform(()=>findRepositories())}>Discover repositories</Button>{/if}
   {#if nextInstallations}<Button variant="outline" disabled={busy||!!pending} onclick={()=>perform(()=>findInstallations(true))}>More installations</Button>{/if}
