@@ -36,10 +36,11 @@
  }
  onMount(() => { void load(); });
 </script>
-<PageHeader eyebrow={repo ? "Repository" : undefined} title={repo?.fullName ?? "Repository"} description={repo ? `${repo.private ? 'Private repository' : 'Public repository'} · Default branch: ${repo.defaultBranch}` : undefined}/>
+<PageHeader eyebrow={repo ? "Repository" : undefined} title={repo?.fullName ?? "Repository"}/>
 <div class="max-w-5xl space-y-5">
  {#if busy}<p role="status" class="text-sm text-muted-foreground">Loading repository…</p>{:else if error}<Feedback kind="error" title="Repository unavailable" message={error}/><Button variant="outline" onclick={load}>Try again</Button>
  {:else if repo}
+ <p class="text-sm text-muted-foreground">{repo.private ? 'Private repository' : 'Public repository'} · Default branch: {repo.defaultBranch}</p>
  <Tabs.Root bind:value={tab}>
   <Tabs.List aria-label={`${repo.fullName} onboarding`} class="mb-6 flex gap-3 border-b">
    <Tabs.Trigger value="source" class={triggerClass}>Source code</Tabs.Trigger>

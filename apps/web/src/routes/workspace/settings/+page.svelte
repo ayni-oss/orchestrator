@@ -3,6 +3,7 @@
  import WorkspaceAgentSettings from '$lib/components/workspace-agent-settings.svelte';
  let {data}=$props();
 </script>
-<div class="mx-auto max-w-5xl space-y-8"><PageHeader flush eyebrow={data.workspace ? "Workspace settings" : undefined} title={data.workspace?.displayName ?? "Workspace settings"} description="Choose the connection, model and execution budgets for this workspace."/>
+<PageHeader eyebrow={data.workspace ? "Workspace settings" : undefined} title={data.workspace?.displayName ?? "Workspace settings"}/>
+<div class="mx-auto max-w-5xl space-y-8">
 {#if data.workspace}{#key data.workspace.id}<WorkspaceAgentSettings workspaceId={data.workspace.id}/>{/key}{:else}<p>Create or choose a workspace first.</p>{/if}
 </div>

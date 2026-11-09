@@ -5,8 +5,8 @@
 </script>
 
 <svelte:head><title>LLM providers · Ayni Orchestrator</title></svelte:head>
+<PageHeader title="LLM providers" />
 <div class="mx-auto max-w-5xl space-y-8">
-  <PageHeader flush title="LLM providers" description="Manage API connections for workspace conversations." />
   <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
     {#each providers as provider (provider.name)}
       <ProviderCard {...provider} />

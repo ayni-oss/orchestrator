@@ -27,9 +27,7 @@
 <PageHeader
  eyebrow={data.workspace ? label : undefined}
  title={data.workspace?.displayName ?? label}
- description={data.workspace ? undefined : 'Choose a workspace to explore its projects.'}
- titleActions={data.workspace ? workspaceActions : undefined}
- actions={data.workspace ? undefined : overviewActions}
+ actions={data.workspace ? workspaceActions : overviewActions}
 />
 {#if data.workspace}
  {#key data.workspace.id}
