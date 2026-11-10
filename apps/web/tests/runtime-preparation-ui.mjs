@@ -645,6 +645,8 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  const repo=catalog.repositories.find(value=>value.id===repositoryId);
  const registryId=randomUUID(),signerId=randomUUID(),inspectionId=randomUUID();
  let run,operation,starts=[],inspections=[],deploymentEnabled=false;
+ let releaseStart;
+ const startGate=new Promise(resolve=>{releaseStart=resolve;});
  const hash=`sha256:${'2'.repeat(64)}`;
  async function routeRetainedState(session) {
   await session.route('**/api/ListConnections',route=>route.fulfill({json:{connections:[{id:repo.connectionId,displayName:'Source',capability:'source_control',enabled:true,revision:'1',activeCredentialRevision:'source'},{id:registryId,displayName:'Registry',capability:'container_registry',enabled:true,revision:'1',activeCredentialRevision:'registry',registryDestination:'ghcr.io/fixture'}]}}));
@@ -655,10 +657,11 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  }
  await routeRetainedState(page);
  await page.route('**/api/StartRuntimePreparation',()=>{throw new Error('browser must not sequence or submit a separate preparation');});
- await page.route('**/api/StartRepositoryRuntime',route=>{
+ await page.route('**/api/StartRepositoryRuntime',async route=>{
   const settings=route.request().postDataJSON();starts.push(settings);
   assert.equal('inspectionId' in settings,false);assert.equal('commitSha' in settings,false);
   assert.equal(settings.expectedConnectionRevision,'1');assert.equal(settings.allowBuild,true);assert.equal(settings.maxBuilds,1);
+  if(starts.length===1)await startGate;
   run={id:randomUUID(),idempotencyKey:settings.idempotencyKey,settings,state:'resolving'};
   return route.fulfill({json:{run}});
  });
@@ -688,16 +691,35 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  await status.getByRole('heading',{name:'Review and start',exact:true}).waitFor();
  assert.equal(await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).isChecked(),false);
  await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).check();
+ const steps=preparation.getByRole('list',{name:'Runtime onboarding steps'});
+ const reviewHeading=status.getByRole('heading',{name:'Review and start',exact:true});
+ const startSent=page.waitForRequest(request=>request.url().endsWith('/api/StartRepositoryRuntime'));
  await preparation.getByRole('button',{name:'Build and publish runtime',exact:true}).click();
+ await startSent;
+ await status.getByText('Submitting preparation…',{exact:true}).waitFor();
+ assert.equal(await reviewHeading.isVisible(),true);
+ assert.equal(await steps.getByRole('button',{name:/Review and start/}).locator('..').getAttribute('aria-current'),'step');
+ assert.equal(await steps.getByRole('button',{name:/Prepare image/}).isDisabled(),true);
+ releaseStart();
  await preparation.getByText('Checking the branch head…',{exact:true}).waitFor();
+ assert.equal(await reviewHeading.isVisible(),true);
  run={...run,state:'inspecting',commitSha:'c'.repeat(40)};
  await preparation.getByText('Checking the committed ayni policy, lock and build inputs…',{exact:true}).waitFor();
+ assert.equal(await reviewHeading.isVisible(),true);
+ assert.equal(await status.getByLabel('Time limit (seconds)',{exact:true}).isDisabled(),true);
+ run={...run,state:'admitting'};
+ await status.getByText('Validating build capability, signer trust and preparation settings…',{exact:true}).waitFor();
+ assert.equal(await reviewHeading.isVisible(),true);
+ assert.equal(await steps.getByRole('button',{name:/Prepare image/}).isDisabled(),true);
  deploymentEnabled=false;
  run={...run,state:'blocked',safeReason:'runtime_profile_unavailable'};
  await preparation.getByText('Runtime building is not enabled on this deployment. Ask the deployment administrator to enable a qualified runtime build profile.',{exact:true}).waitFor();
  deploymentEnabled=true;
+ await page.locator('[data-sonner-toast]').getByText('Preparation needs attention',{exact:true}).waitFor();
+ assert.equal(await reviewHeading.isVisible(),true);
  await page.reload();
- await preparation.getByRole('heading',{name:'Prepare image',exact:true}).waitFor();
+ await reviewHeading.waitFor();
+ assert.equal(await steps.getByRole('button',{name:/Prepare image/}).isDisabled(),true);
  assert.equal(await preparation.getByText(/Cluster network isolation/).count(),0);
  await preparation.getByRole('list',{name:'Runtime onboarding steps'}).getByRole('button',{name:/Check ayni.lock/}).click();
  await review();
@@ -707,11 +729,18 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  await preparation.getByText('Checking the branch head…',{exact:true}).waitFor();
  assert.equal(starts.length,2);assert.notEqual(starts[0].idempotencyKey,starts[1].idempotencyKey);
  inspections=[{id:inspectionId,repositoryId,connectionRevision:'1',commitSha:'c'.repeat(40),state:'completed',updatedAtUnixMs:String(Date.now()),result:{ayniVersion:'0.17.1',trustKeyIds:['named-key'],findings:[]}}];
- operation={id:randomUUID(),idempotencyKey:randomUUID(),generation:'1',frozenInputDigest:hash,acceptedAtUnixMs:String(Date.now()),repositoryId,inspectionId,registryConnectionId:registryId,signerId,platform:'linux/arm64',state:'running',developmentOnly:true,stage:'build',buildMilestone:'RUNTIME_BUILD_MILESTONE_BUILD_IMAGE',buildsStarted:1,sourceCommit:'c'.repeat(40),registryDestination:'ghcr.io/fixture/sandbox',imageDigest:hash,contentVerified:false,managedCompatible:false,cleanupComplete:false,updatedAtUnixMs:String(Date.now())};
+ const admittedId=randomUUID();
+ run={...run,state:'completed',commitSha:'c'.repeat(40),inspectionId,preparationId:admittedId};
+ await status.getByText('Loading the accepted preparation…',{exact:true}).waitFor();
+ assert.equal(await reviewHeading.isVisible(),true);
+ assert.equal(await steps.getByRole('button',{name:/Prepare image/}).isDisabled(),true);
+ operation={id:admittedId,idempotencyKey:randomUUID(),generation:'1',frozenInputDigest:hash,acceptedAtUnixMs:String(Date.now()),repositoryId,inspectionId,registryConnectionId:registryId,signerId,platform:'linux/arm64',state:'running',developmentOnly:true,stage:'build',buildMilestone:'RUNTIME_BUILD_MILESTONE_BUILD_IMAGE',buildsStarted:1,sourceCommit:'c'.repeat(40),registryDestination:'ghcr.io/fixture/sandbox',imageDigest:hash,contentVerified:false,managedCompatible:false,cleanupComplete:false,updatedAtUnixMs:String(Date.now())};
  run={...run,state:'completed',commitSha:operation.sourceCommit,inspectionId,preparationId:operation.id};
  const summary=status.getByRole('region',{name:'Preparation summary',exact:true});
  await status.getByRole('heading',{name:'Prepare image',exact:true}).locator('..').getByText('Running',{exact:true}).waitFor();
  await summary.getByText('Build unsigned runtime',{exact:true}).waitFor();
+ await steps.getByRole('button',{name:/Completed:.*Review and start/}).waitFor();
+ assert.equal(await steps.getByRole('button',{name:/Prepare image/}).locator('..').getAttribute('aria-current'),'step');
  const buildReport=status.getByRole('region',{name:'Build report',exact:true});
  const buildStep=label=>buildReport.getByRole('listitem').filter({hasText:label});
  await buildStep('Copy source').getByText('Complete',{exact:true}).waitFor();
@@ -775,8 +804,10 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
   operation=completedOperation;
  }
  run={...run,id:randomUUID(),state:'resolving',preparationId:undefined,inspectionId:undefined};
- await summary.getByText('Checking the branch head…',{exact:true}).waitFor({timeout:15000});
- assert.equal(await buildReport.getByText('Pending',{exact:true}).count(),5);
+ await status.getByText('Checking the branch head…',{exact:true}).waitFor({timeout:15000});
+ assert.equal(await reviewHeading.isVisible(),true);
+ assert.equal(await status.getByRole('region',{name:'Build report',exact:true}).count(),0);
+ assert.equal(await steps.getByRole('button',{name:/Prepare image/}).isDisabled(),true);
  for(const method of ['ListConnections','ListRuntimeSigners','ListRepositoryInspections','ListRuntimePreparations','GetRepositoryRuntime','StartRepositoryRuntime','StartRuntimePreparation','ResolveRepositoryDefaultCommit','InspectRepository']) await page.unroute(`**/api/${method}`);
  console.log('repository-onboarding-ui: no-inspection setup, retained settings, automatic progress, deployment blocker and immutable registry link passed; provider/build/publication replies are fixtures.');
 }

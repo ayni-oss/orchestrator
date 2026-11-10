@@ -51,6 +51,7 @@
  let polling = false, mounted = false, historySequence = 0, lastPoll = 0;
  let pending = $state<RuntimeCommand | null>(null);
  let recoveryToast: string | number | undefined;
+ let onboardingToast: string | number | undefined;
  let rejected = $state(false);
  let registries = $state.raw<Connection[]>([]), signers = $state.raw<RuntimeSigner[]>([]), operations = $state.raw<RuntimePreparation[]>([]);
  let next = $state(''), registryId = $state(''), signerId = $state(''), platform = $state('linux/arm64');
@@ -63,6 +64,7 @@
  protectUnsavedChanges(()=>!pending&&!!reviewedSettings&&settingsDraft!==reviewedSettings);
  const storage = $derived(`ayni.runtime.preparation.pending.${repo.id}`);
  const candidateInspection = $derived(latestInspection);
+ const starting = $derived(pending?.method === 'StartRepositoryRuntime' || pending?.method === 'StartRuntimePreparation');
  const onboardingActive = $derived(!!onboarding && ['resolving','inspecting','admitting'].includes(onboarding.state));
  const onboardingBlocked = $derived(onboarding?.state === 'blocked');
  const workActive = $derived(operations.some(value => activeStates.has(value.state) || value.state === 'publication_uncertain' || !value.cleanupComplete));
@@ -194,9 +196,13 @@
   !building && buildTimings.size ? 'Unconfirmed' : 'Pending');
  const sourceIssue = $derived(operation?.safeReason?.startsWith('source_') && !operation.buildsStarted);
  const summaryOperation = $derived(sourceIssue ? undefined : buildOperation);
- const preparationMessage = $derived(pending ? overview.description : sourceIssue ? 'See Status for preparation details.' :
+ const matchingOperation = $derived(operation && (retainedRun?.preparationId === operation.id ||
+  (!onboarding && !!reviewedCommit && operation.sourceCommit === reviewedCommit)) ? operation : undefined);
+ const admitted = $derived(!starting && !onboardingActive && !!matchingOperation);
+ const preparationMessage = $derived(busy && starting ? 'Submitting preparation…' : pending ? overview.description :
   onboardingActive ? ({resolving:'Checking the branch head…',inspecting:'Checking the committed ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') :
   onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' :
+  retainedRun?.preparationId && !matchingOperation ? 'Loading the accepted preparation…' : sourceIssue ? 'See Status for preparation details.' :
   !operation ? overview.description : '');
  const preparationStatus = $derived([...new Set([
   summaryOperation && (runtimeStages[summaryOperation.stage] || summaryOperation.stage),
@@ -205,10 +211,9 @@
   ...(sourceIssue ? [] : overview.issues),
  ].filter(Boolean))]);
  const previousOperations = $derived(operations.filter(value => value.id !== displayedOperation?.id));
- const matchingOperation = $derived(operation && (retainedRun?.preparationId === operation.id ||
-  (!onboarding && !!reviewedCommit && operation.sourceCommit === reviewedCommit)) ? operation : undefined);
- const preparing = $derived(onboardingActive || !!pending || workActive);
- const canViewPreparation = $derived(preparing || !!retainedRun || !!matchingOperation);
+ const preparing = $derived(onboardingActive || !!pending || workActive || !!retainedRun?.preparationId && !matchingOperation);
+ const reviewPending = $derived(starting || onboardingActive || onboardingBlocked && !admitted || !!retainedRun?.preparationId && !admitted);
+ const canViewPreparation = $derived(!reviewPending && (workActive || admitted));
  const verificationReached = $derived(!onboardingActive && !!operation && (operation === matchingOperation || workActive) &&
   (operation.state === 'ready' || verificationStages.has(operation.stage)));
  const verified = $derived(!!matchingOperation && matchingOperation.state === 'ready' &&
@@ -217,7 +222,6 @@
  const integrationCheckpoint = $derived(JSON.stringify([connection?.revision, registryId, registry?.revision, signerId, signer?.revision]));
  const inspectionCheckpoint = $derived(signingUpdateRequested ? signingUpdateScope :
   JSON.stringify([branch || repo.defaultBranch, reviewedCommit, connection?.revision, signerId, signer?.revision]));
- const admitted = $derived(!!matchingOperation || !!retainedRun?.preparationId);
  const completed = $derived([
   integrationsReady && (passedIntegrations === integrationCheckpoint || admitted),
   (!!reviewedCommit && canReview && passedInspection === inspectionCheckpoint) || admitted,
@@ -225,7 +229,7 @@
   verificationReached && (passedPreparation === operation?.id || !!verified),
   !!verified,
  ]);
- const lastAvailableStep = $derived(completed[3] ? 4 : canViewPreparation ? 3 :
+ const lastAvailableStep = $derived(reviewPending ? 2 : completed[3] ? 4 : canViewPreparation ? 3 :
   completed[0] ? (completed[1] || (signingUpdateRequested && passedInspection === inspectionCheckpoint) ? 2 : 1) : 0);
  const currentStep = $derived(Math.min(viewedStep ?? (verified ? 4 : canViewPreparation ? 3 : lastAvailableStep), lastAvailableStep));
  const canStart = $derived(deploymentEnabled && integrationsReady && !!reviewedCommit && !signerTrustMissing &&
@@ -370,6 +374,16 @@
   const changed = result.run && (result.run.id !== onboarding?.id || result.run.state !== onboarding?.state);
   onboarding = result.run || null;
   deploymentEnabled = result.preparationEnabled === true;
+  if (changed && onboarding) {
+   if (onboardingActive) {
+    onboardingToast = toast.loading('Reviewing preparation', {id:onboardingToast,description:preparationMessage});
+   } else if (onboardingBlocked) {
+    onboardingToast = toast.warning('Preparation needs attention', {id:onboardingToast,description:preparationMessage});
+   } else if (onboarding.preparationId && onboardingToast !== undefined) {
+    toast.success('Preparation started', {id:onboardingToast});
+    onboardingToast = undefined;
+   }
+  }
   if (changed && onboarding?.inspectionId) await refreshInspections?.();
  }
  async function refresh() {
@@ -380,6 +394,7 @@
    reviewedSettings = settingsDraft;
   }
   loaded = true;
+  if (viewedStep === null && admitted && !verified) await visit(3);
  }
  async function refreshStatus() {
   refreshingStatus = true;
@@ -458,7 +473,7 @@
   if (!connection || !registry || !signer || !reviewedCommit || !canStart) return;
   persist({method:'StartRepositoryRuntime',request:{idempotencyKey:crypto.randomUUID(),repositoryId:repo.id,expectedConnectionRevision:connection.revision,registryConnectionId:registryId,signerId,platform,maxSeconds:seconds,maxBuilds:allowBuild ? builds : 0,allowBuild,allowReplace:allowBuild && allowReplace,branch,expectedCommitSha:reviewedCommit,expectedRegistryRevision:registry.revision,expectedSignerRevision:signer.revision}});
   reviewedSettings = settingsDraft;
-  viewedStep = 3;
+  viewedStep = null;
   await perform(resume);
   await tick();
   stepHeading?.focus();
@@ -474,7 +489,7 @@
    (currentStep < 3 || document.visibilityState !== 'visible' || now - lastPoll < 10000)) return;
   lastPoll = now;
   polling = true;
-  try { await loadOnboarding(); await history(); } catch { if (mounted) error = 'Live updates paused. Refresh history to reconnect; accepted work remains retained.'; } finally { polling = false; }
+  try { await loadOnboarding(); await history(); if (viewedStep === null && admitted && !verified) await visit(3); } catch { if (mounted) error = 'Live updates paused. Refresh history to reconnect; accepted work remains retained.'; } finally { polling = false; }
  }
  function elapsedTime(ms: number) {
   const seconds = Math.floor(ms / 1000);
@@ -491,11 +506,11 @@
   }
   const saved = sessionStorage.getItem(storage);
   if (saved) {
-   try { const value = JSON.parse(saved); if (!['StartRepositoryRuntime', 'StartRuntimePreparation', 'CancelRuntimePreparation', 'RetryRuntimePreparation'].includes(value.method) || typeof value.request?.idempotencyKey !== 'string' || ['StartRepositoryRuntime','StartRuntimePreparation'].includes(value.method) && value.request.repositoryId !== repo.id) throw new Error(); pending = value; viewedStep = 3; void perform(refresh); }
+   try { const value = JSON.parse(saved); if (!['StartRepositoryRuntime', 'StartRuntimePreparation', 'CancelRuntimePreparation', 'RetryRuntimePreparation'].includes(value.method) || typeof value.request?.idempotencyKey !== 'string' || ['StartRepositoryRuntime','StartRuntimePreparation'].includes(value.method) && value.request.repositoryId !== repo.id) throw new Error(); pending = value; viewedStep = value.method === 'StartRepositoryRuntime' || value.method === 'StartRuntimePreparation' ? null : 3; void perform(refresh); }
    catch { error = 'The saved preparation command could not be read. Refresh retained history before starting another.'; }
   } else { void perform(refresh); }
   const timer = setInterval(() => void poll(), 2000);
-  return () => { mounted = false; clearInterval(timer); dismissRecoveryToast(); };
+  return () => { mounted = false; clearInterval(timer); dismissRecoveryToast(); if (onboardingToast !== undefined) toast.dismiss(onboardingToast); };
  });
 </script>
 {#snippet statusReport()}
@@ -588,6 +603,8 @@
       <span aria-live="polite"><StatusBadge status={integrationsReady ? 'Ready' : 'Needs attention'} tone={integrationsReady ? 'success' : 'warning'} /></span>
      {:else if currentStep === 1}<span aria-live="polite"><StatusBadge status={lockCheckStatus.label} tone={lockCheckStatus.tone} /></span>
      {:else if currentStep === 2 && signingUpdateRequested}<span aria-live="polite"><StatusBadge status={signingPullBadge.label} tone={signingPullBadge.tone} /></span>
+     {:else if currentStep === 2 && reviewPending}
+      <span aria-live="polite"><StatusBadge status={pending ? busy ? 'Submitting' : 'Needs recovery' : onboardingBlocked ? 'Needs attention' : 'Checking'} tone={pending && !busy || onboardingBlocked ? 'warning' : 'active'} /></span>
      {:else if currentStep >= 3 && !pending}<span aria-live="polite"><StatusBadge status={runStatus.label} tone={runStatus.tone} /></span>{/if}
     {/snippet}
     {#snippet actions()}
@@ -612,7 +629,7 @@
       onclick={() => refreshSigningPullRequest()}>
       <RefreshCw class={{ 'motion-safe:animate-spin': checkingSigningPull }} aria-hidden="true" />
      </Button>
-    {:else if currentStep >= 3 && !pending}
+    {:else if (currentStep >= 3 || currentStep === 2 && reviewPending) && !pending}
      <div class="flex shrink-0 items-center gap-2">
       <Button variant="ghost" size="icon" aria-label="Refresh status" title="Refresh status"
        aria-busy={refreshingStatus} disabled={busy} onclick={refreshStatus}>
@@ -757,6 +774,9 @@
      </div>
     </div>
    {:else if currentStep === 2}
+    {#if reviewPending}
+     <p class="text-sm" role={onboardingBlocked ? 'alert' : 'status'} aria-live="polite">{preparationMessage}</p>
+    {/if}
     <div class="flex justify-end"><BranchLabel name={branch || repo.defaultBranch} /></div>
     <div class="space-y-2">
      <p class="text-sm font-medium">Reviewed commit</p>
@@ -780,9 +800,9 @@
      <pre class="overflow-x-auto rounded-md bg-muted p-2 text-xs">{trustSnippet(signer)}</pre>
     </div>
    {/if}
-   <div class="flex flex-wrap gap-4"><div class="space-y-2"><Label for={`runtime-platform-${repo.id}`}>Runtime platform</Label><NativeSelect.Root id={`runtime-platform-${repo.id}`} bind:value={platform} disabled={busy || !!pending}><NativeSelect.Option value="linux/arm64">Linux arm64</NativeSelect.Option><NativeSelect.Option value="linux/amd64">Linux amd64</NativeSelect.Option></NativeSelect.Root></div><div class="space-y-2"><Label for={`runtime-seconds-${repo.id}`}>Time limit (seconds)</Label><Input id={`runtime-seconds-${repo.id}`} type="number" min={1} max={86400} bind:value={seconds} disabled={busy || !!pending}/></div></div>
-   <label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowBuild} onchange={() => { if (!allowBuild) allowReplace = false; }} disabled={busy || !!pending}/>Allow a bounded build if the image is missing</label>
-   <div class="space-y-2"><Label for={`runtime-builds-${repo.id}`}>Maximum build attempts</Label><Input id={`runtime-builds-${repo.id}`} type="number" min={1} max={10} bind:value={builds} disabled={!allowBuild || busy || !!pending}/><p class="text-xs text-muted-foreground">The qualified deployment resource limits also apply. Interrupted builds consume their retained attempt allowance.</p></div><label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowReplace} disabled={!allowBuild || busy || !!pending}/>Also allow replacement if an existing image is invalid</label>
+   <div class="flex flex-wrap gap-4"><div class="space-y-2"><Label for={`runtime-platform-${repo.id}`}>Runtime platform</Label><NativeSelect.Root id={`runtime-platform-${repo.id}`} bind:value={platform} disabled={busy || !!pending || onboardingActive}><NativeSelect.Option value="linux/arm64">Linux arm64</NativeSelect.Option><NativeSelect.Option value="linux/amd64">Linux amd64</NativeSelect.Option></NativeSelect.Root></div><div class="space-y-2"><Label for={`runtime-seconds-${repo.id}`}>Time limit (seconds)</Label><Input id={`runtime-seconds-${repo.id}`} type="number" min={1} max={86400} bind:value={seconds} disabled={busy || !!pending || onboardingActive}/></div></div>
+   <label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowBuild} onchange={() => { if (!allowBuild) allowReplace = false; }} disabled={busy || !!pending || onboardingActive}/>Allow a bounded build if the image is missing</label>
+   <div class="space-y-2"><Label for={`runtime-builds-${repo.id}`}>Maximum build attempts</Label><Input id={`runtime-builds-${repo.id}`} type="number" min={1} max={10} bind:value={builds} disabled={!allowBuild || busy || !!pending || onboardingActive}/><p class="text-xs text-muted-foreground">The qualified deployment resource limits also apply. Interrupted builds consume their retained attempt allowance.</p></div><label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowReplace} disabled={!allowBuild || busy || !!pending || onboardingActive}/>Also allow replacement if an existing image is invalid</label>
    {:else}
     <section class="rounded-md border bg-muted/30 p-4" aria-label="Preparation summary">
      <InformationTable aligned rows={[
@@ -836,7 +856,7 @@
     </div>
     {/if}
    {/if}
-   {#if pending && currentStep >= 3}
+   {#if pending && currentStep >= 2}
     <div class="flex flex-wrap gap-2" role="group" aria-label="Preparation recovery actions">
      <Button disabled={busy} onclick={() => perform(recover)}>Recover preparation receipt</Button>
      <Button variant="outline" disabled={busy} onclick={() => perform(resume)}>Retry same preparation command</Button>
