@@ -244,7 +244,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.equal(await page.getByRole('region',{name:'Current preparation recovery',exact:true}).count(),0);
  await preparation.getByRole('button',{name:'Recover preparation receipt',exact:true}).click();
  await preparation.getByRole('button',{name:'Reconcile publication',exact:true}).waitFor();
- assert.equal(await preparation.getByRole('region',{name:'Preparation summary',exact:true}).getByText('Ready',{exact:true}).count(),0);
+ assert.equal(await status.getByText('Ready',{exact:true}).count(),0);
  await page.waitForFunction(id=>sessionStorage.getItem(`ayni.runtime.preparation.pending.${id}`)===null,repositoryId);
  await page.route('**/api/RetryRuntimePreparation',async route=>{
   retryRequest=route.request().postDataJSON();assert.equal(retryRequest.id,operationId);assert.equal(retryRequest.expectedGeneration,'3');
@@ -254,7 +254,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await preparation.getByRole('button',{name:'Reconcile publication',exact:true}).click();
  await preparation.getByRole('region',{name:'Runtime status',exact:true}).getByText('Cleanup is incomplete. The supervisor will keep trying; refresh history to check progress. This runtime cannot become ready until cleanup is confirmed.',{exact:true}).waitFor();
  assert.equal(await preparation.getByRole('button',{name:'Retry cleanup',exact:true}).count(),0);
- assert.equal(await preparation.getByRole('region',{name:'Preparation summary',exact:true}).getByText('Ready',{exact:true}).count(),0);
+ assert.equal(await status.getByText('Ready',{exact:true}).count(),0);
  await next().click();
  await status.getByRole('heading',{name:'Verify and finish',exact:true}).waitFor();
  await page.getByRole('tab',{name:'Activity',exact:true}).click();
@@ -312,7 +312,14 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.equal(await status.getByRole('region',{name:'Build report',exact:true}).count(),0);
  const queued = operation;
  operation={...queued,state:'unavailable',stage:'cleanup',safeReason:'source_unavailable',cleanupComplete:true,buildsStarted:0};
- await status.getByText('See Activity for preparation details.',{exact:true}).waitFor();
+ await status.locator('pre').getByText('See Activity for preparation details.',{exact:true}).waitFor();
+ const prepareHeader=status.getByRole('heading',{name:'Prepare image',exact:true}).locator('..');
+ await prepareHeader.getByText('Unavailable',{exact:true}).waitFor();
+ const refreshStatus=prepareHeader.getByRole('button',{name:'Refresh status',exact:true});
+ assert.equal(await refreshStatus.locator('svg').count(),1);
+ assert.equal(await refreshStatus.evaluate(button=>button.previousElementSibling.textContent.trim()),'Unavailable');
+ assert.equal(await status.getByRole('button',{name:'Refresh status',exact:true}).count(),1);
+ assert.deepEqual(await status.getByRole('region',{name:'Preparation summary',exact:true}).locator('dd').allTextContents(),['—','—','—','—']);
  assert.equal(await status.getByRole('region',{name:'Build report',exact:true}).count(),0);
  assert.equal(await status.getByText(/exact source checkout/).count(),0);
  await page.getByRole('tab',{name:'Activity',exact:true}).click();
@@ -465,7 +472,7 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  operation={id:randomUUID(),idempotencyKey:randomUUID(),generation:'1',frozenInputDigest:hash,acceptedAtUnixMs:String(Date.now()),repositoryId,inspectionId,registryConnectionId:registryId,signerId,platform:'linux/arm64',state:'running',developmentOnly:true,stage:'build',buildMilestone:'RUNTIME_BUILD_MILESTONE_BUILD_IMAGE',buildsStarted:1,sourceCommit:'c'.repeat(40),registryDestination:'ghcr.io/fixture/sandbox',imageDigest:hash,contentVerified:false,managedCompatible:false,cleanupComplete:false,updatedAtUnixMs:String(Date.now())};
  run={...run,state:'completed',commitSha:operation.sourceCommit,inspectionId,preparationId:operation.id};
  const summary=status.getByRole('region',{name:'Preparation summary',exact:true});
- await summary.getByText('Running',{exact:true}).waitFor();
+ await status.getByRole('heading',{name:'Prepare image',exact:true}).locator('..').getByText('Running',{exact:true}).waitFor();
  await summary.getByText('Build unsigned runtime',{exact:true}).waitFor();
  const buildReport=status.getByRole('region',{name:'Build report',exact:true});
  const buildStep=label=>buildReport.getByRole('listitem').filter({hasText:label});
@@ -477,7 +484,7 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  await buildStep('Build runtime image').getByText('Complete',{exact:true}).waitFor();
  operation={...operation,state:'ready',stage:'cleanup',contentVerified:true,managedCompatible:true,cleanupComplete:true};
  await next.click();
- await preparation.getByRole('region',{name:'Preparation summary',exact:true}).getByText('Ready',{exact:true}).waitFor();
+ await status.getByRole('heading',{name:'Verify and finish',exact:true}).locator('..').getByText('Ready',{exact:true}).waitFor();
  await preparation.getByText(`ghcr.io/fixture/sandbox@${hash}`,{exact:true}).waitFor();
  assert.equal(await preparation.getByRole('link',{name:'Open registry package',exact:true}).getAttribute('href'),'https://github.com/orgs/fixture/packages/container/package/sandbox');
  for(const method of ['ListConnections','ListRuntimeSigners','ListRepositoryInspections','ListRuntimePreparations','GetRepositoryRuntime','StartRepositoryRuntime','StartRuntimePreparation','ResolveRepositoryDefaultCommit','InspectRepository']) await page.unroute(`**/api/${method}`);

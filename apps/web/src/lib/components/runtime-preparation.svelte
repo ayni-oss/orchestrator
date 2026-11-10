@@ -20,6 +20,7 @@
  let deploymentEnabled = $state(false);
  let loaded = $state(false);
  let refreshingIntegrations = $state(false);
+ let refreshingStatus = $state(false);
  let viewedStep = $state<number | null>(null);
  let passedIntegrations = $state('');
  let passedInspection = $state('');
@@ -146,6 +147,11 @@
  const activeBuildStep = $derived(buildComplete ? buildSteps.length :
   buildSteps.findIndex(step => step.milestone === operation?.buildMilestone));
  const sourceIssue = $derived(operation?.safeReason?.startsWith('source_') && !operation.buildsStarted);
+ const summaryOperation = $derived(onboardingActive || onboardingBlocked || sourceIssue ? undefined : operation);
+ const preparationMessage = $derived(sourceIssue ? 'See Activity for preparation details.' :
+  onboardingActive ? ({resolving:'Checking the branch head…',inspecting:'Checking the committed ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') :
+  onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' :
+  !operation ? overview.description : '');
  const previousOperations = $derived(operations.filter(value => value.id !== overview.operation?.id));
  const matchingOperation = $derived(operation && (retainedRun?.preparationId === operation.id ||
   (!onboarding && !!reviewedCommit && operation.sourceCommit === reviewedCommit)) ? operation : undefined);
@@ -484,6 +490,17 @@
       aria-busy={refreshingIntegrations} disabled={busy} onclick={refreshIntegrations}>
       <RefreshCw class={{ 'motion-safe:animate-spin': refreshingIntegrations }} aria-hidden="true"/>
      </Button>
+    {:else if currentStep >= 3 && !pending}
+     <div class="flex shrink-0 items-center gap-2">
+      <span aria-live="polite"><StatusBadge status={runStatus.label} tone={runStatus.tone} /></span>
+      <Button variant="outline" size="icon" aria-label="Refresh status" title="Refresh status"
+       aria-busy={refreshingStatus} disabled={busy} onclick={async () => {
+        refreshingStatus = true;
+        try { await perform(refresh); } finally { refreshingStatus = false; }
+       }}>
+       <RefreshCw class={{ 'motion-safe:animate-spin': refreshingStatus }} aria-hidden="true" />
+      </Button>
+     </div>
     {/if}
    </div>
    {#if currentStep === 0}
@@ -646,24 +663,17 @@
    <label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowBuild} onchange={() => { if (!allowBuild) allowReplace = false; }} disabled={busy || !!pending}/>Allow a bounded build if the image is missing</label>
    {#if allowBuild}<div class="space-y-2"><Label for={`runtime-builds-${repo.id}`}>Maximum build attempts</Label><Input id={`runtime-builds-${repo.id}`} type="number" min={1} max={10} bind:value={builds} disabled={busy || !!pending}/><p class="text-xs text-muted-foreground">The qualified deployment resource limits also apply. Interrupted builds consume their retained attempt allowance.</p></div><label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowReplace} disabled={busy || !!pending}/>Also allow replacement if an existing image is invalid</label>{/if}
    {:else if !pending}
-    <section class="space-y-3 rounded-md border bg-muted/30 p-4" aria-label="Preparation summary" aria-live="polite">
-     <StatusBadge status={runStatus.label} tone={runStatus.tone} />
-     {#if !onboardingActive && !onboardingBlocked && operation}
-      <InformationTable aligned rows={[
-       {label:'Stage',value:runtimeStages[operation.stage] || operation.stage},
-       {label:'Commit',value:operation.sourceCommit?.slice(0,12) || 'Unavailable',monospace:true},
-       {label:'Platform',value:operation.platform},
-       ...(currentStep === 3 ? [{label:'Build attempts',value:`${operation.buildsStarted || 0} of ${operation.maxBuilds || 0}`}] : []),
-      ]}/>
-     {:else}
-      <p class="text-sm text-muted-foreground">{onboardingActive ? ({resolving:'Checking the branch head…',inspecting:'Checking the committed ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') : onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' : overview.description}</p>
-     {/if}
-     {#if sourceIssue}
-      <p class="text-sm text-muted-foreground">See Activity for preparation details.</p>
-     {:else}
-      {#each overview.issues as issue (issue)}<p class="text-sm">{issue}</p>{/each}
-     {/if}
+    <section class="rounded-md border bg-muted/30 p-4" aria-label="Preparation summary">
+     <InformationTable aligned rows={[
+      {label:'Stage',value:summaryOperation ? runtimeStages[summaryOperation.stage] || summaryOperation.stage : '—'},
+      {label:'Commit',value:summaryOperation?.sourceCommit?.slice(0,12) || '—',monospace:true},
+      {label:'Platform',value:summaryOperation?.platform || '—'},
+      ...(currentStep === 3 ? [{label:'Build attempts',value:summaryOperation ? `${summaryOperation.buildsStarted || 0} of ${summaryOperation.maxBuilds || 0}` : '—'}] : []),
+     ]}/>
     </section>
+    {#if preparationMessage || (!sourceIssue && overview.issues.length)}
+     <pre class="rounded-md bg-muted p-3 text-xs whitespace-pre-wrap [overflow-wrap:anywhere]" aria-live="polite">{[preparationMessage, ...(sourceIssue ? [] : overview.issues)].filter(Boolean).join('\n')}</pre>
+    {/if}
     {#if currentStep === 3 && operation && (building || operation.buildsStarted) && !onboardingActive && !onboardingBlocked}
      <section class="space-y-2 rounded-md border p-4" aria-labelledby={`build-report-${repo.id}`}>
       <h4 id={`build-report-${repo.id}`} class="text-sm font-medium">Build report</h4>
@@ -694,11 +704,12 @@
    {@const reference = image.reference}
    <Button variant="outline" onclick={() => perform(() => navigator.clipboard.writeText(reference))}>Copy image reference</Button>
   {/if}<a class="text-sm text-primary underline underline-offset-4" href={image.url} target="_blank" rel="noreferrer">Open registry package</a></div>{/if}
+    {#if operation && (retryStates.has(operation.state) || (activeStates.has(operation.state) && operation.state !== 'cancelling'))}
     <div class="flex flex-wrap gap-2">
-     <Button variant="outline" disabled={busy} onclick={() => perform(refresh)}>Refresh status</Button>
      {#if operation && retryStates.has(operation.state)}{@const current = operation}<Button disabled={busy || !!pending} onclick={() => perform(() => command('RetryRuntimePreparation',current))}>{current.state === 'publication_uncertain' ? 'Reconcile publication' : 'Retry preparation'}</Button>{/if}
      {#if operation && activeStates.has(operation.state) && operation.state !== 'cancelling'}{@const current = operation}<Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => command('CancelRuntimePreparation',current))}>Cancel preparation</Button>{/if}
     </div>
+    {/if}
    {/if}
    {#if pending && currentStep >= 3}
     <div class="flex flex-wrap gap-2" role="group" aria-label="Preparation recovery actions">
