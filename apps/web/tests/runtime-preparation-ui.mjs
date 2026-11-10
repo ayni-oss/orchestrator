@@ -45,8 +45,14 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.equal(await page.getByRole('tab',{name:'Ayni runtime',exact:true}).getAttribute('aria-selected'),'true');
  await page.getByRole('navigation',{name:'Breadcrumb'}).getByRole('link',{name:'Repositories',exact:true}).click();
  await repositoryLink.click();
- await page.getByRole('heading',{name:'Source code connected',exact:true}).waitFor();
- assert.equal(await page.getByRole('button',{name:'Configure runtime',exact:true}).isVisible(),false);
+ const sourceDetails=page.getByRole('tabpanel',{name:'Source code',exact:true});
+ await sourceDetails.getByRole('heading',{name:'Source integration details',exact:true}).waitFor();
+ await sourceDetails.getByText('Source control connection',{exact:true}).waitFor();
+ assert.equal(await sourceDetails.getByRole('button').count(),0);
+ assert.equal(await sourceDetails.getByRole('link').count(),0);
+ const metadataBadges=page.locator('span[data-slot="badge"]');
+ await metadataBadges.and(page.getByText('Private repository',{exact:true})).waitFor();
+ await metadataBadges.and(page.getByText('Default branch: main',{exact:true})).waitFor();
  await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
  const inspectionCard=page.locator(`[data-repository-inspection="${repositoryId}"]`);
  await inspectionCard.getByRole('region',{name:'Runtime status',exact:true}).getByText('No preparation is saved for inspected commit dddddddddddd.',{exact:true}).waitFor();
