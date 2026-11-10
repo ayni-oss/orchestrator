@@ -248,8 +248,14 @@ export interface RuntimePreparation {
   certificationLayerDigest: string;
   /** Local development opt-in; does not establish cluster/network qualification. */
   developmentOnly: boolean;
-  /** Latest worker-owned milestone for the exact live build generation. */
+  /** Latest milestone of this build, including completion after the worker exits. */
   buildMilestone: RuntimeBuildMilestone;
+  buildStepTimings: RuntimeBuildStepTiming[];
+}
+
+export interface RuntimeBuildStepTiming {
+  milestone: RuntimeBuildMilestone;
+  elapsedMs: string;
 }
 
 export interface StartRuntimePreparationRequest {
@@ -1838,6 +1844,7 @@ function createBaseRuntimePreparation(): RuntimePreparation {
     certificationLayerDigest: "",
     developmentOnly: false,
     buildMilestone: 0,
+    buildStepTimings: [],
   };
 }
 
@@ -1956,6 +1963,9 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
     }
     if (message.buildMilestone !== 0) {
       writer.uint32(304).int32(message.buildMilestone);
+    }
+    for (const v of message.buildStepTimings) {
+      RuntimeBuildStepTiming.encode(v!, writer.uint32(314).fork()).join();
     }
     return writer;
   },
@@ -2277,6 +2287,14 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
             message.buildMilestone = reader.int32() as any;
             continue;
           }
+          case 39: {
+            if (tag !== 314) {
+              break;
+            }
+
+            message.buildStepTimings.push(RuntimeBuildStepTiming.decode(reader, reader.uint32()));
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2461,6 +2479,11 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
         : isSet(object.build_milestone)
         ? runtimeBuildMilestoneFromJSON(object.build_milestone)
         : 0,
+      buildStepTimings: globalThis.Array.isArray(object?.buildStepTimings)
+        ? object.buildStepTimings.map((e: any) => RuntimeBuildStepTiming.fromJSON(e))
+        : globalThis.Array.isArray(object?.build_step_timings)
+        ? object.build_step_timings.map((e: any) => RuntimeBuildStepTiming.fromJSON(e))
+        : [],
     };
   },
 
@@ -2580,6 +2603,9 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
     if (message.buildMilestone !== 0) {
       obj.buildMilestone = runtimeBuildMilestoneToJSON(message.buildMilestone);
     }
+    if (message.buildStepTimings?.length) {
+      obj.buildStepTimings = message.buildStepTimings.map((e) => RuntimeBuildStepTiming.toJSON(e));
+    }
     return obj;
   },
 
@@ -2626,6 +2652,96 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
     message.certificationLayerDigest = object.certificationLayerDigest ?? "";
     message.developmentOnly = object.developmentOnly ?? false;
     message.buildMilestone = object.buildMilestone ?? 0;
+    message.buildStepTimings = object.buildStepTimings?.map((e) => RuntimeBuildStepTiming.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseRuntimeBuildStepTiming(): RuntimeBuildStepTiming {
+  return { milestone: 0, elapsedMs: "0" };
+}
+
+export const RuntimeBuildStepTiming: MessageFns<RuntimeBuildStepTiming> = {
+  encode(message: RuntimeBuildStepTiming, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.milestone !== 0) {
+      writer.uint32(8).int32(message.milestone);
+    }
+    if (message.elapsedMs !== "0") {
+      writer.uint32(16).uint64(message.elapsedMs);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RuntimeBuildStepTiming {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRuntimeBuildStepTiming();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.milestone = reader.int32() as any;
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.elapsedMs = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RuntimeBuildStepTiming {
+    return {
+      milestone: isSet(object.milestone) ? runtimeBuildMilestoneFromJSON(object.milestone) : 0,
+      elapsedMs: isSet(object.elapsedMs)
+        ? globalThis.String(object.elapsedMs)
+        : isSet(object.elapsed_ms)
+        ? globalThis.String(object.elapsed_ms)
+        : "0",
+    };
+  },
+
+  toJSON(message: RuntimeBuildStepTiming): unknown {
+    const obj: any = {};
+    if (message.milestone !== 0) {
+      obj.milestone = runtimeBuildMilestoneToJSON(message.milestone);
+    }
+    if (message.elapsedMs !== "0") {
+      obj.elapsedMs = message.elapsedMs;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RuntimeBuildStepTiming>): RuntimeBuildStepTiming {
+    return RuntimeBuildStepTiming.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RuntimeBuildStepTiming>): RuntimeBuildStepTiming {
+    const message = createBaseRuntimeBuildStepTiming();
+    message.milestone = object.milestone ?? 0;
+    message.elapsedMs = object.elapsedMs ?? "0";
     return message;
   },
 };

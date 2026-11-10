@@ -304,9 +304,11 @@ async fn worker(
             if report.binding != binding {
                 return Err(StatusCode::CONFLICT);
             }
+            let elapsed_ms = progress::snapshot(&binding.operation_id, binding.generation)
+                .map_or_else(Default::default, |value| value.elapsed_ms);
             authority
                 .store
-                .report_runtime_stage(&report)
+                .report_runtime_stage_with_timings(&report, elapsed_ms)
                 .await
                 .map_err(|_| StatusCode::CONFLICT)?;
             response.accepted = true;

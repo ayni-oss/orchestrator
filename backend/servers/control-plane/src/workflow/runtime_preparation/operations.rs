@@ -1,7 +1,7 @@
 use super::{RequestContext, WorkflowGrpc, profile::RuntimeConfiguration, v1};
 use ayni_core::{AyniPolicy, EnvironmentLock, sha256_fingerprint};
 use ayni_orchestrator_events::runtime_preparation::{
-    BuildMilestone, FreezeInputs, FrozenFile, Operation,
+    BUILD_REPORT_KEY, BUILD_STEPS, BuildMilestone, BuildReport, FreezeInputs, FrozenFile, Operation,
 };
 use ayni_orchestrator_workflow_postgres::store::{
     runtime_preparations::Start, runtime_signers::Signer,
@@ -9,11 +9,33 @@ use ayni_orchestrator_workflow_postgres::store::{
 use tonic::Status;
 
 pub(super) fn public(value: Operation) -> v1::RuntimePreparation {
-    let milestone = if value.stage == "build" && value.state == "running" {
-        crate::runtime_authority::progress::latest(&value.id, value.generation)
-    } else {
-        None
-    };
+    let live = (value.stage == "build" && value.state == "running")
+        .then(|| crate::runtime_authority::progress::snapshot(&value.id, value.generation))
+        .flatten();
+    let retained = value
+        .evidence
+        .details
+        .get(BUILD_REPORT_KEY)
+        .map(|report| serde_json::from_str::<BuildReport>(report).unwrap_or_default());
+    let complete = retained.map_or_else(
+        || {
+            value.builds_started > 0
+                && (value.stage == "freeze_candidate"
+                    || (!matches!(
+                        value.stage.as_str(),
+                        "acquire_source" | "discover" | "pull_existing" | "build"
+                    ) && !value.evidence.unsigned_manifest_digest.is_empty()))
+        },
+        |report| report.complete,
+    );
+    let milestone = live
+        .as_ref()
+        .map(|progress| progress.milestone)
+        .or_else(|| complete.then_some(BuildMilestone::ImageReady));
+    let elapsed = live.map_or_else(
+        || retained.unwrap_or_default().elapsed_ms,
+        |progress| progress.elapsed_ms,
+    );
     v1::RuntimePreparation {
         id: value.id,
         idempotency_key: value.idempotency_key,
@@ -59,6 +81,16 @@ pub(super) fn public(value: Operation) -> v1::RuntimePreparation {
         unsigned_manifest_digest: value.evidence.unsigned_manifest_digest,
         certification_layer_digest: value.evidence.certification_layer_digest,
         build_milestone: public_milestone(milestone) as i32,
+        build_step_timings: BUILD_STEPS
+            .into_iter()
+            .zip(elapsed)
+            .filter_map(|(step, elapsed)| {
+                elapsed.map(|elapsed_ms| v1::RuntimeBuildStepTiming {
+                    milestone: public_milestone(Some(step)) as i32,
+                    elapsed_ms,
+                })
+            })
+            .collect(),
     }
 }
 

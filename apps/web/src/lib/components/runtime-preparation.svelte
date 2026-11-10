@@ -39,7 +39,7 @@
  let pullSequence = 0;
  let stepHeading = $state<HTMLHeadingElement>();
  let busy = $state(false), error = $state('');
- let polling = false, mounted = false, historySequence = 0;
+ let polling = false, mounted = false, historySequence = 0, lastPoll = 0;
  let pending = $state<RuntimeCommand | null>(null);
  let recoveryToast: string | number | undefined;
  let rejected = $state(false);
@@ -141,14 +141,15 @@
   {milestone:'RUNTIME_BUILD_MILESTONE_EXPORT_IMAGE',label:'Export OCI image'},
   {milestone:'RUNTIME_BUILD_MILESTONE_INSPECT_IMAGE',label:'Check exported image'},
  ];
- const buildOperation = $derived(onboardingActive || onboardingBlocked || pending ? undefined : operation);
+ const buildOperation = $derived(onboardingActive || onboardingBlocked || pending ||
+  (retainedRun?.preparationId && retainedRun.preparationId !== operation?.id) ? undefined : operation);
  const building = $derived(buildOperation?.stage === 'build' && buildOperation.state === 'running');
- const buildComplete = $derived(buildOperation?.buildMilestone === 'RUNTIME_BUILD_MILESTONE_IMAGE_READY' ||
-  (!!buildOperation?.buildsStarted && (buildOperation.stage === 'freeze_candidate' || !!buildOperation.unsignedManifestDigest)));
+ const buildComplete = $derived(buildOperation?.buildMilestone === 'RUNTIME_BUILD_MILESTONE_IMAGE_READY');
  const activeBuildStep = $derived(buildComplete ? buildSteps.length :
   building ? buildSteps.findIndex(step => step.milestone === buildOperation?.buildMilestone) : -1);
- const inactiveBuildStatus = $derived(buildOperation?.state === 'ready' && !buildOperation.buildsStarted ? 'Skipped' :
-  !building && buildOperation?.buildsStarted ? 'Unconfirmed' : 'Pending');
+ const buildTimings = $derived(new Map(buildOperation?.buildStepTimings?.map(value => [value.milestone, Number(value.elapsedMs ?? 0)])));
+ const inactiveBuildStatus = $derived(buildOperation?.state === 'ready' ? 'Skipped' :
+  !building && buildTimings.size ? 'Unconfirmed' : 'Pending');
  const sourceIssue = $derived(operation?.safeReason?.startsWith('source_') && !operation.buildsStarted);
  const summaryOperation = $derived(sourceIssue ? undefined : buildOperation);
  const preparationMessage = $derived(pending ? overview.description : sourceIssue ? 'See Activity for preparation details.' :
@@ -415,9 +416,18 @@
   persist({ method, request: { idempotencyKey: crypto.randomUUID(), id: operation.id, expectedGeneration: operation.generation } }); await resume();
  }
  async function poll() {
-  if (!loaded || busy || polling || (!onboardingActive && !operations.some(value => activeStates.has(value.state)))) return;
+  if (!loaded || busy || polling) return;
+  const now = Date.now();
+  if (!onboardingActive && !operations.some(value => activeStates.has(value.state)) &&
+   (currentStep < 3 || document.visibilityState !== 'visible' || now - lastPoll < 10000)) return;
+  lastPoll = now;
   polling = true;
   try { await loadOnboarding(); await history(); } catch { if (mounted) error = 'Live updates paused. Refresh history to reconnect; accepted work remains retained.'; } finally { polling = false; }
+ }
+ function elapsedTime(ms: number) {
+  const seconds = Math.floor(ms / 1000);
+  return [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
+   .map(value => String(value).padStart(2, '0')).join(':');
  }
  onMount(() => {
   mounted = true;
@@ -690,8 +700,12 @@
       <h4 id={`build-report-${repo.id}`} class="text-sm font-medium">Build report</h4>
       <ol class="divide-y" aria-label="Build steps">
         {#each buildSteps as step, index (step.milestone)}
+         {@const elapsed = buildTimings.get(step.milestone)}
          <li class="flex items-center justify-between gap-3 py-2 text-sm" aria-current={index === activeBuildStep ? 'step' : undefined}>
           <span>{step.label}</span>
+          <span class="ml-auto font-mono text-xs tabular-nums text-muted-foreground" aria-label="Elapsed time">
+           {elapsed === undefined ? '—' : elapsedTime(elapsed)}
+          </span>
           {#if index < activeBuildStep}<StatusBadge status="Complete" tone="success" />
           {:else if index === activeBuildStep}<StatusBadge status="Running" tone="active" />
           {:else}<StatusBadge status={inactiveBuildStatus} />{/if}

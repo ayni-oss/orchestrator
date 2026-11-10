@@ -1,4 +1,5 @@
 //! Synthetic authority qualification: no provider requests or signing material.
+use ayni_orchestrator_events::runtime_preparation::{BUILD_REPORT_KEY, BuildReport};
 use ayni_orchestrator_workflow_postgres::{
     StoreError, WorkflowStore,
     store::{
@@ -430,7 +431,23 @@ async fn retry_preserves_build_allowance_and_requires_cleanup() -> TestResult {
     let op = f.discover(&op).await?;
     let op = f.finish(&op, "missing", Evidence::default()).await?;
     assert_eq!(op.stage, "build");
-    let op = f.finish(&op, "failed", Evidence::default()).await?;
+    let binding = f.bind(&op).await?;
+    let report = StageReport {
+        binding: binding.clone(),
+        outcome: "failed".into(),
+        safe_reason: "execution_failed".into(),
+        evidence: Evidence::default(),
+    };
+    let elapsed_ms = [Some(2000), Some(6000), None, None, None];
+    let stopping = f
+        .store
+        .report_runtime_stage_with_timings(&report, elapsed_ms)
+        .await?;
+    assert_eq!(f.store.report_runtime_stage(&report).await?, stopping);
+    f.store.stop_runtime_stage(&binding).await?;
+    let op = f.store.get_runtime_preparation(&op.id).await?;
+    let retained: BuildReport = serde_json::from_str(&op.evidence.details[BUILD_REPORT_KEY])?;
+    assert_eq!(retained.elapsed_ms, elapsed_ms);
     assert_eq!(op.builds_started, 1);
     assert!(
         f.store
@@ -446,6 +463,9 @@ async fn retry_preserves_build_allowance_and_requires_cleanup() -> TestResult {
         .await?;
     assert_eq!(restarted.deadline_unix_ms, op.deadline_unix_ms);
     assert_eq!(restarted.builds_started, 1);
+    let retained: BuildReport =
+        serde_json::from_str(&restarted.evidence.details[BUILD_REPORT_KEY])?;
+    assert!(!retained.complete && retained.elapsed_ms.iter().all(Option::is_none));
     assert_eq!(
         f.store
             .retry_runtime_preparation(&retry, &op.id, op.generation)

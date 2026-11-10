@@ -127,8 +127,13 @@ message RuntimePreparation {
   string certification_layer_digest = 36;
   // Local development opt-in; does not establish cluster/network qualification.
   bool development_only = 37;
-  // Latest worker-owned milestone for the exact live build generation.
+  // Latest milestone of this build, including completion after the worker exits.
   RuntimeBuildMilestone build_milestone = 38;
+  repeated RuntimeBuildStepTiming build_step_timings = 39;
+}
+message RuntimeBuildStepTiming {
+  RuntimeBuildMilestone milestone = 1;
+  uint64 elapsed_ms = 2;
 }
 enum RuntimeBuildMilestone {
   RUNTIME_BUILD_MILESTONE_UNSPECIFIED = 0;

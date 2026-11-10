@@ -201,10 +201,12 @@ The ayni settings page shows when the active worker profile is for local develop
 ### Build status report
 
 The build pod reports typed milestones through its bound worker capability.
-The console refreshes the latest milestone for the current build generation
-with the run status. The report uses these milestones to show completed,
-active, and upcoming build steps. Live progress is ephemeral and does not
-affect stage admission or retained results.
+The console refreshes milestones and elapsed step times for the current build
+generation with the run status. The control plane measures elapsed time from
+observed milestone boundaries and retains those measurements when it accepts the
+build result. A retry resets the report while preserving immutable publication
+evidence and the build allowance. Timing is informational and does not affect
+stage admission.
 
 ### Supervisor diagnostics
 
