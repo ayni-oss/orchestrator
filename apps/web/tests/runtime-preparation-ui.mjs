@@ -241,14 +241,24 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
   await route.fulfill({json:{pullRequest}});
  });
  await next().click();
- await status.getByRole('heading',{name:'Signing key update pull request',exact:true}).waitFor();
+ const signingHeader=status.locator('[data-title-row]');
+ await signingHeader.getByRole('heading',{name:'Signing key update pull request',exact:true}).waitFor();
+ assert.equal(await status.getByRole('heading',{name:'Review and start',exact:true}).count(),0);
+ const refreshPr=signingHeader.locator('[data-title-actions]').getByRole('button',{name:'Refresh pull request status',exact:true});
+ const signingChange=status.locator('pre > code').filter({hasText:'[environment.certificate.trusted_keys]'});
+ await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin});
+ try {
+  await status.getByRole('button',{name:'Copy signing key change',exact:true}).click();
+  await page.getByText('Signing key change copied',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),await signingChange.textContent());
+ } finally { await page.context().clearPermissions(); }
  assert.equal(await status.getByRole('combobox',{name:'Branch with signing key changes',exact:true}).count(),0);
  const openPr=status.getByRole('button',{name:'Open PR',exact:true});
  assert.equal(await openPr.locator('..').getByRole('button',{name:'Back',exact:true}).count(),0);
  await status.getByText('Grant the installed GitHub App write access to Contents and Pull requests, then refresh.',{exact:true}).waitFor();
  assert.ok(await openPr.isDisabled());
  publicationAllowed=true;
- await status.getByRole('button',{name:'Refresh pull request status',exact:true}).click();
+ await refreshPr.click();
  await openPr.click();
  const viewPr=status.getByRole('link',{name:'View PR',exact:true});
  await viewPr.waitFor();
@@ -256,13 +266,13 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
   signerId,expectedSignerRevision:'1',baseBranch:'main'});
  assert.equal(await viewPr.getAttribute('href'),`https://github.com/${repository.fullName}/pull/42`);
  assert.equal(await viewPr.getAttribute('target'),'_blank');
- await status.getByText('Draft',{exact:true}).waitFor();
+ await signingHeader.getByText('Draft',{exact:true}).waitFor();
  await page.reload();
  await viewPr.waitFor();
  await status.getByText('Draft',{exact:true}).waitFor();
  assert.equal(signingWrites,1);
  pullRequest={...pullRequest,state:'RUNTIME_SIGNING_PULL_REQUEST_STATE_MERGED'};
- await status.getByRole('button',{name:'Refresh pull request status',exact:true}).click();
+ await refreshPr.click();
  await status.getByText('Merged',{exact:true}).waitFor();
  resolvedHead='f'.repeat(40);
  await page.reload();

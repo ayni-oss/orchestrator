@@ -136,6 +136,15 @@
  const signingUpdateBase = $derived(branch || repo.defaultBranch);
  const currentPullStatus = $derived(pullStatus?.scope === signingUpdateScope ? pullStatus : undefined);
  const signingPullRequest = $derived(currentPullStatus?.state === 'found' ? currentPullStatus.pull : undefined);
+ const checkingSigningPull = $derived(!currentPullStatus || currentPullStatus.state === 'checking');
+ const signingPullBadge: {label: string; tone: StatusTone} = $derived.by(() => {
+  if (signingPublicationBusy) return {label:'Opening PR',tone:'active'};
+  if (signingPullRequest) return {label:signingPullRequest.state,tone:signingPullRequest.state === 'Merged' ? 'success' : 'neutral'};
+  if (currentPullStatus?.state === 'missing') return {label:'No pull request',tone:'neutral'};
+  if (currentPullStatus?.state === 'forbidden') return {label:'Permission required',tone:'warning'};
+  if (currentPullStatus?.state === 'error') return {label:'Status unavailable',tone:'warning'};
+  return {label:'Checking',tone:'active'};
+ });
  const signingReview = $derived(signingUpdateRequested && candidateInspection && signer && signingUpdateBase ? {
   repositoryId: repo.id,
   inspectionId: candidateInspection.id,
@@ -571,13 +580,14 @@
    <TitleRow>
     {#snippet children()}
     {#key currentStep}
-     <h3 bind:this={stepHeading} tabindex="-1" class="text-lg font-semibold focus:outline-none">{onboardingSteps[currentStep]}</h3>
+     <h3 bind:this={stepHeading} tabindex="-1" class="text-lg font-semibold focus:outline-none">{currentStep === 2 && signingUpdateRequested ? 'Signing key update pull request' : onboardingSteps[currentStep]}</h3>
     {/key}
     {/snippet}
     {#snippet badge()}
      {#if currentStep === 0}
       <span aria-live="polite"><StatusBadge status={integrationsReady ? 'Ready' : 'Needs attention'} tone={integrationsReady ? 'success' : 'warning'} /></span>
      {:else if currentStep === 1}<span aria-live="polite"><StatusBadge status={lockCheckStatus.label} tone={lockCheckStatus.tone} /></span>
+     {:else if currentStep === 2 && signingUpdateRequested}<span aria-live="polite"><StatusBadge status={signingPullBadge.label} tone={signingPullBadge.tone} /></span>
      {:else if currentStep >= 3 && !pending}<span aria-live="polite"><StatusBadge status={runStatus.label} tone={runStatus.tone} /></span>{/if}
     {/snippet}
     {#snippet actions()}
@@ -595,6 +605,12 @@
       aria-busy={checkingDefault} disabled={busy || recheckDisabled || checkingDefault || !!pending || onboardingActive}
       onclick={recheckDefaultBranch}>
       <RefreshCw class={{ 'motion-safe:animate-spin': checkingDefault }} aria-hidden="true" />
+     </Button>
+    {:else if currentStep === 2 && signingUpdateRequested}
+     <Button variant="ghost" size="icon" aria-label="Refresh pull request status" title="Refresh pull request status"
+      aria-busy={checkingSigningPull} disabled={!signingReview || signingPublicationBusy || checkingSigningPull}
+      onclick={() => refreshSigningPullRequest()}>
+      <RefreshCw class={{ 'motion-safe:animate-spin': checkingSigningPull }} aria-hidden="true" />
      </Button>
     {:else if currentStep >= 3 && !pending}
      <div class="flex shrink-0 items-center gap-2">
@@ -694,53 +710,51 @@
      {/if}
     </div>
    {:else if currentStep === 2 && signingUpdateRequested && signer && candidateInspection}
-    <div class="space-y-3">
-     <h4 class="font-medium">Signing key update pull request</h4>
+    {@const signingChange = trustSnippet(signer)}
+    {#snippet targetBranch()}<BranchLabel name={signingUpdateBase} label="Target branch" />{/snippet}
+    <div class="min-w-0 space-y-3">
      <p class="text-sm">The proposed change pins the selected public key in <code>.ayni.toml</code>, preserves the other trusted keys, and regenerates <code>.ayni.lock</code>.</p>
      <InformationTable aligned rows={[
       {label:'Repository',value:repo.fullName},
-      {label:'Target branch',value:signingUpdateBase},
+      {label:'Target branch',value:targetBranch},
       {label:'Inspected commit',value:candidateInspection.commitSha,monospace:true},
       {label:'Signing key',value:signer.keyId},
      ]}/>
-     <pre class="overflow-x-auto rounded-md bg-muted p-2 text-xs">{trustSnippet(signer)}</pre>
-     <div class="space-y-3" aria-live="polite">
+     <CopyableCode value={signingChange} label="Copy signing key change" disabled={busy}
+      oncopy={() => perform(async () => {
+       await navigator.clipboard.writeText(signingChange);
+       toast.success('Signing key change copied');
+      })} />
+    </div>
+    <div class="space-y-3 border-t pt-4">
+     <div class="space-y-2" aria-live="polite">
       {#if signingPullRequest}
        <InformationTable aligned rows={[
-        {label:'Pull request status',value:signingPullRequest.state},
         {label:'Pull request branch',value:signingPullRequest.branch,monospace:true},
        ]}/>
       {:else if currentPullStatus?.state === 'forbidden'}
        <p class="text-sm">Grant the installed GitHub App write access to Contents and Pull requests, then refresh.</p>
-      {:else if signingPublicationBusy}
-       <p class="text-sm">Opening a draft pull request…</p>
-      {:else if currentPullStatus?.state === 'missing'}
-       <p class="text-sm">No pull request exists for this signing key update.</p>
       {:else if currentPullStatus?.state === 'error'}
-       <p class="text-sm">Pull request status is unavailable. Refresh to try again.</p>
-      {:else}
-       <p class="text-sm">Checking for an existing pull request…</p>
+       <p class="text-sm">Refresh to try again.</p>
       {/if}
-      <div class="flex flex-wrap gap-2">
-       {#if signingPullRequest}
-        <Button href={signingPullRequest.url} target="_blank" rel="noopener noreferrer">View PR</Button>
-       {:else}
-        <Button disabled={signingPublicationBusy || !canRequestSigningUpdate || currentPullStatus?.state !== 'missing'}
-         onclick={openSigningPullRequest}>{signingPublicationBusy ? 'Opening PR…' : 'Open PR'}</Button>
-       {/if}
-       <Button variant="ghost" size="icon" aria-label="Refresh pull request status" title="Refresh pull request status"
-        disabled={signingPublicationBusy || currentPullStatus?.state === 'checking'} onclick={() => refreshSigningPullRequest()}>
-        <RefreshCw aria-hidden="true"/>
-       </Button>
-      </div>
+      {#if signingPullRequest?.state === 'Merged' || !canRequestSigningUpdate}
+       <p class="text-sm text-muted-foreground">Check the current branch before continuing runtime preparation.</p>
+      {:else}
+       <p class="text-sm text-muted-foreground">After the pull request is merged, check <code>ayni.lock</code> again to continue runtime preparation.</p>
+      {/if}
      </div>
-     {#if signingPullRequest?.state === 'Merged' || !canRequestSigningUpdate}
-      <p class="text-sm text-muted-foreground">Check the current branch before continuing runtime preparation.</p>
-      <Button variant="outline" disabled={busy || recheckDisabled || checkingDefault || signingPublicationBusy}
-       onclick={() => visit(1)}>Go to lock check</Button>
-     {:else}
-      <p class="text-sm text-muted-foreground">After the pull request is merged, check <code>ayni.lock</code> again to continue runtime preparation.</p>
-     {/if}
+     <div class="flex flex-wrap gap-2">
+      {#if signingPullRequest}
+       <Button href={signingPullRequest.url} target="_blank" rel="noopener noreferrer">View PR</Button>
+      {:else}
+       <Button disabled={signingPublicationBusy || !canRequestSigningUpdate || currentPullStatus?.state !== 'missing'}
+        onclick={openSigningPullRequest}>{signingPublicationBusy ? 'Opening PR…' : 'Open PR'}</Button>
+      {/if}
+      {#if signingPullRequest?.state === 'Merged' || !canRequestSigningUpdate}
+       <Button variant="outline" disabled={busy || recheckDisabled || checkingDefault || signingPublicationBusy}
+        onclick={() => visit(1)}>Go to lock check</Button>
+      {/if}
+     </div>
     </div>
    {:else if currentStep === 2}
     <div class="flex justify-end"><BranchLabel name={branch || repo.defaultBranch} /></div>
