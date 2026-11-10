@@ -103,12 +103,19 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.equal(await metadata.locator('svg').count(),2);
  assert.equal(await metadata.getByRole('button').count(),0);
  assert.equal(await metadata.evaluate(element=>getComputedStyle(element).justifyContent),'flex-end');
- await page.getByRole('button',{name:'View source integration details',exact:true}).click();
- await sourceDetails.getByText(repository.providerRepositoryId,{exact:true}).waitFor();
- await sourceDetails.getByText(repository.installationId,{exact:true}).waitFor();
- await sourceDetails.getByText('Connected',{exact:true}).waitFor();
- await sourceDetails.getByRole('button',{name:'Close',exact:true}).click();
- await sourceDetails.waitFor({state:'hidden'});
+ const sourceInfo=page.getByRole('button',{name:'View source integration details',exact:true});
+ await sourceInfo.hover();
+ const sourceTooltip=page.getByRole('tooltip');
+ await sourceTooltip.getByText(repository.providerRepositoryId,{exact:true}).waitFor();
+ await sourceTooltip.getByText(repository.installationId,{exact:true}).waitFor();
+ await sourceTooltip.getByText('Connected',{exact:true}).waitFor();
+ assert.equal(await sourceDetails.count(),0,'info hover must not open a dialog');
+ await page.getByRole('tab',{name:'Status',exact:true}).hover();
+ await sourceTooltip.waitFor({state:'hidden'});
+ await sourceInfo.focus();
+ await sourceTooltip.getByText(repository.providerRepositoryId,{exact:true}).waitFor();
+ await page.keyboard.press('Escape');
+ await sourceTooltip.waitFor({state:'hidden'});
  const inspectionCard=page.locator(`[data-repository-inspection="${repositoryId}"]`);
  const preparation=page.locator(`[data-runtime-preparation="${repositoryId}"]`);
  assert.equal(await inspectionCard.getByRole('button',{name:'Resume inspection',exact:true}).isVisible(),false,'old retry attempts stay out of the current workflow');
@@ -146,6 +153,8 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
   page.waitForResponse(response=>response.url().endsWith('/api/InspectRepository') && response.ok()),
   inspectionDialog.getByRole('button',{name:'Resume inspection',exact:true}).click(),
  ]);
+ // Refresh keeps the selected entry and its dialog mounted for review.
+ await inspectionDialog.getByRole('button',{name:'Close',exact:true}).click();
  await inspectionDialog.waitFor({state:'hidden'});
  await page.getByRole('tab',{name:'ayni',exact:true}).click();
  await page.unroute('**/api/InspectRepository');
@@ -307,7 +316,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await statusPanel.getByRole('region',{name:'Inspect a specific commit',exact:true}).getByLabel('Commit SHA',{exact:true}).waitFor();
  const sectionTitles=await statusPanel.locator('h3, details > summary').allTextContents();
  assert.deepEqual(sectionTitles.map(title=>title.replace(/ \(.*\)$/,'')),[
-  'Current preparation details','Inspect a specific commit','Previous preparations','Inspection history',
+  'Inspect a specific commit','Previous preparations','Inspection history',
  ]);
  assert.equal(await statusPanel.locator('details').count(),2);
  const history=statusPanel.locator('[data-preparation-history]');
@@ -392,11 +401,12 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  operation={...queued,state:'unavailable',stage:'cleanup',safeReason:'source_unavailable',cleanupComplete:true,buildsStarted:0};
  const summary=status.getByRole('region',{name:'Preparation summary',exact:true});
  await summary.getByText('See Status for preparation details.',{exact:true}).waitFor();
- const prepareHeader=status.getByRole('heading',{name:'Prepare image',exact:true}).locator('..');
+ const prepareHeader=status.locator('[data-title-row]').filter({has:page.getByRole('heading',{name:'Prepare image',exact:true})});
  await prepareHeader.getByText('Unavailable',{exact:true}).waitFor();
  const refreshStatus=prepareHeader.getByRole('button',{name:'Refresh status',exact:true});
  assert.equal(await refreshStatus.locator('svg').count(),1);
- assert.equal(await refreshStatus.evaluate(button=>button.previousElementSibling.textContent.trim()),'Unavailable');
+ assert.equal(await prepareHeader.locator('[data-title-content]').getByText('Unavailable',{exact:true}).count(),1);
+ assert.equal(await prepareHeader.locator('[data-title-actions]').getByRole('button',{name:'Refresh status',exact:true}).count(),1);
  assert.equal(await status.getByRole('button',{name:'Refresh status',exact:true}).count(),1);
  assert.equal(await summary.getByText('Status',{exact:true}).count(),1);
  assert.deepEqual((await summary.locator('dd').allTextContents()).map(value=>value.trim()),['See Status for preparation details.','—','—','—']);
@@ -574,6 +584,16 @@ export async function exerciseRepositoryHistoryPagination(page,origin,repository
  await inspectionPages.getByText('Page 4',{exact:true}).waitFor();
  assert.equal(await inspectionRows.count(),5);
  assert.deepEqual(calls.slice(beforePrefetch).filter(call=>call.key==='inspections').map(call=>call.afterId),[inspections[9].id,inspections[19].id]);
+ let releaseRefresh;
+ const refreshGate=new Promise(resolve=>{releaseRefresh=resolve;});
+ await page.route('**/api/ListRepositoryInspections',async route=>{await refreshGate;await respond(route,'inspections',inspections);});
+ await page.getByRole('button',{name:'Refresh inspection history',exact:true}).click();
+ assert.equal(await inspectionRows.count(),5,'refresh must keep the cached page visible');
+ assert.equal(await inspectionHistory.locator('[data-slot=skeleton]').count(),0);
+ assert.equal(await inspectionPages.getByText('Page 4',{exact:true}).isVisible(),true);
+ releaseRefresh();
+ await inspectionPages.getByText('Page 1',{exact:true}).waitFor();
+ assert.equal(await inspectionRows.first().getAttribute('aria-label'),`Inspection ${inspections[0].commitSha}`);
 }
 
 export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {

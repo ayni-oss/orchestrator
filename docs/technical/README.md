@@ -26,6 +26,8 @@ admission is a planned behavior change.
 
 ## Current implementation
 
+- [Product design manual](contributing/design-manual.md): shared web title, badge, action, loading and history conventions.
+
 - [Observable execution acceptance](operations/observable-execution-acceptance.md): combined deployed progress, task evidence, replay and trace qualification.
 - [Execution tracing](operations/execution-tracing.md): optional self-hosted OTLP export and causal diagnosis.
 - [Execution timeline](architecture/execution-timeline.md): retained accepted transitions, stable history pages and the workspace inspector.

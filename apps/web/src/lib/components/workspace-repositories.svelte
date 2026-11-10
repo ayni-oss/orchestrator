@@ -127,7 +127,7 @@
 <InformationCard title="Workspace repositories">
   {#snippet headerAction()}
     <Button
-      variant="outline"
+      variant="ghost"
       size="icon"
       disabled={busy || !!pending}
       aria-label="Refresh workspace repositories"
@@ -147,7 +147,7 @@
   {/if}
   <fieldset class="space-y-2" disabled={busy || !!pending} aria-busy={busy}>
     <legend class="text-sm font-medium">Select repositories</legend>
-    {#if loading}
+    {#if loading && !membershipLoaded}
       <div class="grid grid-cols-2 gap-2" aria-hidden="true">
         <Skeleton class="h-10 border border-input" />
         <Skeleton class="h-10 border border-input" />

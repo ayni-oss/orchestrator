@@ -26,6 +26,9 @@ design tokens and locally bundled fonts, with the input token mapped to the bord
 
 ## Shared UI components
 
+Follow the [product design manual](../../docs/technical/contributing/design-manual.md)
+for titles, badges, icon actions, loading states and history presentation.
+
 Use shadcn-svelte components from `src/lib/components/ui` for interactive controls,
 including Button, Input, Textarea, Dialog and NativeSelect. Keep theme tokens in
 `src/app.css`; `--input` is a control border color, not a field background.
@@ -42,7 +45,7 @@ registry components for previous and next navigation.
 
 Repository catalog UI: `/repositories`. Available repositories use the same compact, clickable grid cards as projects.
 Opening a connected repository shows **Status** and **ayni** tabs. The header
-shows connection status and opens source integration details from its info icon.
+shows connection status and reveals source integration details on hover or focus of its info icon.
 Switching tabs preserves in-progress selections. Technical inspection
 metadata is collapsed by default. Selecting a source control connection
 automatically discovers repositories through its single active GitHub App

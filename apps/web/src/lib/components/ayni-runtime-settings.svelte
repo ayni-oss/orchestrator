@@ -19,7 +19,7 @@
  let defaults = $state({ registry: '', signer: '' });
  let revisions = $state({ registry: 0, signer: 0 });
  const availableSigners = $derived(signers.filter(signer => signer.enabled));
- const status = $derived(loading ? 'Checking' : !profile ? 'Unavailable' :
+ const status = $derived(loading && !profile ? 'Checking' : !profile ? 'Unavailable' :
   !profile.enabled ? 'Disabled' : profile.developmentOnly ? 'Development only' : 'Enabled');
 
  async function loadRegistries() {
@@ -38,7 +38,8 @@
   loading = true;
   registryError = false;
   const [runtime, registry] = await Promise.allSettled([rpc('GetRuntimeProfile', {}), loadRegistries()]);
-  profile = runtime.status === 'fulfilled' ? runtime.value : undefined;
+  if (runtime.status === 'fulfilled') profile = runtime.value;
+  else if (profile) toast.error('Could not refresh runtime status', {description:'The last loaded profile is still shown. Try refreshing again.'});
   registryError = registry.status === 'rejected';
   loading = false;
  }
@@ -66,14 +67,14 @@
 </script>
 
 {#snippet refreshAction()}
- <Button size="icon" variant="outline" aria-label="Refresh runtime status" title="Refresh runtime status" disabled={loading} onclick={refresh}>
+ <Button size="icon" variant="ghost" aria-label="Refresh runtime status" title="Refresh runtime status" disabled={loading} onclick={refresh}>
   <RefreshCw class={{ 'motion-safe:animate-spin': loading }} aria-hidden="true" />
  </Button>
 {/snippet}
 
 <InformationCard title="Runtime worker profile" headingLevel={2} {status} headerAction={refreshAction}>
- {#if loading}
-  <p class="text-sm text-muted-foreground">Checking deployment configuration…</p>
+ {#if loading && !profile}
+  <InformationTable aligned loading rows={[{label:'Platform',value:''},{label:'Executor image',value:''}]} />
  {:else if !profile}
   <p class="text-sm">Runtime profile status could not be loaded. Refresh to try again.</p>
  {:else if profile.enabled}

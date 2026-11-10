@@ -1,4 +1,5 @@
 <script lang="ts">
+ import TitleRow from "$lib/components/title-row.svelte";
  import { toast } from 'svelte-sonner';
  import { RefreshCw } from '@lucide/svelte';
  import RepositoryCard from '$lib/components/repository-card.svelte';
@@ -25,6 +26,7 @@
  const pending = $derived(Object.values(attempts).some(attempt => attempt.status === 'pending'));
  let refreshing=$state(false);
  let loadingGrid=$state(true);
+ let gridLoaded=$state(false);
  let search=$state('');
  const matchingCatalog = $derived(catalog.filter(repo => repo.fullName.toLowerCase().includes(search.toLowerCase())));
  const visibleAttempts = $derived(Object.values(attempts).filter(({ request, repository }) =>
@@ -40,7 +42,7 @@
  async function loadGrid(action: () => Promise<void>) {
   loadingGrid = true;
   try { await perform(action); }
-  finally { loadingGrid = false; }
+  finally { loadingGrid = false; gridLoaded = true; }
  }
  async function load(){const values:Connection[]=[];let afterId='';let pages=0;do{const result=await rpc('ListConnections',{afterId,limit:100});values.push(...(result.connections||[]).filter((c:Connection)=>c.capability==='source_control'));afterId=result.nextAfterId||'';}while(afterId&&++pages<20);const previousRevision=source?.revision;connections=values;if(source?.revision!==previousRevision)changeSource('');await loadCatalog();}
  async function refreshCatalog() {
@@ -125,16 +127,18 @@
   </div>
   {#if nextRepositories}<Button variant="outline" disabled={busy||!!pending} onclick={()=>perform(()=>findRepositories(true))}>More repositories</Button>{/if}
  </div>
- <div class="flex items-center justify-between">
+ <TitleRow>
   <h2 id="available-repositories" class="text-lg font-semibold">Available repositories</h2>
-  <Button variant="outline" size="icon" disabled={busy} aria-label="Refresh repositories" title="Refresh repositories" aria-busy={refreshing} onclick={refreshCatalog}>
+  {#snippet actions()}
+  <Button variant="ghost" size="icon" disabled={busy} aria-label="Refresh repositories" title="Refresh repositories" aria-busy={refreshing} onclick={refreshCatalog}>
    <RefreshCw class={refreshing ? 'size-4 motion-safe:animate-spin' : 'size-4'} aria-hidden="true" />
   </Button>
- </div>
+  {/snippet}
+ </TitleRow>
  {#if !loadingGrid&&!catalog.length}<p class="text-sm text-muted-foreground">No repositories connected yet.</p>{/if}
  <div class="flex flex-wrap items-center justify-between gap-4"><p class="text-sm text-muted-foreground">{catalog.length} connected {catalog.length===1?'repository':'repositories'}</p><Input class="max-w-xs" bind:value={search} aria-label="Search repositories" placeholder="Search repositories…"/></div>
  <div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3" role="region" aria-labelledby="available-repositories" aria-busy={loadingGrid}>
- {#if loadingGrid}
+ {#if loadingGrid && !gridLoaded}
   {#each [1, 2, 3] as slot (slot)}
    <Card.Root aria-hidden="true">
     <Card.Header><Skeleton class="my-1 h-5 w-2/3" /></Card.Header>

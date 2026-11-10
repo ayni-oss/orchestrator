@@ -5,4 +5,4 @@
   let { class: className, ...props }: HTMLAttributes<HTMLDivElement> = $props();
 </script>
 
-<div data-slot="skeleton" class={cn("rounded-md bg-muted motion-safe:animate-pulse", className)} {...props}></div>
+<div aria-hidden="true" data-slot="skeleton" class={cn("rounded-md bg-muted motion-safe:animate-pulse", className)} {...props}></div>

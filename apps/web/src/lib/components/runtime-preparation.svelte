@@ -1,4 +1,7 @@
 <script lang="ts">
+ import TitleRow from "./title-row.svelte";
+ import ActivitySkeleton from "./activity-skeleton.svelte";
+ import RuntimeLoading from "./runtime-loading.svelte";
  import { protectUnsavedChanges } from "$lib/unsaved-changes.svelte";
  import { onMount, tick, untrack, type Snippet } from 'svelte';
  import { Copy, RefreshCw } from '@lucide/svelte';
@@ -128,6 +131,9 @@
   (!checkedCommit || (onboarding.commitSha || onboarding.settings.expectedCommitSha) === checkedCommit) ? onboarding : null);
  const overview = $derived(runtimeOverview({loaded,error,rejected,inspectionPending,moreHistory:!!next,pending:!!pending,inspectionLoading,inspectionError,inspectionReason:inspectionReasons[latestInspection?.safeReason || ''],inspection:latestInspection,operations,operationId:retainedRun?.preparationId,registries,signers,sourceReady,sourceRevision:connection?.revision}));
  const operation = $derived(overview.operation);
+ // Keep retained evidence visible while unrelated configuration or inspection reads finish.
+ const displayedOperation = $derived(overview.operation ??
+  ((!loaded || inspectionLoading || error || inspectionError) ? operations[0] : undefined));
  const runStatuses: Record<string, { label: string; tone: StatusTone }> = {
   pending: {label:'Queued',tone:'active'}, running: {label:'Running',tone:'active'},
   ready: {label:'Ready',tone:'success'}, failed: {label:'Failed',tone:'danger'},
@@ -167,7 +173,7 @@
   building && activeBuildStep < 0 && 'Waiting for the build worker to report progress.',
   ...(sourceIssue ? [] : overview.issues),
  ].filter(Boolean))]);
- const previousOperations = $derived(operations.filter(value => value.id !== overview.operation?.id));
+ const previousOperations = $derived(operations.filter(value => value.id !== displayedOperation?.id));
  const matchingOperation = $derived(operation && (retainedRun?.preparationId === operation.id ||
   (!onboarding && !!reviewedCommit && operation.sourceCommit === reviewedCommit)) ? operation : undefined);
  const preparing = $derived(onboardingActive || !!pending || workActive);
@@ -336,8 +342,7 @@
   if (changed && onboarding?.inspectionId) await refreshInspections?.();
  }
  async function refresh() {
-  await Promise.all([configuration(), loadOnboarding()]);
-  await history();
+  await Promise.all([configuration(), loadOnboarding(), history()]);
   if (!loaded) {
    restoreSettings();
    restoreIntegrationSelections();
@@ -524,7 +529,7 @@
 {#snippet runtime()}
 <section class="space-y-5" data-runtime-preparation={repo.id} aria-label={`Runtime preparation for ${repo.fullName}`}>
  {#if !loaded}
-  <p role="status">Loading runtime onboarding…</p>
+  <RuntimeLoading failed={!!error} />
   {#if error}<Button onclick={() => perform(refresh)}>Retry</Button>{/if}
  {:else}
   <ol aria-label="Runtime onboarding steps" class="grid gap-2 sm:grid-cols-5">
@@ -541,25 +546,31 @@
    {/each}
   </ol>
   <section class="space-y-4 rounded-xl border bg-card p-5" aria-label="Runtime status">
-   <div class="flex items-center justify-between gap-3">
+   <TitleRow>
+    {#snippet children()}
     {#key currentStep}
      <h3 bind:this={stepHeading} tabindex="-1" class="text-lg font-semibold focus:outline-none">{onboardingSteps[currentStep]}</h3>
     {/key}
+    {/snippet}
+    {#snippet badge()}
+     {#if currentStep >= 3 && !pending}<span aria-live="polite"><StatusBadge status={runStatus.label} tone={runStatus.tone} /></span>{/if}
+    {/snippet}
+    {#snippet actions()}
     {#if currentStep === 0}
-     <Button variant="outline" size="icon" aria-label="Refresh integrations" title="Reload available integrations from Configuration"
+     <Button variant="ghost" size="icon" aria-label="Refresh integrations" title="Reload available integrations from Configuration"
       aria-busy={refreshingIntegrations} disabled={busy} onclick={refreshIntegrations}>
       <RefreshCw class={{ 'motion-safe:animate-spin': refreshingIntegrations }} aria-hidden="true"/>
      </Button>
     {:else if currentStep >= 3 && !pending}
      <div class="flex shrink-0 items-center gap-2">
-      <span aria-live="polite"><StatusBadge status={runStatus.label} tone={runStatus.tone} /></span>
-      <Button variant="outline" size="icon" aria-label="Refresh status" title="Refresh status"
+      <Button variant="ghost" size="icon" aria-label="Refresh status" title="Refresh status"
        aria-busy={refreshingStatus} disabled={busy} onclick={refreshStatus}>
        <RefreshCw class={{ 'motion-safe:animate-spin': refreshingStatus }} aria-hidden="true" />
       </Button>
      </div>
     {/if}
-   </div>
+    {/snippet}
+   </TitleRow>
    {#if currentStep === 0}
     <p role="status" class="text-sm text-muted-foreground">{readyIntegrationCount} of 3 integrations ready</p>
     <InformationTable rows={[
@@ -684,7 +695,7 @@
         <Button disabled={signingPublicationBusy || !canRequestSigningUpdate || currentPullStatus?.state !== 'missing'}
          onclick={openSigningPullRequest}>{signingPublicationBusy ? 'Opening PR…' : 'Open PR'}</Button>
        {/if}
-       <Button variant="outline" size="icon" aria-label="Refresh pull request status" title="Refresh pull request status"
+       <Button variant="ghost" size="icon" aria-label="Refresh pull request status" title="Refresh pull request status"
         disabled={signingPublicationBusy || currentPullStatus?.state === 'checking'} onclick={() => refreshSigningPullRequest()}>
         <RefreshCw aria-hidden="true"/>
        </Button>
@@ -801,24 +812,31 @@
 {/snippet}
 
 {#snippet currentPreparation()}
- {#if overview.operation}
-  <section class="space-y-2" aria-labelledby={`current-preparation-${repo.id}`}>
-   <h3 class="text-sm font-medium" id={`current-preparation-${repo.id}`}>Current preparation details</h3>
-   {#key overview.operation.id}{@render preparationEvidence(overview.operation)}{/key}
-  </section>
+ <section class="min-h-[66px]" aria-label="Current preparation details" aria-busy={!loaded || inspectionLoading}>
+ {#if displayedOperation}
+   {#key displayedOperation.id}{@render preparationEvidence(displayedOperation)}{/key}
+ {:else if (!loaded || inspectionLoading) && !error && !inspectionError}
+  <ActivitySkeleton />
+ {:else}
+  <div class="flex min-h-[66px] items-center rounded-md border px-3 py-2 text-sm text-muted-foreground">
+   {#if error || inspectionError}<span role="alert">Preparation status could not be loaded.</span><Button variant="outline" class="ml-auto" onclick={async () => { await refreshInspections?.(); await perform(refresh); }}>Retry</Button>
+   {:else}No runtime preparation yet.{/if}
+  </div>
  {/if}
+ </section>
 {/snippet}
 
 {#snippet preparationHistory()}
- {@const currentId = overview.operation?.id || ''}
+ {@const currentId = displayedOperation?.id || ''}
  <div class="relative">
   <details class="rounded-xl border p-4" data-preparation-history
    ontoggle={(event) => { if (event.currentTarget.open) preparationHistoryOpened = true; }}>
    <summary class="cursor-pointer pr-10 text-sm font-medium">Previous preparations ({previousOperations.length}{next ? '+' : ''})</summary>
    {#if preparationHistoryOpened}
-    <div class="pt-4">
-     {#key `${currentId}:${preparationHistoryRevision}`}
-      <HistoryPages label="Previous preparations pages" empty="No earlier runtime preparations."
+    <div class="space-y-2 pt-4">
+     <p class="text-sm text-muted-foreground">Earlier preparations retain the results for their source commit, lock and platform. Their verification and cleanup badges describe that run, not the current preparation.</p>
+     {#key currentId}
+      <HistoryPages revision={preparationHistoryRevision} label="Previous preparations pages" empty="No earlier runtime preparations."
        readPage={(afterId) => readPreparations(afterId, currentId)}>
        {#snippet children(items)}
         {#each items as operation (operation.id)}{@render preparationEvidence(operation)}{/each}
@@ -828,7 +846,7 @@
     </div>
    {/if}
   </details>
-  <Button class="absolute top-3 right-4" variant="outline" size="icon-sm" aria-label="Refresh preparation history"
+  <Button class="absolute top-3 right-4" variant="ghost" size="icon-sm" aria-label="Refresh preparation history"
    title="Refresh preparation history" aria-busy={refreshingStatus} disabled={busy}
    onclick={async () => { await refreshStatus(); preparationHistoryRevision += 1; }}>
    <RefreshCw class={{ 'motion-safe:animate-spin': refreshingStatus }} aria-hidden="true" />

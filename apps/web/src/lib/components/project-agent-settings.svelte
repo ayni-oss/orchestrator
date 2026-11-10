@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from "./ui/skeleton/skeleton.svelte";
   import { onMount, onDestroy, type Snippet } from 'svelte';
   import { toast } from 'svelte-sonner';
   import { Button } from '$lib/components/ui/button/index.js';
@@ -205,7 +206,7 @@
   <div class="space-y-2">
     <Label for={id}>{label}</Label>
     <AutosaveField saving={!!inFlight || (changed && !pending && !loading && !loadError && !saveFailed && !validationMessage)} savedRevision={confirmed[key]}>
-      {@render control()}
+      {#if !configuration}<Skeleton class={key === "instructions" ? "h-28 w-full" : "h-8 w-full"} />{:else}{@render control()}{/if}
     </AutosaveField>
   </div>
 {/snippet}
@@ -222,8 +223,8 @@
     </InformationCard>
   {/if}
   {#if (loadError || saveFailed) && !pending}<Button variant="outline" onclick={() => { due = false; void load(); }}>Reload saved settings</Button>{/if}
-  {#if loading}<p role="status">Loading project settings…</p>{/if}
-  {#if configuration}
+  {#if loading}<p role="status" class="sr-only">Loading project settings…</p>{/if}
+  {#if configuration || loading}
     <InformationCard title="Agent configuration">
       <p class="text-sm text-muted-foreground">Instructions, model and budgets apply to this project. Connections are shared; settings and conversation history stay separate.</p>
       <fieldset class="space-y-5" disabled={loading || (!!pending && !saving)}>

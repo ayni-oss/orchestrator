@@ -1,6 +1,7 @@
 <script lang="ts">
  import { onDestroy, onMount } from 'svelte';
- import { Tabs, Tooltip } from 'bits-ui';
+ import { RefreshCw } from '@lucide/svelte';
+ import { Tabs } from 'bits-ui';
  import { toast } from 'svelte-sonner';
  import ActivityEntry from '$lib/components/activity-entry.svelte';
  import HistoryPages from '$lib/components/history-pages.svelte';
@@ -264,7 +265,7 @@
    </NativeSelect.Root>
   </AutosaveField>
   <p id={`runtime-branch-help-${repo.id}`} class="text-xs text-muted-foreground">Check the selected branch before reviewing its commit.</p>
-  {#if loadingBranches}<p role="status" class="text-xs text-muted-foreground">Loading branches…</p>
+  {#if loadingBranches}<p role="status" class="sr-only">Loading branches…</p>
   {:else if branchError}
    <Feedback kind="error" title="Could not list branches" message={branchError}/>
    <Button variant="outline" onclick={() => loadBranches(nextBranchPage || 1)}>Retry branch list</Button>
@@ -342,22 +343,26 @@
 {/snippet}
 
 {#snippet inspectionHistory()}
+ <div class="relative">
  <details class="rounded-xl border p-4" data-inspection-history
   ontoggle={(event) => { if (event.currentTarget.open) inspectionHistoryOpened = true; }}>
-  <summary class="cursor-pointer text-sm font-medium">Inspection history ({inspections.length}{next ? '+' : ''})</summary>
+  <summary class="cursor-pointer pr-10 text-sm font-medium">Inspection history ({inspections.length}{next ? '+' : ''})</summary>
   {#if inspectionHistoryOpened}
    <div class="space-y-2 pt-4">
     <p class="text-sm text-muted-foreground">Saved checks are historical evidence. An older awaiting-retry check does not block the latest completed check.</p>
-    {#key inspectionHistoryRevision}
-     <HistoryPages label="Inspection history pages" empty="No inspections yet." readPage={readInspections}>
+     <HistoryPages revision={inspectionHistoryRevision} label="Inspection history pages" empty="No inspections yet." readPage={readInspections}>
       {#snippet children(items)}
        {#each items as item (item.id)}{@render inspectionEntry(item)}{/each}
       {/snippet}
      </HistoryPages>
-    {/key}
    </div>
   {/if}
  </details>
+ <Button class="absolute top-3 right-4" variant="ghost" size="icon-sm" aria-label="Refresh inspection history" title="Refresh inspection history" aria-busy={busy} disabled={busy}
+  onclick={() => perform(async () => { await load(); inspectionHistoryRevision += 1; })}>
+  <RefreshCw class={{ 'motion-safe:animate-spin': busy }} aria-hidden="true" />
+ </Button>
+ </div>
 {/snippet}
 
 <div data-repository-inspection={repo.id}>
@@ -367,12 +372,10 @@
     {@render runtime()}
    </Tabs.Content>
    <Tabs.Content value="status" class="space-y-6">
-    <Tooltip.Provider>
      {@render currentPreparation()}
      {@render inspectCommit()}
      {@render preparationHistory()}
      {@render inspectionHistory()}
-    </Tooltip.Provider>
    </Tabs.Content>
   {/snippet}
  </RuntimePreparation>
