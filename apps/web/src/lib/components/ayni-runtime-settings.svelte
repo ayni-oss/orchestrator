@@ -82,7 +82,7 @@
    { label: 'Executor image', value: profile.executorImage || 'Unavailable', monospace: true },
   ]} />
   {#if profile.developmentOnly}
-   <p class="text-sm text-muted-foreground">This profile is for local development testing.</p>
+   <p class="text-sm text-muted-foreground">Cluster network isolation is not qualified. Use this profile for local development testing.</p>
   {/if}
  {:else}
   <p class="text-sm">Runtime builds are disabled. A deployment administrator must enable a Kubernetes worker profile with pinned worker, executor, and verifier images.</p>

@@ -195,8 +195,16 @@ signing, allowance, verification and cleanup gates still apply. This exception
 permits testing on a cluster whose NetworkPolicy enforcement is not qualified;
 it does not establish network isolation. The canonical profile still requires
 `qualified: true`, and the development profile rejects that qualification claim.
-The frozen operation records this identity, its API exposes `development_only`,
-and the UI labels its successful result **Development runtime ready**.
+The frozen operation records this identity and its API exposes `development_only`.
+The ayni settings page shows when the active worker profile is for local development.
+
+### Build status report
+
+The build pod reports typed milestones through its bound worker capability.
+The console refreshes the latest milestone for the current build generation
+with the run status. The report uses these milestones to show completed,
+active, and upcoming build steps. Live progress is ephemeral and does not
+affect stage admission or retained results.
 
 ### Supervisor diagnostics
 

@@ -224,10 +224,23 @@ pub enum SupervisorRequest {
     },
 }
 
+/// Worker-owned milestones. Repository command output is never part of this protocol.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum BuildMilestone {
+    CopySource,
+    VerifyInputs,
+    BuildImage,
+    ExportImage,
+    InspectImage,
+    ImageReady,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum WorkerRequest {
     Input,
+    BuildProgress { milestone: BuildMilestone },
     PreparePublication { expected_manifest_digest: String },
     Report { report: Box<StageReport> },
 }

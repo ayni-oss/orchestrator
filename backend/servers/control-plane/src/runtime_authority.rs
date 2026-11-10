@@ -1,4 +1,5 @@
 //! Runtime workers hold one stage capability; only supervisors adopt and retire Pods.
+pub(crate) mod progress;
 use axum::{
     Json, Router,
     extract::Request,
@@ -273,6 +274,18 @@ async fn worker(
                     .await
                     .map_err(|_| StatusCode::CONFLICT)?,
             );
+        }
+        WorkerRequest::BuildProgress { milestone } => {
+            if binding.stage != "build" {
+                return Err(StatusCode::FORBIDDEN);
+            }
+            authority
+                .store
+                .runtime_stage_input(&binding)
+                .await
+                .map_err(|_| StatusCode::CONFLICT)?;
+            progress::record(&binding, milestone);
+            response.accepted = true;
         }
         WorkerRequest::PreparePublication {
             expected_manifest_digest,

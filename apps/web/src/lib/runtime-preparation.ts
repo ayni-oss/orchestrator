@@ -1,7 +1,7 @@
 export type RuntimePreparation = {
  id: string; idempotencyKey: string; repositoryId: string; inspectionId: string;
  developmentOnly?: boolean; registryConnectionId: string; signerId: string; platform: string; state: string; stage: string;
- safeReason?: string; generation: string; allowBuild: boolean; allowReplace: boolean;
+ safeReason?: string; buildMilestone?: string; generation: string; allowBuild: boolean; allowReplace: boolean;
  maxBuilds: number; buildsStarted: number; deadlineUnixMs: string; frozenInputDigest: string;
  imageDigest?: string; candidateImage?: string; protectedContentRoot?: string; certificateDigest?: string;
  managedCheckDigest?: string; unsignedManifestDigest?: string; certificationLayerDigest?: string;

@@ -1,7 +1,8 @@
 //! Exact stage capability transport. No token, credential or provider response is logged.
 use crate::Failure;
 use ayni_orchestrator_events::runtime_preparation::{
-    Binding, MAX_SUPERVISOR_RESPONSE_BYTES, StageClaim, StageReport, WorkerRequest, WorkerResponse,
+    Binding, BuildMilestone, MAX_SUPERVISOR_RESPONSE_BYTES, StageClaim, StageReport, WorkerRequest,
+    WorkerResponse,
 };
 use serde::{Deserialize, de::DeserializeOwned};
 use std::time::Duration;
@@ -82,6 +83,15 @@ impl WorkerClient {
                 .map_err(|_| Failure::ExecutionFailed)?;
         serde_json::from_slice(&body).map_err(|_| Failure::ExecutionFailed)
     }
+    /// Best-effort preview. A failed update never changes the build outcome.
+    pub async fn build_progress(&self, milestone: BuildMilestone) {
+        let _ = tokio::time::timeout(
+            Duration::from_secs(1),
+            self.call::<WorkerResponse>(&WorkerRequest::BuildProgress { milestone }),
+        )
+        .await;
+    }
+
     /// # Errors
     /// Inputs are available only after exact observed Pod UID binding.
     pub async fn input(&self) -> Result<StageClaim, Failure> {

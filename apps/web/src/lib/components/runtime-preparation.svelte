@@ -9,13 +9,15 @@
  import { toast } from 'svelte-sonner';
  import AutosaveField from '$lib/components/autosave-field.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
+ import StatusBadge from '$lib/components/status-badge.svelte';
+ import type { StatusTone } from '$lib/presentation.js';
  import { rpc, RpcError, type Connection } from '$lib/api';
  import { trustSnippet } from '$lib/runtime-signing';
  import { inspectionReasons, type Repository, type RepositoryInspection } from '$lib/repositories';
  import { runtimeOverview, runtimeStages, runtimeReasons, onboardingReasons, runtimeRegistryImage, runtimeProgressKey, readRuntimeProgress, runtimeDefaultKey, type RuntimeIntegration, type RepositoryRuntimeRun, type RuntimePreparation, type RuntimeSigner, type RuntimeCommand } from '$lib/runtime-preparation';
  let { repo, branch = '', checkedCommit, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections, onSourceRefresh, branchPicker, children }: { repo: Repository; branch?: string; checkedCommit?: string; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void>; onSourceRefresh: (value: Connection | undefined) => void; branchPicker: Snippet; children: Snippet<[Snippet, Snippet]> } = $props();
  let onboarding = $state.raw<RepositoryRuntimeRun | null>(null);
- let deploymentEnabled = $state(false), developmentOnly = $state(false);
+ let deploymentEnabled = $state(false);
  let loaded = $state(false);
  let refreshingIntegrations = $state(false);
  let viewedStep = $state<number | null>(null);
@@ -120,6 +122,33 @@
   (!checkedCommit || (onboarding.commitSha || onboarding.settings.expectedCommitSha) === checkedCommit) ? onboarding : null);
  const overview = $derived(runtimeOverview({loaded,error,rejected,inspectionPending,moreHistory:!!next,pending:!!pending,inspectionLoading,inspectionError,inspectionReason:inspectionReasons[latestInspection?.safeReason || ''],inspection:latestInspection,operations,operationId:retainedRun?.preparationId,registries,signers,sourceReady,sourceRevision:connection?.revision}));
  const operation = $derived(overview.operation);
+ const runStatuses: Record<string, { label: string; tone: StatusTone }> = {
+  pending: {label:'Queued',tone:'active'}, running: {label:'Running',tone:'active'},
+  ready: {label:'Ready',tone:'success'}, failed: {label:'Failed',tone:'danger'},
+  unavailable: {label:'Unavailable',tone:'danger'}, blocked: {label:'Blocked',tone:'warning'},
+  publication_uncertain: {label:'Unconfirmed',tone:'warning'}, cleanup_pending: {label:'Cleaning up',tone:'active'},
+  stopping: {label:'Stopping',tone:'warning'}, cancelling: {label:'Cancelling',tone:'warning'},
+  stopped: {label:'Stopped',tone:'neutral'}, cancelled: {label:'Cancelled',tone:'neutral'},
+  superseded: {label:'Superseded',tone:'neutral'},
+ };
+ const runStatus = $derived(onboardingActive ? runStatuses.running : onboardingBlocked ? runStatuses.blocked :
+  runStatuses[operation?.state || ''] ?? {label:loaded ? 'Waiting' : 'Checking',tone:'neutral' as const});
+ const buildSteps = [
+  {milestone:'RUNTIME_BUILD_MILESTONE_COPY_SOURCE',label:'Copy source'},
+  {milestone:'RUNTIME_BUILD_MILESTONE_VERIFY_INPUTS',label:'Verify locked inputs'},
+  {milestone:'RUNTIME_BUILD_MILESTONE_BUILD_IMAGE',label:'Build runtime image'},
+  {milestone:'RUNTIME_BUILD_MILESTONE_EXPORT_IMAGE',label:'Export OCI image'},
+  {milestone:'RUNTIME_BUILD_MILESTONE_INSPECT_IMAGE',label:'Check exported image'},
+ ];
+ const building = $derived(operation?.stage === 'build' && operation.state === 'running');
+ const buildComplete = $derived(operation?.buildMilestone === 'RUNTIME_BUILD_MILESTONE_IMAGE_READY' ||
+  (!!operation?.buildsStarted && (operation.stage === 'freeze_candidate' || !!operation.unsignedManifestDigest)));
+ const activeBuildStep = $derived(buildComplete ? buildSteps.length :
+  buildSteps.findIndex(step => step.milestone === operation?.buildMilestone));
+ const buildReportMessage = $derived(!operation?.allowBuild ? 'This run can only reuse an existing image.' :
+  operation.state === 'ready' && !operation.buildsStarted ? 'An existing image was reused.' :
+  operation.buildsStarted ? 'There is no active build. See the preparation summary for the current status.' :
+  activeStates.has(operation.state) ? 'No build attempt has started.' : 'This run ended before starting a build.');
  const previousOperations = $derived(operations.filter(value => value.id !== overview.operation?.id));
  const matchingOperation = $derived(operation && (retainedRun?.preparationId === operation.id ||
   (!onboarding && !!reviewedCommit && operation.sourceCommit === reviewedCommit)) ? operation : undefined);
@@ -280,7 +309,7 @@
   if (!mounted) return;
   const changed = result.run && (result.run.id !== onboarding?.id || result.run.state !== onboarding?.state);
   onboarding = result.run || null;
-  deploymentEnabled = result.preparationEnabled === true; developmentOnly = result.developmentOnly === true;
+  deploymentEnabled = result.preparationEnabled === true;
   if (changed && onboarding?.inspectionId) await refreshInspections?.();
  }
  async function refresh() {
@@ -620,17 +649,39 @@
    <label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowBuild} onchange={() => { if (!allowBuild) allowReplace = false; }} disabled={busy || !!pending}/>Allow a bounded build if the image is missing</label>
    {#if allowBuild}<div class="space-y-2"><Label for={`runtime-builds-${repo.id}`}>Maximum build attempts</Label><Input id={`runtime-builds-${repo.id}`} type="number" min={1} max={10} bind:value={builds} disabled={busy || !!pending}/><p class="text-xs text-muted-foreground">The qualified deployment resource limits also apply. Interrupted builds consume their retained attempt allowance.</p></div><label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowReplace} disabled={busy || !!pending}/>Also allow replacement if an existing image is invalid</label>{/if}
    {:else if !pending}
-    <div class="space-y-2" aria-live="polite">
-     <p class="font-medium">{onboardingActive ? 'Preparing repository runtime' : onboardingBlocked ? 'Runtime onboarding needs attention' : overview.title}</p>
-     <p class="text-sm text-muted-foreground">{onboardingActive ? ({resolving:'Checking the branch head…',inspecting:'Checking the committed ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') : onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' : overview.description}</p>
+    <section class="space-y-3 rounded-md border bg-muted/30 p-4" aria-label="Preparation summary" aria-live="polite">
+     <StatusBadge status={runStatus.label} tone={runStatus.tone} />
+     {#if !onboardingActive && !onboardingBlocked && operation}
+      <InformationTable aligned rows={[
+       {label:'Stage',value:runtimeStages[operation.stage] || operation.stage},
+       {label:'Commit',value:operation.sourceCommit?.slice(0,12) || 'Unavailable',monospace:true},
+       {label:'Platform',value:operation.platform},
+       ...(currentStep === 3 ? [{label:'Build attempts',value:`${operation.buildsStarted || 0} of ${operation.maxBuilds || 0}`}] : []),
+      ]}/>
+     {:else}
+      <p class="text-sm text-muted-foreground">{onboardingActive ? ({resolving:'Checking the branch head…',inspecting:'Checking the committed ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') : onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' : overview.description}</p>
+     {/if}
      {#each overview.issues as issue (issue)}<p class="text-sm">{issue}</p>{/each}
-     {#if developmentOnly || operation?.developmentOnly}<p class="rounded-md border p-3 text-sm">Local development build mode. Cluster network isolation is not qualified; this result is for local development testing.</p>{/if}
-    </div>
-    {#if currentStep === 3 && operation}
-     <InformationTable rows={[
-      {label:'Build attempts',value:`${operation.buildsStarted || 0} of ${operation.maxBuilds || 0}`},
-      {label:'Build permission',value:operation.allowBuild ? 'Build allowed' : 'Reuse an existing image'},
-     ]}/>
+    </section>
+    {#if currentStep === 3 && operation && !onboardingActive && !onboardingBlocked}
+     <section class="space-y-2 rounded-md border p-4" aria-labelledby={`build-report-${repo.id}`}>
+      <h4 id={`build-report-${repo.id}`} class="text-sm font-medium">Build report</h4>
+      {#if building || buildComplete}
+       {#if activeBuildStep < 0}<p class="text-sm text-muted-foreground">Waiting for the build worker to report progress.</p>{/if}
+       <ol class="divide-y" aria-label="Build steps">
+        {#each buildSteps as step, index (step.milestone)}
+         <li class="flex items-center justify-between gap-3 py-2 text-sm" aria-current={index === activeBuildStep ? 'step' : undefined}>
+          <span>{step.label}</span>
+          {#if index < activeBuildStep}<StatusBadge status="Complete" tone="success" />
+          {:else if index === activeBuildStep}<StatusBadge status="Running" tone="active" />
+          {:else}<StatusBadge status="Pending" />{/if}
+         </li>
+        {/each}
+       </ol>
+      {:else}
+       <p class="text-sm text-muted-foreground">{buildReportMessage}</p>
+      {/if}
+     </section>
     {:else if currentStep === 4 && operation}
      <InformationTable rows={[
       {label:'Content verification',value:operation.contentVerified ? 'Verified' : 'Not verified'},

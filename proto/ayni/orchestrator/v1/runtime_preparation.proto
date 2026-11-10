@@ -127,6 +127,17 @@ message RuntimePreparation {
   string certification_layer_digest = 36;
   // Local development opt-in; does not establish cluster/network qualification.
   bool development_only = 37;
+  // Latest worker-owned milestone for the exact live build generation.
+  RuntimeBuildMilestone build_milestone = 38;
+}
+enum RuntimeBuildMilestone {
+  RUNTIME_BUILD_MILESTONE_UNSPECIFIED = 0;
+  RUNTIME_BUILD_MILESTONE_COPY_SOURCE = 1;
+  RUNTIME_BUILD_MILESTONE_VERIFY_INPUTS = 2;
+  RUNTIME_BUILD_MILESTONE_BUILD_IMAGE = 3;
+  RUNTIME_BUILD_MILESTONE_EXPORT_IMAGE = 4;
+  RUNTIME_BUILD_MILESTONE_INSPECT_IMAGE = 5;
+  RUNTIME_BUILD_MILESTONE_IMAGE_READY = 6;
 }
 message StartRuntimePreparationRequest {
   string idempotency_key = 1;

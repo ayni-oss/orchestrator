@@ -8,6 +8,7 @@ use crate::{
     source, transport,
 };
 use ayni_core::{AyniPolicy, EnvironmentCertificateEnvelope, sha256_fingerprint};
+use ayni_orchestrator_events::runtime_preparation::BuildMilestone;
 use ayni_orchestrator_events::runtime_preparation::{
     Evidence, FrozenInputs, RuntimeProfile, StageClaim, StageReport,
 };
@@ -71,7 +72,7 @@ pub async fn execute(client: &WorkerClient, claim: &StageClaim) -> Result<StageR
         "acquire_source" => acquire_source(client, claim, seconds).await,
         "discover" => discover(client, claim).await,
         "pull_existing" | "pull_final" => pull(client, claim, seconds).await,
-        "build" => build(claim, &profile, seconds).await,
+        "build" => build(client, claim, &profile, seconds).await,
         "freeze_candidate" => freeze(claim, &profile, seconds).await,
         "certify" => certify(claim, &profile),
         "finalize" => finalize(claim, &profile, seconds).await,
@@ -294,15 +295,18 @@ async fn pull(
 }
 
 async fn build(
+    client: &WorkerClient,
     claim: &StageClaim,
     profile: &RuntimeProfile,
     seconds: u64,
 ) -> Result<StageResult, Failure> {
     let root = Path::new("/scratch/source");
+    client.build_progress(BuildMilestone::CopySource).await;
     copy_source(Path::new("/inputs/source/checkout"), root)?;
     if source::snapshot_digest(root)? != claim.operation.evidence.source_digest {
         return Err(Failure::SourceIdentityMismatch);
     }
+    client.build_progress(BuildMilestone::VerifyInputs).await;
     verify_locked_source(root, &claim.operation.frozen)?;
     let image = format!("localhost/ayni-runtime:{}", claim.operation.id);
     let environment = BTreeMap::from([
@@ -320,6 +324,7 @@ async fn build(
         ("AYNI_OCI_RUNTIME".into(), "podman".into()),
     ]);
     fs::create_dir_all("/scratch/run").map_err(|_| Failure::ExecutionFailed)?;
+    client.build_progress(BuildMilestone::BuildImage).await;
     command::checked(
         "/usr/local/bin/ayni",
         &[
@@ -337,6 +342,7 @@ async fn build(
         seconds,
     )
     .await?;
+    client.build_progress(BuildMilestone::ExportImage).await;
     command::checked(
         "/usr/bin/podman",
         &[
@@ -352,6 +358,7 @@ async fn build(
         seconds,
     )
     .await?;
+    client.build_progress(BuildMilestone::InspectImage).await;
     normalize_reference(Path::new("/outputs/layout"))?;
     let identity = Layout::inspect_with_limit(
         Path::new("/outputs/layout"),
@@ -359,6 +366,7 @@ async fn build(
         u64::from(profile.max_storage_mib) * 1024 * 1024,
     )?
     .identity;
+    client.build_progress(BuildMilestone::ImageReady).await;
     Ok(StageResult::completed(Evidence {
         artifact_digest: identity.manifest_digest.clone(),
         artifact_reference: artifact(claim, &identity.manifest_digest),

@@ -1,12 +1,19 @@
 use super::{RequestContext, WorkflowGrpc, profile::RuntimeConfiguration, v1};
 use ayni_core::{AyniPolicy, EnvironmentLock, sha256_fingerprint};
-use ayni_orchestrator_events::runtime_preparation::{FreezeInputs, FrozenFile, Operation};
+use ayni_orchestrator_events::runtime_preparation::{
+    BuildMilestone, FreezeInputs, FrozenFile, Operation,
+};
 use ayni_orchestrator_workflow_postgres::store::{
     runtime_preparations::Start, runtime_signers::Signer,
 };
 use tonic::Status;
 
 pub(super) fn public(value: Operation) -> v1::RuntimePreparation {
+    let milestone = if value.stage == "build" && value.state == "running" {
+        crate::runtime_authority::progress::latest(&value.id, value.generation)
+    } else {
+        None
+    };
     v1::RuntimePreparation {
         id: value.id,
         idempotency_key: value.idempotency_key,
@@ -51,6 +58,20 @@ pub(super) fn public(value: Operation) -> v1::RuntimePreparation {
         managed_check_digest: value.evidence.managed_check_digest,
         unsigned_manifest_digest: value.evidence.unsigned_manifest_digest,
         certification_layer_digest: value.evidence.certification_layer_digest,
+        build_milestone: public_milestone(milestone) as i32,
+    }
+}
+
+const fn public_milestone(milestone: Option<BuildMilestone>) -> v1::RuntimeBuildMilestone {
+    use v1::RuntimeBuildMilestone as Public;
+    match milestone {
+        None => Public::Unspecified,
+        Some(BuildMilestone::CopySource) => Public::CopySource,
+        Some(BuildMilestone::VerifyInputs) => Public::VerifyInputs,
+        Some(BuildMilestone::BuildImage) => Public::BuildImage,
+        Some(BuildMilestone::ExportImage) => Public::ExportImage,
+        Some(BuildMilestone::InspectImage) => Public::InspectImage,
+        Some(BuildMilestone::ImageReady) => Public::ImageReady,
     }
 }
 

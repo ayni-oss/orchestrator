@@ -19,6 +19,69 @@ import {
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
 
+export enum RuntimeBuildMilestone {
+  RUNTIME_BUILD_MILESTONE_UNSPECIFIED = 0,
+  RUNTIME_BUILD_MILESTONE_COPY_SOURCE = 1,
+  RUNTIME_BUILD_MILESTONE_VERIFY_INPUTS = 2,
+  RUNTIME_BUILD_MILESTONE_BUILD_IMAGE = 3,
+  RUNTIME_BUILD_MILESTONE_EXPORT_IMAGE = 4,
+  RUNTIME_BUILD_MILESTONE_INSPECT_IMAGE = 5,
+  RUNTIME_BUILD_MILESTONE_IMAGE_READY = 6,
+  UNRECOGNIZED = -1,
+}
+
+export function runtimeBuildMilestoneFromJSON(object: any): RuntimeBuildMilestone {
+  switch (object) {
+    case 0:
+    case "RUNTIME_BUILD_MILESTONE_UNSPECIFIED":
+      return RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_UNSPECIFIED;
+    case 1:
+    case "RUNTIME_BUILD_MILESTONE_COPY_SOURCE":
+      return RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_COPY_SOURCE;
+    case 2:
+    case "RUNTIME_BUILD_MILESTONE_VERIFY_INPUTS":
+      return RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_VERIFY_INPUTS;
+    case 3:
+    case "RUNTIME_BUILD_MILESTONE_BUILD_IMAGE":
+      return RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_BUILD_IMAGE;
+    case 4:
+    case "RUNTIME_BUILD_MILESTONE_EXPORT_IMAGE":
+      return RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_EXPORT_IMAGE;
+    case 5:
+    case "RUNTIME_BUILD_MILESTONE_INSPECT_IMAGE":
+      return RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_INSPECT_IMAGE;
+    case 6:
+    case "RUNTIME_BUILD_MILESTONE_IMAGE_READY":
+      return RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_IMAGE_READY;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return RuntimeBuildMilestone.UNRECOGNIZED;
+  }
+}
+
+export function runtimeBuildMilestoneToJSON(object: RuntimeBuildMilestone): string {
+  switch (object) {
+    case RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_UNSPECIFIED:
+      return "RUNTIME_BUILD_MILESTONE_UNSPECIFIED";
+    case RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_COPY_SOURCE:
+      return "RUNTIME_BUILD_MILESTONE_COPY_SOURCE";
+    case RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_VERIFY_INPUTS:
+      return "RUNTIME_BUILD_MILESTONE_VERIFY_INPUTS";
+    case RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_BUILD_IMAGE:
+      return "RUNTIME_BUILD_MILESTONE_BUILD_IMAGE";
+    case RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_EXPORT_IMAGE:
+      return "RUNTIME_BUILD_MILESTONE_EXPORT_IMAGE";
+    case RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_INSPECT_IMAGE:
+      return "RUNTIME_BUILD_MILESTONE_INSPECT_IMAGE";
+    case RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_IMAGE_READY:
+      return "RUNTIME_BUILD_MILESTONE_IMAGE_READY";
+    case RuntimeBuildMilestone.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
 export enum RuntimeSigningPullRequestState {
   RUNTIME_SIGNING_PULL_REQUEST_STATE_UNSPECIFIED = 0,
   RUNTIME_SIGNING_PULL_REQUEST_STATE_DRAFT = 1,
@@ -185,6 +248,8 @@ export interface RuntimePreparation {
   certificationLayerDigest: string;
   /** Local development opt-in; does not establish cluster/network qualification. */
   developmentOnly: boolean;
+  /** Latest worker-owned milestone for the exact live build generation. */
+  buildMilestone: RuntimeBuildMilestone;
 }
 
 export interface StartRuntimePreparationRequest {
@@ -1772,6 +1837,7 @@ function createBaseRuntimePreparation(): RuntimePreparation {
     unsignedManifestDigest: "",
     certificationLayerDigest: "",
     developmentOnly: false,
+    buildMilestone: 0,
   };
 }
 
@@ -1887,6 +1953,9 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
     }
     if (message.developmentOnly !== false) {
       writer.uint32(296).bool(message.developmentOnly);
+    }
+    if (message.buildMilestone !== 0) {
+      writer.uint32(304).int32(message.buildMilestone);
     }
     return writer;
   },
@@ -2200,6 +2269,14 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
             message.developmentOnly = reader.bool();
             continue;
           }
+          case 38: {
+            if (tag !== 304) {
+              break;
+            }
+
+            message.buildMilestone = reader.int32() as any;
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2379,6 +2456,11 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
         : isSet(object.development_only)
         ? globalThis.Boolean(object.development_only)
         : false,
+      buildMilestone: isSet(object.buildMilestone)
+        ? runtimeBuildMilestoneFromJSON(object.buildMilestone)
+        : isSet(object.build_milestone)
+        ? runtimeBuildMilestoneFromJSON(object.build_milestone)
+        : 0,
     };
   },
 
@@ -2495,6 +2577,9 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
     if (message.developmentOnly !== false) {
       obj.developmentOnly = message.developmentOnly;
     }
+    if (message.buildMilestone !== 0) {
+      obj.buildMilestone = runtimeBuildMilestoneToJSON(message.buildMilestone);
+    }
     return obj;
   },
 
@@ -2540,6 +2625,7 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
     message.unsignedManifestDigest = object.unsignedManifestDigest ?? "";
     message.certificationLayerDigest = object.certificationLayerDigest ?? "";
     message.developmentOnly = object.developmentOnly ?? false;
+    message.buildMilestone = object.buildMilestone ?? 0;
     return message;
   },
 };
