@@ -16,7 +16,8 @@
  let busy = $state(true), error = $state('');
  function initialTab() {
   const requested = page.url.searchParams.get('tab');
-  return requested === 'source' || requested === 'activity' ? requested : 'runtime';
+  if (requested === 'activity' || requested === 'status') return 'status';
+  return requested === 'source' ? 'source' : 'runtime';
  }
  let tab = $state(initialTab());
  const triggerClass = 'border-b-2 border-transparent px-3 py-3 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:border-primary data-[state=active]:text-foreground';
@@ -53,7 +54,7 @@
   <Tabs.List aria-label={`${repo.fullName} onboarding`} class="mb-6 flex gap-3 border-b">
    <Tabs.Trigger value="runtime" class={triggerClass}>ayni runtime</Tabs.Trigger>
    <Tabs.Trigger value="source" class={triggerClass}>Source code</Tabs.Trigger>
-   <Tabs.Trigger value="activity" class={triggerClass}>Activity</Tabs.Trigger>
+   <Tabs.Trigger value="status" class={triggerClass}>Status</Tabs.Trigger>
   </Tabs.List>
   <Tabs.Content value="source" class="space-y-4">
    <h2 class="font-semibold">Source integration details</h2>

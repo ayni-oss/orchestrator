@@ -1,13 +1,13 @@
 <script lang="ts">
  import { protectUnsavedChanges } from "$lib/unsaved-changes.svelte";
  import { onMount, tick, untrack, type Snippet } from 'svelte';
- import { Copy, Ellipsis, RefreshCw } from '@lucide/svelte';
+ import { Copy, RefreshCw } from '@lucide/svelte';
  import { Button } from '$lib/components/ui/button/index.js';
- import * as Dialog from '$lib/components/ui/dialog/index.js';
  import { Input } from '$lib/components/ui/input/index.js';
  import { Label } from '$lib/components/ui/label/index.js';
  import * as NativeSelect from '$lib/components/ui/native-select/index.js';
  import { toast } from 'svelte-sonner';
+ import ActivityEntry from '$lib/components/activity-entry.svelte';
  import AutosaveField from '$lib/components/autosave-field.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
  import StatusBadge from '$lib/components/status-badge.svelte';
@@ -16,7 +16,7 @@
  import { trustSnippet } from '$lib/runtime-signing';
  import { inspectionReasons, type Repository, type RepositoryInspection } from '$lib/repositories';
  import { runtimeOverview, runtimeStages, runtimeReasons, onboardingReasons, runtimeRegistryImage, runtimeProgressKey, readRuntimeProgress, runtimeDefaultKey, type RuntimeIntegration, type RepositoryRuntimeRun, type RuntimePreparation, type RuntimeSigner, type RuntimeCommand } from '$lib/runtime-preparation';
- let { repo, branch = '', checkedCommit, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections, onSourceRefresh, onRestoreBranch, branchPicker, children }: { repo: Repository; branch?: string; checkedCommit?: string; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void>; onSourceRefresh: (value: Connection | undefined) => void; onRestoreBranch: (value?: string) => void; branchPicker: Snippet; children: Snippet<[Snippet, Snippet]> } = $props();
+ let { repo, branch = '', checkedCommit, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections, onSourceRefresh, onRestoreBranch, branchPicker, children }: { repo: Repository; branch?: string; checkedCommit?: string; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void>; onSourceRefresh: (value: Connection | undefined) => void; onRestoreBranch: (value?: string) => void; branchPicker: Snippet; children: Snippet<[Snippet, Snippet, Snippet]> } = $props();
  let onboarding = $state.raw<RepositoryRuntimeRun | null>(null);
  let deploymentEnabled = $state(false);
  let loaded = $state(false);
@@ -153,7 +153,7 @@
   !building && buildTimings.size ? 'Unconfirmed' : 'Pending');
  const sourceIssue = $derived(operation?.safeReason?.startsWith('source_') && !operation.buildsStarted);
  const summaryOperation = $derived(sourceIssue ? undefined : buildOperation);
- const preparationMessage = $derived(pending ? overview.description : sourceIssue ? 'See Activity for preparation details.' :
+ const preparationMessage = $derived(pending ? overview.description : sourceIssue ? 'See Status for preparation details.' :
   onboardingActive ? ({resolving:'Checking the branch head…',inspecting:'Checking the committed ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') :
   onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' :
   !operation ? overview.description : '');
@@ -336,6 +336,10 @@
   }
   loaded = true;
  }
+ async function refreshStatus() {
+  refreshingStatus = true;
+  try { await perform(refresh); } finally { refreshingStatus = false; }
+ }
  async function refreshIntegrations() {
   refreshingIntegrations = true;
   try {
@@ -454,75 +458,58 @@
  </div>
 {/snippet}
 {#snippet preparationEvidence(operation: RuntimePreparation)}
- {@const updated = operation.updatedAtUnixMs ? new Date(Number(operation.updatedAtUnixMs)) : undefined}
- {@const lock = operation.lockFingerprint || operation.lockDigest}
- {@const checks = [
-  {label:'Content', complete:operation.contentVerified, success:'Verified', incomplete:'Not verified'},
-  {label:'Managed', complete:operation.managedCompatible, success:'Verified', incomplete:'Not verified'},
-  {label:'Cleanup', complete:operation.cleanupComplete, success:'Complete', incomplete:'Not complete'},
- ]}
- <article class="flex items-start gap-2 rounded-md border px-3 py-2" aria-label={`Runtime preparation ${operation.id}`}>
-  <div class="flex min-h-7 min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-   {#if updated}
-    <time class="text-muted-foreground" datetime={updated.toISOString()} title={`Updated ${updated.toLocaleString()}`}>
-     {updated.toLocaleString(undefined, {dateStyle:'short', timeStyle:'short'})}
-    </time>
+ {@const canCancel = activeStates.has(operation.state) && operation.state !== 'cancelling'}
+ {@const canRetry = retryStates.has(operation.state)}
+ {#snippet preparationActions()}
+  {#if canCancel}
+   <Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => command('CancelRuntimePreparation', operation))}>Cancel preparation</Button>
+  {:else if canRetry}
+   <Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => command('RetryRuntimePreparation', operation))}>{operation.state === 'publication_uncertain' ? 'Reconcile publication' : 'Retry preparation'}</Button>
+  {/if}
+ {/snippet}
+ <ActivityEntry label={`Runtime preparation ${operation.id}`} updatedAtUnixMs={operation.updatedAtUnixMs}
+  identifiers={[
+   {label:'Operation ID', value:operation.id},
+   {label:operation.lockFingerprint ? 'Lock fingerprint' : 'Lock digest', value:operation.lockFingerprint || operation.lockDigest},
+  ]}
+  title="Preparation details"
+  description={`${operation.state === 'ready' ? 'Runtime ready' : operation.state.replaceAll('_', ' ')} · ${runtimeStages[operation.stage] || operation.stage}`}
+  statusesFirst statuses={[
+   {label:'Content', status:operation.contentVerified ? 'Verified' : 'Not verified', tone:operation.contentVerified ? 'success' : 'neutral'},
+   {label:'Managed', status:operation.managedCompatible ? 'Verified' : 'Not verified', tone:operation.managedCompatible ? 'success' : 'neutral'},
+   {label:'Cleanup', status:operation.cleanupComplete ? 'Complete' : 'Not complete', tone:operation.cleanupComplete ? 'success' : 'neutral'},
+  ]}
+  actions={canCancel || canRetry ? preparationActions : undefined}>
+  {#snippet information()}
+   <span class="text-muted-foreground">Platform</span> <code>{operation.platform}</code>
+  {/snippet}
+  {#snippet details(fullTime)}
+   {#if operation.safeReason}
+    <div class="space-y-1"><p>{runtimeReasons[operation.safeReason] || 'This stage needs attention. Review the retained reason and configuration before retrying.'}</p><code class="text-xs">{operation.safeReason}</code></div>
    {/if}
-   <span class="inline-flex items-baseline gap-1"><span class="text-muted-foreground">Lock</span> <code title={lock || undefined}>{lock ? `${lock.replace(/^sha256:/, '').slice(0, 12)}…` : '—'}</code></span>
-   <span class="inline-flex min-w-0 items-baseline gap-1"><span class="text-muted-foreground">Operation</span> <code class="min-w-0 break-all">{operation.id}</code></span>
-   <code>{operation.platform}</code>
-   {#each checks as check (check.label)}
-    <span class="inline-flex items-center gap-1">
-     <span class="text-muted-foreground">{check.label}</span>
-     <StatusBadge status={check.complete ? check.success : check.incomplete} tone={check.complete ? 'success' : 'neutral'} />
-    </span>
-   {/each}
-  </div>
-  <Dialog.Root>
-   <Dialog.Trigger>
-    {#snippet child({props})}
-     <Button {...props} variant="ghost" size="icon-sm" aria-label="View preparation details" title="View preparation details"><Ellipsis aria-hidden="true" /></Button>
-    {/snippet}
-   </Dialog.Trigger>
-   <Dialog.Content class="max-h-[85dvh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-2xl" preventScroll>
-    <Dialog.Header class="pr-8">
-     <Dialog.Title>Preparation details</Dialog.Title>
-     <Dialog.Description>{operation.state === 'ready' ? 'Runtime ready' : operation.state.replaceAll('_', ' ')} · {runtimeStages[operation.stage] || operation.stage}</Dialog.Description>
-    </Dialog.Header>
-    <div class="space-y-3 overflow-y-auto pr-1">
-     {#if operation.safeReason}
-      <div class="space-y-1"><p>{runtimeReasons[operation.safeReason] || 'This stage needs attention. Review the retained reason and configuration before retrying.'}</p><code class="text-xs">{operation.safeReason}</code></div>
-     {/if}
-     <InformationTable aligned rows={[
-      {label:'Operation',value:operation.id,monospace:true},
-      {label:'Inspection',value:operation.inspectionId,monospace:true},
-      {label:'Generation',value:operation.generation},
-      {label:'Frozen input digest',value:operation.frozenInputDigest,monospace:true},
-      {label:'Source commit',value:operation.sourceCommit || 'Not retained',monospace:true},
-      {label:'Source tree',value:operation.sourceTree || 'Not retained',monospace:true},
-      {label:'Policy digest',value:operation.policyDigest || 'Not retained',monospace:true},
-      {label:'Lock digest',value:operation.lockDigest || 'Not retained',monospace:true},
-      {label:'Lock fingerprint',value:operation.lockFingerprint || 'Not retained',monospace:true},
-      {label:'Registry destination',value:operation.registryDestination || 'Not retained'},
-      {label:'Builds started / allowance',value:`${operation.buildsStarted || 0} / ${operation.maxBuilds || 0}`},
-      {label:'Image digest',value:operation.imageDigest || 'Not retained',monospace:true},
-      {label:'Publication intent',value:operation.expectedManifestDigest || 'Not retained',monospace:true},
-      {label:'Protected content root',value:operation.protectedContentRoot || 'Not retained',monospace:true},
-      {label:'Certificate digest',value:operation.certificateDigest || 'Not retained',monospace:true},
-      {label:'Unsigned manifest digest',value:operation.unsignedManifestDigest || 'Not retained',monospace:true},
-      {label:'Certification layer digest',value:operation.certificationLayerDigest || 'Not retained',monospace:true},
-      {label:'Managed check digest',value:operation.managedCheckDigest || 'Not retained',monospace:true},
-      {label:'Updated',value:updated?.toLocaleString() || 'Not retained'},
-     ]}/>
-    </div>
-    {#if activeStates.has(operation.state) && operation.state !== 'cancelling'}
-     <Dialog.Footer><Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => command('CancelRuntimePreparation', operation))}>Cancel preparation</Button></Dialog.Footer>
-    {:else if retryStates.has(operation.state)}
-     <Dialog.Footer><Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => command('RetryRuntimePreparation', operation))}>{operation.state === 'publication_uncertain' ? 'Reconcile publication' : 'Retry preparation'}</Button></Dialog.Footer>
-    {/if}
-   </Dialog.Content>
-  </Dialog.Root>
- </article>
+   <InformationTable aligned rows={[
+    {label:'Operation ID',value:operation.id,monospace:true},
+    {label:'Inspection',value:operation.inspectionId,monospace:true},
+    {label:'Generation',value:operation.generation},
+    {label:'Frozen input digest',value:operation.frozenInputDigest,monospace:true},
+    {label:'Source commit',value:operation.sourceCommit || 'Not retained',monospace:true},
+    {label:'Source tree',value:operation.sourceTree || 'Not retained',monospace:true},
+    {label:'Policy digest',value:operation.policyDigest || 'Not retained',monospace:true},
+    {label:'Lock digest',value:operation.lockDigest || 'Not retained',monospace:true},
+    {label:'Lock fingerprint',value:operation.lockFingerprint || 'Not retained',monospace:true},
+    {label:'Registry destination',value:operation.registryDestination || 'Not retained'},
+    {label:'Builds started / allowance',value:`${operation.buildsStarted || 0} / ${operation.maxBuilds || 0}`},
+    {label:'Image digest',value:operation.imageDigest || 'Not retained',monospace:true},
+    {label:'Publication intent',value:operation.expectedManifestDigest || 'Not retained',monospace:true},
+    {label:'Protected content root',value:operation.protectedContentRoot || 'Not retained',monospace:true},
+    {label:'Certificate digest',value:operation.certificateDigest || 'Not retained',monospace:true},
+    {label:'Unsigned manifest digest',value:operation.unsignedManifestDigest || 'Not retained',monospace:true},
+    {label:'Certification layer digest',value:operation.certificationLayerDigest || 'Not retained',monospace:true},
+    {label:'Managed check digest',value:operation.managedCheckDigest || 'Not retained',monospace:true},
+    {label:'Updated',value:fullTime},
+   ]}/>
+  {/snippet}
+ </ActivityEntry>
 {/snippet}
 {#snippet runtime()}
 <section class="space-y-5" data-runtime-preparation={repo.id} aria-label={`Runtime preparation for ${repo.fullName}`}>
@@ -557,10 +544,7 @@
      <div class="flex shrink-0 items-center gap-2">
       <span aria-live="polite"><StatusBadge status={runStatus.label} tone={runStatus.tone} /></span>
       <Button variant="outline" size="icon" aria-label="Refresh status" title="Refresh status"
-       aria-busy={refreshingStatus} disabled={busy} onclick={async () => {
-        refreshingStatus = true;
-        try { await perform(refresh); } finally { refreshingStatus = false; }
-       }}>
+       aria-busy={refreshingStatus} disabled={busy} onclick={refreshStatus}>
        <RefreshCw class={{ 'motion-safe:animate-spin': refreshingStatus }} aria-hidden="true" />
       </Button>
      </div>
@@ -806,21 +790,30 @@
 </section>
 {/snippet}
 
-{#snippet preparationActivity()}
+{#snippet currentPreparation()}
  {#if overview.operation}
-  <details class="rounded-xl border p-4">
-   <summary class="cursor-pointer text-sm font-medium">Current preparation details</summary>
-   <div class="pt-2">{#key overview.operation.id}{@render preparationEvidence(overview.operation)}{/key}</div>
-  </details>
+  <section class="space-y-2" aria-labelledby={`current-preparation-${repo.id}`}>
+   <h3 class="text-sm font-medium" id={`current-preparation-${repo.id}`}>Current preparation details</h3>
+   {#key overview.operation.id}{@render preparationEvidence(overview.operation)}{/key}
+  </section>
  {/if}
- <details class="rounded-xl border p-4" data-preparation-history>
-  <summary class="cursor-pointer text-sm font-medium">Previous preparations ({previousOperations.length}{next ? '+' : ''})</summary>
-  <div class="space-y-4 pt-4"><Button variant="outline" disabled={busy} onclick={() => perform(refresh)}>Refresh preparation history</Button>
-   {#if !previousOperations.length}<p class="text-sm text-muted-foreground">No earlier runtime preparations.</p>{/if}
-   {#each previousOperations as operation (operation.id)}{@render preparationEvidence(operation)}{/each}
-   {#if next}<Button variant="outline" disabled={busy} onclick={() => perform(() => history(true))}>More preparations</Button>{/if}
-  </div>
- </details>
 {/snippet}
 
-{@render children(runtime, preparationActivity)}
+{#snippet preparationHistory()}
+ <div class="relative">
+  <details class="rounded-xl border p-4" data-preparation-history>
+   <summary class="cursor-pointer pr-10 text-sm font-medium">Previous preparations ({previousOperations.length}{next ? '+' : ''})</summary>
+   <div class="space-y-2 pt-4">
+    {#if !previousOperations.length}<p class="text-sm text-muted-foreground">No earlier runtime preparations.</p>{/if}
+    {#each previousOperations as operation (operation.id)}{@render preparationEvidence(operation)}{/each}
+    {#if next}<Button variant="outline" disabled={busy} onclick={() => perform(() => history(true))}>More preparations</Button>{/if}
+   </div>
+  </details>
+  <Button class="absolute top-3 right-4" variant="outline" size="icon-sm" aria-label="Refresh preparation history"
+   title="Refresh preparation history" aria-busy={refreshingStatus} disabled={busy} onclick={refreshStatus}>
+   <RefreshCw class={{ 'motion-safe:animate-spin': refreshingStatus }} aria-hidden="true" />
+  </Button>
+ </div>
+{/snippet}
+
+{@render children(runtime, currentPreparation, preparationHistory)}

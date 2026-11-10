@@ -74,10 +74,10 @@ reapplying the old name over a later edit.
 In Repositories, open a connected repository card and choose **Ayni runtime**.
 **Recheck default branch** resolves GitHub’s current default branch and inspects
 its latest SHA on every click. Recovery retries the frozen SHA from the original
-request. For an explicit commit, choose
-**Inspect a specific commit**, and enter a
-full lowercase commit SHA. The retained result shows policy/lock digests, locked
-tools, public trust key IDs and corrective findings. Reload after an interrupted
+request. For an explicit commit, open **Status** and enter the full lowercase SHA
+under **Inspect a specific commit**. Open the matching result’s details from
+**Inspection history** to see policy and lock digests, locked tools, public trust
+key IDs and corrective findings. Reload after an interrupted
 request and choose **Recover inspection** or **Retry same inspection**.
 
 Static inspection never enables preparation or starts work. Full adapter discovery

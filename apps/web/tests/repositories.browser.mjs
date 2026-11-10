@@ -33,8 +33,7 @@ test('repository catalog and workspace availability and project settings use can
   assert.equal((await branches.json()).safeReason,'github_key_invalid');
   assert.equal((await listBranches('999')).status(),409);
   const inspectionCard = page.locator(`[data-repository-inspection="${fixture}"]`);
-  await page.getByRole('tab',{name:'Activity',exact:true}).click();
-  await inspectionCard.getByText('Inspect a specific commit',{exact:true}).click();
+  await page.getByRole('tab',{name:'Status',exact:true}).click();
   const commitInput = inspectionCard.getByLabel('Commit SHA',{exact:true});
   await commitInput.fill('main');
   assert.equal(await inspectionCard.getByRole('button',{name:'Inspect commit',exact:true}).isDisabled(),true);
@@ -50,11 +49,14 @@ test('repository catalog and workspace availability and project settings use can
   await inspectionCard.getByRole('button',{name:'Inspect commit',exact:true}).click();
   await lostInspection;await page.unroute('**/api/InspectRepository');await page.reload();
   await page.locator('[data-sonner-toast]').getByText('Inspection result not confirmed',{exact:true}).waitFor();
-  await page.getByRole('tab',{name:'Activity',exact:true}).click();
-  await inspectionCard.getByText('Inspect a specific commit',{exact:true}).click();
+  await page.getByRole('tab',{name:'Status',exact:true}).click();
   await inspectionCard.getByRole('button',{name:'Inspect commit',exact:true}).click();
   await inspectionCard.getByText(/Inspection history/).click();
-  await inspectionCard.getByText('The saved App key is invalid. Update the source connection.',{exact:true}).first().waitFor();
+  await inspectionCard.getByRole('article',{name:`Inspection ${'b'.repeat(40)}`,exact:true}).first()
+   .getByRole('button',{name:'View inspection details',exact:true}).click();
+  const inspectionDialog=page.getByRole('dialog',{name:'Inspection details',exact:true});
+  await inspectionDialog.getByText('The saved App key is invalid. Update the source connection.',{exact:true}).waitFor();
+  await inspectionDialog.getByRole('button',{name:'Close',exact:true}).click();
   await page.waitForFunction(id=>sessionStorage.getItem(`ayni.repository.inspection.pending.${id}`)===null,fixture);
   const retainedInspection=await page.request.post(`${origin}/api/GetRepositoryInspection`,{headers:{'x-console-request':'1'},data:{idempotencyKey:inspectionRequest.idempotencyKey}});
   assert.equal(retainedInspection.status(),200);assert.equal((await retainedInspection.json()).inspection.commitSha,'b'.repeat(40));

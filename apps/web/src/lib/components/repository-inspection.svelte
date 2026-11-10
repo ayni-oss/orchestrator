@@ -1,7 +1,8 @@
 <script lang="ts">
  import { onDestroy, onMount } from 'svelte';
- import { Tabs } from 'bits-ui';
+ import { Tabs, Tooltip } from 'bits-ui';
  import { toast } from 'svelte-sonner';
+ import ActivityEntry from '$lib/components/activity-entry.svelte';
  import AutosaveField from '$lib/components/autosave-field.svelte';
  import * as NativeSelect from '$lib/components/ui/native-select/index.js';
  import { Button } from '$lib/components/ui/button/index.js';
@@ -10,11 +11,11 @@
  import Feedback from '$lib/components/feedback.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
  import RuntimePreparation from '$lib/components/runtime-preparation.svelte';
+ import type { StatusTone } from '$lib/presentation.js';
  import { readRuntimeProgress } from '$lib/runtime-preparation';
  import { rpc, RpcError, type Connection } from '$lib/api';
  import { inspectionReasons, type Repository, type RepositoryInspection, type InspectRequest } from '$lib/repositories';
  let { repo, connection = $bindable() }: { repo: Repository; connection?: Connection } = $props();
- let expanded = $state(false);
  let commitSha = $state('');
  let branch = $state('');
  let hasBranchPreference = false;
@@ -40,6 +41,12 @@
  const currentInspection = $derived(inspections.find(value => value.commitSha === checked?.sha &&
   value.connectionRevision === connection?.revision && value.state === 'completed') ?? inspections[0] ?? null);
  const validCommit = $derived(/^[a-f0-9]{40}$/.test(commitSha));
+ const inspectionStates: Record<string, {label: string; tone: StatusTone}> = {
+  completed:{label:'Complete',tone:'success'},
+  accepted:{label:'Awaiting retry',tone:'warning'},
+  superseded:{label:'Source connection changed',tone:'neutral'},
+  failed:{label:'Failed',tone:'danger'},
+ };
  function dismissRecoveryToast() {
   if (recoveryToast !== undefined) toast.dismiss(recoveryToast);
   recoveryToast = undefined;
@@ -257,53 +264,72 @@
  </div>
 {/snippet}
 
-{#snippet inspectionActivity()}
- <details bind:open={expanded} class="rounded-xl border p-4">
-  <summary class="cursor-pointer text-sm font-medium">Inspect a specific commit</summary>
-  <div class="space-y-4 pt-4">
+{#snippet inspectCommit()}
+ <section class="space-y-2" aria-labelledby={`inspect-commit-heading-${repo.id}`}>
+  <h3 class="text-sm font-medium" id={`inspect-commit-heading-${repo.id}`}>Inspect a specific commit</h3>
+  <div class="space-y-4 rounded-xl border p-4">
    <p class="text-sm text-muted-foreground">Enter an exact commit SHA to check a specific revision. The runtime branch check uses the latest commit on the selected branch.</p>
    {#if error && !pending}<Feedback kind="error" title="Inspection needs attention" message={error}/>{/if}
    <div class="space-y-2"><Label for={`inspection-commit-${repo.id}`}>Commit SHA</Label><Input id={`inspection-commit-${repo.id}`} bind:value={commitSha} placeholder="Full 40-character lowercase commit SHA" disabled={busy || !!pending} maxlength={40}/></div>
    {#if !canInspect}<p class="text-sm">Enable and validate the repository's source connection before starting an inspection.</p>{/if}
    <div class="flex flex-wrap gap-2"><Button disabled={busy || (!pending && (!canInspect || !validCommit))} onclick={() => perform(inspect)}>Inspect commit</Button><Button variant="outline" disabled={busy} onclick={() => perform(() => load())}>Refresh inspections</Button></div>
   </div>
- </details>
+ </section>
+{/snippet}
+
+{#snippet inspectionHistory()}
  <details class="rounded-xl border p-4" data-inspection-history>
   <summary class="cursor-pointer text-sm font-medium">Inspection history ({inspections.length}{next ? '+' : ''})</summary>
-  <div class="space-y-4 pt-4"><p class="text-sm text-muted-foreground">Saved checks are historical evidence. An older awaiting-retry check does not block the latest completed check.</p>
+  <div class="space-y-2 pt-4"><p class="text-sm text-muted-foreground">Saved checks are historical evidence. An older awaiting-retry check does not block the latest completed check.</p>
   {#each inspections as item (item.id)}
-   <section class="space-y-3 rounded-md border p-4" aria-label={`Inspection ${item.commitSha}`}>
-    <p class="font-medium">{item.state === 'completed' ? 'Static inspection complete' : item.state === 'accepted' ? 'Inspection awaiting retry' : item.state === 'superseded' ? 'Source connection changed' : 'Inspection failed'}</p>
-    <p class="text-sm text-muted-foreground">Commit <code>{item.commitSha.slice(0,12)}</code> · {new Date(Number(item.updatedAtUnixMs)).toLocaleString()}</p>
-    {#if item.safeReason}<p class="text-sm">{inspectionReasons[item.safeReason] || 'Source inspection needs attention. Check the source connection and retry.'}</p>{/if}
-    <details class="rounded-md border p-3"><summary class="cursor-pointer text-sm font-medium">Inspection technical details</summary><div class="space-y-3 pt-3">
-    <InformationTable rows={[
-     { label: 'Commit', value: item.commitSha, monospace: true },
-     { label: 'Operation', value: item.id, monospace: true },
-     { label: 'Source connection revision', value: item.connectionRevision },
-     { label: 'Updated', value: new Date(Number(item.updatedAtUnixMs)).toLocaleString() },
-    ]} />
-    {#if item.result}
-     <InformationTable rows={[
-      { label: 'Policy digest', value: item.result.policyDigest || 'Unavailable', monospace: true },
-      { label: 'Lock digest', value: item.result.lockDigest || 'Unavailable', monospace: true },
-      { label: 'Lock fingerprint', value: item.result.lockFingerprint || 'Not validated', monospace: true },
-      { label: 'ayni version', value: item.result.ayniVersion || 'Unavailable' },
-      { label: 'Lock schema', value: item.result.lockSchema || 'Unavailable' },
-      { label: 'Locked tools', value: item.result.tools?.join(', ') || 'None inspected' },
-      { label: 'Trusted key IDs', value: item.result.trustKeyIds?.join(', ') || 'None inspected' },
-     ]} />
-    {/if}
-    </div></details>
-    <details><summary class="cursor-pointer text-sm">Inspection findings</summary><div class="space-y-3 pt-3">    {#if item.result}
-     {#each item.result.findings || [] as finding (finding.code + finding.path)}
-      <div class="space-y-1 border-t pt-3"><p class="text-sm font-medium">{finding.path || 'Preparation requirements'}</p><p class="text-sm">{finding.action}</p><details><summary class="cursor-pointer text-xs text-muted-foreground">Finding code</summary><code class="text-xs text-muted-foreground">{finding.code}</code></details></div>
-     {/each}
-    {/if}
-</div></details>
-    {#if item.state === 'accepted'}<Button variant="outline" disabled={busy || !!pending} onclick={() => perform(async () => {const request = {idempotencyKey:item.idempotencyKey, repositoryId:item.repositoryId, expectedConnectionRevision:item.connectionRevision, commitSha:item.commitSha}; persist(request); await resume(request);})}>Resume inspection</Button>{/if}
-
-   </section>
+   {@const state = inspectionStates[item.state] ?? inspectionStates.failed}
+   {@const result = item.result}
+   {#snippet inspectionActions()}
+    <Button variant="outline" disabled={busy || !!pending} onclick={() => perform(async () => {
+     const request = {idempotencyKey:item.idempotencyKey, repositoryId:item.repositoryId, expectedConnectionRevision:item.connectionRevision, commitSha:item.commitSha};
+     persist(request);
+     await resume(request);
+    })}>Resume inspection</Button>
+   {/snippet}
+   <ActivityEntry label={`Inspection ${item.commitSha}`} updatedAtUnixMs={item.updatedAtUnixMs}
+    identifiers={[
+     {label:'Inspection ID', value:item.id},
+     {label:result?.lockFingerprint ? 'Lock fingerprint' : 'Lock digest', value:result?.lockFingerprint || result?.lockDigest},
+    ]}
+    title="Inspection details" description={state.label} statuses={[{label:'Status', status:state.label, tone:state.tone}]}
+    actions={item.state === 'accepted' ? inspectionActions : undefined}>
+    {#snippet information()}
+     <span class="text-muted-foreground">Commit</span> <code title={item.commitSha}>{item.commitSha.slice(0,12)}</code>
+    {/snippet}
+    {#snippet details(fullTime)}
+     {#if item.safeReason}<p>{inspectionReasons[item.safeReason] || 'Source inspection needs attention. Check the source connection and retry.'}</p>{/if}
+     <InformationTable aligned rows={[
+      {label:'Commit',value:item.commitSha,monospace:true},
+      {label:'Inspection ID',value:item.id,monospace:true},
+      {label:'Source connection revision',value:item.connectionRevision},
+      {label:'Updated',value:fullTime},
+      ...(result ? [
+       {label:'Policy digest',value:result.policyDigest || 'Unavailable',monospace:true},
+       {label:'Lock digest',value:result.lockDigest || 'Unavailable',monospace:true},
+       {label:'Lock fingerprint',value:result.lockFingerprint || 'Not validated',monospace:true},
+       {label:'ayni version',value:result.ayniVersion || 'Unavailable'},
+       {label:'Lock schema',value:result.lockSchema || 'Unavailable'},
+       {label:'Locked tools',value:result.tools?.join(', ') || 'None inspected'},
+       {label:'Trusted key IDs',value:result.trustKeyIds?.join(', ') || 'None inspected'},
+      ] : []),
+     ]}/>
+     {#if result?.findings?.length}
+      <h3 class="border-t pt-3 font-medium">Inspection findings</h3>
+      {#each result.findings as finding (finding.code + finding.path)}
+       <div class="space-y-1">
+        <p class="font-medium break-all">{finding.path || 'Preparation requirements'}</p>
+        <p>{finding.action}</p>
+        <code class="break-all text-xs text-muted-foreground">{finding.code}</code>
+       </div>
+      {/each}
+     {/if}
+    {/snippet}
+   </ActivityEntry>
   {/each}
 
    {#if next}<Button variant="outline" disabled={busy} onclick={() => perform(() => load(true))}>More inspections</Button>{/if}
@@ -313,13 +339,17 @@
 
 <div data-repository-inspection={repo.id}>
  <RuntimePreparation {repo} {connection} {branchPicker} onSourceRefresh={refreshSource} onRestoreBranch={restoreBranch} branch={branch.trim()} checkedCommit={checked?.branch === branch.trim() ? checked?.sha : undefined} latestInspection={currentInspection} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || (!pending && !canInspect)} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}>
-  {#snippet children(runtime, preparationActivity)}
+  {#snippet children(runtime, currentPreparation, preparationHistory)}
    <Tabs.Content value="runtime" class="space-y-6">
     {@render runtime()}
    </Tabs.Content>
-   <Tabs.Content value="activity" class="space-y-6">
-    {@render preparationActivity()}
-    {@render inspectionActivity()}
+   <Tabs.Content value="status" class="space-y-6">
+    <Tooltip.Provider>
+     {@render currentPreparation()}
+     {@render inspectCommit()}
+     {@render preparationHistory()}
+     {@render inspectionHistory()}
+    </Tooltip.Provider>
    </Tabs.Content>
   {/snippet}
  </RuntimePreparation>

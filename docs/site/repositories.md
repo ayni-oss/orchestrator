@@ -84,10 +84,10 @@ empty to check the default branch. After checking, the runtime settings show the
 exact commit. If the branch advances after review, check it again before starting
 a new run. A named branch requires a check before preparation.
 
-Open a connected repository card, choose **Ayni runtime**, then expand **Inspect a specific commit**. Paste the full lowercase
-commit SHA from GitHub, and choose **Inspect commit**. The result shows the exact
-commit and next steps for missing or invalid inputs. Expand **Inspection technical
-details** for policy and lock digests, locked tools and trusted public key IDs.
+Open a connected repository card and select **Status**. Under **Inspect a specific commit**,
+paste the full lowercase commit SHA from GitHub and choose **Inspect commit**.
+Open **Inspection history** and select the ellipsis next to the result to see
+findings, policy and lock digests, locked tools and trusted public key IDs.
 
 If the response is interrupted, reopen the repository’s **Ayni runtime** tab and choose **Recover inspection**. Use
 **Retry same inspection** when GitHub becomes available again. A new commit needs

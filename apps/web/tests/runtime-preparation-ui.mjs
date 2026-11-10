@@ -85,7 +85,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await repositoryLink.click();
  const tabs=page.getByRole('tab');
  await tabs.first().waitFor();
- assert.deepEqual(await tabs.allTextContents(),['ayni runtime','Source code','Activity']);
+ assert.deepEqual(await tabs.allTextContents(),['ayni runtime','Source code','Status']);
  assert.equal(await tabs.first().getAttribute('aria-selected'),'true');
  await page.getByRole('tab',{name:'Source code',exact:true}).click();
  const sourceDetails=page.getByRole('tabpanel',{name:'Source code',exact:true});
@@ -100,13 +100,34 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  const inspectionCard=page.locator(`[data-repository-inspection="${repositoryId}"]`);
  const preparation=page.locator(`[data-runtime-preparation="${repositoryId}"]`);
  assert.equal(await inspectionCard.getByRole('button',{name:'Resume inspection',exact:true}).isVisible(),false,'old retry attempts stay out of the current workflow');
- await page.getByRole('tab',{name:'Activity',exact:true}).click();
+ await page.getByRole('tab',{name:'Status',exact:true}).click();
+ assert.equal(await inspectionCard.locator('[data-inspection-history]').getAttribute('open'),null);
  await inspectionCard.locator('[data-inspection-history] > summary').click();
+ const completedInspection=inspectionCard.getByRole('article',{name:`Inspection ${inspection.commitSha}`,exact:true});
+ const identifiersTooltip=page.getByRole('tooltip');
+ const inspectionDialog=page.getByRole('dialog',{name:'Inspection details',exact:true});
+ const inspectionBadge=completedInspection.getByText('Complete',{exact:true});
+ await inspectionBadge.waitFor();
+ assert.equal(await completedInspection.getByText('Status',{exact:true}).count(),1);
+ const [commitBox,inspectionBadgeBox]=await Promise.all([completedInspection.getByText('Commit',{exact:true}).boundingBox(),inspectionBadge.boundingBox()]);
+ assert.ok(commitBox.y<inspectionBadgeBox.y);
+ assert.equal(await completedInspection.getByText(inspection.id,{exact:true}).count(),0);
+ await completedInspection.getByRole('button',{name:'View identifiers',exact:true}).focus();
+ await identifiersTooltip.getByText(inspection.id,{exact:true}).waitFor();
+ await identifiersTooltip.getByText(hash,{exact:true}).waitFor();
+ await completedInspection.getByRole('button',{name:'View inspection details',exact:true}).click();
+ await inspectionDialog.getByText(inspection.id,{exact:true}).waitFor();
+ await inspectionDialog.getByText('Locked tools',{exact:true}).waitFor();
+ await inspectionDialog.getByText('Inspection findings',{exact:true}).waitFor();
+ await inspectionDialog.getByRole('button',{name:'Close',exact:true}).click();
+ await inspectionCard.getByRole('article',{name:`Inspection ${previousInspection.commitSha}`,exact:true})
+  .getByRole('button',{name:'View inspection details',exact:true}).click();
  await page.route('**/api/InspectRepository',route=>route.fulfill({json:{inspection:{...previousInspection,state:'completed',updatedAtUnixMs:String(Date.now()),result:inspection.result}}}));
  await Promise.all([
   page.waitForResponse(response=>response.url().endsWith('/api/InspectRepository') && response.ok()),
-  inspectionCard.getByRole('button',{name:'Resume inspection',exact:true}).click(),
+  inspectionDialog.getByRole('button',{name:'Resume inspection',exact:true}).click(),
  ]);
+ await inspectionDialog.getByRole('button',{name:'Close',exact:true}).click();
  await page.getByRole('tab',{name:'ayni runtime',exact:true}).click();
  await page.unroute('**/api/InspectRepository');
  let resolvedHead;
@@ -257,18 +278,40 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.equal(await status.getByText('Ready',{exact:true}).count(),0);
  await next().click();
  await status.getByRole('heading',{name:'Verify and finish',exact:true}).waitFor();
- await page.getByRole('tab',{name:'Activity',exact:true}).click();
- const activity=page.getByRole('tabpanel',{name:'Activity',exact:true});
- const preparationEntry=activity.getByRole('article',{name:`Runtime preparation ${operationId}`});
+ await page.getByRole('tab',{name:'Status',exact:true}).click();
+ const statusPanel=page.getByRole('tabpanel',{name:'Status',exact:true});
+ const currentPreparation=statusPanel.getByRole('region',{name:'Current preparation details',exact:true});
+ const preparationEntry=currentPreparation.getByRole('article',{name:`Runtime preparation ${operationId}`});
  const viewDetails=preparationEntry.getByRole('button',{name:'View preparation details',exact:true});
  const detailsDialog=page.getByRole('dialog',{name:'Preparation details',exact:true});
- assert.equal(await preparationEntry.count(),0);
- await activity.getByText('Current preparation details',{exact:true}).click();
  await preparationEntry.getByText('Not complete',{exact:true}).waitFor();
+ await statusPanel.getByRole('region',{name:'Inspect a specific commit',exact:true}).getByLabel('Commit SHA',{exact:true}).waitFor();
+ const sectionTitles=await statusPanel.locator('h3, details > summary').allTextContents();
+ assert.deepEqual(sectionTitles.map(title=>title.replace(/ \(.*\)$/,'')),[
+  'Current preparation details','Inspect a specific commit','Previous preparations','Inspection history',
+ ]);
+ assert.equal(await statusPanel.locator('details').count(),2);
+ const history=statusPanel.locator('[data-preparation-history]');
+ const refreshHistory=statusPanel.getByRole('button',{name:'Refresh preparation history',exact:true});
+ assert.equal(await refreshHistory.locator('svg').count(),1);
+ await Promise.all([
+  page.waitForResponse(response=>response.url().endsWith('/api/ListRuntimePreparations') && response.ok()),
+  refreshHistory.click(),
+ ]);
+ assert.equal(await history.getAttribute('open'),null);
  assert.equal(await preparationEntry.getByText('Verified',{exact:true}).count(),2);
- assert.equal(await preparationEntry.getByText(operationId,{exact:true}).count(),1);
- assert.equal(await preparationEntry.getByTitle(hash,{exact:true}).textContent(),`${hash.slice(7,19)}…`);
- assert.equal(await preparationEntry.locator('time').getAttribute('datetime'),new Date(Number(operation.updatedAtUnixMs)).toISOString());
+ const [contentBadgeBox,platformBox]=await Promise.all([preparationEntry.getByText('Verified',{exact:true}).first().boundingBox(),preparationEntry.getByText('Platform',{exact:true}).boundingBox()]);
+ assert.ok(contentBadgeBox.y<platformBox.y);
+ assert.equal(await preparationEntry.getByText(operationId,{exact:true}).count(),0);
+ assert.equal(await preparationEntry.getByText(/Lock fingerprint|Lock digest/).count(),0);
+ const timestamp=preparationEntry.locator('time');
+ assert.equal(await timestamp.getAttribute('datetime'),new Date(Number(operation.updatedAtUnixMs)).toISOString());
+ const viewIdentifiers=preparationEntry.getByRole('button',{name:'View identifiers',exact:true});
+ const [timeBox,infoBox,detailsBox]=await Promise.all([timestamp.boundingBox(),viewIdentifiers.boundingBox(),viewDetails.boundingBox()]);
+ assert.ok(timeBox.y>=Math.max(infoBox.y+infoBox.height,detailsBox.y+detailsBox.height));
+ await viewIdentifiers.hover();
+ await identifiersTooltip.getByText(operationId,{exact:true}).waitFor();
+ await identifiersTooltip.getByText(hash,{exact:true}).waitFor();
  await viewDetails.click();
  await detailsDialog.getByText('Lock fingerprint',{exact:true}).waitFor();
  assert.equal(await detailsDialog.getByText(operationId,{exact:true}).count(),1);
@@ -329,7 +372,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  const queued = operation;
  operation={...queued,state:'unavailable',stage:'cleanup',safeReason:'source_unavailable',cleanupComplete:true,buildsStarted:0};
  const summary=status.getByRole('region',{name:'Preparation summary',exact:true});
- await summary.getByText('See Activity for preparation details.',{exact:true}).waitFor();
+ await summary.getByText('See Status for preparation details.',{exact:true}).waitFor();
  const prepareHeader=status.getByRole('heading',{name:'Prepare image',exact:true}).locator('..');
  await prepareHeader.getByText('Unavailable',{exact:true}).waitFor();
  const refreshStatus=prepareHeader.getByRole('button',{name:'Refresh status',exact:true});
@@ -337,12 +380,11 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.equal(await refreshStatus.evaluate(button=>button.previousElementSibling.textContent.trim()),'Unavailable');
  assert.equal(await status.getByRole('button',{name:'Refresh status',exact:true}).count(),1);
  assert.equal(await summary.getByText('Status',{exact:true}).count(),1);
- assert.deepEqual((await summary.locator('dd').allTextContents()).map(value=>value.trim()),['See Activity for preparation details.','—','—','—']);
+ assert.deepEqual((await summary.locator('dd').allTextContents()).map(value=>value.trim()),['See Status for preparation details.','—','—','—']);
  assert.equal(await buildReport.getByText('Pending',{exact:true}).count(),5);
  assert.equal(await status.getByText(/exact source checkout/).count(),0);
- await page.getByRole('tab',{name:'Activity',exact:true}).click();
- await activity.getByText('Current preparation details',{exact:true}).click();
- await activity.getByRole('article',{name:`Runtime preparation ${queued.id}`}).getByRole('button',{name:'View preparation details',exact:true}).click();
+ await page.getByRole('tab',{name:'Status',exact:true}).click();
+ await currentPreparation.getByRole('article',{name:`Runtime preparation ${queued.id}`}).getByRole('button',{name:'View preparation details',exact:true}).click();
  await detailsDialog.getByText(/exact source checkout/).waitFor();
  assert.equal(await detailsDialog.getByRole('button',{name:'Retry preparation',exact:true}).count(),1);
  await detailsDialog.getByRole('button',{name:'Close',exact:true}).click();
@@ -368,6 +410,10 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
   localStorage.removeItem('ayni.runtime.default.registry');
   localStorage.removeItem('ayni.runtime.default.signer');
  },repositoryId);
+ await page.goto(`${origin}/repositories/${repositoryId}?tab=status`);
+ await statusPanel.getByRole('region',{name:'Inspect a specific commit',exact:true}).waitFor();
+ await page.goto(`${origin}/repositories/${repositoryId}?tab=activity`);
+ await statusPanel.getByRole('region',{name:'Inspect a specific commit',exact:true}).waitFor();
  for(const method of ['ListRepositoryBranches','ListRepositoryInspections','ListConnections','ListRuntimeSigners','ListRuntimePreparations','GetRuntimePreparation','GetRuntimePreparationReceipt','StartRepositoryRuntime','GetRepositoryRuntime','GetRepositoryRuntimeReceipt','RetryRuntimePreparation','CancelRuntimePreparation','ResolveRepositoryDefaultCommit','InspectRepository']) await page.unroute(`**/api/${method}`);
  console.log('runtime-preparation-ui: intercepted UI contract coverage passed for explicit grants, lost-response receipt recovery, current-generation publication reconciliation, separate cleanup gate and cancellation; no registry/build qualification claimed.');
 }
