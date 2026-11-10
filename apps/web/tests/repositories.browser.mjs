@@ -22,7 +22,7 @@ test('repository catalog and workspace availability and project settings use can
   const repositoryLink=page.locator(`main a[href="/repositories/${fixture}"]`);
   await repositoryLink.locator('..').getByText('Connected',{exact:true}).waitFor();
   await repositoryLink.click();
-  await page.getByRole('tab',{name:'ayni runtime',exact:true}).click();
+  await page.getByRole('tab',{name:'ayni',exact:true}).click();
   const resolved=await page.request.post(`${origin}/api/ResolveRepositoryDefaultCommit`,{headers:{'x-console-request':'1'},data:{repositoryId:fixture,expectedConnectionRevision:'1'}});
   assert.equal(resolved.status(),200);assert.equal((await resolved.json()).safeReason,'github_key_invalid');assert.equal((await resolved.json()).commitSha || '','');
   const staleResolve=await page.request.post(`${origin}/api/ResolveRepositoryDefaultCommit`,{headers:{'x-console-request':'1'},data:{repositoryId:fixture,expectedConnectionRevision:'999'}});

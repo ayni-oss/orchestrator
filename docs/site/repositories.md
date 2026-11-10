@@ -27,11 +27,10 @@ flowchart LR
 5. Choose **Connect repository** for the repository you want to use. If you need a new GitHub App connection, add it in the discovery panel and continue with it selected.
 
 Available repositories appear as compact cards, like projects. Open a connected
-repository card to see its **Source code** and **Ayni runtime** tabs. The card’s
-three-dot menu also opens either tab directly.
-
-**Source code** shows the GitHub connection and configuration status. Expand
-**Source integration details** for GitHub IDs and connection time. Connected source
+repository card to see its **Status** and **ayni** tabs. The connection
+status appears next to the repository name. Select the info icon in the header or
+**Source integration details** in the card’s three-dot menu to see the GitHub
+connection, IDs, and connection time. Connected source
 access does not mean a runtime is ready or a task can execute.
 
 ## Use it from a project
@@ -58,7 +57,7 @@ the saved App connection or its installation access.
 
 ## Check runtime status
 
-Open a repository card and choose **Ayni runtime**. The tab loads saved status
+Open a repository card and choose **ayni**. The tab loads saved status
 without starting a preparation. It shows the inspected commit, known setup issues
 and the next step together. Choose **Configure runtime** to review the registry, named signing key, platform and allowance. **Build and publish runtime** starts one server-owned run: it reads the latest default branch, inspects Ayni setup, then builds if needed, certifies, publishes and verifies the image. A missing setup input or disabled build profile stops the run with an actionable issue. The step list highlights the current part of onboarding, from integration setup to verification. Open preparation details for technical evidence and history. Current progress and recovery controls stay visible. Previous preparations and inspection attempts are collapsed into history. Inspection findings include their
 saved date and Ayni version. Choose **Recheck default branch** to resolve GitHub’s
@@ -89,7 +88,7 @@ paste the full lowercase commit SHA from GitHub and choose **Inspect commit**.
 Open **Inspection history** and select the ellipsis next to the result to see
 findings, policy and lock digests, locked tools and trusted public key IDs.
 
-If the response is interrupted, reopen the repository’s **Ayni runtime** tab and choose **Recover inspection**. Use
+If the response is interrupted, reopen the repository’s **ayni** tab and choose **Recover inspection**. Use
 **Retry same inspection** when GitHub becomes available again. A new commit needs
 a new inspection; earlier results remain in history.
 
@@ -140,7 +139,7 @@ Local testing may use an explicitly enabled development profile; the UI labels
 its results **Development runtime ready**, without claiming cluster qualification. In **Configuration**, select a registry connection and set up a signer.
 The committed repository policy must trust that signer.
 
-On the repository’s **Ayni runtime** tab, choose **Configure runtime**. Review the registry, named signer, platform and time/build allowance. You can add a registry or signing key from this form and continue with it selected. A single available registry and signer are selected automatically. Enable building to permit an absent image to be built and published, then choose **Build and publish runtime**. The server checks the latest default-branch commit and continues the complete pipeline without further browser actions. Leave building
+On the repository’s **ayni** tab, choose **Configure runtime**. Review the registry, named signer, platform and time/build allowance. You can add a registry or signing key from this form and continue with it selected. A single available registry and signer are selected automatically. Enable building to permit an absent image to be built and published, then choose **Build and publish runtime**. The server checks the latest default-branch commit and continues the complete pipeline without further browser actions. Leave building
 disabled to check an existing image. Enable building for a confirmed missing image;
 replacing an invalid image requires the separate replacement choice.
 

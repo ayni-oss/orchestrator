@@ -39,9 +39,9 @@ shadcn styling. Update shared components and tokens instead of adding page-speci
 field borders or raw form controls.
 
 Repository catalog UI: `/repositories`. Available repositories use the same compact, clickable grid cards as projects.
-Opening a connected repository shows Source code and Ayni runtime tabs. Source code covers connection status and
-GitHub integration details; Ayni runtime covers exact-commit inspection and
-preparation. Switching tabs preserves in-progress selections. Technical inspection
+Opening a connected repository shows **Status** and **ayni** tabs. The header
+shows connection status and opens source integration details from its info icon.
+Switching tabs preserves in-progress selections. Technical inspection
 metadata is collapsed by default. Selecting a source control connection
 automatically discovers repositories through its single active GitHub App
 installation. Project cards link to
@@ -71,7 +71,7 @@ reapplying the old name over a later edit.
 
 ### Inspect committed Ayni setup
 
-In Repositories, open a connected repository card and choose **Ayni runtime**.
+In Repositories, open a connected repository card and choose **ayni**.
 **Recheck default branch** resolves GitHub’s current default branch and inspects
 its latest SHA on every click. Recovery retries the frozen SHA from the original
 request. For an explicit commit, open **Status** and enter the full lowercase SHA
@@ -94,7 +94,7 @@ preserves old receipts and frozen preparation inputs. Exact setup,
 updates and original receipt recovery survive reloads. Public identities and
 references do not by themselves grant builds or establish runtime readiness.
 
-The repository’s Ayni runtime tab keeps current status, issues and the next action together. Choose **Configure runtime** after a successful check to review the checked commit and configuration. Current progress and recovery controls stay visible; previous preparations and inspections are collapsed by default. Preparation retains frozen source/configuration, explicit build
+The repository’s **ayni** tab keeps current status, issues and the next action together. Choose **Configure runtime** after a successful check to review the checked commit and configuration. Current progress and recovery controls stay visible; previous preparations and inspections are collapsed by default. Preparation retains frozen source/configuration, explicit build
 and replacement grants, stage history, independent verification, cleanup and exact
 command recovery. Runtime preparation needs an admitted deployment profile. See
 [the user guide](../../docs/site/repositories.md) for setup and recovery; verified
