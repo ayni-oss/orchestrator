@@ -169,6 +169,8 @@ message ListRuntimePreparationsRequest {
   string repository_id = 1;
   string after_id = 2;
   uint32 limit = 3;
+  // Omit the current preparation when listing previous preparations.
+  string exclude_id = 4;
 }
 message ListRuntimePreparationsResponse {
   repeated RuntimePreparation operations = 1;

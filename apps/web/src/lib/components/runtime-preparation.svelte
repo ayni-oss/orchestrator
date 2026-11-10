@@ -8,6 +8,7 @@
  import * as NativeSelect from '$lib/components/ui/native-select/index.js';
  import { toast } from 'svelte-sonner';
  import ActivityEntry from '$lib/components/activity-entry.svelte';
+ import HistoryPages from '$lib/components/history-pages.svelte';
  import AutosaveField from '$lib/components/autosave-field.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
  import StatusBadge from '$lib/components/status-badge.svelte';
@@ -15,6 +16,7 @@
  import { rpc, RpcError, type Connection } from '$lib/api';
  import { trustSnippet } from '$lib/runtime-signing';
  import { inspectionReasons, type Repository, type RepositoryInspection } from '$lib/repositories';
+ import { historyBatchSize, readRecentHistory, type HistoryPage } from '$lib/repository-history';
  import { runtimeOverview, runtimeStages, runtimeReasons, onboardingReasons, runtimeRegistryImage, runtimeProgressKey, readRuntimeProgress, runtimeDefaultKey, type RuntimeIntegration, type RepositoryRuntimeRun, type RuntimePreparation, type RuntimeSigner, type RuntimeCommand } from '$lib/runtime-preparation';
  let { repo, branch = '', checkedCommit, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections, onSourceRefresh, onRestoreBranch, branchPicker, children }: { repo: Repository; branch?: string; checkedCommit?: string; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void>; onSourceRefresh: (value: Connection | undefined) => void; onRestoreBranch: (value?: string) => void; branchPicker: Snippet; children: Snippet<[Snippet, Snippet, Snippet]> } = $props();
  let onboarding = $state.raw<RepositoryRuntimeRun | null>(null);
@@ -46,6 +48,8 @@
  let rejected = $state(false);
  let registries = $state.raw<Connection[]>([]), signers = $state.raw<RuntimeSigner[]>([]), operations = $state.raw<RuntimePreparation[]>([]);
  let next = $state(''), registryId = $state(''), signerId = $state(''), platform = $state('linux/arm64');
+ let preparationHistoryOpened = $state(false);
+ let preparationHistoryRevision = $state(0);
  let seconds = $state(1800), builds = $state(1), allowBuild = $state(false), allowReplace = $state(false);
  let reviewedSettings = $state('');
  let savedIntegrationRevision = $state<Record<RuntimeIntegration, number>>({registry:0, signer:0});
@@ -242,11 +246,16 @@
    }
   }
  }
- async function history(append = false) {
+ async function readPreparations(afterId: string, excludeId = ''): Promise<HistoryPage<RuntimePreparation>> {
+  const result = await rpc('ListRuntimePreparations', {repositoryId:repo.id, afterId, limit:historyBatchSize, ...(excludeId ? {excludeId} : {})});
+  return {items:result.operations || [], next:result.nextAfterId || ''};
+ }
+ async function history() {
   const sequence = ++historySequence;
-  const result = await rpc('ListRuntimePreparations', { repositoryId: repo.id, afterId: append ? next : '', limit: 20 });
+  const result = await readRecentHistory(readPreparations);
   if (!mounted || sequence !== historySequence) return;
-  operations = append ? [...operations, ...(result.operations || [])] : result.operations || []; next = result.nextAfterId || '';
+  operations = result.items;
+  next = result.next;
  }
  async function configuration(refreshSource = false) {
   const connections: Connection[] = [], identities: RuntimeSigner[] = [];
@@ -392,6 +401,7 @@
   persist(null);
   const current = await rpc('GetRuntimePreparation', { id: operation.id });
   operations = [current.operation, ...operations.filter(value => value.id !== operation.id)]; await history();
+  preparationHistoryRevision += 1;
  }
  async function resume() {
   if (!pending) return;
@@ -800,17 +810,27 @@
 {/snippet}
 
 {#snippet preparationHistory()}
+ {@const currentId = overview.operation?.id || ''}
  <div class="relative">
-  <details class="rounded-xl border p-4" data-preparation-history>
+  <details class="rounded-xl border p-4" data-preparation-history
+   ontoggle={(event) => { if (event.currentTarget.open) preparationHistoryOpened = true; }}>
    <summary class="cursor-pointer pr-10 text-sm font-medium">Previous preparations ({previousOperations.length}{next ? '+' : ''})</summary>
-   <div class="space-y-2 pt-4">
-    {#if !previousOperations.length}<p class="text-sm text-muted-foreground">No earlier runtime preparations.</p>{/if}
-    {#each previousOperations as operation (operation.id)}{@render preparationEvidence(operation)}{/each}
-    {#if next}<Button variant="outline" disabled={busy} onclick={() => perform(() => history(true))}>More preparations</Button>{/if}
-   </div>
+   {#if preparationHistoryOpened}
+    <div class="pt-4">
+     {#key `${currentId}:${preparationHistoryRevision}`}
+      <HistoryPages label="Previous preparations pages" empty="No earlier runtime preparations."
+       readPage={(afterId) => readPreparations(afterId, currentId)}>
+       {#snippet children(items)}
+        {#each items as operation (operation.id)}{@render preparationEvidence(operation)}{/each}
+       {/snippet}
+      </HistoryPages>
+     {/key}
+    </div>
+   {/if}
   </details>
   <Button class="absolute top-3 right-4" variant="outline" size="icon-sm" aria-label="Refresh preparation history"
-   title="Refresh preparation history" aria-busy={refreshingStatus} disabled={busy} onclick={refreshStatus}>
+   title="Refresh preparation history" aria-busy={refreshingStatus} disabled={busy}
+   onclick={async () => { await refreshStatus(); preparationHistoryRevision += 1; }}>
    <RefreshCw class={{ 'motion-safe:animate-spin': refreshingStatus }} aria-hidden="true" />
   </Button>
  </div>

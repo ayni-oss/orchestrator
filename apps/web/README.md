@@ -37,6 +37,8 @@ with the upstream Nova style utilities expanded into component classes and its i
 resolved to the existing Lucide dependency. Other controls use the same compact
 shadcn styling. Update shared components and tokens instead of adding page-specific
 field borders or raw form controls.
+History controls use the [shadcn-svelte Pagination](https://www.shadcn-svelte.com/docs/components/pagination)
+registry components for previous and next navigation.
 
 Repository catalog UI: `/repositories`. Available repositories use the same compact, clickable grid cards as projects.
 Opening a connected repository shows **Status** and **ayni** tabs. The header

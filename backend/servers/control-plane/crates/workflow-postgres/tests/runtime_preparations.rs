@@ -1,4 +1,7 @@
 //! Synthetic authority qualification: no provider requests or signing material.
+#[path = "runtime_preparations/history.rs"]
+mod history;
+
 use ayni_orchestrator_events::runtime_preparation::{BUILD_REPORT_KEY, BuildReport};
 use ayni_orchestrator_workflow_postgres::{
     StoreError, WorkflowStore,

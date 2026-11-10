@@ -168,7 +168,12 @@ impl v1::runtime_preparation_service_server::RuntimePreparationService for Workf
         let value = request.into_inner();
         let (items, next) = self
             .store
-            .list_runtime_preparations(&value.repository_id, &value.after_id, value.limit)
+            .list_runtime_preparations(
+                &value.repository_id,
+                &value.after_id,
+                &value.exclude_id,
+                value.limit,
+            )
             .await
             .map_err(|e| context.store(&e))?;
         Ok(context.response(v1::ListRuntimePreparationsResponse {

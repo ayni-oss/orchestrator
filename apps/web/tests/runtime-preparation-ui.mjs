@@ -146,7 +146,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
   page.waitForResponse(response=>response.url().endsWith('/api/InspectRepository') && response.ok()),
   inspectionDialog.getByRole('button',{name:'Resume inspection',exact:true}).click(),
  ]);
- await inspectionDialog.getByRole('button',{name:'Close',exact:true}).click();
+ await inspectionDialog.waitFor({state:'hidden'});
  await page.getByRole('tab',{name:'ayni',exact:true}).click();
  await page.unroute('**/api/InspectRepository');
  let resolvedHead;
@@ -492,6 +492,88 @@ export async function exerciseDefaultBranchRecheck(page, origin, repositoryId) {
  assert.equal(await page.getByRole('alert').filter({hasText:'Preparation needs attention'}).count(),0);
  assert.equal(resolutions,4);assert.equal(requests.length,4,'resolution failure must not inspect a cached commit');
  for(const method of ['ListConnections','ListRuntimeSigners','ListRepositoryInspections','ListRuntimePreparations','ResolveRepositoryDefaultCommit','InspectRepository','GetRepositoryInspection']) await page.unroute(`**/api/${method}`);
+}
+
+export async function exerciseRepositoryHistoryPagination(page,origin,repositoryId) {
+ const inspectedAt=String(Date.now());
+ const inspections=Array.from({length:23},(_,index)=>({
+  id:randomUUID(),repositoryId,commitSha:index.toString(16).padStart(40,'0'),state:'completed',connectionRevision:'1',updatedAtUnixMs:inspectedAt,
+ }));
+ const operations=Array.from({length:12},()=>({
+  id:randomUUID(),repositoryId,inspectionId:inspections[0].id,platform:'linux/arm64',state:'ready',stage:'cleanup',
+  updatedAtUnixMs:inspectedAt,contentVerified:true,managedCompatible:true,cleanupComplete:true,
+ }));
+ const current=operations[0];
+ const calls=[];
+ let failNextPreparationPage=true;
+ async function respond(route, key, records) {
+  const {afterId,limit,excludeId}=route.request().postDataJSON();
+  assert.equal(limit,10);
+  calls.push({key,afterId,excludeId});
+  const available=records.filter(record=>record.id!==excludeId);
+  const start=afterId ? available.findIndex(record=>record.id===afterId)+1 : 0;
+  assert.ok(!afterId || start>0);
+  if(key==='operations' && excludeId && afterId && failNextPreparationPage){
+   failNextPreparationPage=false;
+   return route.fulfill({status:503,json:{message:'History temporarily unavailable'}});
+  }
+  const items=available.slice(start,start+limit);
+  return route.fulfill({json:{[key]:items,nextAfterId:start+limit<available.length ? items.at(-1).id : ''}});
+ }
+ await page.route('**/api/ListRuntimePreparations',route=>respond(route,'operations',operations));
+ await page.route('**/api/ListRepositoryInspections',route=>respond(route,'inspections',inspections));
+ await page.goto(`${origin}/repositories/${repositoryId}?tab=status`);
+ const currentEntry=page.getByRole('region',{name:'Current preparation details',exact:true})
+  .getByRole('article',{name:`Runtime preparation ${current.id}`,exact:true});
+ await currentEntry.waitFor();
+
+ const preparationHistory=page.locator('[data-preparation-history]');
+ await preparationHistory.locator('summary').click();
+ const preparationPages=preparationHistory.getByRole('navigation',{name:'Previous preparations pages'});
+ const preparationRows=preparationHistory.getByRole('article');
+ await preparationPages.getByText('Page 1',{exact:true}).waitFor();
+ assert.equal(await preparationRows.count(),5);
+ assert.deepEqual(calls.filter(call=>call.key==='operations' && call.excludeId===current.id).map(call=>call.afterId),['']);
+ assert.equal(await preparationHistory.getByRole('article',{name:`Runtime preparation ${current.id}`,exact:true}).count(),0);
+ await preparationPages.getByRole('button',{name:'Go to next page'}).click();
+ await preparationPages.getByText('Page 2',{exact:true}).waitFor();
+ await preparationHistory.getByRole('alert').waitFor();
+ assert.equal(await preparationRows.count(),5);
+ assert.equal(await preparationRows.first().getAttribute('aria-label'),`Runtime preparation ${operations[6].id}`);
+ await preparationHistory.getByRole('button',{name:'Retry',exact:true}).click();
+ await preparationPages.getByRole('button',{name:'Go to next page'}).click();
+ await preparationPages.getByText('Page 3',{exact:true}).waitFor();
+ assert.equal(await preparationRows.count(),1);
+ assert.equal(await preparationRows.first().getAttribute('aria-label'),`Runtime preparation ${operations.at(-1).id}`);
+ assert.equal(await preparationPages.getByRole('button',{name:'Go to next page'}).isDisabled(),true);
+ await preparationPages.getByRole('button',{name:'Go to previous page'}).click();
+ await preparationPages.getByText('Page 2',{exact:true}).waitFor();
+ await preparationHistory.locator('summary').click();
+ await preparationHistory.locator('summary').click();
+ await preparationPages.getByText('Page 2',{exact:true}).waitFor();
+ await preparationPages.getByRole('button',{name:'Go to previous page'}).click();
+ await preparationPages.getByText('Page 1',{exact:true}).waitFor();
+ assert.deepEqual(calls.filter(call=>call.key==='operations' && call.excludeId===current.id).map(call=>call.afterId),['',operations[10].id,operations[10].id]);
+ assert.equal(await currentEntry.isVisible(),true);
+
+ const inspectionHistory=page.locator('[data-inspection-history]');
+ await inspectionHistory.locator('summary').click();
+ const inspectionPages=inspectionHistory.getByRole('navigation',{name:'Inspection history pages'});
+ const inspectionRows=inspectionHistory.getByRole('article');
+ await inspectionPages.getByText('Page 1',{exact:true}).waitFor();
+ assert.equal(await inspectionRows.count(),5);
+ const beforePrefetch=calls.length;
+ const nextInspectionPage=inspectionPages.getByRole('button',{name:'Go to next page'});
+ for(let pageNumber=2;pageNumber<=5;pageNumber++){
+  await nextInspectionPage.click();
+  await inspectionPages.getByText(`Page ${pageNumber}`,{exact:true}).waitFor();
+ }
+ assert.equal(await inspectionRows.count(),3);
+ assert.equal(await inspectionRows.first().getAttribute('aria-label'),`Inspection ${inspections[20].commitSha}`);
+ await inspectionPages.getByRole('button',{name:'Go to previous page'}).click();
+ await inspectionPages.getByText('Page 4',{exact:true}).waitFor();
+ assert.equal(await inspectionRows.count(),5);
+ assert.deepEqual(calls.slice(beforePrefetch).filter(call=>call.key==='inspections').map(call=>call.afterId),[inspections[9].id,inspections[19].id]);
 }
 
 export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {

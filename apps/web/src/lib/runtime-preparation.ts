@@ -97,7 +97,7 @@ export function runtimeOverview(input: {
    issues:operation.safeReason ? [runtimeReasons[operation.safeReason] || 'Review the retained stage evidence before retrying.'] : [],
    nextAction:operation.state === 'ready' ? 'This saved preparation is ready for this exact inspection and platform.' : operation.state === 'publication_uncertain' ? 'Reconcile publication to confirm whether the saved image was published.' : ['pending','running','stopping','cancelling','cleanup_pending'].includes(operation.state) ? 'Status updates automatically while preparation and cleanup continue.' : 'Review the issue above, then retry this preparation when it is resolved.'};
  }
- if (input.moreHistory) return {title:'More runtime history available',description:'No preparation for this inspection appears in the loaded history. Earlier preparations have not been checked yet.',issues:[],nextAction:'Open preparation details and load more preparations to check earlier results.'};
+ if (input.moreHistory) return {title:'More runtime history available',description:'No preparation for this inspection appears in the recent results.',issues:[],nextAction:'Browse Previous preparations in Status to check earlier results.'};
  const issues: string[] = [];
  if (!input.sourceReady) issues.push('The source connection is unavailable, disabled or needs validation. Enable and validate it before inspecting a commit.');
  if (!candidate) issues.push('No saved ayni inspection is available. Inspect an exact commit to check its policy, lock and trust requirements.');

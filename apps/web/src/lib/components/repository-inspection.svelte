@@ -3,6 +3,7 @@
  import { Tabs, Tooltip } from 'bits-ui';
  import { toast } from 'svelte-sonner';
  import ActivityEntry from '$lib/components/activity-entry.svelte';
+ import HistoryPages from '$lib/components/history-pages.svelte';
  import AutosaveField from '$lib/components/autosave-field.svelte';
  import * as NativeSelect from '$lib/components/ui/native-select/index.js';
  import { Button } from '$lib/components/ui/button/index.js';
@@ -15,6 +16,7 @@
  import { readRuntimeProgress } from '$lib/runtime-preparation';
  import { rpc, RpcError, type Connection } from '$lib/api';
  import { inspectionReasons, type Repository, type RepositoryInspection, type InspectRequest } from '$lib/repositories';
+ import { historyBatchSize, readRecentHistory, type HistoryPage } from '$lib/repository-history';
  let { repo, connection = $bindable() }: { repo: Repository; connection?: Connection } = $props();
  let commitSha = $state('');
  let branch = $state('');
@@ -35,6 +37,8 @@
  let recoveryToast: string | number | undefined;
  let inspections = $state.raw<RepositoryInspection[]>([]);
  let next = $state('');
+ let inspectionHistoryOpened = $state(false);
+ let inspectionHistoryRevision = $state(0);
  const storageKey = $derived(`ayni.repository.inspection.pending.${repo.id}`);
  const branchStorageKey = $derived(`ayni.repository.runtime.branch.${repo.id}`);
  const canInspect = $derived(!!connection?.enabled && !!connection?.activeCredentialRevision);
@@ -81,13 +85,19 @@
    }
   }
  }
- async function load(append = false) {
-  const response = await rpc('ListRepositoryInspections', { repositoryId: repo.id, afterId: append ? next : '', limit: 20 });
-  inspections = append ? [...inspections, ...(response.inspections || [])] : response.inspections || [];
-  next = response.nextAfterId || ''; inspectionLoaded = true;
+ async function readInspections(afterId: string): Promise<HistoryPage<RepositoryInspection>> {
+  const response = await rpc('ListRepositoryInspections', {repositoryId:repo.id, afterId, limit:historyBatchSize});
+  return {items:response.inspections || [], next:response.nextAfterId || ''};
+ }
+ async function load() {
+  const result = await readRecentHistory(readInspections);
+  inspections = result.items;
+  next = result.next;
+  inspectionLoaded = true;
  }
  async function accept(value: RepositoryInspection) {
   inspections = [value, ...inspections.filter(i => i.id !== value.id)].sort((a,b) => Number(b.acceptedAtUnixMs || b.updatedAtUnixMs) - Number(a.acceptedAtUnixMs || a.updatedAtUnixMs) || b.id.localeCompare(a.id));
+  inspectionHistoryRevision += 1;
   if (value.state !== 'accepted') persist(null);
  }
  async function acceptPending(value: RepositoryInspection, request: PendingInspection) {
@@ -272,16 +282,15 @@
    {#if error && !pending}<Feedback kind="error" title="Inspection needs attention" message={error}/>{/if}
    <div class="space-y-2"><Label for={`inspection-commit-${repo.id}`}>Commit SHA</Label><Input id={`inspection-commit-${repo.id}`} bind:value={commitSha} placeholder="Full 40-character lowercase commit SHA" disabled={busy || !!pending} maxlength={40}/></div>
    {#if !canInspect}<p class="text-sm">Enable and validate the repository's source connection before starting an inspection.</p>{/if}
-   <div class="flex flex-wrap gap-2"><Button disabled={busy || (!pending && (!canInspect || !validCommit))} onclick={() => perform(inspect)}>Inspect commit</Button><Button variant="outline" disabled={busy} onclick={() => perform(() => load())}>Refresh inspections</Button></div>
+   <div class="flex flex-wrap gap-2">
+    <Button disabled={busy || (!pending && (!canInspect || !validCommit))} onclick={() => perform(inspect)}>Inspect commit</Button>
+    <Button variant="outline" disabled={busy} onclick={() => perform(async () => { await load(); inspectionHistoryRevision += 1; })}>Refresh inspections</Button>
+   </div>
   </div>
  </section>
 {/snippet}
 
-{#snippet inspectionHistory()}
- <details class="rounded-xl border p-4" data-inspection-history>
-  <summary class="cursor-pointer text-sm font-medium">Inspection history ({inspections.length}{next ? '+' : ''})</summary>
-  <div class="space-y-2 pt-4"><p class="text-sm text-muted-foreground">Saved checks are historical evidence. An older awaiting-retry check does not block the latest completed check.</p>
-  {#each inspections as item (item.id)}
+{#snippet inspectionEntry(item: RepositoryInspection)}
    {@const state = inspectionStates[item.state] ?? inspectionStates.failed}
    {@const result = item.result}
    {#snippet inspectionActions()}
@@ -330,10 +339,24 @@
      {/if}
     {/snippet}
    </ActivityEntry>
-  {/each}
+{/snippet}
 
-   {#if next}<Button variant="outline" disabled={busy} onclick={() => perform(() => load(true))}>More inspections</Button>{/if}
-  </div>
+{#snippet inspectionHistory()}
+ <details class="rounded-xl border p-4" data-inspection-history
+  ontoggle={(event) => { if (event.currentTarget.open) inspectionHistoryOpened = true; }}>
+  <summary class="cursor-pointer text-sm font-medium">Inspection history ({inspections.length}{next ? '+' : ''})</summary>
+  {#if inspectionHistoryOpened}
+   <div class="space-y-2 pt-4">
+    <p class="text-sm text-muted-foreground">Saved checks are historical evidence. An older awaiting-retry check does not block the latest completed check.</p>
+    {#key inspectionHistoryRevision}
+     <HistoryPages label="Inspection history pages" empty="No inspections yet." readPage={readInspections}>
+      {#snippet children(items)}
+       {#each items as item (item.id)}{@render inspectionEntry(item)}{/each}
+      {/snippet}
+     </HistoryPages>
+    {/key}
+   </div>
+  {/if}
  </details>
 {/snippet}
 

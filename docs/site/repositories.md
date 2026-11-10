@@ -87,6 +87,9 @@ Open a connected repository card and select **Status**. Under **Inspect a specif
 paste the full lowercase commit SHA from GitHub and choose **Inspect commit**.
 Open **Inspection history** and select the ellipsis next to the result to see
 findings, policy and lock digests, locked tools and trusted public key IDs.
+**Previous preparations** and **Inspection history** show up to five entries per
+page. The next two pages load when you reach the last cached page. Use the arrows
+below each list to browse older or newer entries.
 
 If the response is interrupted, reopen the repository’s **ayni** tab and choose **Recover inspection**. Use
 **Retry same inspection** when GitHub becomes available again. A new commit needs
