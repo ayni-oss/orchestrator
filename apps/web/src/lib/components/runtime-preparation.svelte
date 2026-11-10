@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { protectUnsavedChanges } from "$lib/unsaved-changes.svelte";
  import { onMount } from 'svelte';
  import { Button } from '$lib/components/ui/button/index.js';
  import { Input } from '$lib/components/ui/input/index.js';
@@ -24,6 +25,9 @@
  let registries = $state.raw<Connection[]>([]), signers = $state.raw<RuntimeSigner[]>([]), operations = $state.raw<RuntimePreparation[]>([]);
  let next = $state(''), registryId = $state(''), signerId = $state(''), platform = $state('linux/arm64');
  let seconds = $state(1800), builds = $state(1), allowBuild = $state(false), allowReplace = $state(false);
+ let reviewedSettings = $state('');
+ const settingsDraft = $derived(JSON.stringify({registryId,signerId,platform,seconds,builds,allowBuild,allowReplace}));
+ protectUnsavedChanges(()=>expanded&&!pending&&!!reviewedSettings&&settingsDraft!==reviewedSettings);
  const overview = $derived(runtimeOverview({loaded,error,rejected,inspectionPending,moreHistory:!!next,pending:!!pending,inspectionLoading,inspectionError,inspectionReason:inspectionReasons[latestInspection?.safeReason || ''],inspection:latestInspection,operations,registries,signers,sourceReady:!!connection?.enabled && !!connection?.activeCredentialRevision,sourceRevision:connection?.revision}));
  const storage = $derived(`ayni.runtime.preparation.pending.${repo.id}`);
  const candidateInspection = $derived(latestInspection);
@@ -105,6 +109,7 @@
   if (!signerId && availableSigners.length===1) signerId=availableSigners[0].id;
   if (!availableRegistries.length) integrationSetup = 'registry';
   else if (!availableSigners.length) integrationSetup = 'signer';
+  reviewedSettings=settingsDraft;
  }
  async function prepareLatest() { restoreSettings(); await start(); }
 

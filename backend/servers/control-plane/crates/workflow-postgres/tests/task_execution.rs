@@ -147,7 +147,9 @@ async fn preparation_freezes_one_attempt_preserves_origin_and_never_dispatches()
     assert!(!prepared.attempt_id.is_empty());
     assert!(prepared.blockers.is_empty());
     assert_eq!(prepared.inputs, frozen);
-    let mut config = store.get_agent_configuration(&workspace.id, "").await?;
+    let mut config = store
+        .get_scoped_agent_configuration(&workspace.id, &project.id, "")
+        .await?;
     assert_eq!(prepared.configuration_revision_id, config.revision_id);
     let prior = config.revision_id.clone();
     config.revision_id.clear();

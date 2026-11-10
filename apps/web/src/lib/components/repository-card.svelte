@@ -1,9 +1,10 @@
 <script lang="ts">
+ import { repositoryPath } from "$lib/paths";
  import { goto } from '$app/navigation';
  import InformationCard from './information-card.svelte';
  import type { Repository } from '$lib/repositories';
  let { repo }: { repo: Repository } = $props();
- const href = $derived(`/repositories/${repo.id}`);
+ const href = $derived(repositoryPath(repo.id));
 </script>
 <InformationCard title={repo.fullName} headingLevel={2} navigationHref={href} actions={[
  {label:'Source code',onSelect:()=>{void goto(href);}},

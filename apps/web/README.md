@@ -6,10 +6,10 @@ provider pages and shared components were promoted from the former example at
 The duplicate example and standalone diagnostic frontend have been removed.
 
 Canonical APIs support workspace/project creation, manual GitHub App credentials,
-GHCR PAT connections, OpenAI key validation/model discovery and explicit workspace
+GHCR PAT connections, OpenAI key validation/model discovery and explicit project
 connection/model/budget selection. Historical BFF/API wiring is not restored.
 Connect repositories in the shared GitHub catalog, then add them in Workspace settings.
-Projects can attach only repositories available to their workspace.
+Projects inherit the repositories available to their workspace.
 Exact-commit static Ayni inspection provides retained findings and retry recovery.
 Runtime preparation, signer setup, stage evidence and recovery are available behind
 an explicitly qualified Kubernetes profile. Guided App setup, full adapter discovery
@@ -21,7 +21,7 @@ Run `pnpm web:dev` with the local gateway, or `dev/ctl live` for one frontend pl
 backend rebuild/rollout. The default web URL is http://127.0.0.1:5174.
 Configuration uses the original `/settings/source-control` and
 `/settings/source-control/github` routes, alongside `/settings/container-registries`,
-`/settings/llm-providers` and `/workspace/settings`. Light/dark themes use the example's
+`/settings/llm-providers` and `/workspaces/:workspaceId/settings`. Light/dark themes use the example's
 design tokens and locally bundled fonts, with the input token mapped to the border color so form controls stay visible in both themes.
 
 ## Shared UI components
@@ -45,8 +45,8 @@ preparation. Switching tabs preserves in-progress selections. Technical inspecti
 metadata is collapsed by default. Selecting a source control connection
 automatically discovers repositories through its single active GitHub App
 installation. Project cards link to
-`/projects/:id/repositories?workspace=:workspaceId`. Repository connect and project
-association requests retain their exact non-secret bytes and idempotency key across
+`/workspaces/:workspaceId/projects/:projectId/settings`. Repository connect and workspace
+membership requests retain their exact non-secret bytes and idempotency key across
 reload; scope changes create a fresh component instance. **Connected** describes
 historical source access and never authorizes task execution.
 
@@ -58,7 +58,7 @@ The dropdown and workspace cards offer the same actions.
 The home page lists workspace cards; opening one lists its project cards. Both
 use a whole-card link and a separate top-right three-dot menu. Workspace menus
 open Workspace settings, where you can rename the workspace. Project menus
-offer Repositories and Rename. The sidebar groups
+open Project settings for names, instructions, model selection and budgets. The sidebar groups
 Repositories and Configuration under Settings at the bottom. Sidebar items share
 one component for hover, focus, selected and disabled states. A single Projects
 parent opens the project list, with indented links to each workspace project below
@@ -107,3 +107,26 @@ starts canonical preparation without browser orchestration. The runtime status
 tracks that run, exposes deployment blockers, and links the repository package and
 confirmed immutable image. Prepare latest commit reuses reviewed settings for one
 new bounded run. Opening a page never renews a build grant.
+
+### Application structure and saving
+
+All product pages live beneath `src/routes/(app)`. Its layout owns workspace
+loading, navigation, breadcrumbs and the application shell; the root layout owns
+only global styles. API routes remain outside the application group. Settings
+pages use `PageHeader`, `PageContent` and shared field/card components.
+
+Workspace and project IDs belong in URL path segments. `src/lib/paths.ts` builds
+encoded scoped links and pagination queries. Old query-based bookmarks redirect
+to the canonical route. Missing resources return 404; unavailable services return
+503 rather than an empty workspace. A project is resolved only within its URL's
+workspace, including paginated collections.
+
+Names and project settings save automatically after a short debounce, with a
+shared saving/unsaved/saved status and per-field acknowledgement. Instructions
+and budgets can be saved before configuring a model. A provider change waits for
+a validated connection and discovered model. Edits during a save are serialized
+into another revision. Unsaved edits are protected during navigation; uncertain
+submitted commands retain their exact non-secret request for explicit recovery
+across reloads. Known rejected updates remain editable and expose reload guidance.
+Credential forms require explicit submission and keep private material out of
+browser storage. New-project recovery is scoped to its workspace.

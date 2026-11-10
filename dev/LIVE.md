@@ -5,6 +5,17 @@ example-derived web application with Svelte HMR and rebuilds/redeploys the Rust
 backend. There is no separate diagnostic frontend. Immutable-image acceptance is
 still required; live debug builds are development evidence only.
 
+## Application database baseline
+
+The fresh-install schema is organized into 14 layer migrations, `001`–`014`.
+Each table's final columns, constraints and indexes live in its owning layer;
+repeated alterations from the former 41-step history are folded into that definition.
+The former history and the temporary ordinal-42 baseline are incompatible. They
+are rejected before schema or data changes; `live migrate` cannot upgrade them.
+Keep existing installations and their retained data intact and use a new isolated
+local namespace. Deleting old volumes remains a separate, explicit operator action.
+After installation, migrations are immutable; new changes start at `015`.
+
 ## Start
 
 Start Docker Desktop and enable Kubernetes in its settings. Wait for Kubernetes

@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { protectUnsavedChanges } from "$lib/unsaved-changes.svelte";
  import { toast } from 'svelte-sonner';
  import { onMount } from 'svelte';
  import { Button } from '$lib/components/ui/button/index.js';
@@ -17,6 +18,7 @@
  let open=$state(false);
  let busy = $state(true); let error = $state('');
  let pendingKey = $state(''); let next = $state(''); let historyNext = $state('');
+ protectUnsavedChanges(() => open && !pendingKey && (name !== (selected?.displayName ?? '') || appId !== (selected?.appId ?? '') || !!pem));
  let selectionGeneration = 0;
  const storageKey = 'ayni.connection.pending';
  function persistKey(key: string) { pendingKey = key; if (key) sessionStorage.setItem(storageKey, key); else sessionStorage.removeItem(storageKey); }

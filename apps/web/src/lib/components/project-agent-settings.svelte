@@ -8,7 +8,9 @@
   import InformationCard from '$lib/components/information-card.svelte';
   import Feedback from '$lib/components/feedback.svelte';
   import FieldSaved from '$lib/components/field-saved.svelte';
-  import { rpc, type Connection } from '$lib/api';
+  import SaveStatus from '$lib/components/save-status.svelte';
+  import { protectUnsavedChanges } from '$lib/unsaved-changes.svelte';
+  import { rpc, RpcError, type Connection } from '$lib/api';
 
   let { workspaceId, projectId }: { workspaceId: string; projectId: string } = $props();
   const budgets = [
@@ -21,11 +23,16 @@
   type Configuration = Draft & { workspaceId: string; revisionId: string; provider: string };
   type Update = { projectId: string; idempotencyKey: string; expectedRevisionId: string; configuration: Configuration };
 
-  let configuration = $state.raw<Configuration | null>(null);
-  let draft = $state<Draft>({
-    connectionId: '', model: '', instructions: '',
+  const defaultDraft: Draft = {
+    connectionId: '', model: 'scripted', instructions: '',
     maxInputTokens: '8192', maxOutputTokens: '2048', maxTotalTokens: '10240', idleTimeoutSeconds: '300',
-  });
+  };
+  function normalized(value: Configuration): Configuration {
+    // Protobuf JSON omits default-valued strings. Editor and recovery drafts are complete.
+    return { ...defaultDraft, ...value, connectionId: value.connectionId ?? '', instructions: value.instructions ?? '' };
+  }
+  let configuration = $state.raw<Configuration | null>(null);
+  let draft = $state<Draft>({ ...defaultDraft });
   let connections = $state.raw<Connection[]>([]);
   let loading = $state(true);
   let saving = $state(false);
@@ -36,15 +43,30 @@
   let due = false;
   let disposed = false;
 
+  const fields = Object.keys(draft) as (keyof Draft)[];
   const storageKey = $derived(`ayni.project.${projectId}.configuration.pending`);
+  const dirty = $derived(!!configuration && fields.some(key => draft[key] !== configuration?.[key]));
+  protectUnsavedChanges(() => saving || (pending ? fields.some(key => draft[key] !== pending?.configuration[key]) : dirty));
   const selected = $derived(connections.find(connection => connection.id === draft.connectionId));
   const models = $derived(selected?.models ?? []);
-  const overBudget = $derived(Number(draft.maxTotalTokens) < Number(draft.maxInputTokens) + Number(draft.maxOutputTokens));
-  const fields = Object.keys(draft) as (keyof Draft)[];
+  const validationMessage = $derived.by(() => {
+    for (const { key, label, min, max } of budgets) {
+      const value = Number(draft[key]);
+      if (!Number.isInteger(value) || value < min || value > max) return `${label} must be a whole number between ${min} and ${max}.`;
+    }
+    if (Number(draft.maxTotalTokens) < Number(draft.maxInputTokens) + Number(draft.maxOutputTokens)) return 'Total token budget must cover the input and output budgets.';
+    if (new TextEncoder().encode(draft.instructions).length > 16384) return 'Instructions are too long. Shorten the text before saving.';
+    if (draft.connectionId) {
+      if (!selected?.enabled || !selected.activeCredentialRevision) return 'This connection is unavailable. Choose an enabled, validated connection to save changes.';
+      if (!models.includes(draft.model)) return 'Select a discovered model to save the connection.';
+    } else if (configuration && configuration.provider !== 'scripted') {
+      return 'Select a connection and discovered model to edit these provider settings.';
+    }
+    return '';
+  });
 
   function applyDraft(value: Configuration) {
     for (const key of fields) draft[key] = value[key];
-    if (draft.model === 'scripted') draft.model = '';
   }
 
   async function load() {
@@ -52,17 +74,18 @@
     error = '';
     try {
       const result = await rpc('GetAgentConfiguration', { workspaceId, projectId, revisionId: '' });
-      configuration = result.configuration;
-      applyDraft(pending?.configuration ?? result.configuration);
+      configuration = normalized(result.configuration);
+      applyDraft(pending?.configuration ?? configuration);
       const values: Connection[] = [];
       let afterId = '';
-      let pages = 0;
+      const visited = new Set<string>();
       do {
         const result = await rpc('ListConnections', { afterId, limit: 100 });
         values.push(...(result.connections ?? []).filter((connection: Connection) => connection.capability === 'llm'));
         afterId = result.nextAfterId || '';
-        pages++;
-      } while (afterId && pages < 20);
+        if (afterId && visited.has(afterId)) throw new Error('Connection pagination did not advance.');
+        visited.add(afterId);
+      } while (afterId);
       connections = values;
     } catch (cause) {
       error = cause instanceof Error ? cause.message : 'Configuration unavailable.';
@@ -88,20 +111,22 @@
 
   async function save() {
     if (disposed || !due || saving || pending || !configuration) return;
-    if (!selected?.enabled || !selected.activeCredentialRevision || !models.includes(draft.model) || overBudget) return;
-    if (budgets.some(({ key, min, max }) => {
-      const value = Number(draft[key]);
-      return !Number.isInteger(value) || value < min || value > max;
-    })) return;
+    if (validationMessage) return;
     due = false;
     if (!fields.some(key => draft[key] !== configuration?.[key])) return;
     pending = {
       projectId,
       idempotencyKey: crypto.randomUUID(),
       expectedRevisionId: configuration.revisionId,
-      configuration: { ...draft, workspaceId, revisionId: '', provider: 'openai' },
+      configuration: { ...draft, workspaceId, revisionId: '', provider: draft.connectionId ? 'openai' : configuration.provider },
     };
-    sessionStorage.setItem(storageKey, JSON.stringify(pending));
+    try {
+      sessionStorage.setItem(storageKey, JSON.stringify(pending));
+    } catch {
+      pending = null;
+      error = 'Browser storage is unavailable. Keep this page open and enable storage before saving.';
+      return;
+    }
     await recover();
   }
 
@@ -118,7 +143,7 @@
     try {
       const result = await rpc('UpdateAgentConfiguration', request);
       const previous = configuration;
-      const saved: Configuration = result.configuration;
+      const saved = normalized(result.configuration);
       configuration = saved;
       for (const key of fields) {
         if (previous?.[key] !== saved[key] && draft[key] === request.configuration[key]) {
@@ -127,7 +152,9 @@
       }
       clearPending();
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Configuration could not be saved.';
+      if (cause instanceof RpcError && [400, 404, 409].includes(cause.status)) clearPending();
+      due = false;
+      error = cause instanceof RpcError && cause.status === 409 ? 'Settings changed elsewhere. Reload the saved settings before applying your changes again.' : cause instanceof Error ? cause.message : 'Configuration could not be saved.';
     } finally {
       saving = false;
       if (!pending) void save();
@@ -136,7 +163,13 @@
 
   onMount(() => {
     const stored = sessionStorage.getItem(storageKey);
-    if (stored) pending = JSON.parse(stored);
+    if (stored) {
+      try {
+        const request = JSON.parse(stored);
+        if (request.projectId !== projectId || request.configuration?.workspaceId !== workspaceId || typeof request.idempotencyKey !== 'string' || typeof request.expectedRevisionId !== 'string' || !fields.every(key => typeof request.configuration[key] === 'string')) throw new Error('Invalid saved update');
+        pending = request;
+      } catch { sessionStorage.removeItem(storageKey); }
+    }
     void load();
   });
   onDestroy(() => {
@@ -162,12 +195,16 @@
       <p>Retry the retained command to recover its original result.</p>
       <div class="flex flex-wrap gap-3">
         <Button onclick={recover}>Recover update</Button>
-        <Button variant="outline" onclick={() => { clearPending(); due = false; void load(); }}>Discard unsaved changes</Button>
+        <Button variant="outline" onclick={() => { clearPending(); due = false; void load(); }}>Close request and reload</Button>
       </div>
     </InformationCard>
   {/if}
+  {#if error && !pending}<Button variant="outline" onclick={() => { due = false; void load(); }}>Reload saved settings</Button>{/if}
+  {#if loading}<p role="status">Loading project settings…</p>{/if}
   {#if configuration}
     <InformationCard title="Agent configuration">
+      <p class="text-sm text-muted-foreground">Instructions, model and budgets apply to this project. Connections are shared; settings and conversation history stay separate.</p>
+      <SaveStatus {saving} {dirty} pending={!!pending} saved={Object.keys(confirmed).length > 0} />
       <fieldset class="space-y-5" disabled={loading || (!!pending && !saving)}>
         <div class="space-y-2">
           {#snippet connectionControl()}
@@ -184,15 +221,12 @@
           <p class="text-xs text-muted-foreground"><a class="underline" href="/settings/llm-providers/openai">Manage OpenAI connections</a></p>
         </div>
         {#snippet modelControl()}
-          <NativeSelect.Root id="project-model" class="w-full" value={draft.model} onchange={event => edit('model', event.currentTarget.value)} disabled={!selected}>
+          <NativeSelect.Root id="project-model" class="w-full" value={draft.model === 'scripted' ? '' : draft.model} onchange={event => edit('model', event.currentTarget.value)} disabled={!selected}>
             <NativeSelect.Option value="" disabled>Select a discovered model</NativeSelect.Option>
             {#each models as model (model)}<NativeSelect.Option value={model}>{model}</NativeSelect.Option>{/each}
           </NativeSelect.Root>
         {/snippet}
         {@render field('project-model', 'Model', 'model', modelControl)}
-        {#if draft.connectionId !== configuration.connectionId && !draft.model}
-          <p class="text-sm text-muted-foreground">Select a model to save the new connection.</p>
-        {/if}
         {#snippet instructionsControl()}
           <Textarea id="project-instructions" value={draft.instructions} oninput={event => edit('instructions', event.currentTarget.value)} maxlength={16384} rows={5} />
         {/snippet}
@@ -205,7 +239,7 @@
             {@render field(id, label, key, numberControl)}
           {/each}
         </div>
-        {#if overBudget}<p class="text-sm text-destructive">Total token budget must cover the input and output budgets.</p>{/if}
+        {#if !loading && validationMessage}<p role="alert" class="text-sm text-destructive">{validationMessage}</p>{/if}
       </fieldset>
     </InformationCard>
   {/if}

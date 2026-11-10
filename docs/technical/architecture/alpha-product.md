@@ -53,9 +53,8 @@ dependencies. Availability alone never authorizes writes or execution.
 
 Multiple workspaces may reuse one catalog repository. Chats and task grants remain
 project-scoped. Removing membership affects future discovery; existing admitted
-attempts keep their frozen scope and provenance. Migration 0040 seeds workspace
-membership from prior attachments; migration 0041 makes project availability
-inherited and migrates model configuration to independent project heads.
+attempts keep their frozen scope and provenance. The fresh-install application baseline gives every project independent model
+configuration revisions. Workspace-level model defaults are not supported.
 
 Fresh source research, skill discovery and automated task source selection still
 need implementation and qualification. The settings and membership APIs alone do

@@ -110,7 +110,7 @@ cargo test --locked -p ayni-orchestrator-workflow-postgres --test runtime_prepar
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test configuration -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test sessions -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test provider_calls -- --ignored --nocapture
-cargo test --locked -p ayni-orchestrator-workflow-postgres --test prior_schema_upgrade -- --ignored --nocapture
+cargo test --locked -p ayni-orchestrator-workflow-postgres --test baseline_rejection -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test transport_retention -- --ignored --nocapture
 export AYNI_POSTGRES_FEASIBILITY_URL="$AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL"
 cargo test --locked -p ayni-orchestrator-control-plane --test workflow_api -- --nocapture

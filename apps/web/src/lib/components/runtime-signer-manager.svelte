@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { protectUnsavedChanges } from "$lib/unsaved-changes.svelte";
  import { toast } from 'svelte-sonner';
  import {onMount} from 'svelte';
  import InformationCard from '$lib/components/information-card.svelte';
@@ -21,6 +22,8 @@
  let pending=$state<Pending|null>(null);let setup=$state<ProvisionIntent|null>(null);let operation=$state.raw<ProvisionOperation|null>(null);let receiptMissing=$state(false);let inputRejected=$state(false);
  const storage='ayni.runtime.signer.pending';const setupStorage='ayni.runtime.signer.provisioning.pending';
  const hasPending=$derived(!!pending||!!setup);
+ const original=$derived(signers.find(signer=>signer.id===selected));
+ protectUnsavedChanges(()=>editorOpen&&!hasPending&&(!!seed||name!==(original?.keyId??'')||publicKey!==(original?.publicKey??'')||secretName!==(original?.secretName??'')||secretUid!==(original?.secretUid??'')));
  const canCorrect=$derived(!!setup&&inputRejected&&receiptMissing);
  const canResume=$derived(!!setup&&(operation?.state==='awaiting_material'||receiptMissing));
  function clearPrivate(){privateReadGeneration++;seed='';backupDownloaded=false;if(seedFile)seedFile.value='';}

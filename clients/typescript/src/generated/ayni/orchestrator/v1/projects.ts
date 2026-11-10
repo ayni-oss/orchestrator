@@ -89,6 +89,7 @@ export interface ListProjectsResponse {
 /**
  * Interface v1; revision_id identifies one immutable snapshot, not an API version.
  * The same snapshot binds instructions, desired provider/model, budget and idle policy.
+ * Immutable project-owned settings. Workspace identifies the project boundary, not defaults.
  */
 export interface AgentConfiguration {
   workspaceId: string;
@@ -104,6 +105,7 @@ export interface AgentConfiguration {
 }
 
 export interface GetAgentConfigurationRequest {
+  /** Required; workspace-level model configuration is not supported. */
   projectId: string;
   workspaceId: string;
   /** Empty selects the current revision. */
@@ -115,6 +117,7 @@ export interface GetAgentConfigurationResponse {
 }
 
 export interface UpdateAgentConfigurationRequest {
+  /** Required; revisions and retry receipts belong to this project. */
   projectId: string;
   idempotencyKey: string;
   expectedRevisionId: string;

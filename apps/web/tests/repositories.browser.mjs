@@ -79,7 +79,7 @@ test('repository catalog and workspace availability and project settings use can
   // Workspace cards replace the dropdown; the menu stays separate from card navigation.
   await page.goto(origin);await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
   await page.getByRole('heading',{name:'Workspaces',exact:true}).waitFor();
-  const workspaceLink=page.locator(`main a[href="/?workspace=${a}"]`);
+  const workspaceLink=page.locator(`main a[href="/workspaces/${a}"]`);
   for(let pageNumber=0;await workspaceLink.count()===0&&pageNumber<20;pageNumber++){
    const next=page.getByRole('link',{name:'More workspaces',exact:true});
    assert.equal(await next.count(),1,'fixture workspace must remain discoverable through pagination');
@@ -104,7 +104,7 @@ test('repository catalog and workspace availability and project settings use can
   const staleRename=await page.request.post(`${origin}/api/RenameWorkspace`,{headers:{'x-console-request':'1'},data:{...renameRequest,idempotencyKey:crypto.randomUUID(),displayName:'Stale'}});assert.equal(staleRename.status(),409);
   await page.getByRole('navigation',{name:'Breadcrumb'}).getByRole('link',{name:'Renamed browser workspace',exact:true}).click();
   await page.getByRole('heading',{name:'Renamed browser workspace',level:1,exact:true}).waitFor();
-  const projectLink=page.locator(`main a[href="/projects/${pa}/settings?workspace=${a}"]`);
+  const projectLink=page.locator(`main a[href="/workspaces/${a}/projects/${pa}/settings"]`);
   await projectLink.locator('..').getByRole('button').click();
   assert.equal(await page.getByRole('menuitem',{name:'Rename',exact:true}).count(),0);
   await page.getByRole('menuitem',{name:'Project settings',exact:true}).click();
@@ -118,7 +118,7 @@ test('repository catalog and workspace availability and project settings use can
   assert.equal((await otherRepos.json()).repositories?.length ?? 0,0);
   const scoped=await page.request.post(`${origin}/api/ListProjectRepositories`,{headers:{'x-console-request':'1'},data:{workspaceId:a,projectId:pb}});assert.equal(scoped.status(),404);
   await page.goto(`${origin}/projects/${pa}/repositories?workspace=${a}`);
-  await page.waitForURL(`**/projects/${pa}/settings?workspace=${a}`);
+  await page.waitForURL(`**/workspaces/${a}/projects/${pa}/settings`);
   await page.getByRole('region',{name:'Agent configuration',exact:true}).waitFor();
   assert.equal((await page.locator('body').innerText()).includes('synthetic-repository-browser-key'),false);
   await page.screenshot({path:'/tmp/repository-project-browser.png',fullPage:true});

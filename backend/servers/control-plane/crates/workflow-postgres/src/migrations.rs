@@ -1,51 +1,79 @@
 use sha2::{Digest as _, Sha256};
 use thiserror::Error;
-use tokio_postgres::{Client, Transaction};
+use tokio_postgres::{Client, Row, Transaction};
 
 pub const MIGRATION_LOCK_ID: i64 = 4_702_199_126_064_921;
-pub const CURRENT_SCHEMA_VERSION: i64 = 41;
+pub const CURRENT_SCHEMA_VERSION: i64 = 14;
 
-const MIGRATION_1: &str = include_str!("../migrations/0001_durable_foundation.sql");
-const MIGRATION_2: &str = include_str!("../migrations/0002_report_acceptance.sql");
-const MIGRATION_3: &str = include_str!("../migrations/0003_transport_quarantine.sql");
-const MIGRATION_4: &str = include_str!("../migrations/0004_watch_retention.sql");
-const MIGRATION_5: &str = include_str!("../migrations/0005_delivery_accounting.sql");
-const MIGRATION_6: &str = include_str!("../migrations/0006_transport_rejections.sql");
-const MIGRATION_7: &str = include_str!("../migrations/0007_broker_capacity.sql");
-const MIGRATION_8: &str = include_str!("../migrations/0008_agent_configuration.sql");
-const MIGRATION_24: &str = include_str!("../migrations/0024_task_source_retention.sql");
-const MIGRATION_39: &str = include_str!("../migrations/0039_repository_runtime_onboarding.sql");
-const MIGRATION_41: &str = include_str!("../migrations/0041_project_configuration.sql");
-const MIGRATION_40: &str = include_str!("../migrations/0040_workspace_repositories.sql");
-const MIGRATION_38: &str = include_str!("../migrations/0038_runtime_signer_provisioning.sql");
-const MIGRATION_37: &str = include_str!("../migrations/0037_registry_organizations.sql");
-const MIGRATION_36: &str = include_str!("../migrations/0036_runtime_preparations.sql");
-const MIGRATION_35: &str = include_str!("../migrations/0035_runtime_signers.sql");
-const MIGRATION_34: &str = include_str!("../migrations/0034_repository_inspections.sql");
-const MIGRATION_33: &str = include_str!("../migrations/0033_hierarchy_renames.sql");
-const MIGRATION_32: &str = include_str!("../migrations/0032_repository_catalog.sql");
-const MIGRATION_31: &str = include_str!("../migrations/0031_provider_connections.sql");
-const MIGRATION_30: &str = include_str!("../migrations/0030_connections.sql");
-const MIGRATION_29: &str = include_str!("../migrations/0029_execution_progress.sql");
-const MIGRATION_28: &str = include_str!("../migrations/0028_execution_timeline.sql");
-const MIGRATION_27: &str = include_str!("../migrations/0027_task_quality_capacity.sql");
-const MIGRATION_26: &str = include_str!("../migrations/0026_anthropic_provider.sql");
-const MIGRATION_23: &str = include_str!("../migrations/0023_concurrent_tasks.sql");
-const MIGRATION_25: &str = include_str!("../migrations/0025_outcome_assessments.sql");
-const MIGRATION_22: &str = include_str!("../migrations/0022_task_continuation.sql");
-const MIGRATION_21: &str = include_str!("../migrations/0021_task_recovery.sql");
-const MIGRATION_20: &str = include_str!("../migrations/0020_task_feedback.sql");
-const MIGRATION_19: &str = include_str!("../migrations/0019_publication_report_history.sql");
-const MIGRATION_18: &str = include_str!("../migrations/0018_task_publication.sql");
-const MIGRATION_17: &str = include_str!("../migrations/0017_task_quality.sql");
-const MIGRATION_16: &str = include_str!("../migrations/0016_task_runs.sql");
-const MIGRATION_15: &str = include_str!("../migrations/0015_task_execution_preparation.sql");
-const MIGRATION_14: &str = include_str!("../migrations/0014_plan_approval.sql");
-const MIGRATION_13: &str = include_str!("../migrations/0013_agent_plan_proposals.sql");
-const MIGRATION_12: &str = include_str!("../migrations/0012_plan_review.sql");
-const MIGRATION_11: &str = include_str!("../migrations/0011_provider_uncertainty_receipts.sql");
-const MIGRATION_10: &str = include_str!("../migrations/0010_provider_calls.sql");
-const MIGRATION_9: &str = include_str!("../migrations/0009_sessions.sql");
+// Ordered, immutable layer migrations. Each table is defined in its owning layer.
+const MIGRATIONS: &[(i64, &str, &str)] = &[
+    (
+        1,
+        "Hierarchy",
+        include_str!("../migrations/001_hierarchy.sql"),
+    ),
+    (
+        2,
+        "Connections",
+        include_str!("../migrations/002_connections.sql"),
+    ),
+    (
+        3,
+        "Repositories",
+        include_str!("../migrations/003_repositories.sql"),
+    ),
+    (
+        4,
+        "Runtime signers",
+        include_str!("../migrations/004_runtime_signers.sql"),
+    ),
+    (
+        5,
+        "Runtime preparations",
+        include_str!("../migrations/005_runtime_preparations.sql"),
+    ),
+    (
+        6,
+        "Project configuration",
+        include_str!("../migrations/006_project_configuration.sql"),
+    ),
+    (
+        7,
+        "Conversations",
+        include_str!("../migrations/007_conversations.sql"),
+    ),
+    (
+        8,
+        "Transport",
+        include_str!("../migrations/008_transport.sql"),
+    ),
+    (
+        9,
+        "Sessions and providers",
+        include_str!("../migrations/009_sessions_and_providers.sql"),
+    ),
+    (10, "Plans", include_str!("../migrations/010_plans.sql")),
+    (
+        11,
+        "Task execution",
+        include_str!("../migrations/011_task_execution.sql"),
+    ),
+    (
+        12,
+        "Task publication",
+        include_str!("../migrations/012_task_publication.sql"),
+    ),
+    (
+        13,
+        "Task feedback and recovery",
+        include_str!("../migrations/013_task_feedback_and_recovery.sql"),
+    ),
+    (
+        14,
+        "Outcome assessments",
+        include_str!("../migrations/014_outcome_assessments.sql"),
+    ),
+];
 
 #[derive(Debug, Error)]
 pub enum MigrationError {
@@ -53,6 +81,10 @@ pub enum MigrationError {
     Database(#[from] tokio_postgres::Error),
     #[error("workflow schema version {0} is newer than this runtime")]
     FutureVersion(i64),
+    #[error(
+        "pre-baseline workflow schema requires a fresh database; retained data was not changed"
+    )]
+    FreshDatabaseRequired,
     #[error("workflow schema migration history is invalid")]
     InvalidHistory,
     #[error("workflow schema migration checksum does not match retained state")]
@@ -116,158 +148,22 @@ async fn migrate_inner(
     if current > CURRENT_SCHEMA_VERSION {
         return Err(MigrationError::FutureVersion(current));
     }
-    if current == 0 {
-        transaction.batch_execute(MIGRATION_1).await?;
-        transaction
-            .execute(
-                "INSERT INTO public.workflow_schema_migrations (version, description, checksum) \
-                 VALUES (1, $1, $2)",
-                &[
-                    &"M1 durable workflow foundation",
-                    &migration_checksum(MIGRATION_1),
-                ],
-            )
-            .await?;
+    for &(version, description, sql) in MIGRATIONS {
+        if version <= current {
+            continue;
+        }
+        transaction.batch_execute(sql).await?;
+        transaction.execute(
+            "INSERT INTO public.workflow_schema_migrations (version, description, checksum) VALUES ($1,$2,$3)",
+            &[&version, &description, &migration_checksum(sql)],
+        ).await?;
     }
-    if current <= 1 {
-        transaction.batch_execute(MIGRATION_2).await?;
-        transaction
-            .execute(
-                "INSERT INTO public.workflow_schema_migrations (version, description, checksum) \
-                 VALUES (2, $1, $2)",
-                &[
-                    &"M1 executor report acceptance",
-                    &migration_checksum(MIGRATION_2),
-                ],
-            )
-            .await?;
-    }
-    apply_pending_migrations(&transaction, current).await?;
-    validate_checksum(&transaction).await?;
     validate_schema(&transaction).await?;
     if let Some(runtime_role) = runtime_role {
         apply_runtime_privileges(&transaction, runtime_role).await?;
     }
     transaction.commit().await?;
     Ok(())
-}
-
-async fn apply_pending_migrations(
-    transaction: &Transaction<'_>,
-    current: i64,
-) -> Result<(), MigrationError> {
-    for (version, source, description) in pending_migrations() {
-        if current < version {
-            transaction.batch_execute(source).await?;
-            transaction.execute("INSERT INTO public.workflow_schema_migrations (version, description, checksum) VALUES ($1,$2,$3)", &[&version,&description,&migration_checksum(source)]).await?;
-        }
-    }
-    Ok(())
-}
-
-#[allow(clippy::too_many_lines, reason = "ordered immutable migration catalog")]
-const fn pending_migrations() -> [(i64, &'static str, &'static str); 39] {
-    [
-        (3_i64, MIGRATION_3, "M1 transport quarantine"),
-        (4_i64, MIGRATION_4, "M1 watch retention"),
-        (5_i64, MIGRATION_5, "M1 delivery accounting"),
-        (6_i64, MIGRATION_6, "M1 detached report rejection"),
-        (7_i64, MIGRATION_7, "M1 broker capacity observations"),
-        (
-            8_i64,
-            MIGRATION_8,
-            "Workspace agent configuration and frozen turn inputs",
-        ),
-        (9_i64, MIGRATION_9, "Isolated conversation sessions"),
-        (
-            10_i64,
-            MIGRATION_10,
-            "Provider calls and cancellation receipts",
-        ),
-        (
-            11_i64,
-            MIGRATION_11,
-            "Explicit provider uncertainty retirement",
-        ),
-        (
-            12_i64,
-            MIGRATION_12,
-            "Immutable conversation-owned plan review",
-        ),
-        (13_i64, MIGRATION_13, "Retained agent plan proposals"),
-        (
-            14_i64,
-            MIGRATION_14,
-            "Explicit plan approval and atomic task admission",
-        ),
-        (15_i64, MIGRATION_15, "Frozen task execution preparation"),
-        (16_i64, MIGRATION_16, "Isolated task execution authority"),
-        (17_i64, MIGRATION_17, "Immutable task quality evidence"),
-        (18_i64, MIGRATION_18, "Frozen draft publication authority"),
-        (19_i64, MIGRATION_19, "Immutable publication report history"),
-        (20_i64, MIGRATION_20, "Durable task feedback and attention"),
-        (
-            21_i64,
-            MIGRATION_21,
-            "Immutable task recovery review records",
-        ),
-        (22_i64, MIGRATION_22, "Confirmed linked task continuation"),
-        (23_i64, MIGRATION_23, "Concurrent isolated task scheduling"),
-        (24_i64, MIGRATION_24, "Delayed source archive reclamation"),
-        (
-            25_i64,
-            MIGRATION_25,
-            "Bounded originating-conversation assessments",
-        ),
-        (26_i64, MIGRATION_26, "Additional stateless provider"),
-        (
-            27_i64,
-            MIGRATION_27,
-            "Bounded repository quality artifacts and recovery context",
-        ),
-        (28_i64, MIGRATION_28, "Durable scoped execution timeline"),
-        (
-            29_i64,
-            MIGRATION_29,
-            "Fenced provisional execution progress",
-        ),
-        (
-            30_i64,
-            MIGRATION_30,
-            "Integration connections and protected credential revisions",
-        ),
-        (
-            31_i64,
-            MIGRATION_31,
-            "Container registry and OpenAI connections",
-        ),
-        (
-            32_i64,
-            MIGRATION_32,
-            "Shared repository catalog and project association",
-        ),
-        (33_i64, MIGRATION_33, "Fenced workspace and project renames"),
-        (34_i64, MIGRATION_34, "Frozen repository source inspection"),
-        (35_i64, MIGRATION_35, "Public runtime signer configuration"),
-        (36_i64, MIGRATION_36, "Durable fenced runtime preparation"),
-        (
-            37_i64,
-            MIGRATION_37,
-            "Organization-scoped registry connections",
-        ),
-        (
-            38_i64,
-            MIGRATION_38,
-            "Recoverable runtime signer provisioning",
-        ),
-        (
-            39_i64,
-            MIGRATION_39,
-            "Durable repository runtime onboarding",
-        ),
-        (40_i64, MIGRATION_40, "Workspace repository membership"),
-        (41_i64, MIGRATION_41, "Project agent configuration"),
-    ]
 }
 
 /// Validate that the runtime connection sees the exact supported workflow schema.
@@ -301,71 +197,13 @@ pub async fn validate_for_runtime(
 async fn validate_inner(client: &Client) -> Result<(), MigrationError> {
     let rows = client
         .query(
-            "SELECT version, checksum FROM public.workflow_schema_migrations ORDER BY version",
+            "SELECT version, description, checksum FROM public.workflow_schema_migrations ORDER BY version",
             &[],
         )
         .await?;
-    if rows
-        .last()
-        .is_some_and(|row| row.get::<_, i64>(0) > CURRENT_SCHEMA_VERSION)
-    {
-        return Err(MigrationError::FutureVersion(
-            rows.last().ok_or(MigrationError::InvalidHistory)?.get(0),
-        ));
-    }
-    let migrations = [
-        (1_i64, MIGRATION_1),
-        (2_i64, MIGRATION_2),
-        (3_i64, MIGRATION_3),
-        (4_i64, MIGRATION_4),
-        (5_i64, MIGRATION_5),
-        (6_i64, MIGRATION_6),
-        (7_i64, MIGRATION_7),
-        (8_i64, MIGRATION_8),
-        (9_i64, MIGRATION_9),
-        (10_i64, MIGRATION_10),
-        (11_i64, MIGRATION_11),
-        (12_i64, MIGRATION_12),
-        (13_i64, MIGRATION_13),
-        (14_i64, MIGRATION_14),
-        (15_i64, MIGRATION_15),
-        (16_i64, MIGRATION_16),
-        (17_i64, MIGRATION_17),
-        (18_i64, MIGRATION_18),
-        (19_i64, MIGRATION_19),
-        (20_i64, MIGRATION_20),
-        (21_i64, MIGRATION_21),
-        (22_i64, MIGRATION_22),
-        (23_i64, MIGRATION_23),
-        (24_i64, MIGRATION_24),
-        (25_i64, MIGRATION_25),
-        (26_i64, MIGRATION_26),
-        (27_i64, MIGRATION_27),
-        (28_i64, MIGRATION_28),
-        (29_i64, MIGRATION_29),
-        (30_i64, MIGRATION_30),
-        (31_i64, MIGRATION_31),
-        (32_i64, MIGRATION_32),
-        (33_i64, MIGRATION_33),
-        (34_i64, MIGRATION_34),
-        (35_i64, MIGRATION_35),
-        (36_i64, MIGRATION_36),
-        (37_i64, MIGRATION_37),
-        (38_i64, MIGRATION_38),
-        (39_i64, MIGRATION_39),
-        (40_i64, MIGRATION_40),
-        (41_i64, MIGRATION_41),
-    ];
-    if rows.len() != migrations.len() {
+    validate_retained_history(&rows)?;
+    if rows.len() != MIGRATIONS.len() {
         return Err(MigrationError::InvalidHistory);
-    }
-    for (row, (expected_version, migration)) in rows.iter().zip(migrations) {
-        if row.get::<_, i64>(0) != expected_version {
-            return Err(MigrationError::InvalidHistory);
-        }
-        if row.get::<_, String>(1) != migration_checksum(migration) {
-            return Err(MigrationError::ChecksumMismatch);
-        }
     }
     validate_schema_client(client).await?;
     validate_runtime_privileges(client).await
@@ -374,74 +212,35 @@ async fn validate_inner(client: &Client) -> Result<(), MigrationError> {
 async fn validate_history(transaction: &Transaction<'_>) -> Result<(), MigrationError> {
     let rows = transaction
         .query(
-            "SELECT version FROM public.workflow_schema_migrations ORDER BY version",
+            "SELECT version, description, checksum FROM public.workflow_schema_migrations ORDER BY version",
             &[],
         )
         .await?;
-    for (index, row) in rows.iter().enumerate() {
-        let expected = i64::try_from(index)
-            .map_err(|_| MigrationError::InvalidHistory)?
-            .saturating_add(1);
-        let actual: i64 = row.get(0);
-        if actual != expected {
-            return Err(MigrationError::InvalidHistory);
-        }
-    }
-    Ok(())
+    validate_retained_history(&rows)
 }
 
-async fn validate_checksum(transaction: &Transaction<'_>) -> Result<(), MigrationError> {
-    for (version, migration) in [
-        (1_i64, MIGRATION_1),
-        (2_i64, MIGRATION_2),
-        (3_i64, MIGRATION_3),
-        (4_i64, MIGRATION_4),
-        (5_i64, MIGRATION_5),
-        (6_i64, MIGRATION_6),
-        (7_i64, MIGRATION_7),
-        (8_i64, MIGRATION_8),
-        (9_i64, MIGRATION_9),
-        (10_i64, MIGRATION_10),
-        (11_i64, MIGRATION_11),
-        (12_i64, MIGRATION_12),
-        (13_i64, MIGRATION_13),
-        (14_i64, MIGRATION_14),
-        (15_i64, MIGRATION_15),
-        (16_i64, MIGRATION_16),
-        (17_i64, MIGRATION_17),
-        (18_i64, MIGRATION_18),
-        (19_i64, MIGRATION_19),
-        (20_i64, MIGRATION_20),
-        (21_i64, MIGRATION_21),
-        (22_i64, MIGRATION_22),
-        (23_i64, MIGRATION_23),
-        (24_i64, MIGRATION_24),
-        (25_i64, MIGRATION_25),
-        (26_i64, MIGRATION_26),
-        (27_i64, MIGRATION_27),
-        (28_i64, MIGRATION_28),
-        (29_i64, MIGRATION_29),
-        (30_i64, MIGRATION_30),
-        (31_i64, MIGRATION_31),
-        (32_i64, MIGRATION_32),
-        (33_i64, MIGRATION_33),
-        (34_i64, MIGRATION_34),
-        (35_i64, MIGRATION_35),
-        (36_i64, MIGRATION_36),
-        (37_i64, MIGRATION_37),
-        (38_i64, MIGRATION_38),
-        (39_i64, MIGRATION_39),
-        (40_i64, MIGRATION_40),
-        (41_i64, MIGRATION_41),
-    ] {
-        let checksum: String = transaction
-            .query_one(
-                "SELECT checksum FROM public.workflow_schema_migrations WHERE version = $1",
-                &[&version],
-            )
-            .await?
-            .get(0);
-        if checksum != migration_checksum(migration) {
+fn validate_retained_history(rows: &[Row]) -> Result<(), MigrationError> {
+    // Ordinals restart at 001. Identify the old catalog before interpreting its
+    // overlapping versions, and never modify a retained installation of it.
+    if rows
+        .first()
+        .is_some_and(|row| row.get::<_, String>(1) != MIGRATIONS[0].1)
+    {
+        return Err(MigrationError::FreshDatabaseRequired);
+    }
+    if let Some(row) = rows.last() {
+        let version = row.get::<_, i64>(0);
+        if version > CURRENT_SCHEMA_VERSION {
+            return Err(MigrationError::FutureVersion(version));
+        }
+    }
+    for (row, &(version, description, sql)) in rows.iter().zip(MIGRATIONS) {
+        if row.get::<_, i64>(0) != version {
+            return Err(MigrationError::InvalidHistory);
+        }
+        if row.get::<_, String>(1) != description
+            || row.get::<_, String>(2) != migration_checksum(sql)
+        {
             return Err(MigrationError::ChecksumMismatch);
         }
     }
@@ -487,12 +286,12 @@ async fn apply_runtime_privileges(
                workflow_workspaces, workflow_projects, workflow_conversations, \
                workflow_command_receipts, workflow_messages, workflow_turns, \
                workflow_activities, workflow_updates, workflow_execution_timeline, workflow_execution_progress, workflow_dispatch_intents, \
-               workflow_outbox, workflow_history_snapshots, workflow_report_receipts, workflow_transport_quarantine, workflow_watch_watermarks, workflow_pending_reports, workflow_transport_rejections, workflow_broker_capacity, workflow_agent_configurations, workflow_agent_configuration_heads, workflow_configuration_receipts, workflow_turn_inputs, workflow_sessions, workflow_turn_sessions, workflow_session_receipts, workflow_context_manifests, workflow_context_manifest_messages, workflow_provider_calls, workflow_cancellation_receipts, workflow_provider_uncertainty_receipts, workflow_plans, workflow_plan_versions, workflow_plan_receipts, workflow_plan_proposals, workflow_plan_approvals, workflow_tasks, workflow_task_preparations, workflow_task_attempts, workflow_task_runs, workflow_task_run_receipts, workflow_task_quality, workflow_task_publications, workflow_task_publication_receipts, workflow_task_publication_reports, workflow_task_feedback, workflow_task_recovery, workflow_task_recovery_confirmations, workflow_task_recovery_confirmation_receipts, workflow_assessment_authorizations, workflow_outcome_assessments, workflow_assessment_scans FROM {role};\
+               workflow_outbox, workflow_history_snapshots, workflow_report_receipts, workflow_transport_quarantine, workflow_watch_watermarks, workflow_pending_reports, workflow_transport_rejections, workflow_broker_capacity, workflow_agent_configurations, workflow_turn_inputs, workflow_sessions, workflow_turn_sessions, workflow_session_receipts, workflow_context_manifests, workflow_context_manifest_messages, workflow_provider_calls, workflow_cancellation_receipts, workflow_provider_uncertainty_receipts, workflow_plans, workflow_plan_versions, workflow_plan_receipts, workflow_plan_proposals, workflow_plan_approvals, workflow_tasks, workflow_task_preparations, workflow_task_attempts, workflow_task_runs, workflow_task_run_receipts, workflow_task_quality, workflow_task_publications, workflow_task_publication_receipts, workflow_task_publication_reports, workflow_task_feedback, workflow_task_recovery, workflow_task_recovery_confirmations, workflow_task_recovery_confirmation_receipts, workflow_assessment_authorizations, workflow_outcome_assessments, workflow_assessment_scans FROM {role};\
              GRANT SELECT, INSERT ON TABLE \
                workflow_workspaces, workflow_projects, workflow_conversations, \
                workflow_command_receipts, workflow_messages, workflow_turns, \
                workflow_activities, workflow_updates, workflow_execution_timeline, workflow_execution_progress, workflow_dispatch_intents, \
-               workflow_outbox, workflow_history_snapshots, workflow_report_receipts, workflow_transport_quarantine, workflow_watch_watermarks, workflow_pending_reports, workflow_transport_rejections, workflow_broker_capacity, workflow_agent_configurations, workflow_agent_configuration_heads, workflow_configuration_receipts, workflow_turn_inputs, workflow_sessions, workflow_turn_sessions, workflow_session_receipts, workflow_context_manifests, workflow_context_manifest_messages, workflow_provider_calls, workflow_cancellation_receipts, workflow_provider_uncertainty_receipts, workflow_plans, workflow_plan_versions, workflow_plan_receipts, workflow_plan_proposals, workflow_plan_approvals, workflow_tasks, workflow_task_preparations, workflow_task_attempts, workflow_task_runs, workflow_task_run_receipts, workflow_task_quality, workflow_task_publications, workflow_task_publication_receipts, workflow_task_publication_reports, workflow_task_feedback, workflow_task_recovery, workflow_task_recovery_confirmations, workflow_task_recovery_confirmation_receipts, workflow_assessment_authorizations, workflow_outcome_assessments, workflow_assessment_scans TO {role};\
+               workflow_outbox, workflow_history_snapshots, workflow_report_receipts, workflow_transport_quarantine, workflow_watch_watermarks, workflow_pending_reports, workflow_transport_rejections, workflow_broker_capacity, workflow_agent_configurations, workflow_turn_inputs, workflow_sessions, workflow_turn_sessions, workflow_session_receipts, workflow_context_manifests, workflow_context_manifest_messages, workflow_provider_calls, workflow_cancellation_receipts, workflow_provider_uncertainty_receipts, workflow_plans, workflow_plan_versions, workflow_plan_receipts, workflow_plan_proposals, workflow_plan_approvals, workflow_tasks, workflow_task_preparations, workflow_task_attempts, workflow_task_runs, workflow_task_run_receipts, workflow_task_quality, workflow_task_publications, workflow_task_publication_receipts, workflow_task_publication_reports, workflow_task_feedback, workflow_task_recovery, workflow_task_recovery_confirmations, workflow_task_recovery_confirmation_receipts, workflow_assessment_authorizations, workflow_outcome_assessments, workflow_assessment_scans TO {role};\
              REVOKE ALL ON workflow_hierarchy_rename_receipts FROM PUBLIC, {role};\
              GRANT SELECT, INSERT ON workflow_hierarchy_rename_receipts TO {role};\
              GRANT UPDATE (display_name,updated_at,resource_version) ON workflow_workspaces,workflow_projects TO {role};\
@@ -529,7 +328,6 @@ async fn apply_runtime_privileges(
              GRANT UPDATE (state,evidence,safe_reason,reservation_settled) ON workflow_provider_calls TO {role};\
              GRANT UPDATE (execution_binding_revision) ON workflow_turns TO {role};\
              GRANT UPDATE (state,idle_timeout_seconds,last_active_at) ON workflow_sessions TO {role};\
-             GRANT UPDATE (revision_id) ON workflow_agent_configuration_heads TO {role};\
              GRANT UPDATE (revision, next_turn_sequence, next_history_sequence) \
                ON workflow_conversations TO {role};\
              GRANT UPDATE (resume_cursor) ON workflow_command_receipts TO {role};\
@@ -570,7 +368,7 @@ fn validate_role_name(runtime_role: &str) -> Result<(), MigrationError> {
 }
 
 const SCHEMA_MANIFEST_CHECKSUM: &str =
-    "sha256:fecf289e3786b3b3ffd8482e4081ad0d838f82ee1e0106e5bf829b4488c53dcf";
+    "sha256:1f5238e2f409ea42c64c869d0ba9d203790414f6c832982e49696bfa283acf4d";
 
 async fn validate_schema(transaction: &Transaction<'_>) -> Result<(), MigrationError> {
     let manifest: String = transaction
@@ -683,7 +481,7 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                        'public.workflow_activities', 'public.workflow_updates', 'public.workflow_execution_timeline', 'public.workflow_execution_progress', \
                        'public.workflow_dispatch_intents', 'public.workflow_outbox', \
                        'public.workflow_history_snapshots', 'public.workflow_report_receipts', \
-                       'public.workflow_transport_quarantine', 'public.workflow_watch_watermarks', 'public.workflow_pending_reports', 'public.workflow_transport_rejections', 'public.workflow_broker_capacity', 'public.workflow_agent_configurations', 'public.workflow_agent_configuration_heads', 'public.workflow_configuration_receipts', 'public.workflow_turn_inputs', 'public.workflow_sessions', 'public.workflow_turn_sessions', 'public.workflow_session_receipts', 'public.workflow_context_manifests', 'public.workflow_context_manifest_messages', 'public.workflow_provider_calls', 'public.workflow_cancellation_receipts', 'public.workflow_provider_uncertainty_receipts', 'public.workflow_plans', 'public.workflow_plan_versions', 'public.workflow_plan_receipts', 'public.workflow_plan_proposals', 'public.workflow_plan_approvals', 'public.workflow_tasks', 'public.workflow_task_preparations', 'public.workflow_task_attempts', 'public.workflow_task_runs', 'public.workflow_task_run_receipts', 'public.workflow_task_feedback', 'public.workflow_task_recovery', 'public.workflow_task_recovery_confirmations', 'public.workflow_task_recovery_confirmation_receipts', 'public.workflow_assessment_authorizations', 'public.workflow_outcome_assessments', 'public.workflow_assessment_scans' \
+                       'public.workflow_transport_quarantine', 'public.workflow_watch_watermarks', 'public.workflow_pending_reports', 'public.workflow_transport_rejections', 'public.workflow_broker_capacity', 'public.workflow_agent_configurations', 'public.workflow_turn_inputs', 'public.workflow_sessions', 'public.workflow_turn_sessions', 'public.workflow_session_receipts', 'public.workflow_context_manifests', 'public.workflow_context_manifest_messages', 'public.workflow_provider_calls', 'public.workflow_cancellation_receipts', 'public.workflow_provider_uncertainty_receipts', 'public.workflow_plans', 'public.workflow_plan_versions', 'public.workflow_plan_receipts', 'public.workflow_plan_proposals', 'public.workflow_plan_approvals', 'public.workflow_tasks', 'public.workflow_task_preparations', 'public.workflow_task_attempts', 'public.workflow_task_runs', 'public.workflow_task_run_receipts', 'public.workflow_task_feedback', 'public.workflow_task_recovery', 'public.workflow_task_recovery_confirmations', 'public.workflow_task_recovery_confirmation_receipts', 'public.workflow_assessment_authorizations', 'public.workflow_outcome_assessments', 'public.workflow_assessment_scans' \
                    ]) AS table_name \
                ) \
                AND ( \
@@ -695,7 +493,7 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                        ('workflow_repository_runtime_runs','state'),('workflow_repository_runtime_runs','progress'),('workflow_repository_runtime_runs','claim_token'),('workflow_repository_runtime_runs','lease_until'),('workflow_workspaces','display_name'),('workflow_workspaces','updated_at'),('workflow_workspaces','resource_version'),('workflow_projects','display_name'),('workflow_projects','updated_at'),('workflow_projects','resource_version'),('workflow_runtime_preparations','state'),('workflow_runtime_preparations','stage'),('workflow_runtime_preparations','safe_reason'),('workflow_runtime_preparations','terminal_state'),('workflow_runtime_preparations','generation'),('workflow_runtime_preparations','builds_started'),('workflow_runtime_preparations','evidence'),('workflow_runtime_preparations','updated_at_unix_ms'),('workflow_runtime_preparation_selections','operation_id'),('workflow_runtime_preparation_attempts','pod_uid'),('workflow_runtime_preparation_attempts','state'),('workflow_runtime_preparation_attempts','report_digest'),('workflow_runtime_preparation_attempts','report'),('workflow_runtime_signer_provisioning','state'),('workflow_runtime_signer_provisioning','safe_reason'),('workflow_runtime_signer_provisioning','public_key'),('workflow_runtime_signer_provisioning','secret_uid'),('workflow_runtime_signer_provisioning','result'),('workflow_runtime_signer_provisioning','updated_at_unix_ms'),('workflow_runtime_signers','display_name'),('workflow_runtime_signers','key_id'),('workflow_runtime_signers','public_key'),('workflow_runtime_signers','secret_name'),('workflow_runtime_signers','secret_uid'),('workflow_runtime_signers','active_revision'),('workflow_runtime_signers','revision'),('workflow_runtime_signers','enabled'),('workflow_repository_inspections','state'),('workflow_repository_inspections','safe_reason'),('workflow_repository_inspections','result'),('workflow_repository_inspections','updated_at_unix_ms'),('workflow_repository_operations','state'),('workflow_repository_operations','safe_reason'),('workflow_repository_operations','result'),('workflow_repository_operations','updated_at_unix_ms'),('workflow_connections','display_name'),('workflow_connections','revision'),('workflow_connections','enabled'),('workflow_connections','app_id'),('workflow_connections','active_credential_revision'),('workflow_connections','candidate_credential_revision'),('workflow_connections','status'),('workflow_connections','safe_reason'),('workflow_connections','settings'),('workflow_connections','models'),('workflow_connection_operations','state'),('workflow_connection_operations','safe_reason'),('workflow_connection_operations','result'),('workflow_execution_progress','sequence'),('workflow_execution_progress','round'),('workflow_execution_progress','call_id'),('workflow_execution_progress','stage'),('workflow_execution_progress','tool_name'),('workflow_execution_progress','tool_invocation_id'),('workflow_execution_progress','provisional_text'),('workflow_execution_progress','stage_observed_at'),('workflow_execution_progress','observed_at'), \
                        ('workflow_task_runs','reconciled_at'),('workflow_task_runs','source_reclaim_after'),('workflow_task_runs','source_retired_at'),('workflow_task_runs','source_retired_bytes'),('workflow_task_runs','source_pack'),('workflow_task_runs','assessment_outcome_at'),('workflow_task_runs','state'),('workflow_task_runs','generation'),('workflow_task_runs','pod_uid'),('workflow_task_runs','deadline_at'),('workflow_task_runs','provider_state'),('workflow_task_runs','request_digest'),('workflow_task_runs','outcome'),('workflow_plans','current_version_id'),('workflow_provider_calls','state'),('workflow_provider_calls','evidence'),('workflow_provider_calls','safe_reason'),('workflow_provider_calls','reservation_settled'),('workflow_turns','execution_binding_revision'),
                        ('workflow_sessions','state'),('workflow_sessions','idle_timeout_seconds'),('workflow_sessions','last_active_at'), \
-                       ('workflow_project_configuration_heads','revision_id'),('workflow_agent_configuration_heads','revision_id'), \
+                       ('workflow_project_configuration_heads','revision_id'), \
                        ('workflow_broker_capacity','retained_messages'),('workflow_broker_capacity','retained_bytes'),('workflow_broker_capacity','observed_at'), \
                        ('workflow_transport_rejections','state'),('workflow_transport_rejections','stream_sequence'),('workflow_transport_rejections','attempt_count'),('workflow_transport_rejections','next_attempt_at'),('workflow_transport_rejections','updated_at'), \
                        ('workflow_watch_watermarks', 'pruned_through_cursor'), \
@@ -741,7 +539,7 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                          OR (candidate.table_name='workflow_provider_calls' AND candidate.column_name IN ('state','evidence','safe_reason','reservation_settled')) \
                          OR (candidate.table_name='workflow_turns' AND candidate.column_name='execution_binding_revision') \
                          OR (candidate.table_name='workflow_sessions' AND candidate.column_name IN ('state','idle_timeout_seconds','last_active_at')) \
-                         OR (candidate.table_name='workflow_project_configuration_heads' AND candidate.column_name='revision_id') OR (candidate.table_name='workflow_agent_configuration_heads' AND candidate.column_name='revision_id') \
+                         OR (candidate.table_name='workflow_project_configuration_heads' AND candidate.column_name='revision_id') \
                          OR (candidate.table_name='workflow_broker_capacity' AND candidate.column_name IN ('retained_messages','retained_bytes','observed_at')) \
                          OR (candidate.table_name='workflow_transport_rejections' AND candidate.column_name IN ('state','stream_sequence','attempt_count','next_attempt_at','updated_at')) \
                          OR (candidate.table_name = 'workflow_watch_watermarks' AND candidate.column_name = 'pruned_through_cursor') \

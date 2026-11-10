@@ -3,8 +3,7 @@ use ayni_orchestrator_workflow_postgres::{
     StoreError, WorkflowStore,
     store::{runtime_signer_provisioning::BeginSignerProvisioning, runtime_signers::SaveSigner},
 };
-use sha2::{Digest as _, Sha256};
-use tokio_postgres::{Client, Config, NoTls};
+use tokio_postgres::{Client, NoTls};
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 fn key() -> String {
     uuid::Uuid::now_v7().to_string()
@@ -357,100 +356,5 @@ async fn import_recovery_requires_original_public_identity_and_never_becomes_gen
         store.get_runtime_signer_provisioning(&key()).await,
         Err(StoreError::NotFound)
     ));
-    Ok(())
-}
-#[tokio::test]
-#[ignore = "requires disposable administrator PostgreSQL"]
-#[allow(clippy::too_many_lines)]
-async fn prior_signer_schema_upgrades_and_retains_existing_public_receipts() -> TestResult {
-    let admin_url = std::env::var("AYNI_POSTGRES_FEASIBILITY_URL")?;
-    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await?;
-    let admin_driver = tokio::spawn(async move {
-        let _ = connection.await;
-    });
-    let database = format!("signer_upgrade_{}", uuid::Uuid::now_v7().simple());
-    admin
-        .batch_execute(&format!("CREATE DATABASE {database}"))
-        .await?;
-    let mut config: Config = admin_url.parse()?;
-    config.dbname(&database);
-    let (mut client, connection) = config.connect(NoTls).await?;
-    let driver = tokio::spawn(async move {
-        let _ = connection.await;
-    });
-    seed_prior_signer_schema(&client).await?;
-    let retained = ayni_orchestrator_workflow_postgres::store::runtime_signers::Signer {
-        id: key(),
-        display_name: "Prior signer".to_owned(),
-        key_id: "prior-key".to_owned(),
-        public_key: "a".repeat(64),
-        secret_name: "ayni-runtime-signer-prior".to_owned(),
-        secret_uid: uuid::Uuid::new_v4().to_string(),
-        active_revision: key(),
-        revision: 1,
-        enabled: true,
-    };
-    let retained_json = serde_json::to_string(&retained)?;
-    let retained_key = key();
-    let tx = client.transaction().await?;
-    tx.execute("INSERT INTO workflow_runtime_signers(id,display_name,key_id,public_key,secret_name,secret_uid,active_revision,revision,enabled) VALUES($1,$2,$3,$4,$5,$6,$7,1,true)",&[&retained.id,&retained.display_name,&retained.key_id,&retained.public_key,&retained.secret_name,&retained.secret_uid,&retained.active_revision]).await?;
-    tx.execute("INSERT INTO workflow_runtime_signer_revisions(revision_id,signer_id,configuration) VALUES($1,$2,$3)",&[&retained.active_revision,&retained.id,&retained_json]).await?;
-    tx.execute("INSERT INTO workflow_runtime_signer_receipts(idempotency_key,command_id,signer_id,kind,safe_request,result) VALUES($1,$2,$3,'save','frozen-public-request',$4)",&[&retained_key,&key(),&retained.id,&retained_json]).await?;
-    tx.commit().await?;
-    let original_receipt:String=client.query_one("SELECT row_to_json(t)::text FROM workflow_runtime_signer_receipts t WHERE idempotency_key=$1",&[&retained_key]).await?.get(0);
-    let before:String=client.query_one("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='workflow_runtime_signer_receipts_kind_check'",&[]).await?.get(0);
-    assert!(!before.contains("provision"));
-    ayni_orchestrator_workflow_postgres::migrate_client(&mut client).await?;
-    let version: i64 = client
-        .query_one("SELECT max(version) FROM workflow_schema_migrations", &[])
-        .await?
-        .get(0);
-    assert_eq!(
-        version,
-        ayni_orchestrator_workflow_postgres::migrations::CURRENT_SCHEMA_VERSION
-    );
-    ayni_orchestrator_workflow_postgres::migrate_client(&mut client).await?;
-    let after:String=client.query_one("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='workflow_runtime_signer_receipts_kind_check'",&[]).await?.get(0);
-    assert!(after.contains("provision"));
-    let preserved:String=client.query_one("SELECT row_to_json(t)::text FROM workflow_runtime_signer_receipts t WHERE idempotency_key=$1",&[&retained_key]).await?.get(0);
-    assert_eq!(preserved, original_receipt);
-    let configuration: String = client
-        .query_one(
-            "SELECT configuration FROM workflow_runtime_signer_revisions WHERE revision_id=$1",
-            &[&retained.active_revision],
-        )
-        .await?
-        .get(0);
-    assert_eq!(configuration, retained_json);
-    drop(client);
-    driver.abort();
-    admin
-        .batch_execute(&format!("DROP DATABASE {database} WITH (FORCE)"))
-        .await?;
-    admin_driver.abort();
-    Ok(())
-}
-
-async fn seed_prior_signer_schema(client: &Client) -> TestResult {
-    client.batch_execute("CREATE TABLE workflow_schema_migrations(version bigint PRIMARY KEY CHECK(version>0),description text NOT NULL,checksum text NOT NULL,applied_at timestamptz NOT NULL DEFAULT clock_timestamp())").await?;
-    let mut paths = std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/migrations"))?
-        .map(|p| p.map(|v| v.path()))
-        .collect::<Result<Vec<_>, _>>()?;
-    paths.sort();
-    for path in paths {
-        let name = path
-            .file_name()
-            .ok_or("migration name")?
-            .to_str()
-            .ok_or("migration utf8")?;
-        let version: i64 = name.get(..4).ok_or("migration prefix")?.parse()?;
-        if version > 37 {
-            continue;
-        }
-        let source = std::fs::read_to_string(&path)?;
-        client.batch_execute(&source).await?;
-        let checksum = format!("sha256:{:x}", Sha256::digest(source.as_bytes()));
-        client.execute("INSERT INTO workflow_schema_migrations(version,description,checksum) VALUES($1,'prior fixture',$2)",&[&version,&checksum]).await?;
-    }
     Ok(())
 }

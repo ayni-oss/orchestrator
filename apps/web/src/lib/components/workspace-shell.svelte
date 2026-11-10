@@ -1,4 +1,7 @@
 <script lang="ts">
+ import { projectSettingsPath, withCursor, workspacePath } from '$lib/paths';
+
+  import { provideCreateWorkspace } from "$lib/workspace-actions";
   import type { Snippet } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { Workspace, WorkspaceData } from "$lib/workspace-types";
@@ -20,6 +23,7 @@
   let collapsePreference = $state<boolean>();
   const sidebarCollapsed = $derived(collapsePreference ?? compactViewport.current);
   let createWorkspaceOpen = $state(false);
+  provideCreateWorkspace(() => { sidebarOpen = false; createWorkspaceOpen = true; });
   let configurationOpen = $state(page.url.pathname.startsWith("/settings"));
   function closeConfigurationOnOutsideClick(event: MouseEvent) {
     if (!configurationOpen) return;
@@ -43,7 +47,7 @@
     <Dropdown.Item
       class="min-w-0 flex-1"
       aria-current={selected ? "true" : undefined}
-      onSelect={() => { void goto(`/?workspace=${workspace.id}`); }}
+      onSelect={() => { void goto(workspacePath(workspace.id)); }}
     >
       <span class="truncate">{workspace.displayName}</span>
     </Dropdown.Item>
@@ -96,13 +100,13 @@
       </Dropdown.Root>
     </div>
     <nav aria-label="Projects" class="mt-7 min-h-0 overflow-y-auto">
-      <SidebarItem label="Projects" href={data.workspace ? `/?workspace=${data.workspace.id}` : '/'} disabled={!data.workspace} active={title==='Projects'}><Layers /><span class="sidebar-label">Projects</span></SidebarItem>
+      <SidebarItem label="Projects" href={data.workspace ? workspacePath(data.workspace.id) : '/'} disabled={!data.workspace} active={title==='Projects'}><Layers /><span class="sidebar-label">Projects</span></SidebarItem>
       {#if data.workspace && data.projects.length}
         <ul class="sidebar-label ml-5 mt-1 space-y-1 border-l border-border pl-2">
           {#each data.projects as project (project.id)}
-            <li><SidebarItem href={`/projects/${project.id}/settings?workspace=${data.workspace.id}`} active={page.params.id===project.id}><span class="min-w-0 truncate">{project.displayName}</span></SidebarItem></li>
+            <li><SidebarItem href={projectSettingsPath(data.workspace.id, project.id)} active={page.params.id===project.id}><span class="min-w-0 truncate">{project.displayName}</span></SidebarItem></li>
           {/each}
-          {#if data.nextProject}<li><SidebarItem href={`/?workspace=${data.workspace.id}&afterProject=${data.nextProject}`}>More projects</SidebarItem></li>{/if}
+          {#if data.nextProject}<li><SidebarItem href={withCursor(workspacePath(data.workspace.id), 'afterProject', data.nextProject)}>More projects</SidebarItem></li>{/if}
         </ul>
       {/if}
     </nav>

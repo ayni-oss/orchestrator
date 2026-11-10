@@ -30,9 +30,10 @@ postgres_pod="$(kubectl --context "$context" --namespace "$namespace" get pod \
 read -r expected_count expected_version < <(python3 - "$DEV_REPOSITORY_ROOT" <<'PYTHON'
 from pathlib import Path
 import sys
-paths=Path(sys.argv[1]).joinpath('backend/servers/control-plane/crates/workflow-postgres/migrations').glob('[0-9][0-9][0-9][0-9]_*.sql')
+paths=Path(sys.argv[1]).joinpath('backend/servers/control-plane/crates/workflow-postgres/migrations').glob('[0-9][0-9][0-9]_*.sql')
 versions=sorted(int(path.name.split('_',1)[0]) for path in paths)
-assert versions == list(range(1, len(versions)+1)), 'migration files must be contiguous'
+assert versions and versions[0] == 1, 'application migrations must start at 001'
+assert versions == list(range(1, max(versions)+1)), 'application migrations must be contiguous'
 print(len(versions), max(versions))
 PYTHON
 )
@@ -41,7 +42,7 @@ migration_count="$(kubectl --context "$context" --namespace "$namespace" exec "$
 latest_migration="$(kubectl --context "$context" --namespace "$namespace" exec "$postgres_pod" -- \
   sh -ec 'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --tuples-only --no-align --command="SELECT max(version) FROM workflow_schema_migrations"')"
 if [[ "$migration_count" != "$expected_count" || "$latest_migration" != "$expected_version" ]]; then
-  echo "expected the complete Slice 3 migration history through version $expected_version" >&2
+  echo "expected the complete application migration history through version $expected_version" >&2
   exit 1
 fi
 

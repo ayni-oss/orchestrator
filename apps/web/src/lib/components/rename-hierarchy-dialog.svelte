@@ -2,6 +2,8 @@
  import { toast } from 'svelte-sonner';
  import { onMount, onDestroy } from 'svelte';
  import { invalidateAll } from '$app/navigation';
+ import SaveStatus from '$lib/components/save-status.svelte';
+ import { protectUnsavedChanges } from '$lib/unsaved-changes.svelte';
  import { rpc } from '$lib/api';
  import * as Dialog from '$lib/components/ui/dialog/index.js';
  import FieldSaved from '$lib/components/field-saved.svelte';
@@ -17,6 +19,9 @@
  let pending=$state<Record<string,string>|null>(null);
  let saveTimer: ReturnType<typeof setTimeout> | undefined;
  let savedRevision=$state(0);
+ let ready=$state(false);
+ const dirty=$derived(ready && (inline || open) && draft.trim()!==name);
+ protectUnsavedChanges(()=>saving||(dirty&&!pending));
  onDestroy(()=>clearTimeout(saveTimer));
  function scheduleSave(value: string) {
   draft=value;
@@ -27,6 +32,7 @@
  const storageKey=$derived(`ayni.rename.${kind}.${id}`);
  onMount(()=>{
   if(inline)draft=name;
+  ready=true;
   const saved=sessionStorage.getItem(storageKey);
   if(saved){try{
    const request=JSON.parse(saved);
@@ -54,6 +60,7 @@
   try {
    await invalidateAll();
    if(inline)draft=name;
+  ready=true;
   } catch(cause) {
    error=cause instanceof Error?cause.message:'The name could not be refreshed.';
   } finally {
@@ -78,6 +85,7 @@
 {/snippet}
 {#if inline}
  <InformationCard title={kind === 'workspace' ? 'Rename workspace' : 'Rename project'}>
+  <SaveStatus {saving} {dirty} pending={!!pending} saved={savedRevision>0} />
   <div class="space-y-2">
    <Label for={`rename-${kind}-${id}`}>{kind === 'workspace' ? 'Workspace name' : 'Project name'}</Label>
    <div class="relative">

@@ -80,7 +80,7 @@ The [M7 delivery plan](../research/project-workflow-m7-delivery-plan.md) records
 ## Authorized outcome assessment
 
 In the contributor console, select a conversation and open **Task outcome assessments**.
-Review the workspace model and input/output limits, choose an allowance of 1–10 assessments, and confirm consent.
+Review the project model and input/output limits, choose an allowance of 1–10 assessments, and confirm consent.
 Each assessment can incur a provider call within that frozen configuration's limits.
 Saving 0 stops future admission; the ordinary conversation controls cancel already admitted turns.
 `AuthorizeOutcomeAssessments` retains exact scope, configuration revision and allowance with idempotent replay.
