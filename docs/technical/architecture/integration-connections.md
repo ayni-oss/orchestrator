@@ -149,6 +149,13 @@ credentials, registry permissions or runtime preparation.
 
 ## Frozen static Ayni inspection
 
+The repository runtime tab lists branches through `ListRepositoryBranches`.
+The service reads one bounded page using the catalog entry's installation and
+repository-scoped credential, and checks the source connection revision before
+and after the provider request. Selecting a branch still requires resolving its
+head to an exact commit before inspection. Preparation and inspection history
+are available in the repository's Activity tab.
+
 `InspectRepository` accepts an existing catalog ID, the displayed source connection
 revision and a full lowercase commit SHA. It records intent before GitHub reads;
 repeating the exact request recovers the same operation. History and recovery reads

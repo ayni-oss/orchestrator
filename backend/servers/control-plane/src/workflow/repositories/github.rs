@@ -86,7 +86,48 @@ impl Github {
         }
         serde_json::from_slice(&bytes).map_err(|_| "github_response_invalid")
     }
-    /// Resolve the provider's current default branch once; subsequent inspection uses only its SHA.
+    pub async fn branches(
+        &self,
+        installation: u64,
+        repo: u64,
+        page: u32,
+    ) -> Result<(Vec<String>, bool), &'static str> {
+        let token = self.installation_token(installation, Some(repo)).await?;
+        let metadata = self
+            .request(Method::GET, &format!("/repositories/{repo}"), &token, None)
+            .await?;
+        let metadata = parse_repository(&metadata)?;
+        if metadata.provider_repository_id != repo || !safe_path(&metadata.full_name) {
+            return Err("github_response_invalid");
+        }
+        let value = self
+            .request(
+                Method::GET,
+                &format!(
+                    "/repos/{}/branches?per_page=100&page={page}",
+                    metadata.full_name
+                ),
+                &token,
+                None,
+            )
+            .await?;
+        let items = value
+            .as_array()
+            .filter(|items| items.len() <= 100)
+            .ok_or("github_response_invalid")?;
+        let branches = items
+            .iter()
+            .map(|item| text(item, "name", 4096))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((
+            branches
+                .into_iter()
+                .filter(|name| name.len() <= 255 && safe_path(name))
+                .collect(),
+            items.len() == 100,
+        ))
+    }
+    /// Resolve the selected branch once; subsequent inspection uses only its SHA.
     pub async fn default_commit(
         &self,
         installation: u64,

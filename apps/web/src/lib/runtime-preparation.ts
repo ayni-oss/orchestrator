@@ -26,8 +26,8 @@ export const runtimeStages: Record<string, string> = {
 };
 export const runtimeReasons: Record<string, string> = {
  invalid_input: 'The frozen preparation inputs are unsupported. Review the selected inspection and deployment profile.',
- source_access_denied: 'GitHub denied source acquisition. Check the installation and repository Contents read permission before retrying.',
- source_rate_limited: 'GitHub is rate limiting source acquisition. Wait, then retry within the retained allowance.',
+ source_access_denied: 'The source provider denied source acquisition. Check the installation and repository Contents read permission before retrying.',
+ source_rate_limited: 'The source provider is rate limiting source acquisition. Wait, then retry within the retained allowance.',
  setup_failure: 'The isolated stage could not be configured. Ask the deployment administrator to check its required volumes, image and permissions before retrying.',
  source_unavailable: 'The exact source checkout could not be acquired. Check repository access before retrying.',
  source_identity_mismatch: 'The acquired source differs from the frozen commit or tree. Check the retained inspection before starting again.',
@@ -67,9 +67,9 @@ export const runtimeReasons: Record<string, string> = {
  runtime_cancelled: 'Preparation was cancelled. Cleanup must finish before its resources can be released.',
  deadline_exceeded: 'The preparation reached its time limit. Review retained evidence and cleanup before starting a new allowance.',
  runtime_inputs_changed: 'The source, registry or signer configuration changed. Inspect the current source and start a new preparation.',
- github_access_denied: 'GitHub denied source access. Check the installation and repository Contents read permission.',
- github_rate_limited: 'GitHub is rate limiting source access. Wait before retrying.',
- github_unavailable: 'GitHub could not be reached. Retry when source access is restored.',
+ github_access_denied: 'The source provider denied source access. Check the installation and repository Contents read permission.',
+ github_rate_limited: 'The source provider is rate limiting source access. Wait before retrying.',
+ github_unavailable: 'The source provider could not be reached. Retry when source access is restored.',
 };
 
 export function runtimeOverview(input: {
@@ -115,7 +115,7 @@ export type RepositoryRuntimeSettings = Omit<StartRuntimeRequest,'idempotencyKey
 export type RepositoryRuntimeRun = {id:string; idempotencyKey:string; settings:RepositoryRuntimeSettings; state:string; safeReason?:string; commitSha?:string; inspectionId?:string; preparationId?:string};
 export const onboardingReasons: Record<string,string> = {
  branch_head_changed: 'The branch advanced after review. Check the branch and review its new commit before starting again.',
- source_unavailable: 'The selected branch could not be read. Check the GitHub connection and repository access, then prepare again.',
+ source_unavailable: 'The selected branch could not be read. Check the source control connection and repository access, then prepare again.',
  configuration_changed: 'The source, registry or signing configuration changed. Review the current settings before preparing again.',
  inspection_failed: 'The repository inspection could not complete. Check source access and prepare again.',
  inspection_findings: 'The repository setup needs changes. Resolve the inspection issues shown below, then prepare the latest commit.',

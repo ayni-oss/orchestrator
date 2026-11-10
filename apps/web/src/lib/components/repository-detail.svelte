@@ -14,7 +14,11 @@
  let repo = $state.raw<Repository | null>(null);
  let connection = $state.raw<Connection | undefined>();
  let busy = $state(true), error = $state('');
- let tab = $state(page.url.searchParams.get('tab') === 'runtime' ? 'runtime' : 'source');
+ function initialTab() {
+  const requested = page.url.searchParams.get('tab');
+  return requested === 'source' || requested === 'activity' ? requested : 'runtime';
+ }
+ let tab = $state(initialTab());
  const triggerClass = 'border-b-2 border-transparent px-3 py-3 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:border-primary data-[state=active]:text-foreground';
  async function load() {
   busy = true; error = '';
@@ -47,8 +51,9 @@
  </div>
  <Tabs.Root bind:value={tab}>
   <Tabs.List aria-label={`${repo.fullName} onboarding`} class="mb-6 flex gap-3 border-b">
-   <Tabs.Trigger value="source" class={triggerClass}>Source code</Tabs.Trigger>
    <Tabs.Trigger value="runtime" class={triggerClass}>Ayni runtime</Tabs.Trigger>
+   <Tabs.Trigger value="source" class={triggerClass}>Source code</Tabs.Trigger>
+   <Tabs.Trigger value="activity" class={triggerClass}>Activity</Tabs.Trigger>
   </Tabs.List>
   <Tabs.Content value="source" class="space-y-4">
    <h2 class="font-semibold">Source integration details</h2>
@@ -60,7 +65,7 @@
     {label:'Connected',value:new Date(Number(repo.connectedAtUnixMs)).toLocaleString()},
    ]}/>
   </Tabs.Content>
-  <Tabs.Content value="runtime" class="space-y-4"><RepositoryInspection {repo} {connection}/></Tabs.Content>
+  <RepositoryInspection {repo} {connection}/>
  </Tabs.Root>
  {/if}
 </div>

@@ -167,6 +167,48 @@ fn inspected(
 }
 #[tonic::async_trait]
 impl v1::repository_service_server::RepositoryService for WorkflowGrpc {
+    async fn list_repository_branches(
+        &self,
+        request: Request<v1::ListRepositoryBranchesRequest>,
+    ) -> Result<Response<v1::ListRepositoryBranchesResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let page = page(value.page)?;
+        let repo = self
+            .store
+            .inspection_repository(&value.repository_id)
+            .await
+            .map_err(|e| context.store(&e))?;
+        let source = self
+            .store
+            .repository_source(&repo.connection_id, value.expected_connection_revision)
+            .await
+            .map_err(|e| context.store(&e))?;
+        let result = match github::Github::new(&source) {
+            Ok(client) => tokio::time::timeout(
+                Duration::from_secs(9),
+                client.branches(repo.installation_id, repo.provider_repository_id, page),
+            )
+            .await
+            .unwrap_or(Err("github_unavailable")),
+            Err(reason) => Err(reason),
+        };
+        self.store
+            .repository_source(&repo.connection_id, value.expected_connection_revision)
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(match result {
+            Ok((branches, more)) => v1::ListRepositoryBranchesResponse {
+                branches,
+                next_page: if more && page < 1000 { page + 1 } else { 0 },
+                safe_reason: String::new(),
+            },
+            Err(reason) => v1::ListRepositoryBranchesResponse {
+                safe_reason: reason.into(),
+                ..Default::default()
+            },
+        }))
+    }
     async fn resolve_repository_default_commit(
         &self,
         request: Request<v1::ResolveRepositoryDefaultCommitRequest>,

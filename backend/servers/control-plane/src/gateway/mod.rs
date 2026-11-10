@@ -488,6 +488,12 @@ async fn repository_rpc(
     body: Value,
 ) -> Result<Json<Value>, ApiError> {
     match method {
+        "ListRepositoryBranches" => forward!(
+            body,
+            gateway.repositories(),
+            list_repository_branches,
+            v1::ListRepositoryBranchesRequest
+        ),
         "ResolveRepositoryDefaultCommit" => forward!(
             body,
             gateway.repositories(),

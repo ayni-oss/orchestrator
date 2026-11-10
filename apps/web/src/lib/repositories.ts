@@ -21,7 +21,12 @@ export type InspectionResult = { policyDigest?: string; lockDigest?: string; loc
 export type RepositoryInspection = { id: string; idempotencyKey: string; repositoryId: string; connectionRevision: string; commitSha: string; state: string; safeReason?: string; result?: InspectionResult; acceptedAtUnixMs: string; updatedAtUnixMs: string };
 export const inspectionReasons: Record<string, string> = {
  ...repositoryReasons,
- github_commit_unavailable: 'This commit is unavailable to the GitHub installation. Check the full commit SHA and repository access.',
+ github_authentication_failed: 'The source provider rejected the credential. Update the source connection.',
+ github_access_denied: 'The source provider denied access. Check the installation and repository read permission.',
+ github_rate_limited: 'The source provider is rate limiting requests. Wait before retrying.',
+ github_unavailable: 'The source provider could not be reached. Try again when access is restored.',
+ github_response_invalid: 'The source provider returned unsupported repository information.',
+ github_commit_unavailable: 'This commit is unavailable through the source connection. Check the full commit SHA and repository access.',
  source_bounds_exceeded: 'These repository inputs exceed the supported inspection limits. Review the documented file and snapshot limits.',
  source_path_unsupported: 'A required input uses an unsupported path or file type. Commit regular files within the repository.',
  inspection_unavailable: 'Inspection could not complete. Retry with the same request.',

@@ -43,7 +43,7 @@ expected = {
         "GetRuntimePreparationReceipt", "CancelRuntimePreparation", "RetryRuntimePreparation",
     ]},
     "repositories.proto": {
-        "RepositoryService": ["ListGithubInstallations", "ListGithubRepositories", "ConnectRepository", "GetRepositoryOperation", "ListRepositoryOperations", "ListRepositories", "ListWorkspaceRepositories", "SetWorkspaceRepository", "AssociateProjectRepository", "ListProjectRepositories", "ResolveRepositoryDefaultCommit", "InspectRepository", "GetRepositoryInspection", "ListRepositoryInspections"],
+        "RepositoryService": ["ListGithubInstallations", "ListGithubRepositories", "ConnectRepository", "GetRepositoryOperation", "ListRepositoryOperations", "ListRepositories", "ListWorkspaceRepositories", "SetWorkspaceRepository", "AssociateProjectRepository", "ListProjectRepositories", "ListRepositoryBranches", "ResolveRepositoryDefaultCommit", "InspectRepository", "GetRepositoryInspection", "ListRepositoryInspections"],
     },
     "connections.proto": {
         "ConnectionService": ["SaveGithubConnection", "SaveProviderConnection", "ValidateProviderConnection", "SetConnectionEnabled", "ValidateGithubConnection", "GetConnection", "CheckConnection", "DeleteConnection", "GetConnectionOperation", "ListConnections", "ListConnectionOperations"],

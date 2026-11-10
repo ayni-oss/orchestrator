@@ -27,9 +27,15 @@ test('repository catalog and workspace availability and project settings use can
   assert.equal(resolved.status(),200);assert.equal((await resolved.json()).safeReason,'github_key_invalid');assert.equal((await resolved.json()).commitSha || '','');
   const staleResolve=await page.request.post(`${origin}/api/ResolveRepositoryDefaultCommit`,{headers:{'x-console-request':'1'},data:{repositoryId:fixture,expectedConnectionRevision:'999'}});
   assert.equal(staleResolve.status(),409);
+  const listBranches = revision => page.request.post(`${origin}/api/ListRepositoryBranches`,{headers:{'x-console-request':'1'},data:{repositoryId:fixture,expectedConnectionRevision:revision,page:1}});
+  const branches = await listBranches('1');
+  assert.equal(branches.status(),200);
+  assert.equal((await branches.json()).safeReason,'github_key_invalid');
+  assert.equal((await listBranches('999')).status(),409);
   const inspectionCard = page.locator(`[data-repository-inspection="${fixture}"]`);
-  await inspectionCard.getByText('Inspect a specific commit',{exact:true}).click();
   await inspectionCard.getByText('Commit an Ayni policy before preparing this repository.',{exact:true}).first().waitFor();
+  await page.getByRole('tab',{name:'Activity',exact:true}).click();
+  await inspectionCard.getByText('Inspect a specific commit',{exact:true}).click();
   const commitInput = inspectionCard.getByLabel('Commit SHA',{exact:true});
   await commitInput.fill('main');
   assert.equal(await inspectionCard.getByRole('button',{name:'Inspect commit',exact:true}).isDisabled(),true);
@@ -46,6 +52,8 @@ test('repository catalog and workspace availability and project settings use can
   await lostInspection;await page.unroute('**/api/InspectRepository');await page.reload();
   await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
   await inspectionCard.getByRole('button',{name:'Recover inspection',exact:true}).click();
+  await page.getByRole('tab',{name:'Activity',exact:true}).click();
+  await inspectionCard.getByText(/Inspection history/).click();
   await inspectionCard.getByText('The saved App key is invalid. Update the source connection.',{exact:true}).first().waitFor();
   await page.waitForFunction(id=>sessionStorage.getItem(`ayni.repository.inspection.pending.${id}`)===null,fixture);
   const retainedInspection=await page.request.post(`${origin}/api/GetRepositoryInspection`,{headers:{'x-console-request':'1'},data:{idempotencyKey:inspectionRequest.idempotencyKey}});
@@ -145,7 +153,7 @@ test('repository catalog and workspace availability and project settings use can
   assert.equal(runtimeReceipt.state,'resolving');
   await page.goto(`${origin}/repositories/${fixture}?tab=runtime`);
   await page.getByRole('heading',{name:'Runtime onboarding needs attention',exact:true}).waitFor();
-  await page.getByText('The selected branch could not be read. Check the GitHub connection and repository access, then prepare again.',{exact:true}).waitFor();
+  await page.getByText('The selected branch could not be read. Check the source control connection and repository access, then prepare again.',{exact:true}).waitFor();
   const recovered=await page.request.post(`${origin}/api/GetRepositoryRuntimeReceipt`,{headers:{'x-console-request':'1'},data:{idempotencyKey:runtimeSettings.idempotencyKey}});
   assert.equal(recovered.status(),200);assert.deepEqual((await recovered.json()).run,runtimeReceipt);
   const currentRun=await page.request.post(`${origin}/api/GetRepositoryRuntime`,{headers:{'x-console-request':'1'},data:{repositoryId:fixture}});

@@ -1,5 +1,9 @@
 <script lang="ts">
  import { onMount } from 'svelte';
+ import { Tabs } from 'bits-ui';
+ import { toast } from 'svelte-sonner';
+ import AutosaveField from '$lib/components/autosave-field.svelte';
+ import * as NativeSelect from '$lib/components/ui/native-select/index.js';
  import { Button } from '$lib/components/ui/button/index.js';
  import { Input } from '$lib/components/ui/input/index.js';
  import { Label } from '$lib/components/ui/label/index.js';
@@ -12,6 +16,11 @@
  let expanded = $state(false);
  let commitSha = $state('');
  let branch = $state('');
+ let branchSavedRevision = $state(0);
+ let branches = $state.raw<string[]>([]);
+ let nextBranchPage = $state(0);
+ let loadingBranches = $state(false);
+ let branchError = $state('');
  let checked = $state<{branch: string; sha: string} | null>(null);
  let busy = $state(false);
  let error = $state('');
@@ -59,6 +68,21 @@
   persist({ idempotencyKey: crypto.randomUUID(), repositoryId: repo.id, expectedConnectionRevision: connection.revision, commitSha });
   await resume();
  }
+ async function loadBranches(page = 1) {
+  if (!connection || !canInspect || loadingBranches) return;
+  loadingBranches = true;
+  branchError = '';
+  try {
+   const result = await rpc('ListRepositoryBranches', { repositoryId: repo.id, expectedConnectionRevision: connection.revision, page });
+   if (result.safeReason) throw new Error(inspectionReasons[result.safeReason] || 'Check the source connection and repository access.');
+   branches = [...new Set([...(page === 1 ? [] : branches), ...(result.branches || [])])];
+   nextBranchPage = result.nextPage || 0;
+  } catch (cause) {
+   branchError = cause instanceof RpcError && cause.status === 409
+    ? 'The source connection changed. Reload this page to list branches.'
+    : cause instanceof Error && !(cause instanceof RpcError) ? cause.message : 'Check the source connection and try again.';
+  } finally { loadingBranches = false; }
+ }
  async function recheckDefaultBranch() {
   if (!connection || pending) return;
   checkingDefault = true;
@@ -66,8 +90,8 @@
   const selectedBranch = branch.trim();
   try {
    const resolved = await rpc('ResolveRepositoryDefaultCommit', {repositoryId:repo.id, expectedConnectionRevision:connection.revision,branch:selectedBranch});
-   if (resolved.safeReason) throw new Error(inspectionReasons[resolved.safeReason] || 'The selected branch could not be resolved. Retry when GitHub is available.');
-   if (!/^[a-f0-9]{40}$/.test(resolved.commitSha)) throw new Error('GitHub did not return an exact commit for the selected branch.');
+   if (resolved.safeReason) throw new Error(inspectionReasons[resolved.safeReason] || 'The selected branch could not be resolved. Retry when the source connection is available.');
+   if (!/^[a-f0-9]{40}$/.test(resolved.commitSha)) throw new Error('The source connection did not return an exact commit for the selected branch.');
    commitSha = resolved.commitSha;
    persist({idempotencyKey:crypto.randomUUID(), repositoryId:repo.id, expectedConnectionRevision:connection.revision, commitSha:resolved.commitSha});
    await resume();
@@ -79,9 +103,27 @@
   const result = await rpc('GetRepositoryInspection', { idempotencyKey: pending.idempotencyKey });
   await accept(result.inspection);
  }
+ function saveBranch(event: Event & { currentTarget: HTMLSelectElement }) {
+  const select = event.currentTarget;
+  const value = select.value;
+  try {
+   localStorage.setItem(branchStorageKey, value);
+   branch = value;
+   checked = null;
+   branchSavedRevision += 1;
+  } catch {
+   select.value = branch;
+   toast.error('Could not save the runtime branch', { description: 'Check that this browser allows site storage, then try again.' });
+  }
+ }
  onMount(() => {
-  const draft = sessionStorage.getItem(branchStorageKey);
-  if (draft && draft.length <= 255) branch = draft;
+  try {
+   const savedBranch = localStorage.getItem(branchStorageKey) ?? sessionStorage.getItem(branchStorageKey);
+   if (savedBranch && savedBranch.length <= 255) branch = savedBranch;
+  } catch {
+   // The branch remains at its default when browser storage is unavailable.
+  }
+  void loadBranches();
   const saved = sessionStorage.getItem(storageKey);
   if (!saved) { void perform(() => load()); return; }
   try {
@@ -92,7 +134,7 @@
   } catch { error = 'The saved inspection request could not be read. Reload repository history before starting another.'; }
  });
 </script>
-<div class="space-y-6" data-repository-inspection={repo.id}>
+{#snippet recovery()}
  {#if pending}
   <section class="space-y-3 rounded-xl border bg-card p-5" aria-label="Current inspection recovery">
    <h3 class="font-semibold">Finish the interrupted check</h3>
@@ -100,16 +142,37 @@
    <div class="flex flex-wrap gap-2"><Button disabled={busy} onclick={() => perform(recover)}>Recover inspection</Button><Button variant="outline" disabled={busy} onclick={() => perform(resume)}>Retry same inspection</Button><Button variant="outline" disabled={busy} onclick={() => persist(null)}>Dismiss inspection recovery</Button></div>
   </section>
  {/if}
+{/snippet}
+
+{#snippet branchPicker()}
  <div class="space-y-2">
   <Label for={`runtime-branch-${repo.id}`}>Runtime branch</Label>
-  <Input id={`runtime-branch-${repo.id}`} bind:value={branch} oninput={(event) => { checked = null; sessionStorage.setItem(branchStorageKey, event.currentTarget.value); }} placeholder="Default branch" maxlength={255} disabled={busy || !!pending}/>
-  <p class="text-xs text-muted-foreground">Leave empty to use the GitHub default branch. Check the branch before reviewing its commit.</p>
+  <AutosaveField savedRevision={branchSavedRevision}>
+   <NativeSelect.Root data-slot="input-group-control" id={`runtime-branch-${repo.id}`} class="w-full" value={branch}
+    onchange={saveBranch} disabled={busy || !!pending} aria-describedby={`runtime-branch-help-${repo.id}`}>
+    <NativeSelect.Option value="">Default branch</NativeSelect.Option>
+    {#if branch && !branches.includes(branch)}
+     <NativeSelect.Option value={branch}>{branch} (saved selection)</NativeSelect.Option>
+    {/if}
+    {#each branches as name (name)}<NativeSelect.Option value={name}>{name}</NativeSelect.Option>{/each}
+   </NativeSelect.Root>
+  </AutosaveField>
+  <p id={`runtime-branch-help-${repo.id}`} class="text-xs text-muted-foreground">Check the selected branch before reviewing its commit.</p>
+  {#if loadingBranches}<p role="status" class="text-xs text-muted-foreground">Loading branches…</p>
+  {:else if branchError}
+   <Feedback kind="error" title="Could not list branches" message={branchError}/>
+   <Button variant="outline" onclick={() => loadBranches(nextBranchPage || 1)}>Retry branch list</Button>
+  {:else if nextBranchPage}
+   <Button variant="outline" onclick={() => loadBranches(nextBranchPage)}>More branches</Button>
+  {/if}
  </div>
- <RuntimePreparation {repo} {connection} branch={branch.trim()} checkedCommit={checked?.branch === branch.trim() ? checked?.sha : undefined} latestInspection={inspections[0] || null} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || !!pending || !canInspect} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}/>
+{/snippet}
+
+{#snippet inspectionActivity()}
  <details bind:open={expanded} class="rounded-xl border p-4">
   <summary class="cursor-pointer text-sm font-medium">Inspect a specific commit</summary>
   <div class="space-y-4 pt-4">
-   <p class="text-sm text-muted-foreground">Use this for a commit outside the current default branch. The main recheck always resolves the latest default-branch commit.</p>
+   <p class="text-sm text-muted-foreground">Enter an exact commit SHA to check a specific revision. The runtime branch check uses the latest commit on the selected branch.</p>
    {#if error}<Feedback kind="error" title="Inspection needs attention" message={error}/>{/if}
    <div class="space-y-2"><Label for={`inspection-commit-${repo.id}`}>Commit SHA</Label><Input id={`inspection-commit-${repo.id}`} bind:value={commitSha} placeholder="Full 40-character lowercase commit SHA" disabled={busy || !!pending} maxlength={40}/></div>
    {#if !canInspect}<p class="text-sm">Enable and validate the repository's source connection before starting an inspection.</p>{/if}
@@ -157,4 +220,21 @@
    {#if next}<Button variant="outline" disabled={busy} onclick={() => perform(() => load(true))}>More inspections</Button>{/if}
   </div>
  </details>
+{/snippet}
+
+<div data-repository-inspection={repo.id}>
+ <RuntimePreparation {repo} {connection} branch={branch.trim()} checkedCommit={checked?.branch === branch.trim() ? checked?.sha : undefined} latestInspection={inspections[0] || null} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || !!pending || !canInspect} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}>
+  {#snippet children(runtime, preparationActivity)}
+   <Tabs.Content value="runtime" class="space-y-6">
+    {@render recovery()}
+    {@render branchPicker()}
+    {@render runtime()}
+   </Tabs.Content>
+   <Tabs.Content value="activity" class="space-y-6">
+    {@render recovery()}
+    {@render preparationActivity()}
+    {@render inspectionActivity()}
+   </Tabs.Content>
+  {/snippet}
+ </RuntimePreparation>
 </div>

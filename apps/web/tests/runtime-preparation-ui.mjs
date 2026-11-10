@@ -16,6 +16,8 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  const catalogReply=await page.request.post(`${origin}/api/ListRepositories`,{headers:{'x-console-request':'1'},data:{limit:100}});
  const repository=(await catalogReply.json()).repositories.find(value=>value.id===repositoryId);
  await page.route('**/api/ListConnections',route=>route.fulfill({json:{connections:[{id:repository.connectionId,displayName:'Fixture GitHub',capability:'source_control',revision:'1',enabled:true,activeCredentialRevision:randomUUID()},{id:registryId,displayName:'Fixture runtime registry',provider:'github',capability:'container_registry',revision:'1',enabled:true,activeCredentialRevision:randomUUID(),registryDestination:'ghcr.io/fixture'}]}}));
+ await page.route('**/api/ListRepositoryBranches',route=>route.fulfill({json:route.request().postDataJSON().page === 1
+  ? {branches:['main'],nextPage:2} : {branches:['release/next']}}));
  await page.route('**/api/ListRuntimeSigners',route=>route.fulfill({json:{signers:[{id:signerId,displayName:'Fixture reviewed signer',keyId:'fixture-signer',publicKey:'e'.repeat(64),enabled:true,revision:'1'}]}}));
  await page.route('**/api/ListRuntimePreparations',route=>route.fulfill({json:{operations:operation?[operation]:[]}}));
  await page.route('**/api/GetRuntimePreparation',route=>route.fulfill({json:{operation}}));
@@ -45,6 +47,11 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.equal(await page.getByRole('tab',{name:'Ayni runtime',exact:true}).getAttribute('aria-selected'),'true');
  await page.getByRole('navigation',{name:'Breadcrumb'}).getByRole('link',{name:'Repositories',exact:true}).click();
  await repositoryLink.click();
+ const tabs=page.getByRole('tab');
+ await tabs.first().waitFor();
+ assert.deepEqual(await tabs.allTextContents(),['Ayni runtime','Source code','Activity']);
+ assert.equal(await tabs.first().getAttribute('aria-selected'),'true');
+ await page.getByRole('tab',{name:'Source code',exact:true}).click();
  const sourceDetails=page.getByRole('tabpanel',{name:'Source code',exact:true});
  await sourceDetails.getByRole('heading',{name:'Source integration details',exact:true}).waitFor();
  await sourceDetails.getByText('Source control connection',{exact:true}).waitFor();
@@ -58,11 +65,12 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await inspectionCard.getByRole('region',{name:'Runtime status',exact:true}).getByText('No preparation is saved for inspected commit dddddddddddd.',{exact:true}).waitFor();
  const preparation=page.locator(`[data-runtime-preparation="${repositoryId}"]`);
  assert.equal(await inspectionCard.getByRole('button',{name:'Resume inspection',exact:true}).isVisible(),false,'old retry attempts stay out of the current workflow');
+ await page.getByRole('tab',{name:'Activity',exact:true}).click();
  await inspectionCard.locator('[data-inspection-history] > summary').click();
  await page.route('**/api/InspectRepository',route=>route.fulfill({json:{inspection:{...previousInspection,state:'completed',updatedAtUnixMs:String(Date.now()),result:inspection.result}}}));
  await inspectionCard.getByRole('button',{name:'Resume inspection',exact:true}).click();
+ await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
  await preparation.getByRole('region',{name:'Runtime status',exact:true}).getByText('No preparation is saved for inspected commit dddddddddddd.',{exact:true}).waitFor();
- await inspectionCard.locator('[data-inspection-history] > summary').click();
  await page.unroute('**/api/InspectRepository');
  await preparation.getByRole('button',{name:'Configure runtime',exact:true}).click();
  await preparation.getByLabel('Runtime registry',{exact:true}).selectOption(registryId);
@@ -101,9 +109,11 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.equal(await preparation.getByRole('button',{name:'Retry cleanup',exact:true}).count(),0);
  assert.equal(await preparation.getByText('Runtime ready',{exact:true}).count(),0);
  await preparation.getByRole('list',{name:'Runtime onboarding steps'}).locator('[aria-current=step]').getByText('Verify and finish',{exact:false}).waitFor();
- await preparation.getByText('Current preparation details',{exact:true}).click();
- await preparation.getByRole('article',{name:`Runtime preparation ${operationId}`}).getByText('Not complete',{exact:true}).waitFor();
- await preparation.getByText('Current preparation details',{exact:true}).click();
+ await page.getByRole('tab',{name:'Activity',exact:true}).click();
+ const activity=page.getByRole('tabpanel',{name:'Activity',exact:true});
+ await activity.getByText('Current preparation details',{exact:true}).click();
+ await activity.getByRole('article',{name:`Runtime preparation ${operationId}`}).getByText('Not complete',{exact:true}).waitFor();
+ await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
  await preparation.getByText('Registry image available',{exact:true}).waitFor();
  assert.equal(await preparation.getByRole('link',{name:'Open registry package',exact:true}).getAttribute('href'),'https://github.com/orgs/fixture/packages/container/package/runtime');
  await preparation.getByText(`ghcr.io/fixture/runtime@${hash}`,{exact:true}).waitFor();
@@ -116,7 +126,13 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.ok(retryRequest.idempotencyKey && cancelRequest.idempotencyKey && retryRequest.idempotencyKey!==cancelRequest.idempotencyKey);
  operation={...operation,state:'cancelled',cleanupComplete:true};originalReceipt=operation;
  inspectionId=randomUUID();inspection={...inspection,id:inspectionId,idempotencyKey:randomUUID(),acceptedAtUnixMs:String(Date.now()),updatedAtUnixMs:String(Date.now())};
- await page.getByRole('textbox',{name:'Runtime branch',exact:true}).fill('release/next');
+ await page.getByRole('button',{name:'More branches',exact:true}).click();
+ const branchPicker=page.getByRole('combobox',{name:'Runtime branch',exact:true});
+ await branchPicker.selectOption('release/next');
+ await branchPicker.locator('xpath=ancestor::*[@data-slot="input-group"][1]').locator('[data-autosave-state="saved"]').waitFor();
+ await page.reload();
+ await branchPicker.waitFor();
+ assert.equal(await branchPicker.inputValue(),'release/next');
  await page.route('**/api/ResolveRepositoryDefaultCommit',route=>{
   assert.equal(route.request().postDataJSON().branch,'release/next');
   return route.fulfill({json:{defaultBranch:'release/next',commitSha:inspection.commitSha}});
@@ -153,8 +169,8 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await preparation.getByRole('button',{name:'Dismiss rejected command',exact:true}).click();
  assert.equal(await page.evaluate(id=>sessionStorage.getItem(`ayni.runtime.preparation.pending.${id}`),repositoryId),null);
  await preparation.screenshot({path:'/tmp/runtime-preparation-ui.png'});
- await page.getByRole('textbox',{name:'Runtime branch',exact:true}).fill('');
- for(const method of ['ListRepositoryInspections','ListConnections','ListRuntimeSigners','ListRuntimePreparations','GetRuntimePreparation','GetRuntimePreparationReceipt','StartRepositoryRuntime','GetRepositoryRuntime','GetRepositoryRuntimeReceipt','RetryRuntimePreparation','CancelRuntimePreparation','ResolveRepositoryDefaultCommit','InspectRepository']) await page.unroute(`**/api/${method}`);
+ await page.getByRole('combobox',{name:'Runtime branch',exact:true}).selectOption('');
+ for(const method of ['ListRepositoryBranches','ListRepositoryInspections','ListConnections','ListRuntimeSigners','ListRuntimePreparations','GetRuntimePreparation','GetRuntimePreparationReceipt','StartRepositoryRuntime','GetRepositoryRuntime','GetRepositoryRuntimeReceipt','RetryRuntimePreparation','CancelRuntimePreparation','ResolveRepositoryDefaultCommit','InspectRepository']) await page.unroute(`**/api/${method}`);
  console.log('runtime-preparation-ui: intercepted UI contract coverage passed for explicit grants, lost-response receipt recovery, current-generation publication reconciliation, separate cleanup gate and cancellation; no registry/build qualification claimed.');
 }
 
