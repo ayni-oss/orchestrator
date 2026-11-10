@@ -122,8 +122,13 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  const report= status.locator('dl').filter({hasText:'Lock fingerprint'});
  const valueStarts=await report.locator('dd').evaluateAll(values=>values.map(value=>value.getBoundingClientRect().left));
  assert.equal(new Set(valueStarts).size,1);
+ assert.ok(await next().isDisabled());
+ await status.getByRole('checkbox',{name:'Update signing key',exact:true}).check();
  await next().click();
- assert.ok(await status.getByRole('button',{name:'Start preparation',exact:true}).isDisabled());
+ await status.getByRole('heading',{name:'Signing key update pull request',exact:true}).waitFor();
+ await status.getByText('Automatic pull request creation is unavailable from runtime onboarding.',{exact:false}).waitFor();
+ assert.equal(await status.getByRole('button',{name:'Start preparation',exact:true}).count(),0);
+ assert.equal(startRequest,undefined);
  await status.getByRole('button',{name:'Back',exact:true}).click();
  inspectionId=randomUUID();
  inspection={...inspection,id:inspectionId,commitSha:'f'.repeat(40),acceptedAtUnixMs:String(Date.now()),

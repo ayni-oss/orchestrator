@@ -22,6 +22,7 @@
  let passedIntegrations = $state('');
  let passedInspection = $state('');
  let passedPreparation = $state('');
+ let requestedSigningUpdate = $state('');
  let stepHeading = $state<HTMLHeadingElement>();
  let busy = $state(false), error = $state('');
  let polling = false, mounted = false, historySequence = 0;
@@ -78,6 +79,16 @@
   !blockingFindings.length
    ? checkedCommit : undefined
  );
+ const canRequestSigningUpdate = $derived(
+  signerReady && !!signer?.publicKey && signerTrustMissing &&
+  !inspectionPending && !checkingDefault && candidateInspection?.state === 'completed' &&
+  candidateInspection.connectionRevision === connection?.revision && !blockingFindings.length
+ );
+ const signingUpdateScope = $derived(JSON.stringify([
+  branch, candidateInspection?.commitSha, connection?.revision, signer?.id, signer?.revision,
+ ]));
+ const signingUpdateRequested = $derived(canRequestSigningUpdate && requestedSigningUpdate === signingUpdateScope);
+ const canReview = $derived(signerTrustMissing ? signingUpdateRequested : !!reviewedCommit);
  const retainedRun = $derived(onboarding && (onboarding.settings.branch || '') === branch &&
   onboarding.settings.expectedConnectionRevision === connection?.revision &&
   onboarding.settings.registryConnectionId === registryId && onboarding.settings.signerId === signerId &&
@@ -95,11 +106,12 @@
   matchingOperation.contentVerified && matchingOperation.managedCompatible && matchingOperation.cleanupComplete);
  const image = $derived(runtimeRegistryImage(onboardingActive || onboardingBlocked ? undefined : overview.operation,destination));
  const integrationCheckpoint = $derived(JSON.stringify([connection?.revision, registryId, registry?.revision, signerId, signer?.revision]));
- const inspectionCheckpoint = $derived(JSON.stringify([branch, reviewedCommit, connection?.revision]));
+ const inspectionCheckpoint = $derived(signingUpdateRequested ? signingUpdateScope :
+  JSON.stringify([branch, reviewedCommit, connection?.revision]));
  const admitted = $derived(!!matchingOperation || !!retainedRun?.preparationId);
  const completed = $derived([
   integrationsReady && (passedIntegrations === integrationCheckpoint || admitted),
-  (!!reviewedCommit && passedInspection === inspectionCheckpoint) || admitted,
+  (canReview && passedInspection === inspectionCheckpoint) || admitted,
   admitted,
   verificationReached && (passedPreparation === operation?.id || !!verified),
   !!verified,
@@ -119,7 +131,7 @@
  function advance() {
   const step = currentStep;
   if (step === 0 && integrationsReady) passedIntegrations = integrationCheckpoint;
-  if (step === 1 && reviewedCommit) passedInspection = inspectionCheckpoint;
+  if (step === 1 && canReview) passedInspection = inspectionCheckpoint;
   if (step === 3 && verificationReached && operation) passedPreparation = operation.id;
   void visit(step + 1);
  }
@@ -418,7 +430,14 @@
        ] : []),
       ]}/>
       {#if signerTrustMissing}
-       <p class="text-sm">Choose a matching signing key in Connect integrations, or update the repository trust policy, regenerate the lock, and check again.</p>
+       <p class="text-sm">Choose a matching key in Connect integrations, or review the proposed update to the repository trust policy.</p>
+       {#if canRequestSigningUpdate}
+        <label class="flex items-center gap-2 text-sm">
+         <input type="checkbox" class="accent-primary" checked={signingUpdateRequested}
+          onchange={event => { requestedSigningUpdate = event.currentTarget.checked ? signingUpdateScope : ''; }}/>
+         Update signing key
+        </label>
+       {/if}
       {/if}
       {#if candidateInspection.safeReason}<p class="text-sm">{inspectionReasons[candidateInspection.safeReason] || 'The inspection needs attention.'}</p>{/if}
       {#each blockingFindings as finding (finding.code + finding.path)}
@@ -427,6 +446,19 @@
      {:else}
       <p class="text-sm">No repository check has been saved.</p>
      {/if}
+    </div>
+   {:else if currentStep === 2 && signingUpdateRequested && signer && candidateInspection}
+    <div class="space-y-3">
+     <h4 class="font-medium">Signing key update pull request</h4>
+     <p class="text-sm">The proposed change pins the selected public key in <code>.ayni.toml</code>, preserves the other trusted keys, and regenerates <code>.ayni.lock</code>.</p>
+     <InformationTable aligned rows={[
+      {label:'Repository',value:repo.fullName},
+      {label:'Target branch',value:branch || 'Repository default'},
+      {label:'Inspected commit',value:candidateInspection.commitSha,monospace:true},
+      {label:'Signing key',value:signer.keyId},
+     ]}/>
+     <pre class="overflow-x-auto rounded-md bg-muted p-2 text-xs">{trustSnippet(signer)}</pre>
+     <p class="text-sm">Automatic pull request creation is unavailable from runtime onboarding. After the trust change is merged, check <code>ayni.lock</code> again to continue runtime preparation.</p>
     </div>
    {:else if currentStep === 2}
     {#if reviewedCommit}<p class="text-sm">Reviewed commit <code class="break-all">{reviewedCommit}</code> on {branch || 'the default branch'}.</p>
@@ -488,8 +520,8 @@
    <div class="flex flex-wrap justify-between gap-2 border-t pt-4">
     {#if currentStep > 0}<Button variant="outline" onclick={() => visit(currentStep - 1)}>Back</Button>{/if}
     {#if currentStep === 0 || currentStep === 1 || currentStep === 3}
-     <Button class="ml-auto" disabled={busy || (currentStep === 0 ? !integrationsReady : currentStep === 1 ? !reviewedCommit : !verificationReached)} onclick={advance}>Next</Button>
-    {:else if currentStep === 2}
+     <Button class="ml-auto" disabled={busy || (currentStep === 0 ? !integrationsReady : currentStep === 1 ? !canReview : !verificationReached)} onclick={advance}>Next</Button>
+    {:else if currentStep === 2 && !signingUpdateRequested}
      <Button class="ml-auto" disabled={!canStart} onclick={start}>{allowBuild ? 'Build and publish runtime' : 'Start preparation'}</Button>
     {/if}
    </div>
