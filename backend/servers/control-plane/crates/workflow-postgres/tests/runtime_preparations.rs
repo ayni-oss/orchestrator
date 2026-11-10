@@ -129,6 +129,7 @@ impl Fixture {
                     lock_schema: "1".into(),
                     tools: vec![],
                     trust_key_ids: vec!["fixture-key".into()],
+                    trusted_public_keys: std::collections::BTreeMap::new(),
                     findings: vec![],
                 }),
             )

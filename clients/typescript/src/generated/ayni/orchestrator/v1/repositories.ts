@@ -194,6 +194,12 @@ export interface RepositoryInspectionResult {
   tools: string[];
   trustKeyIds: string[];
   findings: RepositoryInspectionFinding[];
+  trustedPublicKeys: { [key: string]: string };
+}
+
+export interface RepositoryInspectionResult_TrustedPublicKeysEntry {
+  key: string;
+  value: string;
 }
 
 export interface RepositoryInspection {
@@ -3269,6 +3275,7 @@ function createBaseRepositoryInspectionResult(): RepositoryInspectionResult {
     tools: [],
     trustKeyIds: [],
     findings: [],
+    trustedPublicKeys: {},
   };
 }
 
@@ -3298,6 +3305,10 @@ export const RepositoryInspectionResult: MessageFns<RepositoryInspectionResult> 
     for (const v of message.findings) {
       RepositoryInspectionFinding.encode(v!, writer.uint32(66).fork()).join();
     }
+    globalThis.Object.entries(message.trustedPublicKeys).forEach(([key, value]: [string, string]) => {
+      RepositoryInspectionResult_TrustedPublicKeysEntry.encode({ key: key as any, value }, writer.uint32(74).fork())
+        .join();
+    });
     return writer;
   },
 
@@ -3378,6 +3389,17 @@ export const RepositoryInspectionResult: MessageFns<RepositoryInspectionResult> 
             message.findings.push(RepositoryInspectionFinding.decode(reader, reader.uint32()));
             continue;
           }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            const entry9 = RepositoryInspectionResult_TrustedPublicKeysEntry.decode(reader, reader.uint32());
+            if (entry9.value !== undefined) {
+              message.trustedPublicKeys[entry9.key] = entry9.value;
+            }
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3428,6 +3450,33 @@ export const RepositoryInspectionResult: MessageFns<RepositoryInspectionResult> 
       findings: globalThis.Array.isArray(object?.findings)
         ? object.findings.map((e: any) => RepositoryInspectionFinding.fromJSON(e))
         : [],
+      trustedPublicKeys: isObject(object.trustedPublicKeys)
+        ? (globalThis.Object.entries(object.trustedPublicKeys) as [string, any][]).reduce(
+          (acc: { [key: string]: string }, [key, value]: [string, any]) => {
+            globalThis.Object.defineProperty(acc, key, {
+              value: globalThis.String(value),
+              enumerable: true,
+              configurable: true,
+              writable: true,
+            });
+            return acc;
+          },
+          {},
+        )
+        : isObject(object.trusted_public_keys)
+        ? (globalThis.Object.entries(object.trusted_public_keys) as [string, any][]).reduce(
+          (acc: { [key: string]: string }, [key, value]: [string, any]) => {
+            globalThis.Object.defineProperty(acc, key, {
+              value: globalThis.String(value),
+              enumerable: true,
+              configurable: true,
+              writable: true,
+            });
+            return acc;
+          },
+          {},
+        )
+        : {},
     };
   },
 
@@ -3457,6 +3506,15 @@ export const RepositoryInspectionResult: MessageFns<RepositoryInspectionResult> 
     if (message.findings?.length) {
       obj.findings = message.findings.map((e) => RepositoryInspectionFinding.toJSON(e));
     }
+    if (message.trustedPublicKeys) {
+      const entries = globalThis.Object.entries(message.trustedPublicKeys) as [string, string][];
+      if (entries.length > 0) {
+        obj.trustedPublicKeys = {};
+        entries.forEach(([k, v]) => {
+          obj.trustedPublicKeys[k] = v;
+        });
+      }
+    }
     return obj;
   },
 
@@ -3473,6 +3531,107 @@ export const RepositoryInspectionResult: MessageFns<RepositoryInspectionResult> 
     message.tools = object.tools?.map((e) => e) || [];
     message.trustKeyIds = object.trustKeyIds?.map((e) => e) || [];
     message.findings = object.findings?.map((e) => RepositoryInspectionFinding.fromPartial(e)) || [];
+    message.trustedPublicKeys = (globalThis.Object.entries(object.trustedPublicKeys ?? {}) as [string, string][])
+      .reduce((acc: { [key: string]: string }, [key, value]: [string, string]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.String(value);
+        }
+        return acc;
+      }, {});
+    return message;
+  },
+};
+
+function createBaseRepositoryInspectionResult_TrustedPublicKeysEntry(): RepositoryInspectionResult_TrustedPublicKeysEntry {
+  return { key: "", value: "" };
+}
+
+export const RepositoryInspectionResult_TrustedPublicKeysEntry: MessageFns<
+  RepositoryInspectionResult_TrustedPublicKeysEntry
+> = {
+  encode(
+    message: RepositoryInspectionResult_TrustedPublicKeysEntry,
+    writer: BinaryWriter = new BinaryWriter(),
+  ): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RepositoryInspectionResult_TrustedPublicKeysEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRepositoryInspectionResult_TrustedPublicKeysEntry();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.key = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.value = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RepositoryInspectionResult_TrustedPublicKeysEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.String(object.value) : "",
+    };
+  },
+
+  toJSON(message: RepositoryInspectionResult_TrustedPublicKeysEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== "") {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create(
+    base?: DeepPartial<RepositoryInspectionResult_TrustedPublicKeysEntry>,
+  ): RepositoryInspectionResult_TrustedPublicKeysEntry {
+    return RepositoryInspectionResult_TrustedPublicKeysEntry.fromPartial(base ?? {});
+  },
+  fromPartial(
+    object: DeepPartial<RepositoryInspectionResult_TrustedPublicKeysEntry>,
+  ): RepositoryInspectionResult_TrustedPublicKeysEntry {
+    const message = createBaseRepositoryInspectionResult_TrustedPublicKeysEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
     return message;
   },
 };
@@ -5035,6 +5194,10 @@ type DeepPartial<T> = T extends Builtin ? T
   : T extends { $case: string } ? { [K in keyof Omit<T, "$case">]?: DeepPartial<T[K]> } & { $case: T["$case"] }
   : T extends {} ? { [K in keyof T]?: DeepPartial<T[K]> }
   : Partial<T>;
+
+function isObject(value: any): boolean {
+  return typeof value === "object" && value !== null;
+}
 
 function isSet(value: any): boolean {
   return value !== null && value !== undefined;

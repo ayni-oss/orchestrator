@@ -159,6 +159,10 @@ verification. Starting a run requires an explicit action and submits the
 reviewed commit and integration revisions. Preparation and inspection history
 are available in the repository's Activity tab.
 
+The lock check reports whether the selected signing identity's name and public
+key match the inspected commit's trust policy. An interrupted check first looks
+up its saved receipt, then retries the same commit and idempotency key if needed.
+
 `InspectRepository` accepts an existing catalog ID, the displayed source connection
 revision and a full lowercase commit SHA. It records intent before GitHub reads;
 repeating the exact request recovers the same operation. History and recovery reads

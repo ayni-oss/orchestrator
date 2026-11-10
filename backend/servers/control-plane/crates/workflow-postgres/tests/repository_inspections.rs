@@ -17,6 +17,7 @@ fn observation() -> InspectionResult {
         lock_schema: "v1".into(),
         tools: vec!["cargo".into()],
         trust_key_ids: vec!["required-key".into()],
+        trusted_public_keys: std::collections::BTreeMap::new(),
         findings: vec![Finding {
             code: "trust_required".into(),
             path: "ayni.lock".into(),

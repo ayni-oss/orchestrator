@@ -169,6 +169,7 @@ message RepositoryInspectionResult {
   repeated string tools = 6;
   repeated string trust_key_ids = 7;
   repeated RepositoryInspectionFinding findings = 8;
+  map<string, string> trusted_public_keys = 9;
 }
 message RepositoryInspection {
   string id = 1;

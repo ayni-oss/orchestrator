@@ -8,7 +8,6 @@
  import * as NativeSelect from '$lib/components/ui/native-select/index.js';
  import { toast } from 'svelte-sonner';
  import AutosaveField from '$lib/components/autosave-field.svelte';
- import Feedback from '$lib/components/feedback.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
  import { rpc, RpcError, type Connection } from '$lib/api';
  import { trustSnippet } from '$lib/runtime-signing';
@@ -45,8 +44,21 @@
  const registry = $derived(registries.find(value => value.id === registryId));
  const signer = $derived(signers.find(value => value.id === signerId));
  const blockingFindings = $derived(candidateInspection?.result?.findings?.filter(finding => !['adapter_discovery_pending', 'runtime_verification_pending'].includes(finding.code)) ?? []);
- const signerTrustMissing = $derived(!!signer && candidateInspection?.state === 'completed' &&
-  !!candidateInspection.result?.lockFingerprint && !candidateInspection.result.trustKeyIds?.includes(signer.keyId));
+ const signerTrust = $derived.by(() => {
+  const result = candidateInspection?.result;
+  if (!signer || candidateInspection?.state !== 'completed' || !result?.lockFingerprint ||
+   blockingFindings.some(finding => finding.code === 'trust_invalid' || finding.code === 'inspection_metadata_bounds_exceeded')) return 'unchecked';
+  if (!result.trustKeyIds?.includes(signer.keyId)) return 'name_missing';
+  if (!result.trustedPublicKeys || !Object.hasOwn(result.trustedPublicKeys, signer.keyId) || !signer.publicKey) return 'unchecked';
+  return result.trustedPublicKeys[signer.keyId] === signer.publicKey ? 'matches' : 'key_mismatch';
+ });
+ const signerTrustMissing = $derived(signerTrust === 'name_missing' || signerTrust === 'key_mismatch');
+ const signingKeyStatus = {
+  unchecked: 'Public key match not checked',
+  name_missing: 'Key name is not trusted',
+  key_mismatch: 'Public key does not match',
+  matches: 'Trusted public key matches',
+ };
  const destination = $derived(registry?.registryDestination ? `${registry.registryDestination}/${repo.fullName.split('/').at(-1)?.toLowerCase()}` : registries.find(value => value.id === onboarding?.settings.registryConnectionId)?.registryDestination ? `${registries.find(value => value.id === onboarding?.settings.registryConnectionId)?.registryDestination}/${repo.fullName.split('/').at(-1)?.toLowerCase()}` : '');
  const onboardingSteps = ['Connect integrations', 'Check ayni.lock', 'Review and start', 'Prepare image', 'Verify and finish'];
  const activeStates = new Set(['pending', 'running', 'stopping', 'cancelling', 'cleanup_pending']);
@@ -135,6 +147,8 @@
      description: error || 'Recover the saved receipt before starting another command.',
      action: {label:'Recover', onClick:() => { if (!busy) void perform(recover); }},
     });
+   } else if (mounted && error) {
+    toast.error(loaded ? 'Preparation needs attention' : 'Could not load runtime onboarding', {description:error});
    }
   }
  }
@@ -311,7 +325,7 @@
 <section class="space-y-5" data-runtime-preparation={repo.id} aria-label={`Runtime preparation for ${repo.fullName}`}>
  {#if !loaded}
   <p role="status">Loading runtime onboarding…</p>
-  {#if error}<Feedback kind="error" title="Could not load runtime onboarding" message={error}/><Button onclick={() => perform(refresh)}>Retry</Button>{/if}
+  {#if error}<Button onclick={() => perform(refresh)}>Retry</Button>{/if}
  {:else}
   <ol aria-label="Runtime onboarding steps" class="grid gap-2 sm:grid-cols-5">
    {#each onboardingSteps as step, index (step)}
@@ -384,24 +398,28 @@
     {@render branchPicker()}
     <p class="text-sm text-muted-foreground">Check the selected branch to inspect the exact commit’s policy, lock, and trust requirements.</p>
     <Button variant="outline" disabled={busy || recheckDisabled || checkingDefault || !!pending || onboardingActive}
-     onclick={() => perform(async () => { await recheckDefaultBranch?.(); await refresh(); })}>
+     onclick={recheckDefaultBranch}>
      {checkingDefault ? 'Checking ayni.lock…' : 'Check ayni.lock'}
     </Button>
     <div class="space-y-2" aria-live="polite">
      {#if checkingDefault}
       <p class="text-sm">Resolving the selected branch and inspecting its latest commit…</p>
-     {:else if inspectionError && !inspectionPending}
-      <p class="text-sm">{inspectionError}</p>
      {:else if candidateInspection}
       <h4 class="text-sm font-medium">Lock check report</h4>
-      {#if reviewedCommit}<p class="text-sm">ayni.lock check passed</p>{/if}
-      <InformationTable rows={[
+      <InformationTable aligned rows={[
+       {label:'ayni.lock check',value:candidateInspection.state === 'accepted' ? 'Pending' :
+        candidateInspection.state === 'completed' && candidateInspection.result && !blockingFindings.length ? 'Passed' :
+        candidateInspection.state === 'superseded' ? 'Source connection changed' : 'Needs attention'},
        {label:reviewedCommit ? 'Checked commit' : 'Last inspected commit',value:candidateInspection.commitSha,monospace:true},
+       {label:'Signing key',value:signer ? `${signer.keyId} · ${signingKeyStatus[signerTrust]}` : 'Choose a signing key in Connect integrations'},
        ...(candidateInspection.result ? [
         {label:'Ayni version',value:candidateInspection.result.ayniVersion || 'Unavailable'},
         {label:'Lock fingerprint',value:candidateInspection.result.lockFingerprint || 'Unavailable',monospace:true},
        ] : []),
       ]}/>
+      {#if signerTrustMissing}
+       <p class="text-sm">Choose a matching signing key in Connect integrations, or update the repository trust policy, regenerate the lock, and check again.</p>
+      {/if}
       {#if candidateInspection.safeReason}<p class="text-sm">{inspectionReasons[candidateInspection.safeReason] || 'The inspection needs attention.'}</p>{/if}
       {#each blockingFindings as finding (finding.code + finding.path)}
        <p class="text-sm">{finding.action}</p>
@@ -476,13 +494,11 @@
     {/if}
    </div>
   </section>
-  {#if error && !pending}<Feedback kind="error" title="Preparation needs attention" message={error}/>{/if}
  {/if}
 </section>
 {/snippet}
 
 {#snippet preparationActivity()}
- {#if error && !pending}<Feedback kind="error" title="Preparation needs attention" message={error}/>{/if}
  {#if overview.operation}<details class="rounded-xl border p-4"><summary class="cursor-pointer text-sm font-medium">Current preparation details</summary><div class="pt-4">{@render preparationEvidence(overview.operation)}</div></details>{/if}
  <details class="rounded-xl border p-4" data-preparation-history>
   <summary class="cursor-pointer text-sm font-medium">Previous preparations ({previousOperations.length}{next ? '+' : ''})</summary>

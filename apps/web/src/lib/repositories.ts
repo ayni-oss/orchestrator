@@ -17,7 +17,7 @@ export const repositoryReasons: Record<string, string> = {
 
 export type InspectRequest = { idempotencyKey: string; repositoryId: string; expectedConnectionRevision: string; commitSha: string };
 export type InspectionFinding = { code: string; path: string; action: string };
-export type InspectionResult = { policyDigest?: string; lockDigest?: string; lockFingerprint?: string; ayniVersion?: string; lockSchema?: string; tools?: string[]; trustKeyIds?: string[]; findings?: InspectionFinding[] };
+export type InspectionResult = { policyDigest?: string; lockDigest?: string; lockFingerprint?: string; ayniVersion?: string; lockSchema?: string; tools?: string[]; trustKeyIds?: string[]; trustedPublicKeys?: Record<string, string>; findings?: InspectionFinding[] };
 export type RepositoryInspection = { id: string; idempotencyKey: string; repositoryId: string; connectionRevision: string; commitSha: string; state: string; safeReason?: string; result?: InspectionResult; acceptedAtUnixMs: string; updatedAtUnixMs: string };
 export const inspectionReasons: Record<string, string> = {
  ...repositoryReasons,

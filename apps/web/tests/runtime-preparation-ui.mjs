@@ -6,7 +6,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  let inspectionId=randomUUID();
  const registryId=randomUUID(),signerId=randomUUID(),operationId=randomUUID();
  const hash=`sha256:${'1'.repeat(64)}`;
- let inspection={id:inspectionId,idempotencyKey:randomUUID(),repositoryId,connectionRevision:'1',commitSha:'d'.repeat(40),state:'completed',updatedAtUnixMs:String(Date.now()),result:{policyDigest:hash,lockDigest:hash,lockFingerprint:hash,trustKeyIds:['fixture-signer'],findings:[{code:'adapter_discovery_pending',path:'.ayni.lock',action:'Managed discovery remains required.'},{code:'runtime_verification_pending',path:'.ayni.lock',action:'Runtime verification remains required.'}]}};
+ let inspection={id:inspectionId,idempotencyKey:randomUUID(),repositoryId,connectionRevision:'1',commitSha:'d'.repeat(40),state:'completed',updatedAtUnixMs:String(Date.now()),result:{policyDigest:hash,lockDigest:hash,lockFingerprint:hash,trustKeyIds:['fixture-signer'],trustedPublicKeys:{'fixture-signer':'d'.repeat(64)},findings:[{code:'adapter_discovery_pending',path:'.ayni.lock',action:'Managed discovery remains required.'},{code:'runtime_verification_pending',path:'.ayni.lock',action:'Runtime verification remains required.'}]}};
  const previousInspection={...inspection,id:randomUUID(),idempotencyKey:randomUUID(),commitSha:'a'.repeat(40),state:'accepted',acceptedAtUnixMs:'1',updatedAtUnixMs:'1',result:undefined};
  inspection.acceptedAtUnixMs=String(Date.now());
  let operation,originalReceipt,startRequest,retryRequest,cancelRequest,run;
@@ -67,7 +67,10 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await page.getByRole('tab',{name:'Activity',exact:true}).click();
  await inspectionCard.locator('[data-inspection-history] > summary').click();
  await page.route('**/api/InspectRepository',route=>route.fulfill({json:{inspection:{...previousInspection,state:'completed',updatedAtUnixMs:String(Date.now()),result:inspection.result}}}));
- await inspectionCard.getByRole('button',{name:'Resume inspection',exact:true}).click();
+ await Promise.all([
+  page.waitForResponse(response=>response.url().endsWith('/api/InspectRepository') && response.ok()),
+  inspectionCard.getByRole('button',{name:'Resume inspection',exact:true}).click(),
+ ]);
  await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
  await page.unroute('**/api/InspectRepository');
  await page.route('**/api/ResolveRepositoryDefaultCommit',route=>route.fulfill({json:{defaultBranch:'main',commitSha:inspection.commitSha}}));
@@ -114,8 +117,19 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.ok(await next().isDisabled());
  await status.getByRole('button',{name:'Check ayni.lock',exact:true}).click();
  await status.getByRole('heading',{name:'Lock check report',exact:true}).waitFor();
- await status.getByText('ayni.lock check passed',{exact:true}).waitFor();
- assert.equal(await steps.getByRole('button',{name:/Completed:.*Check ayni\.lock/}).count(),0);
+ await status.getByText('Passed',{exact:true}).waitFor();
+ await status.getByText('fixture-signer · Public key does not match',{exact:true}).waitFor();
+ const report= status.locator('dl').filter({hasText:'Lock fingerprint'});
+ const valueStarts=await report.locator('dd').evaluateAll(values=>values.map(value=>value.getBoundingClientRect().left));
+ assert.equal(new Set(valueStarts).size,1);
+ await next().click();
+ assert.ok(await status.getByRole('button',{name:'Start preparation',exact:true}).isDisabled());
+ await status.getByRole('button',{name:'Back',exact:true}).click();
+ inspectionId=randomUUID();
+ inspection={...inspection,id:inspectionId,commitSha:'f'.repeat(40),acceptedAtUnixMs:String(Date.now()),
+  result:{...inspection.result,trustedPublicKeys:{'fixture-signer':'e'.repeat(64)}}};
+ await status.getByRole('button',{name:'Check ayni.lock',exact:true}).click();
+ await status.getByText('fixture-signer · Trusted public key matches',{exact:true}).waitFor();
  await status.getByText('Lock fingerprint',{exact:true}).waitFor();
  await next().click();
  await status.getByRole('heading',{name:'Review and start',exact:true}).waitFor();
@@ -248,6 +262,7 @@ export async function exerciseDefaultBranchRecheck(page, origin, repositoryId) {
   resolutions++;
   return route.fulfill({json:failResolution?{safeReason:'github_unavailable'}:{defaultBranch:'release/current',commitSha:head}});
  });
+ await page.route('**/api/GetRepositoryInspection',route=>route.fulfill({status:404,json:{message:'Inspection not found'}}));
  await page.route('**/api/InspectRepository',async route=>{
   const request=route.request().postDataJSON();requests.push(request);
   let inspection=inspections.find(value=>value.idempotencyKey===request.idempotencyKey);
@@ -265,10 +280,10 @@ export async function exerciseDefaultBranchRecheck(page, origin, repositoryId) {
  await recheck.click();
  await page.locator('[data-sonner-toast]').getByText('Inspection result not confirmed',{exact:true}).waitFor();
  assert.equal(await page.getByRole('region',{name:'Current inspection recovery',exact:true}).count(),0);
- await page.getByRole('button',{name:'Retry same inspection',exact:true}).waitFor();
+ assert.equal(await page.getByRole('group',{name:'Inspection recovery actions',exact:true}).count(),0);
  assert.equal(resolutions,2);assert.equal(requests[1].commitSha,head);
  head='c'.repeat(40);
- await page.getByRole('button',{name:'Retry same inspection',exact:true}).click();
+ await recheck.click();
  await summary.getByText('b'.repeat(40),{exact:true}).waitFor();
  assert.deepEqual(requests[2],requests[1],'inspection retry must preserve the exact commit and key');
  assert.equal(resolutions,2,'retry must not resolve a moving branch');
@@ -278,9 +293,10 @@ export async function exerciseDefaultBranchRecheck(page, origin, repositoryId) {
  assert.notEqual(requests[3].idempotencyKey,requests[1].idempotencyKey);
  failResolution=true;
  await recheck.click();
- await summary.getByText('The source provider could not be reached. Try again when access is restored.',{exact:true}).waitFor();
+ await page.locator('[data-sonner-toast]').getByText('The source provider could not be reached. Try again when access is restored.',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('alert').filter({hasText:'Preparation needs attention'}).count(),0);
  assert.equal(resolutions,4);assert.equal(requests.length,4,'resolution failure must not inspect a cached commit');
- for(const method of ['ListConnections','ListRuntimeSigners','ListRepositoryInspections','ListRuntimePreparations','ResolveRepositoryDefaultCommit','InspectRepository']) await page.unroute(`**/api/${method}`);
+ for(const method of ['ListConnections','ListRuntimeSigners','ListRepositoryInspections','ListRuntimePreparations','ResolveRepositoryDefaultCommit','InspectRepository','GetRepositoryInspection']) await page.unroute(`**/api/${method}`);
 }
 
 export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {

@@ -151,6 +151,7 @@ fn inspected(
             lock_schema: r.lock_schema,
             tools: r.tools,
             trust_key_ids: r.trust_key_ids,
+            trusted_public_keys: r.trusted_public_keys.into_iter().collect(),
             findings: r
                 .findings
                 .into_iter()

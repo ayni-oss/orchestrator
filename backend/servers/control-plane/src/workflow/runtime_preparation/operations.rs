@@ -291,6 +291,7 @@ mod tests {
                 lock_schema: String::new(),
                 tools: vec![],
                 trust_key_ids: vec![],
+                trusted_public_keys: std::collections::BTreeMap::new(),
                 findings: vec![Finding {
                     code: "adapter_discovery_pending".into(),
                     path: ".ayni.lock".into(),

@@ -26,7 +26,8 @@
  let error = $state('');
  let inspectionLoaded = $state(false);
  let checkingDefault = $state(false);
- let pending = $state<InspectRequest | null>(null);
+ type PendingInspection = InspectRequest & { branch?: string };
+ let pending = $state<PendingInspection | null>(null);
  let mounted = false;
  let recoveryToast: string | number | undefined;
  let inspections = $state.raw<RepositoryInspection[]>([]);
@@ -39,7 +40,7 @@
   if (recoveryToast !== undefined) toast.dismiss(recoveryToast);
   recoveryToast = undefined;
  }
- function persist(value: InspectRequest | null) {
+ function persist(value: PendingInspection | null) {
   pending = value;
   if (value) sessionStorage.setItem(storageKey, JSON.stringify(value));
   else {
@@ -61,9 +62,11 @@
    if (mounted && pending) {
     recoveryToast = toast.warning('Inspection result not confirmed', {
      id: recoveryToast, duration: Infinity,
-     description: error || `Recover the result for commit ${pending.commitSha.slice(0, 12)} before checking another commit.`,
-     action: {label:'Recover', onClick:() => { if (!busy) void perform(recover); }},
+     description: `The next check will recover the request for commit ${pending.commitSha.slice(0, 12)}. ${error}`.trim(),
+     cancel: {label:'Discard request', onClick:() => { if (!busy) persist(null); }},
     });
+   } else if (mounted && error) {
+    toast.error('Could not complete the inspection', {description:error});
    }
   }
  }
@@ -76,15 +79,39 @@
   inspections = [value, ...inspections.filter(i => i.id !== value.id)].sort((a,b) => Number(b.acceptedAtUnixMs || b.updatedAtUnixMs) - Number(a.acceptedAtUnixMs || a.updatedAtUnixMs) || b.id.localeCompare(a.id));
   if (value.state !== 'accepted') persist(null);
  }
- async function resume() {
-  if (!pending) return;
-  const result = await rpc('InspectRepository', pending);
-  await accept(result.inspection);
+ async function acceptPending(value: RepositoryInspection, request: PendingInspection) {
+  if (value.repositoryId !== request.repositoryId || value.commitSha !== request.commitSha) {
+   throw new Error('The retained inspection did not match the requested commit.');
+  }
+  await accept(value);
+  if (value.state === 'completed' && request.branch === branch.trim() &&
+   request.expectedConnectionRevision === connection?.revision) {
+   checked = {branch: request.branch, sha: request.commitSha};
+  }
+ }
+ async function resume(request: PendingInspection) {
+  const { branch: _branch, ...input } = request;
+  const result = await rpc('InspectRepository', input);
+  await acceptPending(result.inspection, request);
+ }
+ async function recoverOrRetry(request: PendingInspection) {
+  try {
+   const { inspection } = await rpc('GetRepositoryInspection', {idempotencyKey:request.idempotencyKey});
+   if (inspection.state !== 'accepted') {
+    await acceptPending(inspection, request);
+    return;
+   }
+  } catch (cause) {
+   if (!(cause instanceof RpcError) || cause.status !== 404) throw cause;
+  }
+  await resume(request);
  }
  async function inspect() {
-  if (!connection || pending || !validCommit) return;
-  persist({ idempotencyKey: crypto.randomUUID(), repositoryId: repo.id, expectedConnectionRevision: connection.revision, commitSha });
-  await resume();
+  if (pending) return recoverOrRetry(pending);
+  if (!connection || !validCommit) return;
+  const request = {idempotencyKey:crypto.randomUUID(),repositoryId:repo.id,expectedConnectionRevision:connection.revision,commitSha};
+  persist(request);
+  await resume(request);
  }
  async function loadBranches(page = 1) {
   if (!connection || !canInspect || loadingBranches) return;
@@ -120,24 +147,21 @@
   }
  }
  async function recheckDefaultBranch() {
-  if (!connection || pending) return;
+  if (!pending && !connection) return;
   checkingDefault = true;
-  checked = null;
-  const selectedBranch = branch.trim();
   try {
+   if (pending) return await recoverOrRetry(pending);
+   if (!connection) return;
+   checked = null;
+   const selectedBranch = branch.trim();
    const resolved = await rpc('ResolveRepositoryDefaultCommit', {repositoryId:repo.id, expectedConnectionRevision:connection.revision,branch:selectedBranch});
    if (resolved.safeReason) throw new Error(inspectionReasons[resolved.safeReason] || 'The selected branch could not be resolved. Retry when the source connection is available.');
    if (!/^[a-f0-9]{40}$/.test(resolved.commitSha)) throw new Error('The source connection did not return an exact commit for the selected branch.');
    commitSha = resolved.commitSha;
-   persist({idempotencyKey:crypto.randomUUID(), repositoryId:repo.id, expectedConnectionRevision:connection.revision, commitSha:resolved.commitSha});
-   await resume();
-   checked = {branch: selectedBranch, sha: resolved.commitSha};
+   const request = {idempotencyKey:crypto.randomUUID(), repositoryId:repo.id, expectedConnectionRevision:connection.revision, commitSha:resolved.commitSha, branch:selectedBranch};
+   persist(request);
+   await resume(request);
   } finally { checkingDefault = false; }
- }
- async function recover() {
-  if (!pending) return;
-  const result = await rpc('GetRepositoryInspection', { idempotencyKey: pending.idempotencyKey });
-  await accept(result.inspection);
  }
  function saveBranch(event: Event & { currentTarget: HTMLSelectElement }) {
   const select = event.currentTarget;
@@ -165,7 +189,7 @@
   if (!saved) { void perform(() => load()); return; }
   try {
    const value = JSON.parse(saved);
-   if (value.repositoryId !== repo.id || !/^[a-f0-9]{40}$/.test(value.commitSha) || typeof value.idempotencyKey !== 'string' || typeof value.expectedConnectionRevision !== 'string') throw new Error();
+   if (value.repositoryId !== repo.id || !/^[a-f0-9]{40}$/.test(value.commitSha) || typeof value.idempotencyKey !== 'string' || typeof value.expectedConnectionRevision !== 'string' || (value.branch !== undefined && typeof value.branch !== 'string')) throw new Error();
    pending = value;
    void perform(() => load());
   } catch { error = 'The saved inspection request could not be read. Reload repository history before starting another.'; }
@@ -175,16 +199,6 @@
   dismissRecoveryToast();
  });
 </script>
-{#snippet recovery()}
- {#if pending}
-  <div class="flex flex-wrap gap-2" role="group" aria-label="Inspection recovery actions">
-   <Button disabled={busy} onclick={() => perform(recover)}>Recover inspection</Button>
-   <Button variant="outline" disabled={busy} onclick={() => perform(resume)}>Retry same inspection</Button>
-   <Button variant="outline" disabled={busy} onclick={() => persist(null)}>Dismiss inspection recovery</Button>
-  </div>
- {/if}
-{/snippet}
-
 {#snippet branchPicker()}
  <div class="space-y-2">
   <Label for={`runtime-branch-${repo.id}`}>Runtime branch</Label>
@@ -206,7 +220,6 @@
   {:else if nextBranchPage}
    <Button variant="outline" onclick={() => loadBranches(nextBranchPage)}>More branches</Button>
   {/if}
-  {@render recovery()}
  </div>
 {/snippet}
 
@@ -218,7 +231,7 @@
    {#if error && !pending}<Feedback kind="error" title="Inspection needs attention" message={error}/>{/if}
    <div class="space-y-2"><Label for={`inspection-commit-${repo.id}`}>Commit SHA</Label><Input id={`inspection-commit-${repo.id}`} bind:value={commitSha} placeholder="Full 40-character lowercase commit SHA" disabled={busy || !!pending} maxlength={40}/></div>
    {#if !canInspect}<p class="text-sm">Enable and validate the repository's source connection before starting an inspection.</p>{/if}
-   <div class="flex flex-wrap gap-2"><Button disabled={busy || !!pending || !canInspect || !validCommit} onclick={() => perform(inspect)}>Inspect commit</Button><Button variant="outline" disabled={busy} onclick={() => perform(() => load())}>Refresh inspections</Button></div>
+   <div class="flex flex-wrap gap-2"><Button disabled={busy || (!pending && (!canInspect || !validCommit))} onclick={() => perform(inspect)}>Inspect commit</Button><Button variant="outline" disabled={busy} onclick={() => perform(() => load())}>Refresh inspections</Button></div>
   </div>
  </details>
  <details class="rounded-xl border p-4" data-inspection-history>
@@ -254,7 +267,7 @@
      {/each}
     {/if}
 </div></details>
-    {#if item.state === 'accepted'}<Button variant="outline" disabled={busy || !!pending} onclick={() => perform(async () => {persist({ idempotencyKey: item.idempotencyKey, repositoryId: item.repositoryId, expectedConnectionRevision: item.connectionRevision, commitSha: item.commitSha }); await resume();})}>Resume inspection</Button>{/if}
+    {#if item.state === 'accepted'}<Button variant="outline" disabled={busy || !!pending} onclick={() => perform(async () => {const request = {idempotencyKey:item.idempotencyKey, repositoryId:item.repositoryId, expectedConnectionRevision:item.connectionRevision, commitSha:item.commitSha}; persist(request); await resume(request);})}>Resume inspection</Button>{/if}
 
    </section>
   {/each}
@@ -265,13 +278,12 @@
 {/snippet}
 
 <div data-repository-inspection={repo.id}>
- <RuntimePreparation {repo} {connection} {branchPicker} onSourceRefresh={refreshSource} branch={branch.trim()} checkedCommit={checked?.branch === branch.trim() ? checked?.sha : undefined} latestInspection={inspections[0] || null} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || !!pending || !canInspect} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}>
+ <RuntimePreparation {repo} {connection} {branchPicker} onSourceRefresh={refreshSource} branch={branch.trim()} checkedCommit={checked?.branch === branch.trim() ? checked?.sha : undefined} latestInspection={inspections[0] || null} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || (!pending && !canInspect)} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}>
   {#snippet children(runtime, preparationActivity)}
    <Tabs.Content value="runtime" class="space-y-6">
     {@render runtime()}
    </Tabs.Content>
    <Tabs.Content value="activity" class="space-y-6">
-    {@render recovery()}
     {@render preparationActivity()}
     {@render inspectionActivity()}
    </Tabs.Content>
