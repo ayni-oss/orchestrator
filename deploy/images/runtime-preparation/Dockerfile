@@ -1,6 +1,6 @@
 # Native arm64 profile. Inputs are static MUSL binaries built from this checkout.
-FROM quay.io/skopeo/stable@sha256:ae11068495eb953847bd9cb21877618dce9a228144ecac294313e89dec51d487 AS skopeo
-FROM quay.io/podman/stable@sha256:46c1a8d9413f59061b61c53cc5a9715d136021091f65ddb6a74e7d74cc4e2035
+FROM quay.io/skopeo/stable@sha256:2681eccb8b02c495b013c2669cbf7f41d5c0b0b0e644e7c69bd3ea9bcb20641f AS skopeo
+FROM quay.io/podman/stable@sha256:f7a17ef911a2b9b866ada8a9426a07e29a6e4f8109ef8c0e0b7010c2541b4e49
 USER root
 COPY --from=skopeo /usr/bin/skopeo /usr/bin/skopeo
 ARG AYNI_CLI_SHA256
