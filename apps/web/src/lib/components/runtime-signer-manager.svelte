@@ -8,6 +8,7 @@
  import { toast } from 'svelte-sonner';
  import {onMount} from 'svelte';
  import InformationCard from '$lib/components/information-card.svelte';
+ import AyniRuntimeSettings from '$lib/components/ayni-runtime-settings.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
  import Feedback from '$lib/components/feedback.svelte';
  import {Button} from '$lib/components/ui/button/index.js';
@@ -239,11 +240,17 @@
 {#if createOnMount}
  <div class="flex justify-end gap-2">{@render actions()}</div>
 {:else}
- <PageHeader title={signerId ? current?.keyId ?? 'Signing key settings' : 'Runtime signing'} eyebrow={signerId ? 'Runtime signing' : undefined} {actions} />
+ <PageHeader title={signerId ? current?.keyId ?? 'Signing key settings' : 'Ayni'} eyebrow={signerId ? 'Ayni' : undefined} {actions} />
 {/if}
 
 <PageContent>
- {#if !signerId && !createOnMount}<p class="text-sm text-muted-foreground">Create or import a signing key and add its public key to your repository trust policy.</p>{/if}
+ {#if !signerId && !createOnMount}
+  <AyniRuntimeSettings {signers} loadingSigners={busy} />
+  <div class="space-y-2">
+   <h2 class="text-lg font-semibold">Signing keys</h2>
+   <p class="text-sm text-muted-foreground">Create or import signing keys for runtime images. Add the public key to each repository that trusts it.</p>
+  </div>
+ {/if}
  {#if error}<Feedback kind="error" title="Signer needs attention" message={error}/>{/if}
  {#if pending && !validatingName}<InformationCard title="Recover signer update"><p class="text-sm">The exact public reference update is retained across reloads.</p><div class="flex flex-wrap gap-2"><Button disabled={busy} onclick={()=>perform(recover)}>Recover signer update</Button><Button variant="outline" disabled={busy} onclick={()=>perform(retry)}>Retry signer update</Button><Button variant="outline" disabled={busy} onclick={()=>persist(null)}>Dismiss signer recovery</Button></div></InformationCard>{/if}
  {#if setup && signerId}

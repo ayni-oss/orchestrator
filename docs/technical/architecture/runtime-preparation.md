@@ -181,6 +181,11 @@ destination before discovery or publication. For `ayni-oss/sandbox`, a connectio
 at `ghcr.io/ayni-oss` yields `ghcr.io/ayni-oss/sandbox`. Reuse and verification bind
 to that complete destination; a connection never supplies a package override.
 
+The Ayni configuration page shows the deployment's runtime profile status,
+platform and pinned executor image. Its registry and signing-key defaults
+are stored in the current browser. Saved repository selections and retained
+runs take precedence over those defaults.
+
 ### Local development exception
 
 An operator may explicitly enable `runtimePreparation.localDevelopment: true`

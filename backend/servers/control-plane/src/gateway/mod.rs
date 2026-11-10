@@ -598,6 +598,12 @@ async fn runtime_preparation_rpc(
             start_repository_runtime,
             v1::StartRepositoryRuntimeRequest
         ),
+        "GetRuntimeProfile" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            get_runtime_profile,
+            v1::GetRuntimeProfileRequest
+        ),
         "GetRepositoryRuntime" => forward!(
             body,
             gateway.runtime_preparation(),

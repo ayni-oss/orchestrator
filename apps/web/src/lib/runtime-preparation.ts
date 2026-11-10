@@ -148,3 +148,9 @@ export function readRuntimeProgress(repositoryId: string): {integrations: string
   // Progress is optional when browser storage is unavailable.
  }
 }
+
+export type RuntimeIntegration = 'registry' | 'signer';
+
+export function runtimeDefaultKey(kind: RuntimeIntegration) {
+ return `ayni.runtime.default.${kind}`;
+}

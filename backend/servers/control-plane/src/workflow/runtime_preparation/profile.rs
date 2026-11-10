@@ -29,6 +29,10 @@ impl RuntimeConfiguration {
         Self::parse(&value)
     }
 
+    pub fn development_only(&self) -> bool {
+        self.profile_id == ayni_orchestrator_events::runtime_preparation::DEVELOPMENT_PROFILE_ID
+    }
+
     fn parse(value: &str) -> Result<Self, Status> {
         if value.len() > 16_384 {
             return Err(unavailable());

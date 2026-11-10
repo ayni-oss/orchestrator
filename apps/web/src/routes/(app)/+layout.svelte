@@ -6,7 +6,7 @@
  import WorkspaceShell from '$lib/components/workspace-shell.svelte';
 
  let { data, children } = $props();
- const title=$derived(page.url.pathname.startsWith('/repositories')?'Repositories':!!page.params.id && !!page.params.workspaceId?'Project settings':page.url.pathname.startsWith('/settings/runtime-signing')?'Runtime signing':page.url.pathname.startsWith('/settings/container-registries')?'Container registries':page.url.pathname.startsWith('/settings/llm-providers')?'LLM providers':page.url.pathname.startsWith('/settings')?'Source control':page.url.pathname.endsWith('/settings') && !!page.params.workspaceId?'Workspace settings':data.workspace?'Projects':'Workspaces');
+ const title=$derived(page.url.pathname.startsWith('/repositories')?'Repositories':!!page.params.id && !!page.params.workspaceId?'Project settings':page.url.pathname.startsWith('/settings/runtime-signing')?'Ayni':page.url.pathname.startsWith('/settings/container-registries')?'Container registries':page.url.pathname.startsWith('/settings/llm-providers')?'LLM providers':page.url.pathname.startsWith('/settings')?'Source control':page.url.pathname.endsWith('/settings') && !!page.params.workspaceId?'Workspace settings':data.workspace?'Projects':'Workspaces');
  const breadcrumbs=$derived.by(() => {
   const workspaces = { href: '/', label: 'Workspaces' };
   const workspace = data.workspace && {
@@ -37,7 +37,7 @@
    case '/(app)/settings/llm-providers/openai/[connectionId]':
     return [{ href: '/settings/llm-providers', label: 'LLM providers' }, { href: '/settings/llm-providers/openai', label: 'OpenAI' }, { ...current, label: 'Connection settings' }];
    case '/(app)/settings/runtime-signing/[signerId]':
-    return [{ href: '/settings/runtime-signing', label: 'Runtime signing' }, { ...current, label: 'Signing key settings' }];
+    return [{ href: '/settings/runtime-signing', label: 'Ayni' }, { ...current, label: 'Signing key settings' }];
    default: return [current];
   }
  });

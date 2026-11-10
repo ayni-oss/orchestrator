@@ -38,6 +38,23 @@ impl v1::runtime_preparation_service_server::RuntimePreparationService for Workf
             run: Some(onboarding::public(run)),
         }))
     }
+    async fn get_runtime_profile(
+        &self,
+        request: Request<v1::GetRuntimeProfileRequest>,
+    ) -> Result<Response<v1::GetRuntimeProfileResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let profile = profile::RuntimeConfiguration::from_environment().ok();
+        let result = profile.map_or_else(v1::GetRuntimeProfileResponse::default, |profile| {
+            v1::GetRuntimeProfileResponse {
+                enabled: true,
+                development_only: profile.development_only(),
+                platform: profile.platform,
+                executor_image: profile.executor_image,
+            }
+        });
+        Ok(context.response(result))
+    }
+
     async fn get_repository_runtime(
         &self,
         request: Request<v1::GetRepositoryRuntimeRequest>,
@@ -53,10 +70,9 @@ impl v1::runtime_preparation_service_server::RuntimePreparationService for Workf
         Ok(context.response(v1::GetRepositoryRuntimeResponse {
             run: run.map(onboarding::public),
             preparation_enabled: profile.is_some(),
-            development_only: profile.is_some_and(|value| {
-                value.profile_id
-                    == ayni_orchestrator_events::runtime_preparation::DEVELOPMENT_PROFILE_ID
-            }),
+            development_only: profile
+                .as_ref()
+                .is_some_and(profile::RuntimeConfiguration::development_only),
         }))
     }
     async fn get_runtime_signing_pull_request(

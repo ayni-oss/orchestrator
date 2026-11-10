@@ -4,6 +4,7 @@ package ayni.orchestrator.v1;
 // Trusted local-operator setup for separate runtime preparation capabilities.
 service RuntimePreparationService {
   rpc StartRepositoryRuntime(StartRepositoryRuntimeRequest) returns (StartRepositoryRuntimeResponse);
+  rpc GetRuntimeProfile(GetRuntimeProfileRequest) returns (GetRuntimeProfileResponse);
   rpc GetRepositoryRuntime(GetRepositoryRuntimeRequest) returns (GetRepositoryRuntimeResponse);
   rpc GetRuntimeSigningPullRequest(GetRuntimeSigningPullRequestRequest) returns (GetRuntimeSigningPullRequestResponse);
   rpc OpenRuntimeSigningPullRequest(OpenRuntimeSigningPullRequestRequest) returns (OpenRuntimeSigningPullRequestResponse);
@@ -246,6 +247,13 @@ message RepositoryRuntimeRun {
 }
 message StartRepositoryRuntimeResponse {
   RepositoryRuntimeRun run = 1;
+}
+message GetRuntimeProfileRequest {}
+message GetRuntimeProfileResponse {
+  bool enabled = 1;
+  bool development_only = 2;
+  string platform = 3;
+  string executor_image = 4;
 }
 message GetRepositoryRuntimeRequest {
   string repository_id = 1;

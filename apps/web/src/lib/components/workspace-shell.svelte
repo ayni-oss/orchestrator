@@ -123,7 +123,7 @@
       <p class="configuration-group">Integrations</p>
       <SidebarItem href="/settings/source-control" onclick={closeConfiguration} active={page.url.pathname.startsWith('/settings/source-control')}><GitBranch />Source control</SidebarItem>
       <SidebarItem href="/settings/container-registries" onclick={closeConfiguration} active={page.url.pathname.startsWith('/settings/container-registries')}><Package />Container registries</SidebarItem>
-      <SidebarItem href="/settings/runtime-signing" onclick={closeConfiguration} active={page.url.pathname.startsWith('/settings/runtime-signing')}><Package />Runtime signing</SidebarItem>
+      <SidebarItem href="/settings/runtime-signing" onclick={closeConfiguration} active={page.url.pathname.startsWith('/settings/runtime-signing')}><Package />Ayni</SidebarItem>
       <SidebarItem href="/settings/llm-providers" onclick={closeConfiguration} active={page.url.pathname.startsWith('/settings/llm-providers')}><BrainCircuit />LLM providers</SidebarItem>
     </nav>
   {/if}

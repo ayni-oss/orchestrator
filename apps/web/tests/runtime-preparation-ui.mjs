@@ -4,6 +4,7 @@ import {randomUUID} from 'node:crypto';
 
 export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  let inspectionId=randomUUID();
+ const alternateRegistryId=randomUUID(),alternateSignerId=randomUUID();
  const registryId=randomUUID(),signerId=randomUUID(),operationId=randomUUID();
  const hash=`sha256:${'1'.repeat(64)}`;
  let inspection={id:inspectionId,idempotencyKey:randomUUID(),repositoryId,connectionRevision:'1',commitSha:'d'.repeat(40),state:'completed',updatedAtUnixMs:String(Date.now()),result:{policyDigest:hash,lockDigest:hash,lockFingerprint:hash,trustKeyIds:['fixture-signer'],trustedPublicKeys:{'fixture-signer':'d'.repeat(64)},findings:[{code:'adapter_discovery_pending',path:'.ayni.lock',action:'Managed discovery remains required.'},{code:'runtime_verification_pending',path:'.ayni.lock',action:'Runtime verification remains required.'}]}};
@@ -15,10 +16,10 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await page.route('**/api/ListRepositoryInspections',route=>route.fulfill({json:{inspections:[inspection,previousInspection]}}));
  const catalogReply=await page.request.post(`${origin}/api/ListRepositories`,{headers:{'x-console-request':'1'},data:{limit:100}});
  const repository=(await catalogReply.json()).repositories.find(value=>value.id===repositoryId);
- await page.route('**/api/ListConnections',route=>route.fulfill({json:{connections:[{id:repository.connectionId,displayName:'Fixture GitHub',capability:'source_control',revision:'1',enabled:true,activeCredentialRevision:randomUUID()},{id:registryId,displayName:'Fixture runtime registry',provider:'github',capability:'container_registry',revision:'1',enabled:true,activeCredentialRevision:randomUUID(),registryDestination:'ghcr.io/fixture'}]}}));
+ await page.route('**/api/ListConnections',route=>route.fulfill({json:{connections:[{id:repository.connectionId,displayName:'Fixture GitHub',capability:'source_control',revision:'1',enabled:true,activeCredentialRevision:randomUUID()},{id:registryId,displayName:'Fixture runtime registry',provider:'github',capability:'container_registry',revision:'1',enabled:true,activeCredentialRevision:randomUUID(),registryDestination:'ghcr.io/fixture'},{id:alternateRegistryId,displayName:'Alternate registry',capability:'container_registry',enabled:true,activeCredentialRevision:'credential',registryDestination:'ghcr.io/alternate'}]}}));
  await page.route('**/api/ListRepositoryBranches',route=>route.fulfill({json:route.request().postDataJSON().page === 1
   ? {branches:['main'],nextPage:2} : {branches:['release/next']}}));
- await page.route('**/api/ListRuntimeSigners',route=>route.fulfill({json:{signers:[{id:signerId,displayName:'Fixture reviewed signer',keyId:'fixture-signer',publicKey:'e'.repeat(64),enabled:true,revision:'1'}]}}));
+ await page.route('**/api/ListRuntimeSigners',route=>route.fulfill({json:{signers:[{id:signerId,displayName:'Fixture reviewed signer',keyId:'fixture-signer',publicKey:'e'.repeat(64),enabled:true,revision:'1'},{id:alternateSignerId,displayName:'Alternate signer',keyId:'alternate',publicKey:'a'.repeat(64),enabled:true,revision:'1'}]}}));
  await page.route('**/api/ListRuntimePreparations',route=>route.fulfill({json:{operations:operation?[operation]:[]}}));
  await page.route('**/api/GetRuntimePreparation',route=>route.fulfill({json:{operation}}));
  await page.route('**/api/GetRuntimePreparationReceipt',route=>route.fulfill({json:{operation:originalReceipt}}));
@@ -34,6 +35,24 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
   run={id:randomUUID(),idempotencyKey:startRequest.idempotencyKey,settings:startRequest,state:'completed',commitSha:inspection.commitSha,inspectionId,preparationId:operation.id};
   await route.abort('failed');acknowledge();
  });
+ let profileEnabled=false;
+ await page.route('**/api/GetRuntimeProfile',route=>route.fulfill({json:profileEnabled
+  ? {enabled:true,developmentOnly:true,platform:'linux/arm64',executorImage:'ghcr.io/fixture/executor@'+hash} : {}}));
+ await page.goto(`${origin}/settings/runtime-signing`);
+ await page.getByRole('heading',{name:'Ayni',exact:true}).waitFor();
+ const workerProfile=page.getByRole('region',{name:'Runtime worker profile',exact:true});
+ await workerProfile.getByText('Runtime builds are disabled.',{exact:false}).waitFor();
+ profileEnabled=true;
+ await workerProfile.getByRole('button',{name:'Refresh runtime status',exact:true}).click();
+ await workerProfile.getByText('Development only',{exact:true}).waitFor();
+ await workerProfile.getByText('linux/arm64',{exact:true}).waitFor();
+ const runtimeDefaults=page.getByRole('region',{name:'Runtime defaults',exact:true});
+ await runtimeDefaults.getByLabel('Default registry',{exact:true}).selectOption(registryId);
+ await runtimeDefaults.getByLabel('Default signing key',{exact:true}).selectOption(signerId);
+ await page.reload();
+ await runtimeDefaults.getByLabel('Default registry',{exact:true}).locator(`option[value="${registryId}"]:checked`).waitFor({state:'attached'});
+ await runtimeDefaults.getByLabel('Default signing key',{exact:true}).locator(`option[value="${signerId}"]:checked`).waitFor({state:'attached'});
+ await page.unroute('**/api/GetRuntimeProfile');
  await page.goto(`${origin}/repositories`);await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
  const repositoryLink=page.locator(`main a[href="/repositories/${repositoryId}"]`);
  await repositoryLink.waitFor();
@@ -288,6 +307,8 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
   localStorage.removeItem(`ayni.repository.runtime.registry.${id}`);
   localStorage.removeItem(`ayni.repository.runtime.signer.${id}`);
   localStorage.removeItem(`ayni.repository.runtime.progress.${id}`);
+  localStorage.removeItem('ayni.runtime.default.registry');
+  localStorage.removeItem('ayni.runtime.default.signer');
  },repositoryId);
  for(const method of ['ListRepositoryBranches','ListRepositoryInspections','ListConnections','ListRuntimeSigners','ListRuntimePreparations','GetRuntimePreparation','GetRuntimePreparationReceipt','StartRepositoryRuntime','GetRepositoryRuntime','GetRepositoryRuntimeReceipt','RetryRuntimePreparation','CancelRuntimePreparation','ResolveRepositoryDefaultCommit','InspectRepository']) await page.unroute(`**/api/${method}`);
  console.log('runtime-preparation-ui: intercepted UI contract coverage passed for explicit grants, lost-response receipt recovery, current-generation publication reconciliation, separate cleanup gate and cancellation; no registry/build qualification claimed.');

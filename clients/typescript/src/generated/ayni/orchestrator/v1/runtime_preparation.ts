@@ -326,6 +326,16 @@ export interface StartRepositoryRuntimeResponse {
   run?: RepositoryRuntimeRun | undefined;
 }
 
+export interface GetRuntimeProfileRequest {
+}
+
+export interface GetRuntimeProfileResponse {
+  enabled: boolean;
+  developmentOnly: boolean;
+  platform: string;
+  executorImage: string;
+}
+
 export interface GetRepositoryRuntimeRequest {
   repositoryId: string;
 }
@@ -5033,6 +5043,183 @@ export const StartRepositoryRuntimeResponse: MessageFns<StartRepositoryRuntimeRe
   },
 };
 
+function createBaseGetRuntimeProfileRequest(): GetRuntimeProfileRequest {
+  return {};
+}
+
+export const GetRuntimeProfileRequest: MessageFns<GetRuntimeProfileRequest> = {
+  encode(_: GetRuntimeProfileRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRuntimeProfileRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRuntimeProfileRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(_: any): GetRuntimeProfileRequest {
+    return {};
+  },
+
+  toJSON(_: GetRuntimeProfileRequest): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRuntimeProfileRequest>): GetRuntimeProfileRequest {
+    return GetRuntimeProfileRequest.fromPartial(base ?? {});
+  },
+  fromPartial(_: DeepPartial<GetRuntimeProfileRequest>): GetRuntimeProfileRequest {
+    const message = createBaseGetRuntimeProfileRequest();
+    return message;
+  },
+};
+
+function createBaseGetRuntimeProfileResponse(): GetRuntimeProfileResponse {
+  return { enabled: false, developmentOnly: false, platform: "", executorImage: "" };
+}
+
+export const GetRuntimeProfileResponse: MessageFns<GetRuntimeProfileResponse> = {
+  encode(message: GetRuntimeProfileResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.enabled !== false) {
+      writer.uint32(8).bool(message.enabled);
+    }
+    if (message.developmentOnly !== false) {
+      writer.uint32(16).bool(message.developmentOnly);
+    }
+    if (message.platform !== "") {
+      writer.uint32(26).string(message.platform);
+    }
+    if (message.executorImage !== "") {
+      writer.uint32(34).string(message.executorImage);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRuntimeProfileResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRuntimeProfileResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.enabled = reader.bool();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.developmentOnly = reader.bool();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.platform = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.executorImage = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRuntimeProfileResponse {
+    return {
+      enabled: isSet(object.enabled) ? globalThis.Boolean(object.enabled) : false,
+      developmentOnly: isSet(object.developmentOnly)
+        ? globalThis.Boolean(object.developmentOnly)
+        : isSet(object.development_only)
+        ? globalThis.Boolean(object.development_only)
+        : false,
+      platform: isSet(object.platform) ? globalThis.String(object.platform) : "",
+      executorImage: isSet(object.executorImage)
+        ? globalThis.String(object.executorImage)
+        : isSet(object.executor_image)
+        ? globalThis.String(object.executor_image)
+        : "",
+    };
+  },
+
+  toJSON(message: GetRuntimeProfileResponse): unknown {
+    const obj: any = {};
+    if (message.enabled !== false) {
+      obj.enabled = message.enabled;
+    }
+    if (message.developmentOnly !== false) {
+      obj.developmentOnly = message.developmentOnly;
+    }
+    if (message.platform !== "") {
+      obj.platform = message.platform;
+    }
+    if (message.executorImage !== "") {
+      obj.executorImage = message.executorImage;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRuntimeProfileResponse>): GetRuntimeProfileResponse {
+    return GetRuntimeProfileResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRuntimeProfileResponse>): GetRuntimeProfileResponse {
+    const message = createBaseGetRuntimeProfileResponse();
+    message.enabled = object.enabled ?? false;
+    message.developmentOnly = object.developmentOnly ?? false;
+    message.platform = object.platform ?? "";
+    message.executorImage = object.executorImage ?? "";
+    return message;
+  },
+};
+
 function createBaseGetRepositoryRuntimeRequest(): GetRepositoryRuntimeRequest {
   return { repositoryId: "" };
 }
@@ -5894,6 +6081,17 @@ export const RuntimePreparationServiceService = {
     responseDeserialize: (value: Buffer): StartRepositoryRuntimeResponse =>
       StartRepositoryRuntimeResponse.decode(value),
   },
+  getRuntimeProfile: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/GetRuntimeProfile" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetRuntimeProfileRequest): Buffer =>
+      Buffer.from(GetRuntimeProfileRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetRuntimeProfileRequest => GetRuntimeProfileRequest.decode(value),
+    responseSerialize: (value: GetRuntimeProfileResponse): Buffer =>
+      Buffer.from(GetRuntimeProfileResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetRuntimeProfileResponse => GetRuntimeProfileResponse.decode(value),
+  },
   getRepositoryRuntime: {
     path: "/ayni.orchestrator.v1.RuntimePreparationService/GetRepositoryRuntime" as const,
     requestStream: false as const,
@@ -6114,6 +6312,7 @@ export const RuntimePreparationServiceService = {
 
 export interface RuntimePreparationServiceServer extends UntypedServiceImplementation {
   startRepositoryRuntime: handleUnaryCall<StartRepositoryRuntimeRequest, StartRepositoryRuntimeResponse>;
+  getRuntimeProfile: handleUnaryCall<GetRuntimeProfileRequest, GetRuntimeProfileResponse>;
   getRepositoryRuntime: handleUnaryCall<GetRepositoryRuntimeRequest, GetRepositoryRuntimeResponse>;
   getRuntimeSigningPullRequest: handleUnaryCall<
     GetRuntimeSigningPullRequestRequest,
@@ -6161,6 +6360,21 @@ export interface RuntimePreparationServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: StartRepositoryRuntimeResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimeProfile(
+    request: GetRuntimeProfileRequest,
+    callback: (error: ServiceError | null, response: GetRuntimeProfileResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimeProfile(
+    request: GetRuntimeProfileRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetRuntimeProfileResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimeProfile(
+    request: GetRuntimeProfileRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetRuntimeProfileResponse) => void,
   ): ClientUnaryCall;
   getRepositoryRuntime(
     request: GetRepositoryRuntimeRequest,

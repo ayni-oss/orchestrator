@@ -12,7 +12,7 @@
  import { rpc, RpcError, type Connection } from '$lib/api';
  import { trustSnippet } from '$lib/runtime-signing';
  import { inspectionReasons, type Repository, type RepositoryInspection } from '$lib/repositories';
- import { runtimeOverview, runtimeStages, runtimeReasons, onboardingReasons, runtimeRegistryImage, runtimeProgressKey, readRuntimeProgress, type RepositoryRuntimeRun, type RuntimePreparation, type RuntimeSigner, type RuntimeCommand } from '$lib/runtime-preparation';
+ import { runtimeOverview, runtimeStages, runtimeReasons, onboardingReasons, runtimeRegistryImage, runtimeProgressKey, readRuntimeProgress, runtimeDefaultKey, type RuntimeIntegration, type RepositoryRuntimeRun, type RuntimePreparation, type RuntimeSigner, type RuntimeCommand } from '$lib/runtime-preparation';
  let { repo, branch = '', checkedCommit, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections, onSourceRefresh, branchPicker, children }: { repo: Repository; branch?: string; checkedCommit?: string; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void>; onSourceRefresh: (value: Connection | undefined) => void; branchPicker: Snippet; children: Snippet<[Snippet, Snippet]> } = $props();
  let onboarding = $state.raw<RepositoryRuntimeRun | null>(null);
  let deploymentEnabled = $state(false), developmentOnly = $state(false);
@@ -44,8 +44,7 @@
  let next = $state(''), registryId = $state(''), signerId = $state(''), platform = $state('linux/arm64');
  let seconds = $state(1800), builds = $state(1), allowBuild = $state(false), allowReplace = $state(false);
  let reviewedSettings = $state('');
- type Integration = 'registry' | 'signer';
- let savedIntegrationRevision = $state<Record<Integration, number>>({registry:0, signer:0});
+ let savedIntegrationRevision = $state<Record<RuntimeIntegration, number>>({registry:0, signer:0});
  const settingsDraft = $derived(JSON.stringify({platform,seconds,builds,allowBuild,allowReplace}));
  protectUnsavedChanges(()=>!pending&&!!reviewedSettings&&settingsDraft!==reviewedSettings);
  const storage = $derived(`ayni.runtime.preparation.pending.${repo.id}`);
@@ -306,22 +305,28 @@
   registryId=saved.registryConnectionId; signerId=saved.signerId; platform=saved.platform;
   seconds=saved.maxSeconds; builds=saved.maxBuilds || 1; allowBuild=saved.allowBuild; allowReplace=saved.allowReplace;
  }
- function integrationStorageKey(kind: Integration) {
+ function integrationStorageKey(kind: RuntimeIntegration) {
   return `ayni.repository.runtime.${kind}.${repo.id}`;
  }
  function restoreIntegrationSelections() {
-  const availableRegistries=registries.filter(value=>value.enabled && value.activeCredentialRevision);
-  const availableSigners=signers.filter(value=>value.enabled);
-  if (!registryId && availableRegistries.length===1) registryId=availableRegistries[0].id;
-  if (!signerId && availableSigners.length===1) signerId=availableSigners[0].id;
+  const availableRegistries = registries.filter(value => value.enabled && value.activeCredentialRevision);
+  const availableSigners = signers.filter(value => value.enabled);
+  let defaultRegistry = '', defaultSigner = '';
   try {
-   registryId = localStorage.getItem(integrationStorageKey('registry')) ?? registryId;
-   signerId = localStorage.getItem(integrationStorageKey('signer')) ?? signerId;
+   defaultRegistry = localStorage.getItem(runtimeDefaultKey('registry')) || '';
+   defaultSigner = localStorage.getItem(runtimeDefaultKey('signer')) || '';
+   registryId = localStorage.getItem(integrationStorageKey('registry')) ??
+    (registryId || availableRegistries.find(value => value.id === defaultRegistry)?.id ||
+     (availableRegistries.length === 1 ? availableRegistries[0].id : ''));
+   signerId = localStorage.getItem(integrationStorageKey('signer')) ??
+    (signerId || availableSigners.find(value => value.id === defaultSigner)?.id ||
+     (availableSigners.length === 1 ? availableSigners[0].id : ''));
   } catch {
-   // The current configuration supplies the defaults when browser storage is unavailable.
+   if (!registryId && availableRegistries.length === 1) registryId = availableRegistries[0].id;
+   if (!signerId && availableSigners.length === 1) signerId = availableSigners[0].id;
   }
  }
- function saveIntegration(kind: Integration, event: Event & {currentTarget: HTMLSelectElement}) {
+ function saveIntegration(kind: RuntimeIntegration, event: Event & {currentTarget: HTMLSelectElement}) {
   const select = event.currentTarget;
   try {
    localStorage.setItem(integrationStorageKey(kind), select.value);
@@ -596,7 +601,7 @@
    {:else if currentStep === 2}
     {#if reviewedCommit}<p class="text-sm">Reviewed commit <code class="break-all">{reviewedCommit}</code> on {branch || 'the default branch'}.</p>
     {:else}<p class="text-sm">Recheck the branch before starting a new preparation.</p>{/if}
-    {#if !deploymentEnabled}<p class="text-sm">Preparing a runtime image requires a worker profile configured by the deployment administrator.</p>{/if}
+    {#if !deploymentEnabled}<p class="text-sm">Preparing a runtime image requires a worker profile configured by the deployment administrator.</p><Button variant="link" class="px-0" href="/settings/runtime-signing">View Ayni runtime settings</Button>{/if}
     <p class="text-sm text-muted-foreground">Review the registry, signer, and limits for this run. The run continues if you close the browser.</p>
    <InformationTable rows={[
     {label:'Runtime registry',value:registryReady ? registry?.displayName || 'Selected' : 'Choose a registry in Connect integrations'},
