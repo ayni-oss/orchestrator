@@ -7,7 +7,7 @@
  const href = $derived(repositoryPath(repo.id));
 </script>
 <InformationCard title={repo.fullName} status="connected" headingLevel={2} navigationHref={href} actions={[
- {label:'Ayni runtime',onSelect:()=>{void goto(`${href}?tab=runtime`);}},
+ {label:'ayni runtime',onSelect:()=>{void goto(`${href}?tab=runtime`);}},
  {label:'Source code',onSelect:()=>{void goto(`${href}?tab=source`);}},
 ]}>
  <p class="min-h-16 text-sm leading-relaxed text-muted-foreground">{repo.private ? 'Private repository' : 'Public repository'}<br/>Default branch: {repo.defaultBranch}</p>

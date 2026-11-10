@@ -4,7 +4,7 @@
   let { params } = $props();
 </script>
 
-<svelte:head><title>Registry settings · Ayni Orchestrator</title></svelte:head>
+<svelte:head><title>Registry settings · ayni Orchestrator</title></svelte:head>
 
 {#key params.connectionId}
   <ProviderConnectionManager capability="container_registry" connectionId={params.connectionId} />

@@ -4,7 +4,7 @@
   let { params } = $props();
 </script>
 
-<svelte:head><title>Signing key settings · Ayni Orchestrator</title></svelte:head>
+<svelte:head><title>Signing key settings · ayni Orchestrator</title></svelte:head>
 
 {#key params.signerId}
   <RuntimeSignerManager signerId={params.signerId} />

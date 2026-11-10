@@ -5,7 +5,7 @@
   const providers = [{name:'OpenAI',logo:'openai',description:'Manage API connections for project conversations.',href:'/settings/llm-providers/openai'}];
 </script>
 
-<svelte:head><title>LLM providers · Ayni Orchestrator</title></svelte:head>
+<svelte:head><title>LLM providers · ayni Orchestrator</title></svelte:head>
 <PageHeader title="LLM providers" />
 <PageContent>
   <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">

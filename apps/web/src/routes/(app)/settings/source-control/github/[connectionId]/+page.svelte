@@ -4,7 +4,7 @@
   let { params } = $props();
 </script>
 
-<svelte:head><title>GitHub App settings · Ayni Orchestrator</title></svelte:head>
+<svelte:head><title>GitHub App settings · ayni Orchestrator</title></svelte:head>
 
 {#key params.connectionId}
   <ProviderConnectionManager capability="source_control" connectionId={params.connectionId} />

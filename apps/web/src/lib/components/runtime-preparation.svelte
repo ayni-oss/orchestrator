@@ -521,7 +521,7 @@
        {label:reviewedCommit ? 'Checked commit' : 'Last inspected commit',value:candidateInspection.commitSha,monospace:true},
        {label:'Signing key',value:signer ? `${signer.keyId} · ${signingKeyStatus[signerTrust]}` : 'Choose a signing key in Connect integrations'},
        ...(candidateInspection.result ? [
-        {label:'Ayni version',value:candidateInspection.result.ayniVersion || 'Unavailable'},
+        {label:'ayni version',value:candidateInspection.result.ayniVersion || 'Unavailable'},
         {label:'Lock fingerprint',value:candidateInspection.result.lockFingerprint || 'Unavailable',monospace:true},
        ] : []),
       ]}/>
@@ -601,7 +601,7 @@
    {:else if currentStep === 2}
     {#if reviewedCommit}<p class="text-sm">Reviewed commit <code class="break-all">{reviewedCommit}</code> on {branch || 'the default branch'}.</p>
     {:else}<p class="text-sm">Recheck the branch before starting a new preparation.</p>{/if}
-    {#if !deploymentEnabled}<p class="text-sm">Preparing a runtime image requires a worker profile configured by the deployment administrator.</p><Button variant="link" class="px-0" href="/settings/runtime-signing">View Ayni runtime settings</Button>{/if}
+    {#if !deploymentEnabled}<p class="text-sm">Preparing a runtime image requires a worker profile configured by the deployment administrator.</p><Button variant="link" class="px-0" href="/settings/runtime-signing">View ayni runtime settings</Button>{/if}
     <p class="text-sm text-muted-foreground">Review the registry, signer, and limits for this run. The run continues if you close the browser.</p>
    <InformationTable rows={[
     {label:'Runtime registry',value:registryReady ? registry?.displayName || 'Selected' : 'Choose a registry in Connect integrations'},
@@ -622,7 +622,7 @@
    {:else if !pending}
     <div class="space-y-2" aria-live="polite">
      <p class="font-medium">{onboardingActive ? 'Preparing repository runtime' : onboardingBlocked ? 'Runtime onboarding needs attention' : overview.title}</p>
-     <p class="text-sm text-muted-foreground">{onboardingActive ? ({resolving:'Checking the branch head…',inspecting:'Checking the committed Ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') : onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' : overview.description}</p>
+     <p class="text-sm text-muted-foreground">{onboardingActive ? ({resolving:'Checking the branch head…',inspecting:'Checking the committed ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') : onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' : overview.description}</p>
      {#each overview.issues as issue (issue)}<p class="text-sm">{issue}</p>{/each}
      {#if developmentOnly || operation?.developmentOnly}<p class="rounded-md border p-3 text-sm">Local development build mode. Cluster network isolation is not qualified; this result is for local development testing.</p>{/if}
     </div>

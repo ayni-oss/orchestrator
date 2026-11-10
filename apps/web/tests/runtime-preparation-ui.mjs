@@ -39,7 +39,24 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await page.route('**/api/GetRuntimeProfile',route=>route.fulfill({json:profileEnabled
   ? {enabled:true,developmentOnly:true,platform:'linux/arm64',executorImage:'ghcr.io/fixture/executor@'+hash} : {}}));
  await page.goto(`${origin}/settings/runtime-signing`);
- await page.getByRole('heading',{name:'Ayni',exact:true}).waitFor();
+ const settingsTitle=page.getByRole('heading',{name:'ayni',exact:true});
+ await settingsTitle.waitFor();
+ const mark=settingsTitle.locator('.ayni-mark');
+ assert.match(await mark.evaluate(element=>getComputedStyle(element).maskImage),/\/ayni\.svg/);
+ const home=page.getByRole('link',{name:'ayni orchestrator home',exact:true});
+ assert.match(await home.locator('.ayni-mark').evaluate(element=>getComputedStyle(element).maskImage),/ayni-orchestrator\.svg/);
+ assert.equal(await home.locator('.sidebar-label').evaluate(element=>element.firstChild.textContent),'orchestrator');
+ assert.equal(await home.locator('small').textContent(),'ayni');
+ await page.getByRole('button',{name:'Configuration',exact:true}).click();
+ const configuration=page.getByRole('navigation',{name:'Configuration navigation',exact:true});
+ const settingsMark=configuration.getByRole('link',{name:'ayni',exact:true}).locator('.ayni-mark');
+ await settingsMark.waitFor();
+ assert.match(await settingsMark.evaluate(element=>getComputedStyle(element).maskImage),/\/ayni\.svg/);
+ await page.getByRole('button',{name:'Close configuration navigation',exact:true}).click();
+ const signingActions=page.getByRole('group',{name:'Signing key actions',exact:true});
+ await signingActions.getByRole('button',{name:'Add signing key',exact:true}).waitFor();
+ await signingActions.getByRole('button',{name:'Refresh signers',exact:true}).waitFor();
+ assert.equal(await settingsTitle.locator('..').getByRole('button').count(),0);
  const workerProfile=page.getByRole('region',{name:'Runtime worker profile',exact:true});
  await workerProfile.getByText('Runtime builds are disabled.',{exact:false}).waitFor();
  profileEnabled=true;
@@ -56,19 +73,19 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await page.goto(`${origin}/repositories`);await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
  const repositoryLink=page.locator(`main a[href="/repositories/${repositoryId}"]`);
  await repositoryLink.waitFor();
- assert.equal(await page.getByRole('tab',{name:'Ayni runtime',exact:true}).count(),0,'catalog cards must stay compact');
+ assert.equal(await page.getByRole('tab',{name:'ayni runtime',exact:true}).count(),0,'catalog cards must stay compact');
  await page.getByRole('textbox',{name:'Search repositories',exact:true}).fill('no-matching-repository');
  await page.getByText('No matching repositories.',{exact:true}).waitFor();
  await page.getByRole('textbox',{name:'Search repositories',exact:true}).fill('');
  await repositoryLink.locator('..').getByRole('button').click();
- await page.getByRole('menuitem',{name:'Ayni runtime',exact:true}).click();
- await page.getByRole('tab',{name:'Ayni runtime',exact:true}).waitFor();
- assert.equal(await page.getByRole('tab',{name:'Ayni runtime',exact:true}).getAttribute('aria-selected'),'true');
+ await page.getByRole('menuitem',{name:'ayni runtime',exact:true}).click();
+ await page.getByRole('tab',{name:'ayni runtime',exact:true}).waitFor();
+ assert.equal(await page.getByRole('tab',{name:'ayni runtime',exact:true}).getAttribute('aria-selected'),'true');
  await page.getByRole('navigation',{name:'Breadcrumb'}).getByRole('link',{name:'Repositories',exact:true}).click();
  await repositoryLink.click();
  const tabs=page.getByRole('tab');
  await tabs.first().waitFor();
- assert.deepEqual(await tabs.allTextContents(),['Ayni runtime','Source code','Activity']);
+ assert.deepEqual(await tabs.allTextContents(),['ayni runtime','Source code','Activity']);
  assert.equal(await tabs.first().getAttribute('aria-selected'),'true');
  await page.getByRole('tab',{name:'Source code',exact:true}).click();
  const sourceDetails=page.getByRole('tabpanel',{name:'Source code',exact:true});
@@ -79,7 +96,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  const metadataBadges=page.locator('span[data-slot="badge"]');
  await metadataBadges.and(page.getByText('Private repository',{exact:true})).waitFor();
  await metadataBadges.and(page.getByText('Default branch: main',{exact:true})).waitFor();
- await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
+ await page.getByRole('tab',{name:'ayni runtime',exact:true}).click();
  const inspectionCard=page.locator(`[data-repository-inspection="${repositoryId}"]`);
  const preparation=page.locator(`[data-runtime-preparation="${repositoryId}"]`);
  assert.equal(await inspectionCard.getByRole('button',{name:'Resume inspection',exact:true}).isVisible(),false,'old retry attempts stay out of the current workflow');
@@ -90,7 +107,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
   page.waitForResponse(response=>response.url().endsWith('/api/InspectRepository') && response.ok()),
   inspectionCard.getByRole('button',{name:'Resume inspection',exact:true}).click(),
  ]);
- await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
+ await page.getByRole('tab',{name:'ayni runtime',exact:true}).click();
  await page.unroute('**/api/InspectRepository');
  let resolvedHead;
  await page.route('**/api/ResolveRepositoryDefaultCommit',route=>route.fulfill({json:{defaultBranch:'main',commitSha:resolvedHead ?? inspection.commitSha}}));
@@ -218,11 +235,11 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).uncheck();
  await page.getByRole('tab',{name:'Source code',exact:true}).click();
  assert.equal(await preparation.isVisible(),false);
- await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
+ await page.getByRole('tab',{name:'ayni runtime',exact:true}).click();
  await status.getByText('Fixture runtime registry',{exact:true}).waitFor();
  await preparation.getByRole('button',{name:'Start preparation',exact:true}).click();await lost;
  await page.reload();
- await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
+ await page.getByRole('tab',{name:'ayni runtime',exact:true}).click();
  await page.locator('[data-sonner-toast]').getByText('Preparation result not confirmed',{exact:true}).waitFor();
  assert.equal(await page.getByRole('region',{name:'Current preparation recovery',exact:true}).count(),0);
  await preparation.getByRole('button',{name:'Recover preparation receipt',exact:true}).click();
@@ -244,7 +261,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  const activity=page.getByRole('tabpanel',{name:'Activity',exact:true});
  await activity.getByText('Current preparation details',{exact:true}).click();
  await activity.getByRole('article',{name:`Runtime preparation ${operationId}`}).getByText('Not complete',{exact:true}).waitFor();
- await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
+ await page.getByRole('tab',{name:'ayni runtime',exact:true}).click();
  await preparation.getByText('Registry image available',{exact:true}).waitFor();
  assert.equal(await preparation.getByRole('link',{name:'Open registry package',exact:true}).getAttribute('href'),'https://github.com/orgs/fixture/packages/container/package/runtime');
  await preparation.getByText(`ghcr.io/fixture/runtime@${hash}`,{exact:true}).waitFor();
@@ -416,7 +433,7 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  await preparation.getByRole('button',{name:'Build and publish runtime',exact:true}).click();
  await preparation.getByText('Checking the branch head…',{exact:true}).waitFor();
  run={...run,state:'inspecting',commitSha:'c'.repeat(40)};
- await preparation.getByText('Checking the committed Ayni policy, lock and build inputs…',{exact:true}).waitFor();
+ await preparation.getByText('Checking the committed ayni policy, lock and build inputs…',{exact:true}).waitFor();
  deploymentEnabled=false;
  run={...run,state:'blocked',safeReason:'runtime_profile_unavailable'};
  await preparation.getByText('Runtime building is not enabled on this deployment. Ask the deployment administrator to enable a qualified runtime build profile.',{exact:true}).waitFor();

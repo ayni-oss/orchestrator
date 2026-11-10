@@ -97,7 +97,7 @@ export function runtimeOverview(input: {
  if (input.moreHistory) return {title:'More runtime history available',description:'No preparation for this inspection appears in the loaded history. Earlier preparations have not been checked yet.',issues:[],nextAction:'Open preparation details and load more preparations to check earlier results.'};
  const issues: string[] = [];
  if (!input.sourceReady) issues.push('The source connection is unavailable, disabled or needs validation. Enable and validate it before inspecting a commit.');
- if (!candidate) issues.push('No saved Ayni inspection is available. Inspect an exact commit to check its policy, lock and trust requirements.');
+ if (!candidate) issues.push('No saved ayni inspection is available. Inspect an exact commit to check its policy, lock and trust requirements.');
  else {
   if (candidate.connectionRevision !== input.sourceRevision) issues.push('The source connection changed after this inspection. Inspect the commit again using the current connection.');
   if (candidate.state !== 'completed') issues.push(input.inspectionReason || 'The latest inspection did not complete. Recover or retry it before preparing this commit.');

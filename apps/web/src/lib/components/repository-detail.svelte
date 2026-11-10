@@ -51,7 +51,7 @@
  </div>
  <Tabs.Root bind:value={tab}>
   <Tabs.List aria-label={`${repo.fullName} onboarding`} class="mb-6 flex gap-3 border-b">
-   <Tabs.Trigger value="runtime" class={triggerClass}>Ayni runtime</Tabs.Trigger>
+   <Tabs.Trigger value="runtime" class={triggerClass}>ayni runtime</Tabs.Trigger>
    <Tabs.Trigger value="source" class={triggerClass}>Source code</Tabs.Trigger>
    <Tabs.Trigger value="activity" class={triggerClass}>Activity</Tabs.Trigger>
   </Tabs.List>

@@ -4,7 +4,7 @@
   let { params } = $props();
 </script>
 
-<svelte:head><title>OpenAI settings · Ayni Orchestrator</title></svelte:head>
+<svelte:head><title>OpenAI settings · ayni Orchestrator</title></svelte:head>
 
 {#key params.connectionId}
   <ProviderConnectionManager capability="llm" connectionId={params.connectionId} />

@@ -8,6 +8,7 @@
  import { toast } from 'svelte-sonner';
  import {onMount} from 'svelte';
  import InformationCard from '$lib/components/information-card.svelte';
+ import AyniMark from '$lib/components/ayni-mark.svelte';
  import AyniRuntimeSettings from '$lib/components/ayni-runtime-settings.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
  import Feedback from '$lib/components/feedback.svelte';
@@ -228,6 +229,10 @@
   editorOpen=!signerId&&(!!pending||!!setup||createOnMount);await refresh();if(setup&&!signerId)await recoverSetup();
  });return clearPrivate;});
 </script>
+{#snippet titleMark()}
+ <AyniMark class="size-10" />
+{/snippet}
+
 {#snippet actions()}
  {#if !signerId}
   <Button size="icon" aria-label="Add signing key" title="Add signing key" disabled={busy || hasPending} onclick={() => select(null)}><Plus aria-hidden="true" /></Button>
@@ -240,14 +245,17 @@
 {#if createOnMount}
  <div class="flex justify-end gap-2">{@render actions()}</div>
 {:else}
- <PageHeader title={signerId ? current?.keyId ?? 'Signing key settings' : 'Ayni'} eyebrow={signerId ? 'Ayni' : undefined} {actions} />
+ <PageHeader title={signerId ? current?.keyId ?? 'Signing key settings' : 'ayni'} titleMark={signerId ? undefined : titleMark} actions={signerId ? actions : undefined} />
 {/if}
 
 <PageContent>
  {#if !signerId && !createOnMount}
   <AyniRuntimeSettings {signers} loadingSigners={busy} />
   <div class="space-y-2">
-   <h2 class="text-lg font-semibold">Signing keys</h2>
+   <div class="flex items-center justify-between gap-3">
+    <h2 class="text-lg font-semibold">Signing keys</h2>
+    <div role="group" aria-label="Signing key actions" class="flex shrink-0 gap-2">{@render actions()}</div>
+   </div>
    <p class="text-sm text-muted-foreground">Create or import signing keys for runtime images. Add the public key to each repository that trusts it.</p>
   </div>
  {/if}

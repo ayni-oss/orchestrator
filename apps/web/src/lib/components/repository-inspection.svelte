@@ -280,7 +280,7 @@
       { label: 'Policy digest', value: item.result.policyDigest || 'Unavailable', monospace: true },
       { label: 'Lock digest', value: item.result.lockDigest || 'Unavailable', monospace: true },
       { label: 'Lock fingerprint', value: item.result.lockFingerprint || 'Not validated', monospace: true },
-      { label: 'Ayni version', value: item.result.ayniVersion || 'Unavailable' },
+      { label: 'ayni version', value: item.result.ayniVersion || 'Unavailable' },
       { label: 'Lock schema', value: item.result.lockSchema || 'Unavailable' },
       { label: 'Locked tools', value: item.result.tools?.join(', ') || 'None inspected' },
       { label: 'Trusted key IDs', value: item.result.trustKeyIds?.join(', ') || 'None inspected' },
