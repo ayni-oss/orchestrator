@@ -637,6 +637,8 @@ pub fn failure_report(client: &WorkerClient, reason: Failure) -> StageReport {
             Failure::RegistryAccessDenied
                 | Failure::RegistryUnavailable
                 | Failure::SourceUnavailable
+                | Failure::SourceTreeUnavailable
+                | Failure::SourceFetchUnavailable
                 | Failure::SourceAccessDenied
                 | Failure::SourceRateLimited
         ) {

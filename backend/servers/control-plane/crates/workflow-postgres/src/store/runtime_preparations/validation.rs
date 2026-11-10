@@ -107,6 +107,8 @@ fn safe_reason(value: &str) -> bool {
             | "builder_unavailable"
             | "invalid_input"
             | "source_unavailable"
+            | "source_tree_unavailable"
+            | "source_fetch_unavailable"
             | "source_access_denied"
             | "source_rate_limited"
             | "source_identity_mismatch"

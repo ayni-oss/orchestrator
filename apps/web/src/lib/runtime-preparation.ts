@@ -30,6 +30,8 @@ export const runtimeReasons: Record<string, string> = {
  source_rate_limited: 'The source provider is rate limiting source acquisition. Wait, then retry within the retained allowance.',
  setup_failure: 'The isolated stage could not be configured. Ask the deployment administrator to check its required volumes, image and permissions before retrying.',
  source_unavailable: 'The exact source checkout could not be acquired. Check repository access before retrying.',
+ source_tree_unavailable: 'The source provider did not return the repository tree after retries. Check connectivity from the runtime worker.',
+ source_fetch_unavailable: 'Git could not fetch the inspected commit. Check worker connectivity and access to the commit before retrying.',
  source_identity_mismatch: 'The acquired source differs from the frozen commit or tree. Check the retained inspection before starting again.',
  source_path_unsupported: 'The checkout contains an unsupported path or file type. Commit supported repository files and inspect the new commit.',
  source_bounds_exceeded: 'The checkout exceeds supported source limits. Reduce the source snapshot before preparing it.',

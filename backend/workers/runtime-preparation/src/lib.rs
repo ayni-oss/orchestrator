@@ -18,6 +18,8 @@ use serde::{Deserialize, Serialize};
 pub enum Failure {
     InvalidInput,
     SourceUnavailable,
+    SourceTreeUnavailable,
+    SourceFetchUnavailable,
     SourceAccessDenied,
     SourceRateLimited,
     SourceIdentityMismatch,
@@ -51,6 +53,8 @@ impl Failure {
         match self {
             Self::InvalidInput => "invalid_input",
             Self::SourceUnavailable => "source_unavailable",
+            Self::SourceTreeUnavailable => "source_tree_unavailable",
+            Self::SourceFetchUnavailable => "source_fetch_unavailable",
             Self::SourceAccessDenied => "source_access_denied",
             Self::SourceRateLimited => "source_rate_limited",
             Self::SourceIdentityMismatch => "source_identity_mismatch",
