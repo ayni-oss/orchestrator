@@ -70,12 +70,14 @@ expected = {
     "ORCHESTRATOR_WORKFLOW_COMMAND_V1": (268435456, 25000),
     "ORCHESTRATOR_WORKFLOW_REPORT_V1": (201326592, 50000),
     "ORCHESTRATOR_WORKFLOW_DECISION_V1": (67108864, 50000),
+    "ORCHESTRATOR_EXECUTION_DIAGNOSTICS_V1": (33554432, 50000),
 }
 assert streams.keys() >= expected.keys(), streams.keys()
 for name, (max_bytes, max_msgs) in expected.items():
     config = streams[name]["config"]
     assert config["max_bytes"] == max_bytes and config["max_msgs"] == max_msgs, (name, config)
-    assert config["discard"] == "new" and config["storage"] == "file", (name, config)
+    discard = "old" if name == "ORCHESTRATOR_EXECUTION_DIAGNOSTICS_V1" else "new"
+    assert config["discard"] == discard and config["storage"] == "file", (name, config)
     assert config["deny_delete"] and config["deny_purge"], (name, config)
 consumers = {
     name: {consumer["name"] for consumer in stream.get("consumer_detail", [])}
@@ -95,4 +97,4 @@ executor_pod="$(kubectl --context "$context" --namespace "$namespace" get pod \
 kubectl --context "$context" --namespace "$namespace" exec "$executor_pod" -- \
   test -f /var/lib/ayni-executor/ledger.sqlite
 
-echo "local Slice 3 stack ready: PostgreSQL migration v$expected_version, three retained streams, control plane, and conversation supervisor passed"
+echo "local stack ready: PostgreSQL migration v$expected_version, retained workflow and diagnostic streams, control plane, and conversation supervisor passed"

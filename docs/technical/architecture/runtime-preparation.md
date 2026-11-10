@@ -214,10 +214,16 @@ A reconciliation failure retries the retained operation and generation; it does
 not grant another build or extend its deadline. Supervisor diagnostics identify
 failed authority requests by endpoint and HTTP status or response category, and
 failed Kubernetes requests by action and API status. Stage failures include the
-operation, stage, generation and closed failure reason. Identical diagnostics are
-limited to once every 30 seconds. Response bodies, credentials and raw client
+operation, stage, generation and closed failure reason. Identical reconciliation
+failures are logged at most once every 30 seconds. Response bodies, credentials and raw client
 errors are never logged. Authority-side store failures include the closed store
 reason and SQLSTATE when available.
+
+Accepted stage reports and build checkpoints also leave retained execution
+diagnostics. Certification projects an allowlisted cause from its bounded
+worker report. The authority stores it with the attempt before the supervisor
+deletes the pod. Operators can replay it from the private listener or follow
+the dedicated diagnostics stream. See [retained execution diagnostics](../operations/execution-tracing.md#retained-execution-diagnostics).
 
 
 ## Signing key update pull requests

@@ -7,6 +7,7 @@ mod delivery;
 mod delivery_failure;
 mod discovery;
 mod execution;
+mod execution_diagnostics;
 mod hierarchy;
 pub mod outcome_assessments;
 mod plans;

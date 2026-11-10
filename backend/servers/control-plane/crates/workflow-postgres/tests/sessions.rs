@@ -256,6 +256,21 @@ async fn complete(
         ConversationTurnReportKind::Completed,
     )?;
     assert!(store.accept_terminal_report(&completed).await?.accepted);
+    let session = command.session.ok_or("missing session scope")?;
+    let records = store
+        .list_execution_diagnostics(
+            ayni_orchestrator_events::execution_diagnostics::Kind::Session,
+            &session.session_id,
+            0,
+        )
+        .await?;
+    assert!(
+        records
+            .iter()
+            .any(|entry| entry.diagnostic.related_id == turn
+                && entry.diagnostic.generation == session.generation
+                && entry.diagnostic.outcome == "completed")
+    );
     Ok(Completed {
         binding,
         metadata,

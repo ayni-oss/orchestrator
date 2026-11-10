@@ -1,6 +1,7 @@
 use ayni_orchestrator_runtime_preparation::supervisor::Supervisor;
 #[tokio::main]
 async fn main() {
+    let _telemetry = ayni_orchestrator_observability::init("runtime-preparation-supervisor");
     let Ok(supervisor) = Supervisor::configured().await else {
         eprintln!("runtime supervisor configuration unavailable");
         std::process::exit(2);

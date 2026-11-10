@@ -2,6 +2,7 @@
 
 pub mod broker;
 pub mod configuration;
+mod execution_diagnostics;
 pub mod gateway;
 pub mod health;
 pub mod maintenance;

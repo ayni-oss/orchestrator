@@ -28,6 +28,7 @@ type Result<T = ()> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 const COMMAND: &str = "ORCHESTRATOR_WORKFLOW_COMMAND_V1";
 const REPORT: &str = "ORCHESTRATOR_WORKFLOW_REPORT_V1";
 const DECISION: &str = "ORCHESTRATOR_WORKFLOW_DECISION_V1";
+const DIAGNOSTICS: &str = "ORCHESTRATOR_EXECUTION_DIAGNOSTICS_V1";
 const COMMAND_SUBJECT: &str = "orchestrator.workflow.command.conversation.v1";
 const REPORT_SUBJECT: &str = "orchestrator.workflow.report.conversation.v1";
 
@@ -51,12 +52,17 @@ async fn context(role: &str) -> Result<jetstream::Context> {
 async fn disposable_profile_setup() -> Result {
     let root = std::path::PathBuf::from(env::var("M1_TRANSPORT_FIXTURE_DIRECTORY")?);
     let administrator = context("ADMIN").await?;
-    for name in [COMMAND, REPORT, DECISION] {
+    for name in [COMMAND, REPORT, DECISION, DIAGNOSTICS] {
         // This ignored setup is invoked only by the disposable fixture wrapper.
         // Stream deletion also resets ACKfloors between independent scenarios.
         let _ = administrator.delete_stream(name).await;
     }
-    for file in ["command.json", "report.json", "decision.json"] {
+    for file in [
+        "command.json",
+        "report.json",
+        "decision.json",
+        "diagnostics.json",
+    ] {
         let config: stream::Config = serde_json::from_slice(&fs::read(root.join(file))?)?;
         administrator.create_stream(config).await?;
     }
@@ -73,6 +79,40 @@ async fn disposable_profile_setup() -> Result {
             .await?
             .create_consumer(config)
             .await?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires scripts/ci/check-workflow-jetstream.sh"]
+async fn diagnostic_stream_replays_after_publisher_disconnect_and_deduplicates() -> Result {
+    use ayni_orchestrator_events::execution_diagnostics::SUBJECT;
+    let application = context("APPLICATION").await?;
+    let mut headers = HeaderMap::new();
+    headers.insert("Nats-Msg-Id", Uuid::new_v4().to_string());
+    headers.insert("Nats-Expected-Stream", DIAGNOSTICS);
+    let payload = Vec::from(b"{\"fixture\":\"certification_failed\"}");
+    let ack = application
+        .publish_with_headers(SUBJECT, headers.clone(), payload.clone().into())
+        .await?
+        .await?;
+    assert_eq!(ack.stream, DIAGNOSTICS);
+    drop(application);
+    let retry = context("APPLICATION")
+        .await?
+        .publish_with_headers(SUBJECT, headers, payload.clone().into())
+        .await?
+        .await?;
+    assert!(retry.duplicate);
+    assert_eq!(retry.sequence, ack.sequence);
+    let stream = context("ADMIN").await?.get_stream(DIAGNOSTICS).await?;
+    assert_eq!(
+        stream.get_raw_message(ack.sequence).await?.payload.as_ref(),
+        payload
+    );
+    let executor = context("WINNER").await?;
+    if let Ok(reply) = executor.publish(SUBJECT, payload.into()).await {
+        assert!(reply.await.is_err());
     }
     Ok(())
 }

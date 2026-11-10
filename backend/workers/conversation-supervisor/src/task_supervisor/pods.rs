@@ -1,5 +1,6 @@
 use super::{Result, Supervisor};
 use ayni_orchestrator_events::task_execution::{SupervisorRequest, TaskRun, digest, worker_token};
+use ayni_orchestrator_observability::workload;
 use k8s_openapi::api::core::v1::{PersistentVolumeClaim, Pod, Secret};
 use kube::{
     Api, Client,
@@ -17,6 +18,9 @@ pub async fn reconcile(s: &Supervisor, client: Client, run: &TaskRun) -> Result 
     if run.state == "cancelling" {
         if let Some(pod) = pod {
             verify(&pod, run)?;
+            if pod.metadata.deletion_timestamp.is_none() {
+                let _ = retain_lifecycle(s, run, "cancelling", Some(&pod)).await;
+            }
             delete(&api, &name, &pod).await?;
             return Ok(());
         }
@@ -44,6 +48,7 @@ pub async fn reconcile(s: &Supervisor, client: Client, run: &TaskRun) -> Result 
             pod.status.as_ref().and_then(|s| s.phase.as_deref()),
             Some("Succeeded" | "Failed")
         ) {
+            retain_lifecycle(s, run, "finished", Some(&pod)).await?;
             s.call(&SupervisorRequest::Stopped {
                 attempt_id: run.command.attempt_id.clone(),
                 generation: run.command.generation,
@@ -55,6 +60,7 @@ pub async fn reconcile(s: &Supervisor, client: Client, run: &TaskRun) -> Result 
         return Ok(());
     }
     if !run.pod_uid.is_empty() {
+        retain_lifecycle(s, run, "pod_lost", None).await?;
         // Pod loss is interruption, never permission to resend a possibly paid call.
         s.call(&SupervisorRequest::Stopped {
             attempt_id: run.command.attempt_id.clone(),
@@ -80,6 +86,25 @@ pub async fn reconcile(s: &Supervisor, client: Client, run: &TaskRun) -> Result 
         Err(e) => return Err(e.into()),
     }
     Ok(())
+}
+async fn retain_lifecycle(
+    s: &Supervisor,
+    run: &TaskRun,
+    event: &'static str,
+    pod: Option<&Pod>,
+) -> Result {
+    let mut diagnostic = workload::record(
+        workload::Kind::Task,
+        &run.command.attempt_id,
+        run.generation,
+        "",
+        event,
+        pod,
+    );
+    if pod.is_none() {
+        diagnostic.pod_uid.clone_from(&run.pod_uid);
+    }
+    s.retain_lifecycle(&diagnostic).await
 }
 fn verify(pod: &Pod, run: &TaskRun) -> Result {
     let hash = digest(&serde_json::to_vec(&run.command)?);

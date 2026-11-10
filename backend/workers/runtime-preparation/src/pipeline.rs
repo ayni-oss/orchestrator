@@ -1,7 +1,7 @@
 //! Executable stages. The supervisor owns mounts, workload retirement and cleanup;
 //! successful stages cannot advance until the exact pod has been removed.
 use crate::{
-    Failure,
+    CERTIFICATION_DIAGNOSTIC, CertificationDiagnostic, Failure,
     client::{Credential, WorkerClient},
     command,
     oci::{self, Layout},
@@ -454,19 +454,25 @@ async fn freeze(
 }
 
 fn certify(claim: &StageClaim, profile: &RuntimeProfile) -> Result<StageResult, Failure> {
+    use CertificationDiagnostic as Diagnostic;
+    use Failure::CertificationRejected as rejected;
+
     let frozen = &claim.operation.frozen;
     let root = Path::new("/inputs/source/locked");
     verify_locked_source(root, frozen)?;
-    let policy = AyniPolicy::parse(&frozen.policy).map_err(|_| Failure::CertificationFailed)?;
+    let policy =
+        AyniPolicy::parse(&frozen.policy).map_err(|_| rejected(Diagnostic::PolicyInvalid))?;
     let trust = policy
         .environment_certificate_trust_policy()
-        .map_err(|_| Failure::CertificationFailed)?;
-    let lock = ayni_environment::read_lock(root).map_err(|_| Failure::CertificationFailed)?;
-    let mut seed = read_seed()?;
+        .map_err(|_| rejected(Diagnostic::TrustPolicyInvalid))?;
+    let lock =
+        ayni_environment::read_lock(root).map_err(|_| rejected(Diagnostic::LockUnreadable))?;
+    let mut seed = read_seed().map_err(|_| rejected(Diagnostic::SignerSeedUnreadable))?;
     if seed.last() == Some(&b'\n') {
         seed.pop();
     }
-    let seed = std::str::from_utf8(&seed).map_err(|_| Failure::CertificationFailed)?;
+    let seed =
+        std::str::from_utf8(&seed).map_err(|_| rejected(Diagnostic::SigningMaterialInvalid))?;
     let expectations = ayni_environment::staged::CertificationExpectations {
         platform: &profile.platform,
         ayni_executable_digest: &profile.trusted_cli_sha256,
@@ -480,15 +486,15 @@ fn certify(claim: &StageClaim, profile: &RuntimeProfile) -> Result<StageResult, 
         &frozen.signer_key_id,
         seed,
     )
-    .map_err(|_| Failure::CertificationFailed)?;
+    .map_err(|error| rejected(certifier_diagnostic(&error.message)))?;
     layer
         .write(Path::new("/outputs/layer.tar"))
-        .map_err(|_| Failure::CertificationFailed)?;
+        .map_err(|_| rejected(Diagnostic::LayerWriteFailed))?;
     fs::write(
         "/outputs/report.json",
-        serde_json::to_vec(&layer.report).map_err(|_| Failure::CertificationFailed)?,
+        serde_json::to_vec(&layer.report).map_err(|_| rejected(Diagnostic::ReportWriteFailed))?,
     )
-    .map_err(|_| Failure::CertificationFailed)?;
+    .map_err(|_| rejected(Diagnostic::ReportWriteFailed))?;
     Ok(StageResult::completed(Evidence {
         certificate_digest: layer.report.certificate_digest,
         certification_layer_digest: layer.report.layer_digest.clone(),
@@ -496,6 +502,58 @@ fn certify(claim: &StageClaim, profile: &RuntimeProfile) -> Result<StageResult, 
         artifact_reference: artifact(claim, &layer.report.layer_digest),
         ..Evidence::default()
     }))
+}
+
+fn certifier_diagnostic(message: &str) -> CertificationDiagnostic {
+    use CertificationDiagnostic::{
+        CertifierRejected, ExecutableDigestInvalid, ExecutableDigestMismatch, LockTrustMismatch,
+        LockVersionMismatch, PlatformMismatch, ProtectedContentChanged,
+        ProtectedContentRootInvalid, ProtectedContentRootMismatch,
+        ProtectedInventoryBoundsExceeded, ProtectedInventoryRejected, ProtectedInventoryUnreadable,
+        SignerTrustMismatch, SigningMaterialInvalid,
+    };
+
+    // The pinned certifier exposes prose errors. Only classify known messages;
+    // never forward the message itself or interpolate candidate-controlled data.
+    if let Some(inventory) = message.strip_prefix("staged protected-content inventory: ") {
+        return match inventory {
+            "directory depth limit exceeded"
+            | "entry limit exceeded"
+            | "file or total byte limit exceeded"
+            | "manifest limit exceeded" => ProtectedInventoryBoundsExceeded,
+            "directory changed during inspection"
+            | "file changed during inspection"
+            | "filesystem root changed during inspection"
+            | "symlink changed during inspection" => ProtectedContentChanged,
+            value if value.starts_with("cannot ") => ProtectedInventoryUnreadable,
+            _ => ProtectedInventoryRejected,
+        };
+    }
+    match message {
+        "invalid signing seed or certificate key identifier"
+        | "unsigned is reserved for metadata without a signing authority" => SigningMaterialInvalid,
+        "signer does not match the reviewed repository trust policy" => SignerTrustMismatch,
+        "expected platform must match the certification host architecture"
+        | "lock does not support the certification platform" => PlatformMismatch,
+        "lock Ayni version does not match this certification implementation" => LockVersionMismatch,
+        "reviewed nonempty certificate trust must match the exact lock trust fingerprint" => {
+            LockTrustMismatch
+        }
+        "expected protected-content root must be a canonical SHA-256 identity" => {
+            ProtectedContentRootInvalid
+        }
+        "protected content does not match the independently reviewed root" => {
+            ProtectedContentRootMismatch
+        }
+        "protected filesystem changed during certification" => ProtectedContentChanged,
+        "expected Ayni executable digest must be a canonical SHA-256 identity" => {
+            ExecutableDigestInvalid
+        }
+        "candidate Ayni executable does not match its independently trusted digest" => {
+            ExecutableDigestMismatch
+        }
+        _ => CertifierRejected,
+    }
 }
 async fn finalize(
     claim: &StageClaim,
@@ -628,6 +686,14 @@ fn read(path: &Path, maximum: u64) -> Result<Vec<u8>, Failure> {
 /// error after an admitted intent remains uncertain until exact readback.
 #[must_use]
 pub fn failure_report(client: &WorkerClient, reason: Failure) -> StageReport {
+    let mut evidence = Evidence::default();
+    if let Failure::CertificationRejected(diagnostic) = reason
+        && let Ok(encoded) = serde_json::to_string(&diagnostic)
+    {
+        evidence
+            .details
+            .insert(CERTIFICATION_DIAGNOSTIC.into(), encoded);
+    }
     StageReport {
         binding: client.binding.clone(),
         outcome: if client.binding.stage == "publish" {
@@ -648,7 +714,7 @@ pub fn failure_report(client: &WorkerClient, reason: Failure) -> StageReport {
         }
         .into(),
         safe_reason: reason.reason().into(),
-        evidence: Evidence::default(),
+        evidence,
     }
 }
 

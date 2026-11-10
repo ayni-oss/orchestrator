@@ -2,6 +2,7 @@ use super::{
     PublicationRun, SELECT, StoreError, Transaction, WorkflowStore, by_id, encode, lock, row,
     update,
 };
+use ayni_orchestrator_events::execution_diagnostics::{Diagnostic, Kind};
 use ayni_orchestrator_events::task_publication::{
     PublicationOutcome, PublicationSupervisorRequest, PublicationWorkerRequest,
     PublicationWorkerResponse, oid,
@@ -96,6 +97,7 @@ impl WorkflowStore {
             }
             PublicationWorkerRequest::Report { outcome } => {
                 report(&tx, &run, outcome).await?;
+                retain_publication_diagnostic(&tx, &run, outcome).await?;
                 result.authorized = true;
             }
         }
@@ -105,6 +107,36 @@ impl WorkflowStore {
         driver.abort();
         Ok(result)
     }
+}
+async fn retain_publication_diagnostic(
+    tx: &Transaction<'_>,
+    run: &PublicationRun,
+    outcome: &PublicationOutcome,
+) -> Result<(), StoreError> {
+    let mut diagnostic = Diagnostic::new(
+        Kind::Task,
+        &run.command.attempt_id,
+        run.generation,
+        "publication",
+        "stage_report",
+    );
+    diagnostic
+        .related_id
+        .clone_from(&run.command.publication_id);
+    diagnostic.pod_uid.clone_from(&run.pod_uid);
+    diagnostic.outcome.clone_from(&outcome.state);
+    diagnostic.reason = match outcome.safe_reason.as_str() {
+        reason @ (""
+        | "publication_create_uncertain"
+        | "publication_expired"
+        | "publication_identity_conflict"
+        | "publication_no_changes"
+        | "publication_ref_conflict"
+        | "publication_source_invalid") => reason,
+        _ => "publication_requires_attention",
+    }
+    .into();
+    crate::store::execution_diagnostics::append(tx, &diagnostic).await
 }
 fn validate_uid(uid: &str) -> Result<(), StoreError> {
     let parsed = uuid::Uuid::parse_str(uid).map_err(|_| StoreError::InvalidInput("pod_uid"))?;

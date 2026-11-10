@@ -11,6 +11,7 @@ publish.workspace = true
 ayni-core = { git = "https://github.com/ayni-oss/ayni.git", rev = "639ace4c180bfaef8e5d222bcd5ce7f4b0480b07" }
 ayni-environment = { git = "https://github.com/ayni-oss/ayni.git", rev = "639ace4c180bfaef8e5d222bcd5ce7f4b0480b07" }
 ayni-orchestrator-events = { path = "../../libs/events" }
+ayni-orchestrator-observability = { path = "../../libs/observability" }
 ayni-orchestrator-oci = { path = "../../libs/oci" }
 ayni-orchestrator-registry = { path = "../../libs/registry" }
 ayni-orchestrator-worker-sandbox = { path = "../../libs/worker-sandbox" }
@@ -27,6 +28,7 @@ sha2.workspace = true
 tempfile.workspace = true
 tar = "=0.4.46"
 tokio.workspace = true
+tracing.workspace = true
 uuid.workspace = true
 zstd = "=0.13.3"
 

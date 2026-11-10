@@ -1,4 +1,5 @@
 use super::{Api, Deserialize, Failure, Pod, StageClaim, Supervisor, resources};
+use crate::{CERTIFICATION_DIAGNOSTIC, CertificationDiagnostic};
 use ayni_orchestrator_events::runtime_preparation::{Evidence, RuntimeProfile, StageReport};
 use kube::api::LogParams;
 #[derive(Deserialize)]
@@ -38,25 +39,41 @@ pub(super) async fn finished(
             )
             .await
             .map_err(|_| Failure::ExecutionFailed)?;
-        if logs.len() < 131_072
+        let mut cause = if logs.len() < 131_072
             && let Ok(candidate) = serde_json::from_str::<StageReport>(logs.trim())
             && candidate.binding == report.binding
         {
             report = candidate;
-        }
+            take_certification_diagnostic(&mut report)
+                .unwrap_or(CertificationDiagnostic::WorkerFailureWithoutDiagnostic)
+        } else {
+            CertificationDiagnostic::MissingOrInvalidWorkerReport
+        };
         match resources::verify_signer(s, c).await {
             Ok(()) => {}
             Err(Failure::CertificationFailed) => {
+                cause = CertificationDiagnostic::SignerIdentityRejectedAfterExecution;
                 report.outcome = "failed".into();
                 report.safe_reason = "certification_failed".into();
                 report.evidence = Evidence::default();
             }
             Err(reason) => return Err(reason),
         }
+        if report.outcome != "completed" {
+            let encoded = serde_json::to_string(&cause).map_err(|_| Failure::ExecutionFailed)?;
+            report
+                .evidence
+                .details
+                .insert(CERTIFICATION_DIAGNOSTIC.into(), encoded);
+        }
         let accepted: ayni_orchestrator_events::runtime_preparation::WorkerResponse = s
             .request("/v1/runtime-supervisor/certification", &report)
             .await?;
         return if accepted.accepted {
+            if report.outcome != "completed" {
+                tracing::warn!(operation_id = %c.operation.id, generation = c.attempt.generation,
+                    pod_uid = uid, cause = ?cause, "Runtime certification failed");
+            }
             Ok(())
         } else {
             Err(Failure::ExecutionFailed)
@@ -92,6 +109,11 @@ pub(super) async fn finished(
         }
     }
     s.worker(c, uid)?.report(report).await
+}
+
+fn take_certification_diagnostic(report: &mut StageReport) -> Option<CertificationDiagnostic> {
+    let encoded = report.evidence.details.remove(CERTIFICATION_DIAGNOSTIC)?;
+    serde_json::from_str(&encoded).ok()
 }
 fn content(c: &StageClaim, logs: &str, report: &mut StageReport) -> Result<(), Failure> {
     let parsed: Content =

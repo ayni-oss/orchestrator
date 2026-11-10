@@ -21,6 +21,29 @@ pub struct Supervisor {
     endpoint: String,
 }
 impl Supervisor {
+    async fn retain_lifecycle(
+        &self,
+        diagnostic: &ayni_orchestrator_events::execution_diagnostics::Diagnostic,
+    ) -> Result {
+        let result = self
+            .http
+            .post(format!(
+                "{}/v1/session-diagnostics",
+                self.url.trim_end_matches('/')
+            ))
+            .bearer_auth(&self.token)
+            .json(diagnostic)
+            .send()
+            .await
+            .and_then(reqwest::Response::error_for_status);
+        if result.is_err() {
+            tracing::warn!(target: "ayni_orchestrator_observability::workload",
+                attempt_id = %diagnostic.execution_id, generation = diagnostic.generation,
+                "Task workload diagnostic was not retained");
+        }
+        result?;
+        Ok(())
+    }
     async fn call(&self, request: &SupervisorRequest) -> Result<Option<TaskRun>> {
         let mut request_builder = self
             .http

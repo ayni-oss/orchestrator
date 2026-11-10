@@ -5,6 +5,43 @@ activity and task evidence remain the authority for work and outcomes. Export is
 optional; collector failure, dropped spans or sampling cannot cancel accepted work,
 authorize retries or replace project accounting.
 
+## Retained execution diagnostics
+
+Runtime stages, task coding, quality and publication, and conversation session
+turns retain bounded outcomes in PostgreSQL. Runtime build checkpoints arrive
+while the build runs. Supervisors also save Kubernetes lifecycle observations
+before normal retirement, including exit codes, signals, restart counts and
+known wait or termination reasons. A missing pod is recorded as `pod_lost`.
+Certification records carry a closed cause, such as `signer_trust_mismatch` or
+`protected_content_root_mismatch`, alongside the existing result code. Only
+trusted code projects these records. Raw stdout, stderr, termination messages,
+source, credentials, and provider responses stay out of the diagnostic stream.
+
+PostgreSQL retains these observations for 30 days. The control plane forwards
+them after commit to the separate `ORCHESTRATOR_EXECUTION_DIAGNOSTICS_V1`
+JetStream stream on `orchestrator.diagnostics.execution.v1`. The local stream
+keeps up to seven days, 32 MiB or 50,000 messages and evicts old entries when a
+limit is reached. Existing external brokers need the matching stream and a
+publish grant for the application role. Delivery retries use a stable message
+ID. Consumers can also deduplicate by execution identity and cursor. Broker
+unavailability leaves the retained history and workflow admission available.
+
+Operators can page or follow one execution on the private control-plane HTTP
+listener using the corresponding supervisor authorization:
+
+| Execution | Path | Query |
+| --- | --- | --- |
+| Runtime preparation | `/v1/runtime-supervisor/diagnostics` | `kind=runtime&id=<operation-id>` |
+| Task | `/v1/session-diagnostics` | `kind=task&id=<attempt-id>` |
+| Conversation session | `/v1/session-diagnostics` | `kind=session&id=<session-id>` |
+
+`GET` returns up to 50 entries. Pass the last `cursor` as `after` to resume.
+Append `/stream` to follow with Server-Sent Events. Reconnect after a stream
+closes using `Last-Event-ID` or `after`. Streams are limited to 60 seconds per
+connection. The operator listener uses the retained records for replay even
+when the broker stream has evicted an entry. A workload that dies before it
+reports can leave only its observed Kubernetes metadata and earlier checkpoints.
+
 ## Local collection
 
 Run the supported Docker Desktop deployment with the optional collector:

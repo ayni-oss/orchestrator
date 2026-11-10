@@ -37,6 +37,7 @@ data:
             publish: { allow: [
               "orchestrator.workflow.command.conversation.v1",
               "orchestrator.workflow.accepted.conversation.v1.*",
+              "orchestrator.diagnostics.execution.v1",
               "$JS.API.CONSUMER.INFO.ORCHESTRATOR_WORKFLOW_REPORT_V1.workflow-application",
               "$JS.API.CONSUMER.INFO.ORCHESTRATOR_WORKFLOW_COMMAND_V1.scripted-executor",
               "$JS.API.STREAM.INFO.ORCHESTRATOR_WORKFLOW_COMMAND_V1",
@@ -128,6 +129,24 @@ data:
       "max_age": 604800000000000,
       "max_msg_size": 266240,
       "max_consumers": 2,
+      "duplicate_window": 120000000000,
+      "deny_delete": true,
+      "deny_purge": true,
+      "allow_rollup_hdrs": false
+    }
+  diagnostics.json: |
+    {
+      "name": "ORCHESTRATOR_EXECUTION_DIAGNOSTICS_V1",
+      "subjects": ["orchestrator.diagnostics.execution.v1"],
+      "retention": "limits",
+      "storage": "file",
+      "num_replicas": 1,
+      "discard": "old",
+      "max_bytes": 33554432,
+      "max_msgs": 50000,
+      "max_age": 604800000000000,
+      "max_msg_size": 9216,
+      "max_consumers": 8,
       "duplicate_window": 120000000000,
       "deny_delete": true,
       "deny_purge": true,
@@ -415,6 +434,7 @@ spec:
               configure_stream ORCHESTRATOR_WORKFLOW_COMMAND_V1 /config/command.json
               configure_stream ORCHESTRATOR_WORKFLOW_REPORT_V1 /config/report.json
               configure_stream ORCHESTRATOR_WORKFLOW_DECISION_V1 /config/decision.json
+              configure_stream ORCHESTRATOR_EXECUTION_DIAGNOSTICS_V1 /config/diagnostics.json
               configure_consumer ORCHESTRATOR_WORKFLOW_COMMAND_V1 scripted-executor /config/command-consumer.json
               configure_consumer ORCHESTRATOR_WORKFLOW_REPORT_V1 workflow-application /config/report-consumer.json
               configure_consumer ORCHESTRATOR_WORKFLOW_DECISION_V1 executor-{{ .Values.jetstream.executorInstanceId }} /config/executor-decision-consumer.json

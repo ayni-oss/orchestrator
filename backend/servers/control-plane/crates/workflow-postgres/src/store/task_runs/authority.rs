@@ -3,6 +3,7 @@ use super::{
     support, update,
 };
 use ayni_orchestrator_events::{
+    execution_diagnostics::{Diagnostic, Kind},
     task_execution::{SupervisorRequest, WorkerRequest, WorkerResponse},
     task_quality::{MAX_QUALITY_OUTCOME_BYTES, QualityOutcome, snapshot_digest},
 };
@@ -74,10 +75,23 @@ impl WorkflowStore {
             }
             WorkerRequest::QualityReport { outcome } => {
                 retain_quality_report(&tx, &run, attempt, outcome).await?;
+                let mut diagnostic =
+                    Diagnostic::new(Kind::Task, attempt, generation, "quality", "stage_report");
+                diagnostic.pod_uid = pod_uid.into();
+                diagnostic.outcome.clone_from(&outcome.state);
+                diagnostic.reason.clone_from(&outcome.safe_reason);
+                diagnostic.exit_code = outcome.exit_code;
+                crate::store::execution_diagnostics::append(&tx, &diagnostic).await?;
                 response.authorized = true;
             }
             WorkerRequest::Report { outcome } => {
                 retain_worker_report(&tx, &run, attempt, outcome).await?;
+                let mut diagnostic =
+                    Diagnostic::new(Kind::Task, attempt, generation, "coding", "stage_report");
+                diagnostic.pod_uid = pod_uid.into();
+                diagnostic.outcome.clone_from(&outcome.state);
+                diagnostic.reason.clone_from(&outcome.safe_reason);
+                crate::store::execution_diagnostics::append(&tx, &diagnostic).await?;
                 response.authorized = true;
             }
         }

@@ -49,6 +49,7 @@ class State:
         self.released = False
         self.observed_absent = ''
         self.report = None
+        self.diagnostics = []
         self.stopped = False
         self.bindings = []
         self.polls = 0
@@ -72,7 +73,8 @@ class State:
         return {'configured': self.claim is not None, 'pod_uid': self.claim['attempt']['pod_uid'] if self.claim else '',
             'polls': self.polls, 'bindings': self.bindings, 'blocked_reports': self.blocked_reports,
             'report_accepted': self.report is not None, 'externally_observed_absent_uid': self.observed_absent,
-            'stopped': self.stopped, 'rejected_premature_stops': self.rejected_stops}
+            'stopped': self.stopped, 'rejected_premature_stops': self.rejected_stops,
+            'diagnostics': self.diagnostics}
 
     def master(self, path, body):
         if path == '/configure' and self.claim is None:
@@ -82,6 +84,15 @@ class State:
             return 200, self.result()
         if self.claim is None:
             return 409, {}
+        if path == '/v1/runtime-supervisor/diagnostics':
+            binding = self.binding()
+            if (body.get('kind'), body.get('execution_id'), body.get('generation'), body.get('stage'), body.get('pod_uid')) != (
+                'runtime', binding['operation_id'], binding['generation'], binding['stage'], binding['pod_uid']
+            ) or body.get('event') != 'retiring' or not self.report:
+                return 409, {}
+            if body not in self.diagnostics:
+                self.diagnostics.append(copy.deepcopy(body))
+            return 200, None
         if path == '/release':
             self.released = True
             return 200, {'accepted': True}

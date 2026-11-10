@@ -70,6 +70,7 @@ export M1_APPLICATION_NATS_USER=workflow-application M1_APPLICATION_NATS_PASSWOR
 export M1_WINNER_NATS_USER=workflow-executor M1_WINNER_NATS_PASSWORD=fixture-executor
 export M1_LOSER_NATS_USER=fixture-loser M1_LOSER_NATS_PASSWORD=fixture-loser
 cargo test --locked -p ayni-orchestrator-control-plane --test workflow_transport disposable_profile_setup -- --ignored --nocapture
+cargo test --locked -p ayni-orchestrator-control-plane --test workflow_transport diagnostic_stream_replays -- --ignored --nocapture
 if [[ "${AYNI_M1_RUN_INTEGRATED:-0}" == 1 ]]; then
   : "${AYNI_POSTGRES_FEASIBILITY_URL:?integrated M1 gate requires disposable PostgreSQL}"
   : "${AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL:?integrated M1 gate requires runtime PostgreSQL role}"

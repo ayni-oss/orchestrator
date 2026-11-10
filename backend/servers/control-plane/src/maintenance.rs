@@ -16,6 +16,9 @@ pub async fn run(store: WorkflowStore, mut shutdown: watch::Receiver<bool>) {
                 if store.cleanup_observation().await.is_err() {
                     metrics::increment("workflow_observation_cleanup_errors_total");
                 }
+                if store.cleanup_execution_diagnostics().await.is_err() {
+                    metrics::increment("workflow_execution_diagnostics_cleanup_errors_total");
+                }
                 if store.cleanup_history_snapshots().await.is_err() {
                     metrics::increment("workflow_history_cleanup_errors_total");
                 }

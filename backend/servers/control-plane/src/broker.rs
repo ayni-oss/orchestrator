@@ -87,6 +87,11 @@ pub async fn run_publisher(
             store.clone(),
             shutdown.clone(),
         ));
+        tokio::spawn(publish_execution_diagnostics(
+            context.clone(),
+            store.clone(),
+            shutdown.clone(),
+        ));
         info!("authenticated workflow outbox publisher connected");
         loop {
             if *shutdown.borrow() {
@@ -102,6 +107,73 @@ pub async fn run_publisher(
             }
         }
     }
+}
+
+const DIAGNOSTICS_STREAM: &str = "ORCHESTRATOR_EXECUTION_DIAGNOSTICS_V1";
+
+async fn publish_execution_diagnostics(
+    context: jetstream::Context,
+    store: WorkflowStore,
+    mut shutdown: watch::Receiver<bool>,
+) {
+    let mut delay = Duration::from_millis(250);
+    while !*shutdown.borrow() {
+        match publish_diagnostic_batch(&context, &store).await {
+            Ok(true) => {
+                delay = Duration::from_millis(250);
+                continue;
+            }
+            Ok(false) => delay = Duration::from_millis(250),
+            Err(error) => {
+                warn!(reason_code = "execution_diagnostic_delivery_pending", %error, "Execution diagnostics remain retained in PostgreSQL");
+                delay = (delay * 2).min(Duration::from_secs(30));
+            }
+        }
+        tokio::select! {
+            () = time::sleep(delay) => {},
+            _ = shutdown.changed() => return,
+        }
+    }
+}
+
+async fn publish_diagnostic_batch(
+    context: &jetstream::Context,
+    store: &WorkflowStore,
+) -> Result<bool, io::Error> {
+    use ayni_orchestrator_events::execution_diagnostics::SUBJECT;
+    let batch = store
+        .pending_execution_diagnostics()
+        .await
+        .map_err(io::Error::other)?;
+    if batch.is_empty() {
+        return Ok(false);
+    }
+    for entry in batch {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "Nats-Msg-Id",
+            format!(
+                "diagnostic:{}:{}",
+                entry.diagnostic.execution_id, entry.cursor
+            ),
+        );
+        headers.insert("Nats-Expected-Stream", DIAGNOSTICS_STREAM);
+        let payload = serde_json::to_vec(&entry).map_err(io::Error::other)?;
+        let ack = context
+            .publish_with_headers(SUBJECT, headers, payload.into())
+            .await
+            .map_err(|_| io::Error::other("execution diagnostics stream unavailable"))?
+            .await
+            .map_err(|_| io::Error::other("execution diagnostics acknowledgement unavailable"))?;
+        if ack.stream != DIAGNOSTICS_STREAM {
+            return Err(io::Error::other("unexpected execution diagnostics stream"));
+        }
+        store
+            .mark_execution_diagnostic_published(entry.cursor)
+            .await
+            .map_err(io::Error::other)?;
+    }
+    Ok(true)
 }
 
 async fn run_report_consumer(

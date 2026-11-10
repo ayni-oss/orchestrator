@@ -1,4 +1,5 @@
 //! Verification wire contracts. Successful decoding conveys no admission authority.
+pub mod execution_diagnostics;
 pub mod runtime_preparation;
 pub mod task_execution;
 pub mod task_publication;
