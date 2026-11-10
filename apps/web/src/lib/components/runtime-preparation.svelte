@@ -1,6 +1,6 @@
 <script lang="ts">
  import { protectUnsavedChanges } from "$lib/unsaved-changes.svelte";
- import { onMount, tick, type Snippet } from 'svelte';
+ import { onMount, tick, untrack, type Snippet } from 'svelte';
  import { RefreshCw } from '@lucide/svelte';
  import { Button } from '$lib/components/ui/button/index.js';
  import { Input } from '$lib/components/ui/input/index.js';
@@ -12,12 +12,8 @@
  import { rpc, RpcError, type Connection } from '$lib/api';
  import { trustSnippet } from '$lib/runtime-signing';
  import { inspectionReasons, type Repository, type RepositoryInspection } from '$lib/repositories';
- import { runtimeOverview, runtimeStages, runtimeReasons, onboardingReasons, runtimeRegistryImage, type RepositoryRuntimeRun, type RuntimePreparation, type RuntimeSigner, type RuntimeCommand } from '$lib/runtime-preparation';
- type RepositoryBranches = {
-  names: string[]; loading: boolean; error: string;
-  refresh: () => Promise<void>; more?: () => Promise<void>;
- };
- let { repo, branch = '', checkedCommit, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections, onSourceRefresh, branchPicker, repositoryBranches, children }: { repo: Repository; branch?: string; checkedCommit?: string; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void>; onSourceRefresh: (value: Connection | undefined) => void; branchPicker: Snippet; repositoryBranches: RepositoryBranches; children: Snippet<[Snippet, Snippet]> } = $props();
+ import { runtimeOverview, runtimeStages, runtimeReasons, onboardingReasons, runtimeRegistryImage, runtimeProgressKey, readRuntimeProgress, type RepositoryRuntimeRun, type RuntimePreparation, type RuntimeSigner, type RuntimeCommand } from '$lib/runtime-preparation';
+ let { repo, branch = '', checkedCommit, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections, onSourceRefresh, branchPicker, children }: { repo: Repository; branch?: string; checkedCommit?: string; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void>; onSourceRefresh: (value: Connection | undefined) => void; branchPicker: Snippet; children: Snippet<[Snippet, Snippet]> } = $props();
  let onboarding = $state.raw<RepositoryRuntimeRun | null>(null);
  let deploymentEnabled = $state(false), developmentOnly = $state(false);
  let loaded = $state(false);
@@ -27,7 +23,18 @@
  let passedInspection = $state('');
  let passedPreparation = $state('');
  let requestedSigningUpdate = $state('');
- let signingChangeBranch = $state('');
+ let signingPublicationEnabled = $state(false);
+ let signingPublicationBusy = $state(false);
+ const pullStates = {
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_DRAFT: 'Draft',
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_OPEN: 'Open',
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_CLOSED: 'Closed',
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_MERGED: 'Merged',
+ } as const;
+ type PullRequest = {url: string; branch: string; state: typeof pullStates[keyof typeof pullStates]};
+ type PullStatus = {scope: string; state: 'checking' | 'missing' | 'error'} | {scope: string; state: 'found'; pull: PullRequest};
+ let pullStatus = $state.raw<PullStatus>();
+ let pullSequence = 0;
  let stepHeading = $state<HTMLHeadingElement>();
  let busy = $state(false), error = $state('');
  let polling = false, mounted = false, historySequence = 0;
@@ -84,32 +91,34 @@
   !blockingFindings.length
    ? checkedCommit : undefined
  );
- const canRequestSigningUpdate = $derived(
+ const validSigningReview = $derived(
   signerReady && !!signer?.publicKey && signerTrustMissing &&
   !inspectionPending && !checkingDefault && candidateInspection?.state === 'completed' &&
   candidateInspection.connectionRevision === connection?.revision && !blockingFindings.length
  );
  const signingUpdateScope = $derived(JSON.stringify([
-  branch, candidateInspection?.commitSha, connection?.revision, signer?.id, signer?.revision,
+  branch || repo.defaultBranch, candidateInspection?.commitSha, candidateInspection?.result?.lockFingerprint, connection?.revision, signer?.id, signer?.revision,
  ]));
- const signingUpdateRequested = $derived(canRequestSigningUpdate && requestedSigningUpdate === signingUpdateScope);
+ const canRequestSigningUpdate = $derived(validSigningReview && candidateInspection?.commitSha === checkedCommit);
+ const signingUpdateRequested = $derived(validSigningReview && requestedSigningUpdate === signingUpdateScope &&
+  (canRequestSigningUpdate || passedInspection === signingUpdateScope));
  const signingUpdateBase = $derived(branch || repo.defaultBranch);
- const signingChangeBranches = $derived(repositoryBranches.names.filter(name => name !== signingUpdateBase));
- const signingPullRequest = $derived.by(() => {
-  if (!signingUpdateRequested || !signingUpdateBase || !signingChangeBranches.includes(signingChangeBranch)) return undefined;
-  const repository = repo.fullName.split('/').map(encodeURIComponent).join('/');
-  const comparison = `${encodeURIComponent(signingUpdateBase)}...${encodeURIComponent(signingChangeBranch)}`;
-  const query = new URLSearchParams({
-   quick_pull: '1',
-   title: 'fix(runtime): update the trusted signing key',
-   body: 'Update the runtime signing key in `.ayni.toml`, preserve the other trusted keys, and regenerate `.ayni.lock`.',
-  });
-  return `https://github.com/${repository}/compare/${comparison}?${query}`;
- });
+ const currentPullStatus = $derived(pullStatus?.scope === signingUpdateScope ? pullStatus : undefined);
+ const signingPullRequest = $derived(currentPullStatus?.state === 'found' ? currentPullStatus.pull : undefined);
+ const signingReview = $derived(signingUpdateRequested && candidateInspection && signer && signingUpdateBase ? {
+  repositoryId: repo.id,
+  inspectionId: candidateInspection.id,
+  expectedConnectionRevision: candidateInspection.connectionRevision,
+  signerId: signer.id,
+  expectedSignerRevision: signer.revision,
+  baseBranch: signingUpdateBase,
+ } : undefined);
  const canReview = $derived(signerTrustMissing ? signingUpdateRequested : !!reviewedCommit);
  const retainedRun = $derived(onboarding && (onboarding.settings.branch || '') === branch &&
   onboarding.settings.expectedConnectionRevision === connection?.revision &&
   onboarding.settings.registryConnectionId === registryId && onboarding.settings.signerId === signerId &&
+  (!onboarding.settings.expectedRegistryRevision || onboarding.settings.expectedRegistryRevision === registry?.revision) &&
+  (!onboarding.settings.expectedSignerRevision || onboarding.settings.expectedSignerRevision === signer?.revision) &&
   (!checkedCommit || (onboarding.commitSha || onboarding.settings.expectedCommitSha) === checkedCommit) ? onboarding : null);
  const overview = $derived(runtimeOverview({loaded,error,rejected,inspectionPending,moreHistory:!!next,pending:!!pending,inspectionLoading,inspectionError,inspectionReason:inspectionReasons[latestInspection?.safeReason || ''],inspection:latestInspection,operations,operationId:retainedRun?.preparationId,registries,signers,sourceReady,sourceRevision:connection?.revision}));
  const operation = $derived(overview.operation);
@@ -125,18 +134,18 @@
  const image = $derived(runtimeRegistryImage(onboardingActive || onboardingBlocked ? undefined : overview.operation,destination));
  const integrationCheckpoint = $derived(JSON.stringify([connection?.revision, registryId, registry?.revision, signerId, signer?.revision]));
  const inspectionCheckpoint = $derived(signingUpdateRequested ? signingUpdateScope :
-  JSON.stringify([branch, reviewedCommit, connection?.revision]));
+  JSON.stringify([branch || repo.defaultBranch, reviewedCommit, connection?.revision, signerId, signer?.revision]));
  const admitted = $derived(!!matchingOperation || !!retainedRun?.preparationId);
  const completed = $derived([
   integrationsReady && (passedIntegrations === integrationCheckpoint || admitted),
-  (canReview && passedInspection === inspectionCheckpoint) || admitted,
+  (!!reviewedCommit && canReview && passedInspection === inspectionCheckpoint) || admitted,
   admitted,
   verificationReached && (passedPreparation === operation?.id || !!verified),
   !!verified,
  ]);
  const lastAvailableStep = $derived(completed[3] ? 4 : canViewPreparation ? 3 :
-  completed[0] ? (completed[1] ? 2 : 1) : 0);
- const currentStep = $derived(Math.min(viewedStep ?? (verified ? 4 : canViewPreparation ? 3 : 0), lastAvailableStep));
+  completed[0] ? (completed[1] || (signingUpdateRequested && passedInspection === inspectionCheckpoint) ? 2 : 1) : 0);
+ const currentStep = $derived(Math.min(viewedStep ?? (verified ? 4 : canViewPreparation ? 3 : lastAvailableStep), lastAvailableStep));
  const canStart = $derived(deploymentEnabled && integrationsReady && !!reviewedCommit && !signerTrustMissing &&
   !preparing && !!registry?.enabled && !!registry.activeCredentialRevision && !!signer?.enabled && validAllowance && !busy);
 
@@ -151,7 +160,17 @@
   if (step === 0 && integrationsReady) passedIntegrations = integrationCheckpoint;
   if (step === 1 && canReview) passedInspection = inspectionCheckpoint;
   if (step === 3 && verificationReached && operation) passedPreparation = operation.id;
+  if (step === 0 || step === 1) saveProgress();
   void visit(step + 1);
+ }
+ function saveProgress() {
+  try {
+   localStorage.setItem(runtimeProgressKey(repo.id), JSON.stringify({
+    integrations: passedIntegrations, inspection: passedInspection, signingUpdate: requestedSigningUpdate,
+   }));
+  } catch {
+   // The current visit can continue without a saved checkpoint.
+  }
  }
  function dismissRecoveryToast() {
   if (recoveryToast !== undefined) toast.dismiss(recoveryToast);
@@ -209,11 +228,59 @@
    if (refreshSource && (source || connectionsComplete)) onSourceRefresh(source);
   }
  }
+ function checkedPull(result: {url: string; branch: string; state: keyof typeof pullStates}): PullRequest {
+  const url = new URL(result.url);
+  const prefix = `/${repo.fullName}/pull/`;
+  if (url.origin !== 'https://github.com' || !url.pathname.startsWith(prefix) ||
+      !/^[1-9][0-9]*$/.test(url.pathname.slice(prefix.length)) || url.username || url.password ||
+      !Object.hasOwn(pullStates, result.state)) {
+   throw new Error('The service returned an invalid pull request.');
+  }
+  return {url: url.href, branch: result.branch, state: pullStates[result.state]};
+ }
+ async function refreshSigningPullRequest(scope = signingUpdateScope, review = signingReview) {
+  if (!review || signingPublicationBusy) return;
+  const sequence = ++pullSequence;
+  pullStatus = {scope, state:'checking'};
+  try {
+   const {pullRequest} = await rpc('GetRuntimeSigningPullRequest', {review});
+   if (sequence !== pullSequence) return;
+   pullStatus = pullRequest ? {scope, state:'found', pull:checkedPull(pullRequest)} : {scope, state:'missing'};
+  } catch {
+   if (sequence === pullSequence) pullStatus = {scope, state:'error'};
+  }
+ }
+ $effect(() => {
+  if (currentStep !== 2 || signingPublicationBusy || !signingPublicationEnabled || !signingReview) return;
+  const scope = signingUpdateScope, review = signingReview;
+  untrack(() => {
+   if (currentPullStatus?.state !== 'found') void refreshSigningPullRequest(scope, review);
+  });
+ });
+ async function openSigningPullRequest() {
+  if (!signingPublicationEnabled || signingPublicationBusy || !canRequestSigningUpdate || !signingReview || currentPullStatus?.state !== 'missing') return;
+  const scope = signingUpdateScope;
+  signingPublicationBusy = true;
+  try {
+   const {pullRequest} = await rpc('OpenRuntimeSigningPullRequest', signingReview);
+   if (mounted && scope === signingUpdateScope) pullStatus = {scope, state:'found', pull:checkedPull(pullRequest)};
+  } catch (cause) {
+   toast.error('Could not confirm the signing key pull request', {
+    description: cause instanceof RpcError && cause.status === 409
+     ? 'Check the branch and signing key again before retrying.'
+     : 'Refresh the pull request status before trying again.',
+   });
+   if (mounted && scope === signingUpdateScope) pullStatus = {scope, state:'error'};
+  } finally {
+   signingPublicationBusy = false;
+  }
+ }
  async function loadOnboarding() {
   const result = await rpc('GetRepositoryRuntime',{repositoryId:repo.id});
   if (!mounted) return;
   const changed = result.run && (result.run.id !== onboarding?.id || result.run.state !== onboarding?.state);
   onboarding = result.run || null;
+  signingPublicationEnabled = result.signingUpdatePublicationEnabled === true;
   deploymentEnabled = result.preparationEnabled === true; developmentOnly = result.developmentOnly === true;
   if (changed && onboarding?.inspectionId) await refreshInspections?.();
  }
@@ -308,6 +375,12 @@
  }
  onMount(() => {
   mounted = true;
+  const progress = readRuntimeProgress(repo.id);
+  if (progress) {
+   passedIntegrations = progress.integrations;
+   passedInspection = progress.inspection;
+   requestedSigningUpdate = progress.signingUpdate;
+  }
   const saved = sessionStorage.getItem(storage);
   if (saved) {
    try { const value = JSON.parse(saved); if (!['StartRepositoryRuntime', 'StartRuntimePreparation', 'CancelRuntimePreparation', 'RetryRuntimePreparation'].includes(value.method) || typeof value.request?.idempotencyKey !== 'string' || ['StartRepositoryRuntime','StartRuntimePreparation'].includes(value.method) && value.request.repositoryId !== repo.id) throw new Error(); pending = value; viewedStep = 3; void perform(refresh); }
@@ -447,6 +520,9 @@
         {label:'Lock fingerprint',value:candidateInspection.result.lockFingerprint || 'Unavailable',monospace:true},
        ] : []),
       ]}/>
+      {#if candidateInspection.state === 'completed' && !reviewedCommit}
+       <p class="text-sm text-muted-foreground">Check the selected branch for a current result.</p>
+      {/if}
       {#if signerTrustMissing}
        <p class="text-sm">Choose a matching key in Connect integrations, or review the proposed update to the repository trust policy.</p>
        {#if canRequestSigningUpdate}
@@ -454,7 +530,7 @@
          <input type="checkbox" class="accent-primary" checked={signingUpdateRequested}
           onchange={event => {
            requestedSigningUpdate = event.currentTarget.checked ? signingUpdateScope : '';
-           signingChangeBranch = '';
+           if (!event.currentTarget.checked) saveProgress();
           }}/>
          Update signing key
         </label>
@@ -479,26 +555,45 @@
       {label:'Signing key',value:signer.keyId},
      ]}/>
      <pre class="overflow-x-auto rounded-md bg-muted p-2 text-xs">{trustSnippet(signer)}</pre>
-     <p class="text-sm">Push the trust policy and regenerated lock to a separate branch, then select that branch to open a pull request on GitHub.</p>
-     <div class="space-y-2">
-      <Label for="signing-change-branch">Branch with signing key changes</Label>
-      <div class="flex items-center gap-2">
-       <NativeSelect.Root id="signing-change-branch" class="min-w-0 flex-1" bind:value={signingChangeBranch} disabled={repositoryBranches.loading}>
-        <NativeSelect.Option value="">Choose a branch</NativeSelect.Option>
-        {#each signingChangeBranches as name (name)}<NativeSelect.Option value={name}>{name}</NativeSelect.Option>{/each}
-       </NativeSelect.Root>
-       <Button variant="outline" size="icon" aria-label="Refresh branches" title="Refresh branches"
-        aria-busy={repositoryBranches.loading} disabled={repositoryBranches.loading} onclick={repositoryBranches.refresh}>
-        <RefreshCw class={{'motion-safe:animate-spin':repositoryBranches.loading}} aria-hidden="true"/>
-       </Button>
-      </div>
-      {#if repositoryBranches.error}
-       <p role="status" class="text-sm text-muted-foreground">{repositoryBranches.error}</p>
-      {:else if repositoryBranches.more}
-       <Button variant="outline" disabled={repositoryBranches.loading} onclick={repositoryBranches.more}>More branches</Button>
+     <div class="space-y-3" aria-live="polite">
+      {#if signingPullRequest}
+       <InformationTable aligned rows={[
+        {label:'Pull request status',value:signingPullRequest.state},
+        {label:'Pull request branch',value:signingPullRequest.branch,monospace:true},
+       ]}/>
+      {:else if !signingPublicationEnabled}
+       <p class="text-sm">This repository needs a signing update publisher before you can open a pull request here.</p>
+      {:else if signingPublicationBusy}
+       <p class="text-sm">Opening a draft pull request…</p>
+      {:else if currentPullStatus?.state === 'missing'}
+       <p class="text-sm">No pull request exists for this signing key update.</p>
+      {:else if currentPullStatus?.state === 'error'}
+       <p class="text-sm">Pull request status is unavailable. Refresh to try again.</p>
+      {:else}
+       <p class="text-sm">Checking for an existing pull request…</p>
       {/if}
+      <div class="flex flex-wrap gap-2">
+       {#if signingPullRequest}
+        <Button href={signingPullRequest.url} target="_blank" rel="noopener noreferrer">View PR</Button>
+       {:else}
+        <Button disabled={!signingPublicationEnabled || signingPublicationBusy || !canRequestSigningUpdate || currentPullStatus?.state !== 'missing'}
+         onclick={openSigningPullRequest}>{signingPublicationBusy ? 'Opening PR…' : 'Open PR'}</Button>
+       {/if}
+       {#if signingPublicationEnabled}
+        <Button variant="outline" size="icon" aria-label="Refresh pull request status" title="Refresh pull request status"
+         disabled={signingPublicationBusy || currentPullStatus?.state === 'checking'} onclick={() => refreshSigningPullRequest()}>
+         <RefreshCw aria-hidden="true"/>
+        </Button>
+       {/if}
+      </div>
      </div>
-     <p class="text-sm text-muted-foreground">After the pull request is merged, check <code>ayni.lock</code> again to continue runtime preparation.</p>
+     {#if signingPullRequest?.state === 'Merged' || !canRequestSigningUpdate}
+      <p class="text-sm text-muted-foreground">Check the current branch before continuing runtime preparation.</p>
+      <Button variant="outline" disabled={busy || recheckDisabled || checkingDefault || signingPublicationBusy}
+       onclick={() => visit(1)}>Go to lock check</Button>
+     {:else}
+      <p class="text-sm text-muted-foreground">After the pull request is merged, check <code>ayni.lock</code> again to continue runtime preparation.</p>
+     {/if}
     </div>
    {:else if currentStep === 2}
     {#if reviewedCommit}<p class="text-sm">Reviewed commit <code class="break-all">{reviewedCommit}</code> on {branch || 'the default branch'}.</p>
@@ -561,9 +656,7 @@
     {#if currentStep > 0}<Button variant="outline" onclick={() => visit(currentStep - 1)}>Back</Button>{/if}
     {#if currentStep === 0 || currentStep === 1 || currentStep === 3}
      <Button class="ml-auto" disabled={busy || (currentStep === 0 ? !integrationsReady : currentStep === 1 ? !canReview : !verificationReached)} onclick={advance}>Next</Button>
-    {:else if currentStep === 2 && signingUpdateRequested}
-     <Button class="ml-auto" href={signingPullRequest} disabled={!signingPullRequest || repositoryBranches.loading} target="_blank" rel="noopener noreferrer">Open PR</Button>
-    {:else if currentStep === 2}
+    {:else if currentStep === 2 && !signingUpdateRequested}
      <Button class="ml-auto" disabled={!canStart} onclick={start}>{allowBuild ? 'Build and publish runtime' : 'Start preparation'}</Button>
     {/if}
    </div>

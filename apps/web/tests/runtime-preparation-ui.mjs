@@ -10,7 +10,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  const previousInspection={...inspection,id:randomUUID(),idempotencyKey:randomUUID(),commitSha:'a'.repeat(40),state:'accepted',acceptedAtUnixMs:'1',updatedAtUnixMs:'1',result:undefined};
  inspection.acceptedAtUnixMs=String(Date.now());
  let operation,originalReceipt,startRequest,retryRequest,cancelRequest,run;
- await page.route('**/api/GetRepositoryRuntime',route=>route.fulfill({json:{run,preparationEnabled:true}}));
+ await page.route('**/api/GetRepositoryRuntime',route=>route.fulfill({json:{run,preparationEnabled:true,signingUpdatePublicationEnabled:true}}));
  await page.route('**/api/GetRepositoryRuntimeReceipt',route=>route.fulfill({json:{run:{...run,state:'resolving',preparationId:''}}}));
  await page.route('**/api/ListRepositoryInspections',route=>route.fulfill({json:{inspections:[inspection,previousInspection]}}));
  const catalogReply=await page.request.post(`${origin}/api/ListRepositories`,{headers:{'x-console-request':'1'},data:{limit:100}});
@@ -73,7 +73,8 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  ]);
  await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
  await page.unroute('**/api/InspectRepository');
- await page.route('**/api/ResolveRepositoryDefaultCommit',route=>route.fulfill({json:{defaultBranch:'main',commitSha:inspection.commitSha}}));
+ let resolvedHead;
+ await page.route('**/api/ResolveRepositoryDefaultCommit',route=>route.fulfill({json:{defaultBranch:'main',commitSha:resolvedHead ?? inspection.commitSha}}));
  await page.route('**/api/InspectRepository',route=>route.fulfill({json:{inspection}}));
  const status=preparation.getByRole('region',{name:'Runtime status',exact:true});
  const next=()=>status.getByRole('button',{name:'Next',exact:true});
@@ -124,20 +125,46 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.equal(new Set(valueStarts).size,1);
  assert.ok(await next().isDisabled());
  await status.getByRole('checkbox',{name:'Update signing key',exact:true}).check();
+ let signingRequest, pullRequest, signingWrites=0;
+ await page.route('**/api/GetRuntimeSigningPullRequest',async route=>{
+  assert.deepEqual(route.request().postDataJSON().review,{repositoryId,inspectionId,expectedConnectionRevision:'1',
+   signerId,expectedSignerRevision:'1',baseBranch:'main'});
+  await route.fulfill({json:{pullRequest}});
+ });
+ await page.route('**/api/OpenRuntimeSigningPullRequest',async route=>{
+  signingWrites++;
+  signingRequest=route.request().postDataJSON();
+  pullRequest={url:`https://github.com/${repository.fullName}/pull/42`,branch:'fix/runtime-signing-fixture',state:'RUNTIME_SIGNING_PULL_REQUEST_STATE_DRAFT'};
+  await route.fulfill({json:{pullRequest}});
+ });
  await next().click();
  await status.getByRole('heading',{name:'Signing key update pull request',exact:true}).waitFor();
- assert.ok(await status.getByRole('button',{name:'Open PR',exact:true}).isDisabled());
- const changeBranch=status.getByRole('combobox',{name:'Branch with signing key changes',exact:true});
- assert.equal(await changeBranch.locator('option[value="main"]').count(),0);
- await status.getByRole('button',{name:'More branches',exact:true}).click();
- await changeBranch.selectOption('release/next');
- const openPr=status.getByRole('link',{name:'Open PR',exact:true});
- const pullRequestUrl=new URL(await openPr.getAttribute('href'));
- assert.equal(pullRequestUrl.origin,'https://github.com');
- assert.equal(pullRequestUrl.pathname,`/${repository.fullName}/compare/main...release%2Fnext`);
- assert.equal(pullRequestUrl.searchParams.get('quick_pull'),'1');
- assert.equal(pullRequestUrl.searchParams.get('title'),'fix(runtime): update the trusted signing key');
- assert.equal(await openPr.getAttribute('target'),'_blank');
+ assert.equal(await status.getByRole('combobox',{name:'Branch with signing key changes',exact:true}).count(),0);
+ const openPr=status.getByRole('button',{name:'Open PR',exact:true});
+ assert.equal(await openPr.locator('..').getByRole('button',{name:'Back',exact:true}).count(),0);
+ await openPr.click();
+ const viewPr=status.getByRole('link',{name:'View PR',exact:true});
+ await viewPr.waitFor();
+ assert.deepEqual(signingRequest,{repositoryId,inspectionId,expectedConnectionRevision:'1',
+  signerId,expectedSignerRevision:'1',baseBranch:'main'});
+ assert.equal(await viewPr.getAttribute('href'),`https://github.com/${repository.fullName}/pull/42`);
+ assert.equal(await viewPr.getAttribute('target'),'_blank');
+ await status.getByText('Draft',{exact:true}).waitFor();
+ await page.reload();
+ await viewPr.waitFor();
+ await status.getByText('Draft',{exact:true}).waitFor();
+ assert.equal(signingWrites,1);
+ pullRequest={...pullRequest,state:'RUNTIME_SIGNING_PULL_REQUEST_STATE_MERGED'};
+ await status.getByRole('button',{name:'Refresh pull request status',exact:true}).click();
+ await status.getByText('Merged',{exact:true}).waitFor();
+ resolvedHead='f'.repeat(40);
+ await page.reload();
+ await status.getByText('Merged',{exact:true}).waitFor();
+ await status.getByRole('button',{name:'Go to lock check',exact:true}).waitFor();
+ assert.equal(signingWrites,1);
+ assert.equal(await status.getByRole('button',{name:/^Merge/}).count(),0);
+ await page.unroute('**/api/GetRuntimeSigningPullRequest');
+ await page.unroute('**/api/OpenRuntimeSigningPullRequest');
  assert.equal(await status.getByRole('button',{name:'Start preparation',exact:true}).count(),0);
  assert.equal(startRequest,undefined);
  await status.getByRole('button',{name:'Back',exact:true}).click();
@@ -256,6 +283,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await page.evaluate(id => {
   localStorage.removeItem(`ayni.repository.runtime.registry.${id}`);
   localStorage.removeItem(`ayni.repository.runtime.signer.${id}`);
+  localStorage.removeItem(`ayni.repository.runtime.progress.${id}`);
  },repositoryId);
  for(const method of ['ListRepositoryBranches','ListRepositoryInspections','ListConnections','ListRuntimeSigners','ListRuntimePreparations','GetRuntimePreparation','GetRuntimePreparationReceipt','StartRepositoryRuntime','GetRepositoryRuntime','GetRepositoryRuntimeReceipt','RetryRuntimePreparation','CancelRuntimePreparation','ResolveRepositoryDefaultCommit','InspectRepository']) await page.unroute(`**/api/${method}`);
  console.log('runtime-preparation-ui: intercepted UI contract coverage passed for explicit grants, lost-response receipt recovery, current-generation publication reconciliation, separate cleanup gate and cancellation; no registry/build qualification claimed.');
@@ -357,8 +385,7 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  assert.equal(starts.length,0);
  deploymentEnabled=true;
  await page.reload();
- await next.click();
- await review();
+ await status.getByRole('heading',{name:'Review and start',exact:true}).waitFor();
  assert.equal(await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).isChecked(),false);
  await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).check();
  await preparation.getByRole('button',{name:'Build and publish runtime',exact:true}).click();

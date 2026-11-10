@@ -5,6 +5,8 @@ package ayni.orchestrator.v1;
 service RuntimePreparationService {
   rpc StartRepositoryRuntime(StartRepositoryRuntimeRequest) returns (StartRepositoryRuntimeResponse);
   rpc GetRepositoryRuntime(GetRepositoryRuntimeRequest) returns (GetRepositoryRuntimeResponse);
+  rpc GetRuntimeSigningPullRequest(GetRuntimeSigningPullRequestRequest) returns (GetRuntimeSigningPullRequestResponse);
+  rpc OpenRuntimeSigningPullRequest(OpenRuntimeSigningPullRequestRequest) returns (OpenRuntimeSigningPullRequestResponse);
   rpc GetRepositoryRuntimeReceipt(GetRepositoryRuntimeReceiptRequest) returns (GetRepositoryRuntimeReceiptResponse);
   rpc ProvisionRuntimeSigner(ProvisionRuntimeSignerRequest) returns (ProvisionRuntimeSignerResponse);
   rpc RecoverRuntimeSignerProvisioning(RecoverRuntimeSignerProvisioningRequest) returns (RecoverRuntimeSignerProvisioningResponse);
@@ -253,6 +255,37 @@ message GetRepositoryRuntimeResponse {
   // Deployment configuration, independent of the retained last-run outcome.
   bool preparation_enabled = 2;
   bool development_only = 3;
+  bool signing_update_publication_enabled = 4;
+}
+
+message OpenRuntimeSigningPullRequestRequest {
+  string repository_id = 1;
+  string inspection_id = 2;
+  uint64 expected_connection_revision = 3;
+  string signer_id = 4;
+  uint64 expected_signer_revision = 5;
+  string base_branch = 6;
+}
+message OpenRuntimeSigningPullRequestResponse {
+  RuntimeSigningPullRequest pull_request = 1;
+}
+message GetRuntimeSigningPullRequestRequest {
+  OpenRuntimeSigningPullRequestRequest review = 1;
+}
+message GetRuntimeSigningPullRequestResponse {
+  RuntimeSigningPullRequest pull_request = 1;
+}
+message RuntimeSigningPullRequest {
+  string url = 1;
+  string branch = 2;
+  RuntimeSigningPullRequestState state = 3;
+}
+enum RuntimeSigningPullRequestState {
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_UNSPECIFIED = 0;
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_DRAFT = 1;
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_OPEN = 2;
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_CLOSED = 3;
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_MERGED = 4;
 }
 message GetRepositoryRuntimeReceiptRequest {
   string idempotency_key = 1;

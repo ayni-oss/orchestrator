@@ -203,3 +203,32 @@ operation, stage, generation and closed failure reason. Identical diagnostics ar
 limited to once every 30 seconds. Response bodies, credentials and raw client
 errors are never logged. Authority-side store failures include the closed store
 reason and SQLSTATE when available.
+
+
+## Signing key update pull requests
+
+When the selected signing key differs from the repository trust policy, the
+onboarding review can open a draft pull request. The control plane uses the
+reviewed branch and inspected commit, pins only the selected public key in
+`.ayni.toml`, and rebuilds `.ayni.lock` from the verified locked inputs through
+Ayni. It aborts if the existing lock cannot be reproduced or the target branch
+has moved. The branch is deterministic for the reviewed snapshot and regenerated
+lock. Review checks the provider for a draft, open, closed, or merged pull
+request on that branch. Retrying the same change returns the existing pull
+request, including after its branch is deleted on merge.
+
+The browser remembers integration and lock review checkpoints per repository.
+Reopening verifies current integration revisions and resolves the selected
+branch before reusing the saved inspection. A changed branch or configuration
+returns the wizard to the affected step. Inspections and preparation runs remain
+in PostgreSQL, and pull request state is read from the provider. After merge,
+check the target branch again before preparing the runtime.
+
+Enable this action for one repository through the chart values
+`signingUpdatePublication.enabled`, `signingUpdatePublication.repository`
+(the exact `owner/name`), and `signingUpdatePublication.tokenSecretName`.
+The named Secret must contain a `token` key with a GitHub credential restricted
+to that repository and granted Contents and Pull requests write permissions.
+The chart mounts it into the control plane separately from the read-only source
+connection. For other deployments, set `ORCHESTRATOR_SIGNING_UPDATE_REPOSITORY`
+and point `ORCHESTRATOR_SIGNING_UPDATE_TOKEN_FILE` to the mounted credential.

@@ -3,6 +3,7 @@ pub(super) mod onboarding;
 mod operations;
 mod profile;
 mod provisioning;
+mod signing_update;
 use super::{RequestContext, WorkflowGrpc, v1};
 use ayni_orchestrator_workflow_postgres::store::runtime_signers::{SaveSigner, Signer};
 use std::collections::BTreeMap;
@@ -42,20 +43,48 @@ impl v1::runtime_preparation_service_server::RuntimePreparationService for Workf
         request: Request<v1::GetRepositoryRuntimeRequest>,
     ) -> Result<Response<v1::GetRepositoryRuntimeResponse>, Status> {
         let context = RequestContext::new(&request);
+        let repository_id = request.into_inner().repository_id;
+        let repository = self
+            .store
+            .inspection_repository(&repository_id)
+            .await
+            .map_err(|error| context.store(&error))?;
         let run = self
             .store
-            .latest_repository_runtime(&request.into_inner().repository_id)
+            .latest_repository_runtime(&repository_id)
             .await
             .map_err(|e| context.store(&e))?;
         let profile = profile::RuntimeConfiguration::from_environment().ok();
         Ok(context.response(v1::GetRepositoryRuntimeResponse {
             run: run.map(onboarding::public),
+            signing_update_publication_enabled: signing_update::enabled(&repository.full_name),
             preparation_enabled: profile.is_some(),
             development_only: profile.is_some_and(|value| {
                 value.profile_id
                     == ayni_orchestrator_events::runtime_preparation::DEVELOPMENT_PROFILE_ID
             }),
         }))
+    }
+    async fn get_runtime_signing_pull_request(
+        &self,
+        request: Request<v1::GetRuntimeSigningPullRequestRequest>,
+    ) -> Result<Response<v1::GetRuntimeSigningPullRequestResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let review = request
+            .into_inner()
+            .review
+            .ok_or_else(|| Status::invalid_argument("A signing update review is required."))?;
+        let pull_request = signing_update::run(self, &context, review, false).await?;
+        Ok(context.response(v1::GetRuntimeSigningPullRequestResponse { pull_request }))
+    }
+
+    async fn open_runtime_signing_pull_request(
+        &self,
+        request: Request<v1::OpenRuntimeSigningPullRequestRequest>,
+    ) -> Result<Response<v1::OpenRuntimeSigningPullRequestResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let pull_request = signing_update::run(self, &context, request.into_inner(), true).await?;
+        Ok(context.response(v1::OpenRuntimeSigningPullRequestResponse { pull_request }))
     }
     async fn get_repository_runtime_receipt(
         &self,

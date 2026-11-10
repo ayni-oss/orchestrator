@@ -132,3 +132,19 @@ export function runtimeRegistryImage(operation: RuntimePreparation | undefined, 
  const confirmed = !!digest && /^sha256:[a-f0-9]{64}$/.test(digest) && (operation?.state === 'ready' || !!operation?.expectedManifestDigest && digest === operation.expectedManifestDigest && ['pull_final','verify_content','verify_compatibility','cleanup'].includes(operation.stage) && operation.state !== 'publication_uncertain');
  return {destination:target, url:`https://github.com/orgs/${match[1]}/packages/container/package/${match[2]}`, reference:confirmed ? `${target}@${digest}` : '', confirmed};
 }
+
+
+export function runtimeProgressKey(repositoryId: string) {
+ return `ayni.repository.runtime.progress.${repositoryId}`;
+}
+
+export function readRuntimeProgress(repositoryId: string): {integrations: string; inspection: string; signingUpdate: string} | undefined {
+ try {
+  const saved = JSON.parse(localStorage.getItem(runtimeProgressKey(repositoryId)) ?? 'null');
+  if (saved && typeof saved.integrations === 'string' && typeof saved.inspection === 'string' && typeof saved.signingUpdate === 'string') {
+   return saved;
+  }
+ } catch {
+  // Progress is optional when browser storage is unavailable.
+ }
+}

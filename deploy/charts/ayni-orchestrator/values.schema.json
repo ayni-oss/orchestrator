@@ -361,6 +361,15 @@
         }
       }
     },
+    "signingUpdatePublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "repository": { "type": "string", "pattern": "^$|^[A-Za-z0-9-]+/[A-Za-z0-9_.-]+$" },
+        "tokenSecretName": { "type": "string" }
+      }
+    },
     "publication": {
       "type": "object",
       "additionalProperties": false,

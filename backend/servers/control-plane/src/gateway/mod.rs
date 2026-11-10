@@ -95,15 +95,19 @@ pub fn router(gateway: Gateway) -> Router {
 }
 
 macro_rules! forward {
-    ($body:expr, $client:expr, $method:ident, $request:ty) => {{
+    ($body:expr, $client:expr, $method:ident, $request:ty) => {
+        forward!($body, $client, $method, $request, 10)
+    };
+    ($body:expr, $client:expr, $method:ident, $request:ty, $timeout:literal) => {{
         let value: $request = decode($body)?;
         let mut request = tonic::Request::new(value);
-        request.set_timeout(Duration::from_secs(10));
-        let response = tokio::time::timeout(Duration::from_secs(12), $client.$method(request))
-            .await
-            .map_err(|_| {
-                ApiError::from(Status::deadline_exceeded("workflow request timed out"))
-            })??;
+        request.set_timeout(Duration::from_secs($timeout));
+        let response =
+            tokio::time::timeout(Duration::from_secs($timeout + 2), $client.$method(request))
+                .await
+                .map_err(|_| {
+                    ApiError::from(Status::deadline_exceeded("workflow request timed out"))
+                })??;
         encode(response.into_inner()).map(Json)
     }};
 }
@@ -599,6 +603,20 @@ async fn runtime_preparation_rpc(
             gateway.runtime_preparation(),
             get_repository_runtime,
             v1::GetRepositoryRuntimeRequest
+        ),
+        "GetRuntimeSigningPullRequest" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            get_runtime_signing_pull_request,
+            v1::GetRuntimeSigningPullRequestRequest,
+            55
+        ),
+        "OpenRuntimeSigningPullRequest" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            open_runtime_signing_pull_request,
+            v1::OpenRuntimeSigningPullRequestRequest,
+            105
         ),
         "GetRepositoryRuntimeReceipt" => forward!(
             body,

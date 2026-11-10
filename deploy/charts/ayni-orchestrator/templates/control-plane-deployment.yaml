@@ -1,5 +1,6 @@
 {{- if .Values.enabled }}
 {{- $signerProvisioning := .Values.signerProvisioning | default dict }}
+{{- $signingUpdate := .Values.signingUpdatePublication | default dict }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -65,6 +66,12 @@ spec:
               value: /tmp
             - name: ORCHESTRATOR_SESSION_AUTHORITY_TOKEN_PATH
               value: /var/run/secrets/ayni/session-authority/token
+            {{- if $signingUpdate.enabled }}
+            - name: ORCHESTRATOR_SIGNING_UPDATE_REPOSITORY
+              value: {{ required "signingUpdatePublication.repository is required" $signingUpdate.repository | quote }}
+            - name: ORCHESTRATOR_SIGNING_UPDATE_TOKEN_FILE
+              value: /var/run/secrets/ayni/signing-update/token
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.controlPlane.httpPort }}
@@ -106,6 +113,11 @@ spec:
             {{- if $signerProvisioning.enabled }}
             - name: signer-provisioning
               mountPath: /var/run/secrets/ayni/signer-provisioning
+              readOnly: true
+            {{- end }}
+            {{- if $signingUpdate.enabled }}
+            - name: signing-update
+              mountPath: /var/run/secrets/ayni/signing-update
               readOnly: true
             {{- end }}
             - name: workflow-postgres-runtime
@@ -155,6 +167,12 @@ spec:
         - name: publication-authority
           secret:
             secretName: {{ .Values.publication.authoritySecretName | quote }}
+            items: [{ key: token, path: token }]
+        {{- end }}
+        {{- if $signingUpdate.enabled }}
+        - name: signing-update
+          secret:
+            secretName: {{ required "signingUpdatePublication.tokenSecretName is required" $signingUpdate.tokenSecretName | quote }}
             items: [{ key: token, path: token }]
         {{- end }}
         - name: session-authority

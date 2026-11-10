@@ -10,6 +10,7 @@
  import Feedback from '$lib/components/feedback.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
  import RuntimePreparation from '$lib/components/runtime-preparation.svelte';
+ import { readRuntimeProgress } from '$lib/runtime-preparation';
  import { rpc, RpcError, type Connection } from '$lib/api';
  import { inspectionReasons, type Repository, type RepositoryInspection, type InspectRequest } from '$lib/repositories';
  let { repo, connection = $bindable() }: { repo: Repository; connection?: Connection } = $props();
@@ -35,6 +36,8 @@
  const storageKey = $derived(`ayni.repository.inspection.pending.${repo.id}`);
  const branchStorageKey = $derived(`ayni.repository.runtime.branch.${repo.id}`);
  const canInspect = $derived(!!connection?.enabled && !!connection?.activeCredentialRevision);
+ const currentInspection = $derived(inspections.find(value => value.commitSha === checked?.sha &&
+  value.connectionRevision === connection?.revision && value.state === 'completed') ?? inspections[0] ?? null);
  const validCommit = $derived(/^[a-f0-9]{40}$/.test(commitSha));
  function dismissRecoveryToast() {
   if (recoveryToast !== undefined) toast.dismiss(recoveryToast);
@@ -146,6 +149,29 @@
    if (canInspect) void loadBranches();
   }
  }
+ async function resolveBranch(selectedBranch: string, revision: string): Promise<string> {
+  const resolved = await rpc('ResolveRepositoryDefaultCommit', {repositoryId:repo.id, expectedConnectionRevision:revision, branch:selectedBranch});
+  if (resolved.safeReason) throw new Error(inspectionReasons[resolved.safeReason] || 'The selected branch could not be resolved. Retry when the source connection is available.');
+  if (!/^[a-f0-9]{40}$/.test(resolved.commitSha)) throw new Error('The source connection did not return an exact commit for the selected branch.');
+  return resolved.commitSha;
+ }
+ async function restoreCheckedCommit() {
+  if (!readRuntimeProgress(repo.id)?.inspection || !canInspect || !connection ||
+      !inspections.some(value => value.state === 'completed' && value.connectionRevision === connection?.revision)) return;
+  const selectedBranch = branch.trim(), revision = connection.revision;
+  checkingDefault = true;
+  try {
+   const sha = await resolveBranch(selectedBranch, revision);
+   if (mounted && selectedBranch === branch.trim() && revision === connection?.revision &&
+       inspections.some(value => value.commitSha === sha && value.connectionRevision === revision && value.state === 'completed')) {
+    checked = {branch:selectedBranch, sha};
+   }
+  } catch {
+   // Keep the last report visible and let the user check again when the branch is reachable.
+  } finally {
+   checkingDefault = false;
+  }
+ }
  async function recheckDefaultBranch() {
   if (!pending && !connection) return;
   checkingDefault = true;
@@ -154,11 +180,11 @@
    if (!connection) return;
    checked = null;
    const selectedBranch = branch.trim();
-   const resolved = await rpc('ResolveRepositoryDefaultCommit', {repositoryId:repo.id, expectedConnectionRevision:connection.revision,branch:selectedBranch});
-   if (resolved.safeReason) throw new Error(inspectionReasons[resolved.safeReason] || 'The selected branch could not be resolved. Retry when the source connection is available.');
-   if (!/^[a-f0-9]{40}$/.test(resolved.commitSha)) throw new Error('The source connection did not return an exact commit for the selected branch.');
-   commitSha = resolved.commitSha;
-   const request = {idempotencyKey:crypto.randomUUID(), repositoryId:repo.id, expectedConnectionRevision:connection.revision, commitSha:resolved.commitSha, branch:selectedBranch};
+   const revision = connection.revision;
+   const sha = await resolveBranch(selectedBranch, revision);
+   if (selectedBranch !== branch.trim() || revision !== connection?.revision) return;
+   commitSha = sha;
+   const request = {idempotencyKey:crypto.randomUUID(), repositoryId:repo.id, expectedConnectionRevision:revision, commitSha:sha, branch:selectedBranch};
    persist(request);
    await resume(request);
   } finally { checkingDefault = false; }
@@ -186,7 +212,7 @@
   }
   void loadBranches();
   const saved = sessionStorage.getItem(storageKey);
-  if (!saved) { void perform(() => load()); return; }
+  if (!saved) { void perform(async () => { await load(); await restoreCheckedCommit(); }); return; }
   try {
    const value = JSON.parse(saved);
    if (value.repositoryId !== repo.id || !/^[a-f0-9]{40}$/.test(value.commitSha) || typeof value.idempotencyKey !== 'string' || typeof value.expectedConnectionRevision !== 'string' || (value.branch !== undefined && typeof value.branch !== 'string')) throw new Error();
@@ -278,8 +304,7 @@
 {/snippet}
 
 <div data-repository-inspection={repo.id}>
- <RuntimePreparation {repo} {connection} {branchPicker} onSourceRefresh={refreshSource} branch={branch.trim()} checkedCommit={checked?.branch === branch.trim() ? checked?.sha : undefined} latestInspection={inspections[0] || null} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || (!pending && !canInspect)} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}
-  repositoryBranches={{names:branches, loading:loadingBranches, error:branchError, refresh:() => loadBranches(), more:nextBranchPage ? () => loadBranches(nextBranchPage) : undefined}}>
+ <RuntimePreparation {repo} {connection} {branchPicker} onSourceRefresh={refreshSource} branch={branch.trim()} checkedCommit={checked?.branch === branch.trim() ? checked?.sha : undefined} latestInspection={currentInspection} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || (!pending && !canInspect)} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}>
   {#snippet children(runtime, preparationActivity)}
    <Tabs.Content value="runtime" class="space-y-6">
     {@render runtime()}

@@ -18,7 +18,7 @@ export async function POST({ params, request }) {
   const origin = gatewayOrigin();
   try {
     const response = await fetch(`${origin}/api/${params.method}`, {
-      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(25000),
+      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(params.method === 'OpenRuntimeSigningPullRequest' ? 110000 : params.method === 'GetRuntimeSigningPullRequest' ? 60000 : 25000),
       headers: { 'Content-Type': 'application/json', 'x-console-request': '1', Origin: origin }, body: bytes,
     });
     return new Response(response.body, { status: response.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });

@@ -50,9 +50,11 @@ mod tests {
         "ListRepositoryInspections",
     ];
 
-    const RUNTIME_PREPARATION_METHODS: [&str; 17] = [
+    const RUNTIME_PREPARATION_METHODS: [&str; 19] = [
         "StartRepositoryRuntime",
         "GetRepositoryRuntime",
+        "GetRuntimeSigningPullRequest",
+        "OpenRuntimeSigningPullRequest",
         "GetRepositoryRuntimeReceipt",
         "ProvisionRuntimeSigner",
         "RecoverRuntimeSignerProvisioning",

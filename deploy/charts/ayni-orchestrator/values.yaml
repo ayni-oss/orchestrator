@@ -61,6 +61,12 @@ controlPlane:
       cpu: 500m
       memory: 256Mi
 
+# Allow runtime onboarding to open draft signing-key PRs in a single repository.
+signingUpdatePublication:
+  enabled: false
+  repository: ""
+  tokenSecretName: ""
+
 taskExecution:
   enabled: true
   # Deterministic coding is strictly an acceptance fixture, disabled by default.
