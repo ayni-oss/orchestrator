@@ -220,14 +220,14 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.equal(await status.getByText('Check the selected branch to inspect the exact commit’s policy, lock, and trust requirements.',{exact:true}).count(),0);
  await lockCheckAction.click();
  await status.getByRole('heading',{name:'Lock check report',exact:true}).waitFor();
- await status.locator('[data-title-content]').getByText('Passed',{exact:true}).waitFor();
- await status.locator('dd').getByText('Passed',{exact:true}).waitFor();
+ await status.locator('[data-title-content]').getByText('Signing key not trusted',{exact:true}).waitFor();
+ assert.equal(await status.getByText('Passed',{exact:true}).count(),0);
  await status.getByText('fixture-signer · Public key does not match',{exact:true}).waitFor();
  const report= status.locator('dl').filter({hasText:'Lock fingerprint'});
  const valueStarts=await report.locator('dd').evaluateAll(values=>values.map(value=>value.getBoundingClientRect().left));
  assert.equal(new Set(valueStarts).size,1);
  assert.ok(await next().isDisabled());
- await status.getByRole('checkbox',{name:'Update signing key',exact:true}).check();
+ await status.getByRole('checkbox',{name:'I accept adding the signing key by creating a new change request',exact:true}).check();
  let signingRequest, pullRequest, signingWrites=0, publicationAllowed=false;
  await page.route('**/api/GetRuntimeSigningPullRequest',async route=>{
   assert.deepEqual(route.request().postDataJSON().review,{repositoryId,inspectionId,expectedConnectionRevision:'1',
@@ -280,6 +280,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
   result:{...inspection.result,trustedPublicKeys:{'fixture-signer':'e'.repeat(64)}}};
  await status.getByRole('button',{name:'Check ayni.lock',exact:true}).click();
  await status.getByText('fixture-signer · Trusted public key matches',{exact:true}).waitFor();
+ await status.locator('[data-title-content]').getByText('Passed',{exact:true}).waitFor();
  await status.getByText('Lock fingerprint',{exact:true}).waitFor();
  await next().click();
  await status.getByRole('heading',{name:'Review and start',exact:true}).waitFor();

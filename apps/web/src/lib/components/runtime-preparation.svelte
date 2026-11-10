@@ -117,7 +117,10 @@
    return {label:'Recheck required',tone:'warning'};
   if (candidateInspection.state !== 'completed' || !candidateInspection.result || blockingFindings.length)
    return {label:'Needs attention',tone:'warning'};
-  return reviewedCommit ? {label:'Passed',tone:'success'} : {label:'Recheck required',tone:'warning'};
+  if (!reviewedCommit) return {label:'Recheck required',tone:'warning'};
+  if (signerTrustMissing) return {label:'Signing key not trusted',tone:'warning'};
+  if (signerTrust !== 'matches') return {label:'Signing key unverified',tone:'warning'};
+  return {label:'Passed',tone:'success'};
  });
  const validSigningReview = $derived(
   signerReady && !!signer?.publicKey && signerTrustMissing &&
@@ -656,9 +659,6 @@
      {#if candidateInspection}
       <h4 class="text-sm font-medium">Lock check report</h4>
       <InformationTable aligned rows={[
-       {label:'ayni.lock check',value:candidateInspection.state === 'accepted' ? 'Pending' :
-        candidateInspection.state === 'completed' && candidateInspection.result && !blockingFindings.length ? 'Passed' :
-        candidateInspection.state === 'superseded' ? 'Source connection changed' : 'Needs attention'},
        {label:reviewedCommit ? 'Checked commit' : 'Last inspected commit',value:candidateInspection.commitSha,monospace:true},
        {label:'Signing key',value:signer ? `${signer.keyId} · ${signingKeyStatus[signerTrust]}` : 'Choose a signing key in Connect integrations'},
        ...(candidateInspection.result ? [
@@ -669,18 +669,15 @@
       {#if candidateInspection.state === 'completed' && !reviewedCommit}
        <p class="text-sm text-muted-foreground">Check the selected branch for a current result.</p>
       {/if}
-      {#if signerTrustMissing}
-       <p class="text-sm">Choose a matching key in Connect integrations, or review the proposed update to the repository trust policy.</p>
-       {#if canRequestSigningUpdate}
-        <label class="flex items-center gap-2 text-sm">
-         <input type="checkbox" class="accent-primary" checked={signingUpdateRequested}
-          onchange={event => {
-           requestedSigningUpdate = event.currentTarget.checked ? signingUpdateScope : '';
-           if (!event.currentTarget.checked) saveProgress();
-          }}/>
-         Update signing key
-        </label>
-       {/if}
+      {#if canRequestSigningUpdate}
+       <label class="flex items-start gap-2 text-sm">
+        <input type="checkbox" class="mt-0.5 accent-primary" checked={signingUpdateRequested}
+         onchange={event => {
+          requestedSigningUpdate = event.currentTarget.checked ? signingUpdateScope : '';
+          if (!event.currentTarget.checked) saveProgress();
+         }}/>
+        I accept adding the signing key by creating a new change request
+       </label>
       {/if}
       {#if candidateInspection.safeReason}<p class="text-sm">{inspectionReasons[candidateInspection.safeReason] || 'The inspection needs attention.'}</p>{/if}
       {#each blockingFindings as finding (finding.code + finding.path)}
@@ -689,7 +686,7 @@
      {:else if checkingDefault}
       <h4 class="text-sm font-medium">Lock check report</h4>
       <InformationTable aligned loading rows={[
-       {label:'ayni.lock check',value:''},{label:'Checked commit',value:''},
+       {label:'Checked commit',value:''},
        {label:'Signing key',value:''},{label:'ayni version',value:''},{label:'Lock fingerprint',value:''},
       ]} />
      {:else}

@@ -90,7 +90,9 @@ The lock-check step keeps the branch selector as its main control and preserves
 the detailed report below it. Run the check when the branch changes. Show check
 status beside the title and put a ghost refresh icon at the right to recheck. Keep the last report visible during
 a recheck; a changed branch or source revision requires a fresh check before
-showing a passing current status.
+showing a passing current status. The badge also requires the selected signing
+key to match the repository’s trust policy. Keep signing key details in the
+report and show the overall result only beside the title.
 
 The review step uses the shared branch label and copyable code block for its
 reviewed commit. Keep build-attempt and replacement controls visible, disabling
