@@ -1,7 +1,7 @@
 <script lang="ts">
  import { protectUnsavedChanges } from "$lib/unsaved-changes.svelte";
  import { onMount, tick, untrack, type Snippet } from 'svelte';
- import { RefreshCw } from '@lucide/svelte';
+ import { Copy, RefreshCw } from '@lucide/svelte';
  import { Button } from '$lib/components/ui/button/index.js';
  import { Input } from '$lib/components/ui/input/index.js';
  import { Label } from '$lib/components/ui/label/index.js';
@@ -721,10 +721,26 @@
       {label:'Cleanup',value:operation.cleanupComplete ? 'Complete' : 'Not complete'},
      ]}/>
     {/if}
-  {#if currentStep === 4 && !pending && image}<div class="space-y-2 border-t pt-3"><p class="text-sm font-medium">{image.confirmed ? 'Registry image available' : 'Image destination'}</p><code class="block break-all text-xs">{image.reference || image.destination}</code>{#if !image.confirmed}<p class="text-xs text-muted-foreground">No published image is confirmed by this status yet.</p>{/if}{#if image.reference && verified}
-   {@const reference = image.reference}
-   <Button variant="outline" onclick={() => perform(() => navigator.clipboard.writeText(reference))}>Copy image reference</Button>
-  {/if}<a class="text-sm text-primary underline underline-offset-4" href={image.url} target="_blank" rel="noreferrer">Open registry package</a></div>{/if}
+    {#if currentStep === 4 && !pending && image}
+     <div class="space-y-2 border-t pt-3">
+      <p class="text-sm font-medium">{image.confirmed ? 'Registry image available' : 'Image destination'}</p>
+      <div class="flex items-start gap-2 rounded-md border bg-muted/30 p-2">
+       <pre class="min-w-0 flex-1 px-1 py-2 text-xs whitespace-pre-wrap break-all"><code>{image.reference || image.destination}</code></pre>
+       {#if image.reference && verified}
+        {@const reference = image.reference}
+        <Button variant="outline" size="icon" aria-label="Copy image reference" title="Copy image reference" disabled={busy}
+         onclick={() => perform(async () => {
+          await navigator.clipboard.writeText(reference);
+          toast.success('Image reference copied');
+         })}>
+         <Copy aria-hidden="true" />
+        </Button>
+       {/if}
+      </div>
+      {#if !image.confirmed}<p class="text-xs text-muted-foreground">No published image is confirmed by this status yet.</p>{/if}
+      <a class="text-sm text-primary underline underline-offset-4" href={image.url} target="_blank" rel="noreferrer">Open registry package</a>
+     </div>
+    {/if}
     {#if !pending && operation && (retryStates.has(operation.state) || (activeStates.has(operation.state) && operation.state !== 'cancelling'))}
     <div class="flex flex-wrap gap-2">
      {#if operation && retryStates.has(operation.state)}{@const current = operation}<Button disabled={busy || !!pending} onclick={() => perform(() => command('RetryRuntimePreparation',current))}>{current.state === 'publication_uncertain' ? 'Reconcile publication' : 'Retry preparation'}</Button>{/if}

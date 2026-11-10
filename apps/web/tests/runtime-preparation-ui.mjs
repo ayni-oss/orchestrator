@@ -265,6 +265,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await preparation.getByText('Registry image available',{exact:true}).waitFor();
  assert.equal(await preparation.getByRole('link',{name:'Open registry package',exact:true}).getAttribute('href'),'https://github.com/orgs/fixture/packages/container/package/runtime');
  await preparation.getByText(`ghcr.io/fixture/runtime@${hash}`,{exact:true}).waitFor();
+ assert.equal(await preparation.getByRole('button',{name:'Copy image reference',exact:true}).count(),0);
  await page.route('**/api/CancelRuntimePreparation',async route=>{
   cancelRequest=route.request().postDataJSON();assert.equal(cancelRequest.id,operationId);assert.equal(cancelRequest.expectedGeneration,'4');
   operation={...operation,state:'cancelling',generation:'5',safeReason:'cancelled'};originalReceipt=operation;await route.fulfill({json:{operation}});
@@ -506,7 +507,18 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  operation={...operation,state:'ready',stage:'cleanup',contentVerified:true,managedCompatible:true,cleanupComplete:true};
  await next.click();
  await status.getByRole('heading',{name:'Verify and finish',exact:true}).locator('..').getByText('Ready',{exact:true}).waitFor();
- await preparation.getByText(`ghcr.io/fixture/sandbox@${hash}`,{exact:true}).waitFor();
+ const imageReference=`ghcr.io/fixture/sandbox@${hash}`;
+ const imageBlock=preparation.locator('div:has(> pre > code)').filter({hasText:imageReference});
+ const copyImage=imageBlock.getByRole('button',{name:'Copy image reference',exact:true});
+ await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin});
+ try {
+  await copyImage.click();
+  assert.equal(await copyImage.textContent(),'');
+  await page.getByText('Image reference copied',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),imageReference);
+ } finally {
+  await page.context().clearPermissions();
+ }
  assert.equal(await preparation.getByRole('link',{name:'Open registry package',exact:true}).getAttribute('href'),'https://github.com/orgs/fixture/packages/container/package/sandbox');
  const completedRun=run,completedOperation=operation;
  const fresh=await page.context().browser().newPage();
