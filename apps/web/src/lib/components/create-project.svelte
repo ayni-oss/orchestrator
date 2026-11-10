@@ -1,4 +1,7 @@
 <script lang="ts">
+ import { protectUnsavedChanges } from "$lib/unsaved-changes.svelte";
+ import { workspacePath } from '$lib/paths';
+
  import { onMount, tick } from 'svelte';
  import { goto, invalidateAll } from '$app/navigation';
  import { Plus } from '@lucide/svelte';
@@ -11,15 +14,16 @@
  let { workspaceId }: {workspaceId:string}=$props();let open=$state(false);
  let name=$state('');let goal=$state('');let saving=$state(false);let error=$state('');
  let pending=$state<Record<string,string>|null>(null);
- const storageKey='ayni.project.pending';
- onMount(()=>{const saved=sessionStorage.getItem(storageKey);if(saved){try{pending=JSON.parse(saved);name=pending?.displayName||'';goal=pending?.goal||'';open=true;}catch{error='The pending command could not be restored.';}}});
+ protectUnsavedChanges(() => open && !pending && (!!name || !!goal));
+ const storageKey=$derived(`ayni.workspace.${workspaceId}.project.pending`);
+ onMount(()=>{const saved=sessionStorage.getItem(storageKey);if(saved){try{pending=JSON.parse(saved);if(pending?.workspaceId!==workspaceId)throw new Error('Invalid project scope');name=pending?.displayName||'';goal=pending?.goal||'';open=true;}catch{error='The pending command could not be restored.';}}});
  async function create(event:SubmitEvent){
   event.preventDefault();if(saving)return;saving=true;error='';
   try{
    if(!pending){pending={idempotencyKey:crypto.randomUUID(),workspaceId,displayName:name,goal};sessionStorage.setItem(storageKey,JSON.stringify(pending));}
    const result=await rpc('CreateProject',pending);
    pending=null;sessionStorage.removeItem(storageKey);open=false;await tick();
-   await goto(`/?workspace=${encodeURIComponent(result.project.workspaceId)}`);await invalidateAll();
+   await goto(workspacePath(result.project.workspaceId));await invalidateAll();
    name='';goal='';
   }catch(cause){error=cause instanceof Error?cause.message:'Project could not be created.';}finally{saving=false;}
  }

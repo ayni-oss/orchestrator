@@ -89,7 +89,7 @@ async fn configured_fixture() -> Result<(Fixture, String), Box<dyn std::error::E
         .await?;
     let current = fixture
         .store
-        .get_agent_configuration(&fixture.workspace, "")
+        .get_scoped_agent_configuration(&fixture.workspace, &fixture.project, "")
         .await?;
     let mut proposed = current.clone();
     proposed.revision_id.clear();

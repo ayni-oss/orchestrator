@@ -6,7 +6,7 @@ The sole web application in `apps/web` uses the promoted example shell, shared
 components, fonts and original light/dark tokens. It provides Workspaces and Configuration.
 It creates and discovers workspaces/projects through canonical v1 APIs and manages
 multiple named GitHub App source-control, GitHub Container Registry and OpenAI
-connections. Workspace settings selects an OpenAI connection, discovered model,
+connections. Project settings selects an OpenAI connection, discovered model,
 instructions and budgets. Repositories provides shared source discovery and catalog admission. Project cards link to their repository associations. Runtime preparation uses separately frozen registry/signer revisions and a qualified Kubernetes profile. The duplicate example and diagnostic frontend
 are removed. All future journeys extend this application.
 
@@ -94,7 +94,7 @@ disable/late-validation fencing, concurrent updates, safe history and immutable
 credential privileges. The optional combined browser gate runs real PostgreSQL,
 gRPC and the gateway; it loses a successful credential-write response and checks
 reload recovery, field/storage redaction, negative key validation, concurrent-tab
-conflicts, GHCR/OpenAI save/reload recovery, workspace connection/model selection
+conflicts, GHCR/OpenAI save/reload recovery, project connection/model selection
 and same-origin rejection. It uses synthetic credential material.
 
 Live successful GitHub, GHCR and OpenAI evidence requires maintainer-provided

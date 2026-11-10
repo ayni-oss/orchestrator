@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { protectUnsavedChanges } from "$lib/unsaved-changes.svelte";
  import { toast } from 'svelte-sonner';
  import { onMount } from 'svelte';
  import { Button } from '$lib/components/ui/button/index.js';
@@ -19,6 +20,7 @@
  let pushToken=$state(''); let pullToken=$state(''); let apiKey=$state('');
  let open=$state(false); let busy=$state(true); let error=$state('');
  let pendingKey=$state(''); let next=$state(''); let historyNext=$state(''); let generation=0;
+ protectUnsavedChanges(() => open && !pendingKey && (name !== (selected?.displayName ?? '') || destination !== (selected?.registryDestination ?? '') || pushUsername !== (selected?.pushUsername ?? '') || pullUsername !== (selected?.pullUsername ?? '') || !!pushToken || !!pullToken || !!apiKey));
  function clearCredentials(){pushToken='';pullToken='';apiKey='';}
  function persist(key:string){pendingKey=key;if(key)sessionStorage.setItem(storageKey,key);else sessionStorage.removeItem(storageKey);}
  async function perform(action:()=>Promise<void>){busy=true;error='';try{await action();}catch(e){error=e instanceof Error?e.message:'Service unavailable. Refresh and retry.';}finally{busy=false;}}
@@ -65,7 +67,7 @@
 {#if selected}<section class="mt-8 space-y-4"><h3 class="text-lg font-semibold">Operation history</h3>
  {#if registry}<p class="text-sm text-muted-foreground">Credential validation checks authentication for both accounts. It does not establish artifact push, pull or runtime readiness.</p>{/if}
  <Button variant="outline" disabled={busy||!!pendingKey} onclick={()=>perform(toggle)}>{selected.enabled?'Disable connection':'Enable connection'}</Button>
- {#if !registry&&selected.models?.length}<InformationCard title="Discovered models"><p class="text-sm text-muted-foreground">Choose a model when configuring a workspace. API access does not establish model compatibility with conversation execution.</p><ul class="max-h-64 overflow-y-auto font-mono text-xs">{#each selected.models as model (model)}<li>{model}</li>{/each}</ul></InformationCard>{/if}
+ {#if !registry&&selected.models?.length}<InformationCard title="Discovered models"><p class="text-sm text-muted-foreground">Choose a model when configuring a project. API access does not establish model compatibility with conversation execution.</p><ul class="max-h-64 overflow-y-auto font-mono text-xs">{#each selected.models as model (model)}<li>{model}</li>{/each}</ul></InformationCard>{/if}
  {#each history as op (op.id)}<InformationCard title={op.kind==='save'?'Credential candidate':'Connection state'} status={op.state}><InformationTable rows={[{label:'Operation',value:op.id,monospace:true},{label:'Revision',value:op.connectionRevision}]}/>{#if op.safeReason}<p class="text-sm">{reasonText[op.safeReason]||op.safeReason}</p>{/if}{#if op.kind==='save'&&op.state==='accepted'}<Button disabled={busy} onclick={()=>perform(async()=>{const result=await rpc('ValidateProviderConnection',{operationId:op.id});await accept(result.operation);})}>Validate candidate</Button>{/if}</InformationCard>{/each}
  {#if historyNext}<Button variant="outline" disabled={busy} onclick={()=>perform(()=>inspect(selected!,true))}>Load more history</Button>{/if}
 </section>{/if}

@@ -48,7 +48,14 @@ impl Fixture {
             .await?
             .resource
             .id;
-        let current = store.get_agent_configuration(&workspace, "").await?;
+        let project = store
+            .create_project(&key(), &workspace, "Provider", "paid-call safety")
+            .await?
+            .resource
+            .id;
+        let current = store
+            .get_scoped_agent_configuration(&workspace, &project, "")
+            .await?;
         let config = ayni_orchestrator_workflow_postgres::model::AgentConfiguration {
             connection_id: String::new(),
             revision_id: String::new(),
@@ -57,13 +64,8 @@ impl Fixture {
             ..current.clone()
         };
         store
-            .update_agent_configuration(&key(), &current.revision_id, &config)
+            .update_scoped_agent_configuration(&key(), &project, &current.revision_id, &config)
             .await?;
-        let project = store
-            .create_project(&key(), &workspace, "Provider", "paid-call safety")
-            .await?
-            .resource
-            .id;
         let conversation = store
             .create_conversation(&key(), &workspace, &project, "Provider")
             .await?

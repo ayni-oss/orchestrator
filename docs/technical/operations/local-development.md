@@ -491,8 +491,11 @@ namespace, including all Secrets and retained workflow/session stores.
 `dev/ctl live` now also starts the new SvelteKit product at
 `http://127.0.0.1:5174`. This is the only frontend. The local canonical API gateway
 stays on port 3000; those two ports must be available.
-Existing retained live environments require the explicit forward migration step
-from [the live-development guide](../../../dev/LIVE.md) before the new API can run.
+The application schema uses layer migrations `001`–`014`, with each table defined
+once in its final form, and requires a fresh database. Pre-baseline
+installations are rejected without altering retained data; use a new isolated
+local namespace and keep the previous installation for recovery. See
+[the live-development guide](../../../dev/LIVE.md).
 
 Alternatively, run `dev/ctl gateway` against the deployed stack and `pnpm web:dev`
 in another terminal. `pnpm web:build` builds the Node application; start it with
@@ -509,7 +512,7 @@ Configuration → Container registries manages named GHCR destinations with sepa
 push/pull classic PATs. Validation currently checks both accounts' authentication;
 it does not yet publish a disposable artifact or establish push/pull permissions.
 Configuration → LLM providers manages named OpenAI keys. Save and validate a key to
-discover models, then choose a connection, model and budgets in Workspace settings.
+discover models, then choose a connection, model and budgets in Project settings.
 OpenAI validation does not issue a paid conversation. Conversation execution uses
 the existing API; the full chat UI remains outside this slice.
 
@@ -542,12 +545,12 @@ live GitHub App or establish registry, provider or runtime readiness. See
 Use **Repositories** to discover installations and repositories through a validated
 GitHub App source connection. The App requires repository Contents read permission;
 its installation must include the selected repository. Connect the repository once,
-then use a project card's **Repositories** action to attach it in each workspace.
+then use **Workspace settings** to make it available to every project in that workspace.
 Source access status remains separate from the planned Ayni/runtime gates.
 
-Migration 32 adds the shared catalog and operation/association receipts. Stop the
-live loop, run `dev/ctl live migrate`, then restart `dev/ctl live`; retain existing
-configuration and stores. Test the authority and browser journey separately with
+The application baseline includes catalog, workspace membership, and project
+configuration receipts. Install it in a fresh database; `dev/ctl live migrate`
+does not upgrade pre-baseline installations. Test the authority and browser journey separately with
 `AYNI_REPOSITORIES_ONLY=1 scripts/ci/check-workflow-postgres-feasibility.sh`.
 The test uses synthetic credentials and a disposable database; it does not prove
 live GitHub installation access.

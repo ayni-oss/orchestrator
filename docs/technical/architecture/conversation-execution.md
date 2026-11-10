@@ -44,7 +44,11 @@ receipts, replacing frozen inputs, or deleting retained stores.
 ## Project configuration and frozen inputs
 
 A project owns one current agent configuration and immutable configuration
-revisions. Its conversations share that configuration; other projects have independent heads.
+revisions. Creation installs a distinct initial revision for each project; it
+never copies a workspace or sibling project model selection. Both configuration
+API operations require a project ID. Its conversations share that configuration;
+other projects cannot read or select its revisions. Database constraints bind
+heads and retry receipts to the owning project.
 Workspace settings own repository availability and environment configuration. One
 revision identifies the complete snapshot: instructions, provider, model,
 input/output/total token limits and session idle timeout. Instructions and

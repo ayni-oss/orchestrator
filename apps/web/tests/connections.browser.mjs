@@ -11,7 +11,7 @@ async function freePort() {
  const server=createServer();server.listen(0,'127.0.0.1');await once(server,'listening');
  const port=server.address().port;await new Promise(resolve=>server.close(resolve));return port;
 }
-test('real canonical API: workspaces, credential recovery, validation, scope and reload', { timeout: 120000 }, async () => {
+test('real canonical API: workspaces, credential recovery, validation, scope and reload', { timeout: 180000 }, async () => {
  assert.match(process.env.AYNI_ORCHESTRATOR_LIVE_GATEWAY_PORT || '', /^[0-9]+$/, 'run through the PostgreSQL/browser acceptance gate or supply a real gateway');
  const port=await freePort();const origin=`http://127.0.0.1:${port}`;
  const production=process.env.AYNI_PRODUCT_PRODUCTION==='1';
@@ -114,6 +114,37 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
    for(const secret of providerSecrets)assert.equal((await page.locator('body').innerText()).includes(secret),false);
   }
   await page.goto(`${origin}/projects/${projectId}/settings?workspace=${workspaceId}`);
+  await page.waitForURL(`${origin}/workspaces/${workspaceId}/projects/${projectId}/settings`);
+  // Project instructions save even before a provider is selected.
+  await page.getByLabel('Instructions',{exact:true}).waitFor();
+  let update = page.waitForResponse(response=>response.url().endsWith('/api/UpdateAgentConfiguration'));
+  await page.getByLabel('Instructions',{exact:true}).fill('Project instructions before model setup');
+  assert.equal((await update).status(),200);
+  await page.getByText('All changes saved',{exact:true}).waitFor();
+  const call = async (method, data) => {
+    const response=await page.request.post(`${origin}/api/${method}`,{headers:{'x-console-request':'1'},data});
+    return {status:response.status(),value:await response.json()};
+  };
+  assert.equal((await call('GetAgentConfiguration',{workspaceId})).status,400);
+  await page.getByLabel('Output token budget',{exact:true}).fill('0');
+  await page.getByText('Output token budget must be a whole number between 1 and 100000.',{exact:true}).waitFor();
+  await delay(650);
+  assert.equal((await call('GetAgentConfiguration',{workspaceId,projectId})).value.configuration.maxOutputTokens,'2048');
+  await page.getByLabel('Output token budget',{exact:true}).fill('2048');
+  await page.getByText('All changes saved',{exact:true}).waitFor();
+  const sibling=(await call('CreateProject',{workspaceId,idempotencyKey:randomUUID(),displayName:'Independent project',goal:'Isolated settings'})).value.project;
+  const siblingSettings=(await call('GetAgentConfiguration',{workspaceId,projectId:sibling.id})).value.configuration;
+  assert.equal(siblingSettings.instructions ?? '','');
+  // Cancel navigation while a debounce still holds an unsent edit.
+  const guarded=page.waitForEvent('dialog').then(dialog=>dialog.dismiss());
+  update=page.waitForResponse(response=>response.url().endsWith('/api/UpdateAgentConfiguration'));
+  await page.getByLabel('Instructions',{exact:true}).fill('Stay until saved');
+  await page.getByRole('link',{name:'Workspaces',exact:true}).click();
+  await guarded;
+  assert.match(page.url(),new RegExp(`/projects/${projectId}/settings$`));
+  assert.equal((await update).status(),200);
+  await page.getByText('All changes saved',{exact:true}).waitFor();
+
   await page.getByLabel('OpenAI connection',{exact:true}).selectOption(process.env.AYNI_BROWSER_CONNECTION_ID);
   const savedResponse=page.waitForResponse(response=>response.url().endsWith('/api/UpdateAgentConfiguration'));
   await page.getByLabel('Model',{exact:true}).selectOption('fixture-model');
@@ -125,6 +156,44 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   assert.equal(configuration.connectionId,process.env.AYNI_BROWSER_CONNECTION_ID);
   assert.equal(configuration.instructions,'Browser-selected provider');
   await page.getByLabel('Instructions',{exact:true}).locator('..').getByText('Saved',{exact:true}).waitFor();
+  // A second edit during an in-flight save gets its own revision after acknowledgement.
+  let started;
+  const firstStarted=new Promise(resolve=>{started=resolve;});
+  let requests=0;
+  await page.route('**/api/UpdateAgentConfiguration',async route=>{
+    const response=await route.fetch();
+    requests++;
+    if(requests===1){started();await delay(1200);}
+    await route.fulfill({response});
+  });
+  await page.getByLabel('Instructions',{exact:true}).fill('First queued edit');
+  await firstStarted;
+  await page.getByLabel('Instructions',{exact:true}).fill('Latest queued edit');
+  await page.getByText('All changes saved',{exact:true}).waitFor();
+  assert.equal(requests,2);
+  await page.unroute('**/api/UpdateAgentConfiguration');
+  assert.equal((await call('GetAgentConfiguration',{workspaceId,projectId})).value.configuration.instructions,'Latest queued edit');
+  assert.equal((await call('GetAgentConfiguration',{workspaceId,projectId:sibling.id})).value.configuration.revisionId,siblingSettings.revisionId);
+  // Recover an accepted command after losing its response and reloading.
+  let acceptedRevision;
+  await page.route('**/api/UpdateAgentConfiguration',async route=>{
+    const response=await route.fetch();
+    acceptedRevision=(await response.json()).configuration.revisionId;
+    await route.abort('failed');
+  });
+  await page.getByLabel('Instructions',{exact:true}).fill('Recover this exact revision');
+  await page.getByRole('button',{name:'Recover update',exact:true}).waitFor();
+  await page.unroute('**/api/UpdateAgentConfiguration');
+  await page.reload();
+  await page.getByRole('button',{name:'Recover update',exact:true}).click();
+  await page.waitForFunction(()=>!sessionStorage.getItem(`ayni.project.${location.pathname.split('/').at(-2)}.configuration.pending`));
+  assert.equal((await call('GetAgentConfiguration',{workspaceId,projectId})).value.configuration.revisionId,acceptedRevision);
+  assert.equal(await page.getByLabel('Instructions',{exact:true}).inputValue(),'Recover this exact revision');
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.screenshot({path:`/tmp/ayni-project-settings-${production?'production':'development'}.png`,fullPage:true});
+  await page.setViewportSize({width:1280,height:900});
+
   await page.reload();await page.waitForFunction(id=>document.querySelector('#project-connection')?.value===id,process.env.AYNI_BROWSER_CONNECTION_ID);
   assert.equal(await page.getByLabel('OpenAI connection',{exact:true}).inputValue(),process.env.AYNI_BROWSER_CONNECTION_ID);
   assert.equal(await page.getByLabel('Model',{exact:true}).inputValue(),'fixture-model');

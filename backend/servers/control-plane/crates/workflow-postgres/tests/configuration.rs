@@ -42,6 +42,23 @@ async fn immutable_configuration_freezes_admission_and_isolates_conversations() 
         .get_scoped_agent_configuration(&workspace.id, &project.id, "")
         .await?;
     assert_eq!(initial.provider, "scripted");
+    let other_initial = store
+        .get_scoped_agent_configuration(&workspace.id, &other_project.id, "")
+        .await?;
+    assert_ne!(initial.revision_id, other_initial.revision_id);
+    assert!(matches!(
+        store
+            .get_scoped_agent_configuration(&workspace.id, "", "")
+            .await,
+        Err(StoreError::InvalidInput("project_id"))
+    ));
+    assert!(matches!(
+        store
+            .get_scoped_agent_configuration(&workspace.id, &other_project.id, &initial.revision_id)
+            .await,
+        Err(StoreError::NotFound)
+    ));
+
     let first = store
         .send_message(&key(), &workspace.id, &project.id, &a.id, "Only A")
         .await?;
@@ -67,7 +84,7 @@ async fn immutable_configuration_freezes_admission_and_isolates_conversations() 
     let mut proposed = AgentConfiguration {
         connection_id: String::new(),
         revision_id: String::new(),
-        instructions: "Shared workspace instructions".into(),
+        instructions: "Project instructions".into(),
         provider: "openai".into(),
         model: "operator-selected-model".into(),
         ..initial.clone()
@@ -85,7 +102,7 @@ async fn immutable_configuration_freezes_admission_and_isolates_conversations() 
         store
             .get_scoped_agent_configuration(&workspace.id, &other_project.id, "")
             .await?,
-        initial
+        other_initial
     );
     assert_ne!(updated.revision_id, initial.revision_id);
     assert_eq!(
@@ -576,5 +593,88 @@ async fn seed_context_history(
     transaction.execute("INSERT INTO workflow_outbox(id,workspace_id,project_id,conversation_id,turn_id,subject,event_bytes,state) SELECT decision_event_id,workspace_id,project_id,conversation_id,turn_id,'retained-decision',decision_bytes,'transferred' FROM workflow_report_receipts WHERE conversation_id=$1", &[&conversation]).await?;
     transaction.execute("UPDATE workflow_conversations SET next_turn_sequence=$2::bigint+1,next_history_sequence=$2::bigint+1 WHERE id=$1", &[&conversation,&count]).await?;
     transaction.commit().await?;
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires disposable migrated PostgreSQL with the runtime-role URL"]
+async fn project_configuration_requires_its_owner_at_api_and_database_boundaries() -> TestResult {
+    let runtime_url = std::env::var("AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL")?;
+    ayni_orchestrator_workflow_postgres::migrate_for_runtime(
+        &std::env::var("AYNI_POSTGRES_FEASIBILITY_URL")?,
+        &std::env::var("AYNI_POSTGRES_RUNTIME_FEASIBILITY_ROLE")?,
+    )
+    .await?;
+    let store = WorkflowStore::new(runtime_url.clone());
+    let workspace = store
+        .create_workspace(&key(), "Project ownership")
+        .await?
+        .resource;
+    let project = store
+        .create_project(&key(), &workspace.id, "Owner", "Private settings")
+        .await?
+        .resource;
+    let initial = store
+        .get_scoped_agent_configuration(&workspace.id, &project.id, "")
+        .await?;
+    let proposed = AgentConfiguration {
+        revision_id: String::new(),
+        instructions: "Only this project".into(),
+        ..initial.clone()
+    };
+    assert!(matches!(
+        store
+            .update_scoped_agent_configuration(&key(), "", &initial.revision_id, &proposed)
+            .await,
+        Err(StoreError::InvalidInput("project_id"))
+    ));
+    let updated = store
+        .update_scoped_agent_configuration(&key(), &project.id, &initial.revision_id, &proposed)
+        .await?;
+    let sibling = store
+        .create_project(&key(), &workspace.id, "New sibling", "Independent settings")
+        .await?
+        .resource;
+    let sibling_settings = store
+        .get_scoped_agent_configuration(&workspace.id, &sibling.id, "")
+        .await?;
+    assert!(sibling_settings.instructions.is_empty());
+    assert_ne!(sibling_settings.revision_id, initial.revision_id);
+    assert_ne!(sibling_settings.revision_id, updated.revision_id);
+    assert!(matches!(
+        store
+            .get_scoped_agent_configuration(&workspace.id, &sibling.id, &updated.revision_id)
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    let other_workspace = store
+        .create_workspace(&key(), "Other owner")
+        .await?
+        .resource;
+    assert!(matches!(
+        store
+            .get_scoped_agent_configuration(&other_workspace.id, &project.id, "")
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    let (client, driver) = ayni_orchestrator_workflow_postgres::connect(&runtime_url).await?;
+    let shared = client.execute("INSERT INTO workflow_project_configuration_revisions(workspace_id,project_id,revision_id) VALUES($1,$2,$3)", &[&workspace.id,&sibling.id,&updated.revision_id]).await;
+    assert_eq!(
+        shared.err().ok_or("revision gained a second owner")?.code(),
+        Some(&tokio_postgres::error::SqlState::UNIQUE_VIOLATION)
+    );
+    let head = client
+        .execute(
+            "UPDATE workflow_project_configuration_heads SET revision_id=$1 WHERE project_id=$2",
+            &[&updated.revision_id, &sibling.id],
+        )
+        .await;
+    assert_eq!(
+        head.err()
+            .ok_or("head selected another project's revision")?
+            .code(),
+        Some(&tokio_postgres::error::SqlState::FOREIGN_KEY_VIOLATION)
+    );
+    driver.abort();
     Ok(())
 }

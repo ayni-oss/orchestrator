@@ -4,13 +4,15 @@ use tokio_postgres::{Row, Transaction};
 
 const COLUMNS: &str = "workspace_id,revision_id,instructions,provider,model,max_input_tokens,max_output_tokens,max_total_tokens,idle_timeout_seconds,connection_id";
 
-pub(super) async fn initialize(tx: &Transaction<'_>, workspace: &str) -> Result<(), StoreError> {
-    tx.execute("INSERT INTO workflow_agent_configurations (workspace_id,revision_id,instructions,provider,model,max_input_tokens,max_output_tokens,max_total_tokens,idle_timeout_seconds) VALUES ($1,$1,'','scripted','scripted',8192,2048,10240,300)", &[&workspace]).await?;
-    tx.execute(
-        "INSERT INTO workflow_agent_configuration_heads (workspace_id,revision_id) VALUES ($1,$1)",
-        &[&workspace],
-    )
-    .await?;
+pub(super) async fn initialize_project(
+    tx: &Transaction<'_>,
+    workspace: &str,
+    project: &str,
+) -> Result<(), StoreError> {
+    let revision = support::new_id();
+    tx.execute("INSERT INTO workflow_agent_configurations (workspace_id,revision_id,instructions,provider,model,max_input_tokens,max_output_tokens,max_total_tokens,idle_timeout_seconds) VALUES ($1,$2,'','scripted','scripted',8192,2048,10240,300)", &[&workspace,&revision]).await?;
+    tx.execute("INSERT INTO workflow_project_configuration_heads (workspace_id,project_id,revision_id) VALUES ($1,$2,$3)", &[&workspace,&project,&revision]).await?;
+    tx.execute("INSERT INTO workflow_project_configuration_revisions (workspace_id,project_id,revision_id) VALUES ($1,$2,$3)", &[&workspace,&project,&revision]).await?;
     Ok(())
 }
 
@@ -118,19 +120,6 @@ fn validate_configuration(value: &AgentConfiguration) -> Result<(), StoreError> 
 }
 
 impl WorkflowStore {
-    /// Read the current workspace configuration, or an immutable revision of it.
-    ///
-    /// # Errors
-    /// Returns invalid input, missing scope/revision, unavailable authority or corrupt data.
-    pub async fn get_agent_configuration(
-        &self,
-        workspace: &str,
-        revision: &str,
-    ) -> Result<AgentConfiguration, StoreError> {
-        self.get_scoped_agent_configuration(workspace, "", revision)
-            .await
-    }
-
     /// Read the current or retained configuration inside the requested project.
     /// # Errors
     /// Returns invalid scope, missing configuration or database errors.
@@ -141,20 +130,13 @@ impl WorkflowStore {
         revision: &str,
     ) -> Result<AgentConfiguration, StoreError> {
         support::validate_id(workspace, "workspace_id")?;
-        if !project.is_empty() {
-            support::validate_id(project, "project_id")?;
-        }
+        support::validate_id(project, "project_id")?;
         if !revision.is_empty() {
             support::validate_id(revision, "revision_id")?;
         }
         let (client, driver) = crate::connect(&self.database_url).await?;
-        let head = if project.is_empty() {
-            "SELECT revision_id FROM workflow_agent_configuration_heads WHERE workspace_id=$1 AND $3=''"
-        } else {
-            "SELECT revision_id FROM workflow_project_configuration_heads WHERE workspace_id=$1 AND project_id=$3"
-        };
         let query = format!(
-            "SELECT {COLUMNS} FROM workflow_agent_configurations WHERE workspace_id=$1 AND revision_id=COALESCE(NULLIF($2,''),({head})) AND EXISTS ({head}) AND ($3='' OR EXISTS (SELECT 1 FROM workflow_project_configuration_revisions r WHERE r.project_id=$3 AND r.revision_id=workflow_agent_configurations.revision_id))"
+            "SELECT {COLUMNS} FROM workflow_agent_configurations WHERE workspace_id=$1 AND revision_id=COALESCE(NULLIF($2,''),(SELECT revision_id FROM workflow_project_configuration_heads WHERE workspace_id=$1 AND project_id=$3)) AND EXISTS (SELECT 1 FROM workflow_project_configuration_revisions r WHERE r.workspace_id=$1 AND r.project_id=$3 AND r.revision_id=workflow_agent_configurations.revision_id)"
         );
         let row = client
             .query_opt(&query, &[&workspace, &revision, &project])
@@ -163,21 +145,6 @@ impl WorkflowStore {
         let result = configuration(&row)?;
         driver.abort();
         Ok(result)
-    }
-
-    /// Atomically replace a workspace's current configuration with an immutable snapshot.
-    /// Replays return the original snapshot even after later edits.
-    ///
-    /// # Errors
-    /// Returns invalid inputs, revision/idempotency conflict, missing scope or database errors.
-    pub async fn update_agent_configuration(
-        &self,
-        key: &str,
-        expected_revision: &str,
-        proposed: &AgentConfiguration,
-    ) -> Result<AgentConfiguration, StoreError> {
-        self.update_scoped_agent_configuration(key, "", expected_revision, proposed)
-            .await
     }
 
     /// Replace a project configuration using an immutable revision and retry receipt.
@@ -191,9 +158,7 @@ impl WorkflowStore {
         proposed: &AgentConfiguration,
     ) -> Result<AgentConfiguration, StoreError> {
         support::validate_key(key)?;
-        if !project.is_empty() {
-            support::validate_id(project, "project_id")?;
-        }
+        support::validate_id(project, "project_id")?;
         support::validate_id(expected_revision, "expected_revision_id")?;
         if !proposed.revision_id.is_empty() {
             return Err(StoreError::InvalidInput("revision_id_is_server_assigned"));
@@ -203,6 +168,7 @@ impl WorkflowStore {
             "UpdateAgentConfiguration",
             &[
                 proposed.workspace_id.as_bytes(),
+                project.as_bytes(),
                 expected_revision.as_bytes(),
                 proposed.instructions.as_bytes(),
                 proposed.provider.as_bytes(),
@@ -216,10 +182,8 @@ impl WorkflowStore {
         );
         let (mut client, driver) = crate::connect(&self.database_url).await?;
         let tx = client.transaction().await?;
-        let (heads, receipts, scope_column, scope_id) =
-            configuration_scope(project, &proposed.workspace_id);
-        let head = tx.query_opt(&format!("SELECT revision_id FROM {heads} WHERE workspace_id=$1 AND {scope_column}=$2 FOR UPDATE"), &[&proposed.workspace_id,&scope_id]).await?.ok_or(StoreError::NotFound)?;
-        let replay = tx.query_opt(&format!("SELECT request_digest,revision_id FROM {receipts} WHERE {scope_column}=$1 AND idempotency_key=$2"), &[&scope_id,&key]).await?;
+        let head = tx.query_opt("SELECT revision_id FROM workflow_project_configuration_heads WHERE workspace_id=$1 AND project_id=$2 FOR UPDATE", &[&proposed.workspace_id,&project]).await?.ok_or(StoreError::NotFound)?;
+        let replay = tx.query_opt("SELECT request_digest,revision_id FROM workflow_project_configuration_receipts WHERE workspace_id=$1 AND project_id=$2 AND idempotency_key=$3", &[&proposed.workspace_id,&project,&key]).await?;
         let revision = if let Some(row) = replay {
             support::ensure_digest(&row.get::<_, Vec<u8>>(0), &digest)?;
             row.get::<_, String>(1)
@@ -239,16 +203,12 @@ impl WorkflowStore {
                 .map_err(|_| StoreError::InvalidInput("idle_timeout_seconds"))?;
             tx.execute("INSERT INTO workflow_agent_configurations (workspace_id,revision_id,instructions,provider,model,max_input_tokens,max_output_tokens,max_total_tokens,idle_timeout_seconds,connection_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", &[&proposed.workspace_id,&revision,&proposed.instructions,&proposed.provider,&proposed.model,&input,&output,&total,&idle,&proposed.connection_id]).await?;
             tx.execute(
-                &format!("UPDATE {heads} SET revision_id=$2 WHERE {scope_column}=$1"),
-                &[&scope_id, &revision],
+                "UPDATE workflow_project_configuration_heads SET revision_id=$2 WHERE project_id=$1",
+                &[&project, &revision],
             )
             .await?;
-            if project.is_empty() {
-                tx.execute("INSERT INTO workflow_configuration_receipts (workspace_id,idempotency_key,request_digest,revision_id) VALUES ($1,$2,$3,$4)", &[&proposed.workspace_id,&key,&&digest[..],&revision]).await?;
-            } else {
-                tx.execute("INSERT INTO workflow_project_configuration_revisions(workspace_id,project_id,revision_id) VALUES ($1,$2,$3)", &[&proposed.workspace_id,&project,&revision]).await?;
-                tx.execute("INSERT INTO workflow_project_configuration_receipts (workspace_id,project_id,idempotency_key,request_digest,revision_id) VALUES ($1,$2,$3,$4,$5)", &[&proposed.workspace_id,&project,&key,&&digest[..],&revision]).await?;
-            }
+            tx.execute("INSERT INTO workflow_project_configuration_revisions(workspace_id,project_id,revision_id) VALUES ($1,$2,$3)", &[&proposed.workspace_id,&project,&revision]).await?;
+            tx.execute("INSERT INTO workflow_project_configuration_receipts (workspace_id,project_id,idempotency_key,request_digest,revision_id) VALUES ($1,$2,$3,$4,$5)", &[&proposed.workspace_id,&project,&key,&&digest[..],&revision]).await?;
             revision
         };
         let query = format!(
@@ -309,27 +269,6 @@ async fn validate_connection(
         return Err(StoreError::InvalidInput("connection_model_unavailable"));
     }
     Ok(())
-}
-
-const fn configuration_scope<'a>(
-    project: &'a str,
-    workspace: &'a str,
-) -> (&'static str, &'static str, &'static str, &'a str) {
-    if project.is_empty() {
-        (
-            "workflow_agent_configuration_heads",
-            "workflow_configuration_receipts",
-            "workspace_id",
-            workspace,
-        )
-    } else {
-        (
-            "workflow_project_configuration_heads",
-            "workflow_project_configuration_receipts",
-            "project_id",
-            project,
-        )
-    }
 }
 
 #[cfg(test)]

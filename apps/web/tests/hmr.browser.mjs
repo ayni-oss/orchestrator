@@ -29,7 +29,7 @@ test('the application itself retains browser state through component and theme C
   browser=await chromium.launch({headless:true});const page=await browser.newPage();
   await page.goto(origin);await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
   await page.evaluate(()=>{window.hmrSentinel='retained';});
-  const source=join(directory,'src/routes/+page.svelte');
+  const source=join(directory,'src/lib/components/hierarchy-overview.svelte');
   const originalSource=await readFile(source,'utf8');
   const titleBinding='title={data.workspace?.displayName ?? label}';
   assert.ok(originalSource.includes(titleBinding),'home page title binding must be found before testing HMR');

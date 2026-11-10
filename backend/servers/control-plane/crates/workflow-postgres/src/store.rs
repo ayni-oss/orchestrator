@@ -152,7 +152,6 @@ impl WorkflowStore {
                     &[&workspace_id, &display_name, &command_id],
                 )
                 .await?;
-            configuration::initialize(&transaction, &workspace_id).await?;
             receipt_and_resource(&transaction, &command_id).await?
         } else {
             replay_receipt(
@@ -233,8 +232,7 @@ impl WorkflowStore {
                     ],
                 )
                 .await?;
-            transaction.execute("INSERT INTO workflow_project_configuration_heads(workspace_id,project_id,revision_id) SELECT workspace_id,$2,revision_id FROM workflow_agent_configuration_heads WHERE workspace_id=$1", &[&workspace_id,&project_id]).await?;
-            transaction.execute("INSERT INTO workflow_project_configuration_revisions SELECT workspace_id,project_id,revision_id FROM workflow_project_configuration_heads WHERE project_id=$1", &[&project_id]).await?;
+            configuration::initialize_project(&transaction, workspace_id, &project_id).await?;
             receipt_and_resource(&transaction, &command_id).await?
         } else {
             replay_receipt(
