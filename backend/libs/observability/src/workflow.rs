@@ -175,7 +175,7 @@ pub fn configured_tool_name<'a>(
     }
 }
 
-fn identifier(value: &str) -> &str {
+pub(crate) fn identifier(value: &str) -> &str {
     if value.is_empty() {
         ""
     } else {

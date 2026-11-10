@@ -24,6 +24,10 @@ The trusted-loopback control-plane listener registers only:
 associations, plus read-only `ResolveRepositoryDefaultCommit` and explicit `InspectRepository`, `GetRepositoryInspection` and
 `ListRepositoryInspections` for frozen static Ayni findings. A completed inspection
 never establishes runtime readiness or authorizes preparation or execution.
+Inspection and runtime preparation history accept a `limit` and an `after_id`
+cursor. Follow `next_after_id` to continue in descending ID order. The console
+requests 10 records at a time. `ListRuntimePreparations` also accepts an optional
+`exclude_id` so the current preparation can be shown separately.
 
 `RuntimePreparationService` currently manages public signer references and exact
 configuration receipts. Saving a reference performs no Secret access or runtime

@@ -73,41 +73,90 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await page.goto(`${origin}/repositories`);await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
  const repositoryLink=page.locator(`main a[href="/repositories/${repositoryId}"]`);
  await repositoryLink.waitFor();
- assert.equal(await page.getByRole('tab',{name:'ayni runtime',exact:true}).count(),0,'catalog cards must stay compact');
+ assert.equal(await page.getByRole('tab',{name:'ayni',exact:true}).count(),0,'catalog cards must stay compact');
  await page.getByRole('textbox',{name:'Search repositories',exact:true}).fill('no-matching-repository');
  await page.getByText('No matching repositories.',{exact:true}).waitFor();
  await page.getByRole('textbox',{name:'Search repositories',exact:true}).fill('');
  await repositoryLink.locator('..').getByRole('button').click();
- await page.getByRole('menuitem',{name:'ayni runtime',exact:true}).click();
- await page.getByRole('tab',{name:'ayni runtime',exact:true}).waitFor();
- assert.equal(await page.getByRole('tab',{name:'ayni runtime',exact:true}).getAttribute('aria-selected'),'true');
+ await page.getByRole('menuitem',{name:'ayni',exact:true}).click();
+ await page.getByRole('tab',{name:'ayni',exact:true}).waitFor();
+ assert.equal(await page.getByRole('tab',{name:'ayni',exact:true}).getAttribute('aria-selected'),'true');
  await page.getByRole('navigation',{name:'Breadcrumb'}).getByRole('link',{name:'Repositories',exact:true}).click();
- await repositoryLink.click();
+ await repositoryLink.locator('..').getByRole('button').click();
+ await page.getByRole('menuitem',{name:'Source integration details',exact:true}).click();
+ const sourceDetails=page.getByRole('dialog',{name:'Source integration details',exact:true});
+ await sourceDetails.getByText('Source control connection',{exact:true}).waitFor();
+ await sourceDetails.getByRole('button',{name:'Close',exact:true}).click();
+ await sourceDetails.waitFor({state:'hidden'});
+ await page.waitForURL(url=>!url.searchParams.has('details'));
  const tabs=page.getByRole('tab');
  await tabs.first().waitFor();
- assert.deepEqual(await tabs.allTextContents(),['ayni runtime','Source code','Activity']);
+ assert.deepEqual(await tabs.allTextContents(),['Status','ayni']);
  assert.equal(await tabs.first().getAttribute('aria-selected'),'true');
- await page.getByRole('tab',{name:'Source code',exact:true}).click();
- const sourceDetails=page.getByRole('tabpanel',{name:'Source code',exact:true});
- await sourceDetails.getByRole('heading',{name:'Source integration details',exact:true}).waitFor();
- await sourceDetails.getByText('Source control connection',{exact:true}).waitFor();
- assert.equal(await sourceDetails.getByRole('button').count(),0);
- assert.equal(await sourceDetails.getByRole('link').count(),0);
- const metadataBadges=page.locator('span[data-slot="badge"]');
- await metadataBadges.and(page.getByText('Private repository',{exact:true})).waitFor();
- await metadataBadges.and(page.getByText('Default branch: main',{exact:true})).waitFor();
- await page.getByRole('tab',{name:'ayni runtime',exact:true}).click();
+ const runtimeMark=page.getByRole('tab',{name:'ayni',exact:true}).locator('.ayni-mark');
+ assert.match(await runtimeMark.evaluate(element=>getComputedStyle(element).maskImage),/\/ayni\.svg/);
+ const title=page.getByRole('heading',{level:1,name:repository.fullName,exact:true});
+ await title.locator('..').getByText('Configured',{exact:true}).waitFor();
+ const metadata=page.getByRole('group',{name:'Repository metadata',exact:true});
+ await metadata.getByText('Private',{exact:true}).waitFor();
+ await metadata.getByText(repository.defaultBranch,{exact:true}).waitFor();
+ assert.equal(await metadata.locator('svg').count(),2);
+ assert.equal(await metadata.getByRole('button').count(),0);
+ assert.equal(await metadata.evaluate(element=>getComputedStyle(element).justifyContent),'flex-end');
+ const sourceInfo=page.getByRole('button',{name:'View source integration details',exact:true});
+ await sourceInfo.hover();
+ const sourceTooltip=page.getByRole('tooltip');
+ await sourceTooltip.getByText(repository.providerRepositoryId,{exact:true}).waitFor();
+ await sourceTooltip.getByText(repository.installationId,{exact:true}).waitFor();
+ await sourceTooltip.getByText('Connected',{exact:true}).waitFor();
+ assert.equal(await sourceDetails.count(),0,'info hover must not open a dialog');
+ await page.getByRole('tab',{name:'Status',exact:true}).hover();
+ await sourceTooltip.waitFor({state:'hidden'});
+ await sourceInfo.focus();
+ await sourceTooltip.getByText(repository.providerRepositoryId,{exact:true}).waitFor();
+ await page.keyboard.press('Escape');
+ await sourceTooltip.waitFor({state:'hidden'});
  const inspectionCard=page.locator(`[data-repository-inspection="${repositoryId}"]`);
  const preparation=page.locator(`[data-runtime-preparation="${repositoryId}"]`);
  assert.equal(await inspectionCard.getByRole('button',{name:'Resume inspection',exact:true}).isVisible(),false,'old retry attempts stay out of the current workflow');
- await page.getByRole('tab',{name:'Activity',exact:true}).click();
+ await page.getByRole('tab',{name:'Status',exact:true}).click();
+ assert.equal(await inspectionCard.locator('[data-inspection-history]').getAttribute('open'),null);
  await inspectionCard.locator('[data-inspection-history] > summary').click();
+ const completedInspection=inspectionCard.getByRole('article',{name:`Inspection ${inspection.commitSha}`,exact:true});
+ const identifiersTooltip=page.getByRole('tooltip');
+ const inspectionDialog=page.getByRole('dialog',{name:'Inspection details',exact:true});
+ const inspectionBadge=completedInspection.getByText('Complete',{exact:true});
+ await inspectionBadge.waitFor();
+ assert.equal(await completedInspection.getByText('Status',{exact:true}).count(),1);
+ const [commitBox,inspectionBadgeBox]=await Promise.all([completedInspection.getByText('Commit',{exact:true}).boundingBox(),inspectionBadge.boundingBox()]);
+ assert.ok(commitBox.y<inspectionBadgeBox.y);
+ assert.equal(await completedInspection.getByText(inspection.id,{exact:true}).count(),0);
+ const viewInspectionIdentifiers=completedInspection.getByRole('button',{name:'View identifiers',exact:true});
+ const viewInspectionDetails=completedInspection.getByRole('button',{name:'View inspection details',exact:true});
+ await viewInspectionIdentifiers.hover();
+ await identifiersTooltip.getByText(inspection.id,{exact:true}).waitFor();
+ await identifiersTooltip.getByText(hash,{exact:true}).waitFor();
+ await viewInspectionDetails.focus();
+ await page.mouse.move(0,0);
+ await identifiersTooltip.waitFor({state:'hidden'});
+ await page.keyboard.press('Shift+Tab');
+ await identifiersTooltip.getByText(inspection.id,{exact:true}).waitFor();
+ await viewInspectionDetails.click();
+ await inspectionDialog.getByText(inspection.id,{exact:true}).waitFor();
+ await inspectionDialog.getByText('Locked tools',{exact:true}).waitFor();
+ await inspectionDialog.getByText('Inspection findings',{exact:true}).waitFor();
+ await inspectionDialog.getByRole('button',{name:'Close',exact:true}).click();
+ await inspectionCard.getByRole('article',{name:`Inspection ${previousInspection.commitSha}`,exact:true})
+  .getByRole('button',{name:'View inspection details',exact:true}).click();
  await page.route('**/api/InspectRepository',route=>route.fulfill({json:{inspection:{...previousInspection,state:'completed',updatedAtUnixMs:String(Date.now()),result:inspection.result}}}));
  await Promise.all([
   page.waitForResponse(response=>response.url().endsWith('/api/InspectRepository') && response.ok()),
-  inspectionCard.getByRole('button',{name:'Resume inspection',exact:true}).click(),
+  inspectionDialog.getByRole('button',{name:'Resume inspection',exact:true}).click(),
  ]);
- await page.getByRole('tab',{name:'ayni runtime',exact:true}).click();
+ // Refresh keeps the selected entry and its dialog mounted for review.
+ await inspectionDialog.getByRole('button',{name:'Close',exact:true}).click();
+ await inspectionDialog.waitFor({state:'hidden'});
+ await page.getByRole('tab',{name:'ayni',exact:true}).click();
  await page.unroute('**/api/InspectRepository');
  let resolvedHead;
  await page.route('**/api/ResolveRepositoryDefaultCommit',route=>route.fulfill({json:{defaultBranch:'main',commitSha:resolvedHead ?? inspection.commitSha}}));
@@ -120,7 +169,18 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.ok(await integrations.isEnabled());
  assert.equal(await integrations.locator('svg').count(),0);
  assert.ok(await steps.getByRole('button',{name:/Check ayni\.lock/}).isDisabled());
- await status.getByText('3 of 3 integrations ready',{exact:true}).waitFor();
+ const readiness=status.getByRole('list',{name:'Integration readiness',exact:true});
+ await readiness.getByRole('listitem',{name:'Source control: Ready',exact:true}).waitFor();
+ await readiness.getByRole('listitem',{name:'Runtime registry: Ready',exact:true}).waitFor();
+ await readiness.getByRole('listitem',{name:'Signing key: Ready',exact:true}).waitFor();
+ assert.equal(await readiness.locator('svg').count(),3);
+ await status.locator('[data-title-content]').getByText('Ready',{exact:true}).waitFor();
+ assert.equal(await status.getByText('Source control connection',{exact:true}).count(),0);
+ await status.getByRole('button',{name:'View source control connection',exact:true}).hover();
+ await page.getByRole('tooltip').getByText('Source control connection',{exact:true}).waitFor();
+ await page.getByRole('tooltip').getByText('Fixture GitHub',{exact:true}).waitFor();
+ await status.getByRole('heading',{name:'Connect integrations',exact:true}).hover();
+ await page.getByRole('tooltip').waitFor({state:'hidden'});
  const refresh=status.getByRole('button',{name:'Refresh integrations',exact:true});
  const [connectionsReloaded,signersReloaded]=await Promise.all([
   page.waitForResponse(response=>response.url().endsWith('/api/ListConnections')),
@@ -134,7 +194,8 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  const saved = field => field.locator('xpath=ancestor::*[@data-slot="input-group"][1]').locator('[data-autosave-state="saved"]');
  await registryPicker.selectOption('');
  await saved(registryPicker).waitFor();
- await status.getByText('2 of 3 integrations ready',{exact:true}).waitFor();
+ await readiness.getByRole('listitem',{name:'Runtime registry: Not ready',exact:true}).waitFor();
+ await status.locator('[data-title-content]').getByText('Needs attention',{exact:true}).waitFor();
  assert.ok(await next().isDisabled());
  await signerPicker.selectOption('');
  await saved(signerPicker).waitFor();
@@ -152,15 +213,21 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await next().click();
  await steps.getByRole('button',{name:/Completed:.*Connect integrations/}).waitFor();
  assert.ok(await next().isDisabled());
- await status.getByRole('button',{name:'Check ayni.lock',exact:true}).click();
+ const lockCheckAction=status.locator('[data-title-actions]').getByRole('button',{name:'Check ayni.lock',exact:true});
+ assert.equal(await lockCheckAction.locator('svg').count(),1);
+ assert.equal(await lockCheckAction.textContent(),'');
+ assert.equal(await status.getByText('Check the selected branch before reviewing its commit.',{exact:true}).count(),0);
+ assert.equal(await status.getByText('Check the selected branch to inspect the exact commit’s policy, lock, and trust requirements.',{exact:true}).count(),0);
+ await lockCheckAction.click();
  await status.getByRole('heading',{name:'Lock check report',exact:true}).waitFor();
- await status.getByText('Passed',{exact:true}).waitFor();
+ await status.locator('[data-title-content]').getByText('Signing key not trusted',{exact:true}).waitFor();
+ assert.equal(await status.getByText('Passed',{exact:true}).count(),0);
  await status.getByText('fixture-signer · Public key does not match',{exact:true}).waitFor();
  const report= status.locator('dl').filter({hasText:'Lock fingerprint'});
  const valueStarts=await report.locator('dd').evaluateAll(values=>values.map(value=>value.getBoundingClientRect().left));
  assert.equal(new Set(valueStarts).size,1);
  assert.ok(await next().isDisabled());
- await status.getByRole('checkbox',{name:'Update signing key',exact:true}).check();
+ await status.getByRole('checkbox',{name:'I accept adding the signing key by creating a new change request',exact:true}).check();
  let signingRequest, pullRequest, signingWrites=0, publicationAllowed=false;
  await page.route('**/api/GetRuntimeSigningPullRequest',async route=>{
   assert.deepEqual(route.request().postDataJSON().review,{repositoryId,inspectionId,expectedConnectionRevision:'1',
@@ -174,14 +241,24 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
   await route.fulfill({json:{pullRequest}});
  });
  await next().click();
- await status.getByRole('heading',{name:'Signing key update pull request',exact:true}).waitFor();
+ const signingHeader=status.locator('[data-title-row]');
+ await signingHeader.getByRole('heading',{name:'Signing key update pull request',exact:true}).waitFor();
+ assert.equal(await status.getByRole('heading',{name:'Review and start',exact:true}).count(),0);
+ const refreshPr=signingHeader.locator('[data-title-actions]').getByRole('button',{name:'Refresh pull request status',exact:true});
+ const signingChange=status.locator('pre > code').filter({hasText:'[environment.certificate.trusted_keys]'});
+ await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin});
+ try {
+  await status.getByRole('button',{name:'Copy signing key change',exact:true}).click();
+  await page.getByText('Signing key change copied',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),await signingChange.textContent());
+ } finally { await page.context().clearPermissions(); }
  assert.equal(await status.getByRole('combobox',{name:'Branch with signing key changes',exact:true}).count(),0);
  const openPr=status.getByRole('button',{name:'Open PR',exact:true});
  assert.equal(await openPr.locator('..').getByRole('button',{name:'Back',exact:true}).count(),0);
  await status.getByText('Grant the installed GitHub App write access to Contents and Pull requests, then refresh.',{exact:true}).waitFor();
  assert.ok(await openPr.isDisabled());
  publicationAllowed=true;
- await status.getByRole('button',{name:'Refresh pull request status',exact:true}).click();
+ await refreshPr.click();
  await openPr.click();
  const viewPr=status.getByRole('link',{name:'View PR',exact:true});
  await viewPr.waitFor();
@@ -189,13 +266,13 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
   signerId,expectedSignerRevision:'1',baseBranch:'main'});
  assert.equal(await viewPr.getAttribute('href'),`https://github.com/${repository.fullName}/pull/42`);
  assert.equal(await viewPr.getAttribute('target'),'_blank');
- await status.getByText('Draft',{exact:true}).waitFor();
+ await signingHeader.getByText('Draft',{exact:true}).waitFor();
  await page.reload();
  await viewPr.waitFor();
  await status.getByText('Draft',{exact:true}).waitFor();
  assert.equal(signingWrites,1);
  pullRequest={...pullRequest,state:'RUNTIME_SIGNING_PULL_REQUEST_STATE_MERGED'};
- await status.getByRole('button',{name:'Refresh pull request status',exact:true}).click();
+ await refreshPr.click();
  await status.getByText('Merged',{exact:true}).waitFor();
  resolvedHead='f'.repeat(40);
  await page.reload();
@@ -213,6 +290,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
   result:{...inspection.result,trustedPublicKeys:{'fixture-signer':'e'.repeat(64)}}};
  await status.getByRole('button',{name:'Check ayni.lock',exact:true}).click();
  await status.getByText('fixture-signer · Trusted public key matches',{exact:true}).waitFor();
+ await status.locator('[data-title-content]').getByText('Passed',{exact:true}).waitFor();
  await status.getByText('Lock fingerprint',{exact:true}).waitFor();
  await next().click();
  await status.getByRole('heading',{name:'Review and start',exact:true}).waitFor();
@@ -221,25 +299,39 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await next().click();
  await page.unroute('**/api/ResolveRepositoryDefaultCommit');
  await page.unroute('**/api/InspectRepository');
- await preparation.getByText('Signing key details',{exact:true}).click();
- await preparation.getByText('Key name',{exact:true}).waitFor();
- await preparation.locator('details').filter({hasText:'Signing key details'}).getByText('fixture-signer',{exact:true}).waitFor();
- await preparation.getByText('Signing key details',{exact:true}).click();
+ assert.equal(await preparation.getByText('Signing key details',{exact:true}).count(),0);
+ assert.equal(await preparation.getByText('Review the registry, signer, and limits for this run. The run continues if you close the browser.',{exact:true}).count(),0);
+ await preparation.locator('pre > code').filter({hasText:'f'.repeat(40)}).waitFor();
+ await preparation.getByText('Branch',{exact:true}).locator('..').getByText('main',{exact:true}).waitFor();
+ await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin});
+ try {
+  await preparation.getByRole('button',{name:'Copy reviewed commit',exact:true}).click();
+  assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),'f'.repeat(40));
+ } finally { await page.context().clearPermissions(); }
  assert.equal(await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).isChecked(),false);
- assert.equal(await preparation.getByRole('checkbox',{name:'Also allow replacement if an existing image is invalid',exact:true}).count(),0);
+ const replacement=preparation.getByRole('checkbox',{name:'Also allow replacement if an existing image is invalid',exact:true});
+ const attempts=preparation.getByLabel('Maximum build attempts',{exact:true});
+ assert.equal(await replacement.isVisible(),true);
+ assert.equal(await replacement.isDisabled(),true);
+ assert.equal(await attempts.isDisabled(),true);
+ const attemptsBefore=await attempts.boundingBox();
  await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).check();
+ assert.equal(await replacement.isEnabled(),true);
+ assert.equal(await attempts.isEnabled(),true);
+ assert.deepEqual(await attempts.boundingBox(),attemptsBefore);
+
  await preparation.getByRole('checkbox',{name:'Also allow replacement if an existing image is invalid',exact:true}).check();
  await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).uncheck();
  await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).check();
  assert.equal(await preparation.getByRole('checkbox',{name:'Also allow replacement if an existing image is invalid',exact:true}).isChecked(),false);
  await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).uncheck();
- await page.getByRole('tab',{name:'Source code',exact:true}).click();
+ await page.getByRole('tab',{name:'Status',exact:true}).click();
  assert.equal(await preparation.isVisible(),false);
- await page.getByRole('tab',{name:'ayni runtime',exact:true}).click();
+ await page.getByRole('tab',{name:'ayni',exact:true}).click();
  await status.getByText('Fixture runtime registry',{exact:true}).waitFor();
  await preparation.getByRole('button',{name:'Start preparation',exact:true}).click();await lost;
  await page.reload();
- await page.getByRole('tab',{name:'ayni runtime',exact:true}).click();
+ await page.getByRole('tab',{name:'ayni',exact:true}).click();
  await page.locator('[data-sonner-toast]').getByText('Preparation result not confirmed',{exact:true}).waitFor();
  assert.equal(await page.getByRole('region',{name:'Current preparation recovery',exact:true}).count(),0);
  await preparation.getByRole('button',{name:'Recover preparation receipt',exact:true}).click();
@@ -257,14 +349,50 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.equal(await status.getByText('Ready',{exact:true}).count(),0);
  await next().click();
  await status.getByRole('heading',{name:'Verify and finish',exact:true}).waitFor();
- await page.getByRole('tab',{name:'Activity',exact:true}).click();
- const activity=page.getByRole('tabpanel',{name:'Activity',exact:true});
- await activity.getByText('Current preparation details',{exact:true}).click();
- await activity.getByRole('article',{name:`Runtime preparation ${operationId}`}).getByText('Not complete',{exact:true}).waitFor();
- await page.getByRole('tab',{name:'ayni runtime',exact:true}).click();
+ await page.getByRole('tab',{name:'Status',exact:true}).click();
+ const statusPanel=page.getByRole('tabpanel',{name:'Status',exact:true});
+ const currentPreparation=statusPanel.getByRole('region',{name:'Current preparation details',exact:true});
+ const preparationEntry=currentPreparation.getByRole('article',{name:`Runtime preparation ${operationId}`});
+ const viewDetails=preparationEntry.getByRole('button',{name:'View preparation details',exact:true});
+ const detailsDialog=page.getByRole('dialog',{name:'Preparation details',exact:true});
+ await preparationEntry.getByText('Not complete',{exact:true}).waitFor();
+ const sectionTitles=await statusPanel.locator('h3, details > summary').allTextContents();
+ assert.deepEqual(sectionTitles.map(title=>title.replace(/ \(.*\)$/,'')),[
+  'Previous preparations','Inspection history',
+ ]);
+ assert.equal(await statusPanel.locator('details').count(),2);
+ const history=statusPanel.locator('[data-preparation-history]');
+ const refreshHistory=statusPanel.getByRole('button',{name:'Refresh preparation history',exact:true});
+ assert.equal(await refreshHistory.locator('svg').count(),1);
+ await Promise.all([
+  page.waitForResponse(response=>response.url().endsWith('/api/ListRuntimePreparations') && response.ok()),
+  refreshHistory.click(),
+ ]);
+ assert.equal(await history.getAttribute('open'),null);
+ assert.equal(await preparationEntry.getByText('Verified',{exact:true}).count(),2);
+ const [contentBadgeBox,platformBox]=await Promise.all([preparationEntry.getByText('Verified',{exact:true}).first().boundingBox(),preparationEntry.getByText('Platform',{exact:true}).boundingBox()]);
+ assert.ok(contentBadgeBox.y<platformBox.y);
+ assert.equal(await preparationEntry.getByText(operationId,{exact:true}).count(),0);
+ assert.equal(await preparationEntry.getByText(/Lock fingerprint|Lock digest/).count(),0);
+ const timestamp=preparationEntry.locator('time');
+ assert.equal(await timestamp.getAttribute('datetime'),new Date(Number(operation.updatedAtUnixMs)).toISOString());
+ const viewIdentifiers=preparationEntry.getByRole('button',{name:'View identifiers',exact:true});
+ const [timeBox,infoBox,detailsBox]=await Promise.all([timestamp.boundingBox(),viewIdentifiers.boundingBox(),viewDetails.boundingBox()]);
+ assert.ok(timeBox.y>=Math.max(infoBox.y+infoBox.height,detailsBox.y+detailsBox.height));
+ await viewIdentifiers.hover();
+ await identifiersTooltip.getByText(operationId,{exact:true}).waitFor();
+ await identifiersTooltip.getByText(hash,{exact:true}).waitFor();
+ await viewDetails.click();
+ await detailsDialog.getByText('Lock fingerprint',{exact:true}).waitFor();
+ assert.equal(await detailsDialog.getByText(operationId,{exact:true}).count(),1);
+ await page.keyboard.press('Escape');
+ await detailsDialog.waitFor({state:'hidden'});
+ assert.equal(await viewDetails.evaluate(button=>document.activeElement===button),true);
+ await page.getByRole('tab',{name:'ayni',exact:true}).click();
  await preparation.getByText('Registry image available',{exact:true}).waitFor();
  assert.equal(await preparation.getByRole('link',{name:'Open registry package',exact:true}).getAttribute('href'),'https://github.com/orgs/fixture/packages/container/package/runtime');
  await preparation.getByText(`ghcr.io/fixture/runtime@${hash}`,{exact:true}).waitFor();
+ assert.equal(await preparation.getByRole('button',{name:'Copy image reference',exact:true}).count(),0);
  await page.route('**/api/CancelRuntimePreparation',async route=>{
   cancelRequest=route.request().postDataJSON();assert.equal(cancelRequest.id,operationId);assert.equal(cancelRequest.expectedGeneration,'4');
   operation={...operation,state:'cancelling',generation:'5',safeReason:'cancelled'};originalReceipt=operation;await route.fulfill({json:{operation}});
@@ -277,18 +405,21 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await steps.getByRole('button',{name:/Check ayni.lock/}).click();
  await page.getByRole('button',{name:'More branches',exact:true}).click();
  const branchPicker=page.getByRole('combobox',{name:'Runtime branch',exact:true});
+ await page.route('**/api/ResolveRepositoryDefaultCommit',route=>{
+  assert.equal(route.request().postDataJSON().branch,'release/next');
+  return route.fulfill({json:{defaultBranch:'release/next',commitSha:inspection.commitSha}});
+ });
+ await page.route('**/api/InspectRepository',route=>route.fulfill({json:{inspection}}));
+ const checkedBranch = page.waitForRequest(request=>request.url().endsWith('/api/InspectRepository'));
  await branchPicker.selectOption('release/next');
+ assert.equal((await checkedBranch).postDataJSON().commitSha,inspection.commitSha);
+ await status.locator('[data-title-content]').getByText('Passed',{exact:true}).waitFor();
  await branchPicker.locator('xpath=ancestor::*[@data-slot="input-group"][1]').locator('[data-autosave-state="saved"]').waitFor();
  await page.reload();
  await steps.getByRole('button',{name:/Connect integrations/}).click();
  await next().click();
  await branchPicker.waitFor();
  assert.equal(await branchPicker.inputValue(),'release/next');
- await page.route('**/api/ResolveRepositoryDefaultCommit',route=>{
-  assert.equal(route.request().postDataJSON().branch,'release/next');
-  return route.fulfill({json:{defaultBranch:'release/next',commitSha:inspection.commitSha}});
- });
- await page.route('**/api/InspectRepository',route=>route.fulfill({json:{inspection}}));
  await preparation.getByRole('button',{name:'Check ayni.lock',exact:true}).click();
  await next().click();
  await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).check();
@@ -314,22 +445,25 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  const queued = operation;
  operation={...queued,state:'unavailable',stage:'cleanup',safeReason:'source_unavailable',cleanupComplete:true,buildsStarted:0};
  const summary=status.getByRole('region',{name:'Preparation summary',exact:true});
- await summary.getByText('See Activity for preparation details.',{exact:true}).waitFor();
- const prepareHeader=status.getByRole('heading',{name:'Prepare image',exact:true}).locator('..');
+ await summary.getByText('See Status for preparation details.',{exact:true}).waitFor();
+ const prepareHeader=status.locator('[data-title-row]').filter({has:page.getByRole('heading',{name:'Prepare image',exact:true})});
  await prepareHeader.getByText('Unavailable',{exact:true}).waitFor();
  const refreshStatus=prepareHeader.getByRole('button',{name:'Refresh status',exact:true});
  assert.equal(await refreshStatus.locator('svg').count(),1);
- assert.equal(await refreshStatus.evaluate(button=>button.previousElementSibling.textContent.trim()),'Unavailable');
+ assert.equal(await prepareHeader.locator('[data-title-content]').getByText('Unavailable',{exact:true}).count(),1);
+ assert.equal(await prepareHeader.locator('[data-title-actions]').getByRole('button',{name:'Refresh status',exact:true}).count(),1);
  assert.equal(await status.getByRole('button',{name:'Refresh status',exact:true}).count(),1);
  assert.equal(await summary.getByText('Status',{exact:true}).count(),1);
- assert.deepEqual((await summary.locator('dd').allTextContents()).map(value=>value.trim()),['See Activity for preparation details.','—','—','—']);
+ assert.deepEqual((await summary.locator('dd').allTextContents()).map(value=>value.trim()),['See Status for preparation details.','—','—','—']);
  assert.equal(await buildReport.getByText('Pending',{exact:true}).count(),5);
  assert.equal(await status.getByText(/exact source checkout/).count(),0);
- await page.getByRole('tab',{name:'Activity',exact:true}).click();
- await activity.getByText('Current preparation details',{exact:true}).click();
- await activity.getByText(/exact source checkout/).waitFor();
+ await page.getByRole('tab',{name:'Status',exact:true}).click();
+ await currentPreparation.getByRole('article',{name:`Runtime preparation ${queued.id}`}).getByRole('button',{name:'View preparation details',exact:true}).click();
+ await detailsDialog.getByText(/exact source checkout/).waitFor();
+ assert.equal(await detailsDialog.getByRole('button',{name:'Retry preparation',exact:true}).count(),1);
+ await detailsDialog.getByRole('button',{name:'Close',exact:true}).click();
  operation=queued;
- await page.getByRole('tab',{name:'ayni runtime',exact:true}).click();
+ await page.getByRole('tab',{name:'ayni',exact:true}).click();
  await status.getByRole('button',{name:'Refresh status',exact:true}).click();
  await status.getByText('Queued',{exact:true}).waitFor();
  assert.ok(buildGrant);
@@ -341,15 +475,21 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await preparation.getByRole('button',{name:'Dismiss rejected command',exact:true}).click();
  assert.equal(await page.evaluate(id=>sessionStorage.getItem(`ayni.runtime.preparation.pending.${id}`),repositoryId),null);
  await preparation.screenshot({path:'/tmp/runtime-preparation-ui.png'});
- await steps.getByRole('button',{name:/Check ayni.lock/}).click();
- await branchPicker.selectOption('');
  await page.evaluate(id => {
+  localStorage.removeItem(`ayni.repository.runtime.branch.${id}`);
   localStorage.removeItem(`ayni.repository.runtime.registry.${id}`);
   localStorage.removeItem(`ayni.repository.runtime.signer.${id}`);
   localStorage.removeItem(`ayni.repository.runtime.progress.${id}`);
   localStorage.removeItem('ayni.runtime.default.registry');
   localStorage.removeItem('ayni.runtime.default.signer');
  },repositoryId);
+ await page.goto(`${origin}/repositories/${repositoryId}?tab=status`);
+ await statusPanel.getByText(/^Inspection history/).waitFor();
+ await page.goto(`${origin}/repositories/${repositoryId}?tab=activity`);
+ await statusPanel.getByText(/^Inspection history/).waitFor();
+ await page.goto(`${origin}/repositories/${repositoryId}?tab=source`);
+ await sourceDetails.getByText('Source control connection',{exact:true}).waitFor();
+ await sourceDetails.getByRole('button',{name:'Close',exact:true}).click();
  for(const method of ['ListRepositoryBranches','ListRepositoryInspections','ListConnections','ListRuntimeSigners','ListRuntimePreparations','GetRuntimePreparation','GetRuntimePreparationReceipt','StartRepositoryRuntime','GetRepositoryRuntime','GetRepositoryRuntimeReceipt','RetryRuntimePreparation','CancelRuntimePreparation','ResolveRepositoryDefaultCommit','InspectRepository']) await page.unroute(`**/api/${method}`);
  console.log('runtime-preparation-ui: intercepted UI contract coverage passed for explicit grants, lost-response receipt recovery, current-generation publication reconciliation, separate cleanup gate and cancellation; no registry/build qualification claimed.');
 }
@@ -408,11 +548,105 @@ export async function exerciseDefaultBranchRecheck(page, origin, repositoryId) {
  for(const method of ['ListConnections','ListRuntimeSigners','ListRepositoryInspections','ListRuntimePreparations','ResolveRepositoryDefaultCommit','InspectRepository','GetRepositoryInspection']) await page.unroute(`**/api/${method}`);
 }
 
+export async function exerciseRepositoryHistoryPagination(page,origin,repositoryId) {
+ const inspectedAt=String(Date.now());
+ const inspections=Array.from({length:23},(_,index)=>({
+  id:randomUUID(),repositoryId,commitSha:index.toString(16).padStart(40,'0'),state:'completed',connectionRevision:'1',updatedAtUnixMs:inspectedAt,
+ }));
+ const operations=Array.from({length:12},()=>({
+  id:randomUUID(),repositoryId,inspectionId:inspections[0].id,platform:'linux/arm64',state:'ready',stage:'cleanup',
+  updatedAtUnixMs:inspectedAt,contentVerified:true,managedCompatible:true,cleanupComplete:true,
+ }));
+ const current=operations[0];
+ const calls=[];
+ let failNextPreparationPage=true;
+ async function respond(route, key, records) {
+  const {afterId,limit,excludeId}=route.request().postDataJSON();
+  assert.equal(limit,10);
+  calls.push({key,afterId,excludeId});
+  const available=records.filter(record=>record.id!==excludeId);
+  const start=afterId ? available.findIndex(record=>record.id===afterId)+1 : 0;
+  assert.ok(!afterId || start>0);
+  if(key==='operations' && excludeId && afterId && failNextPreparationPage){
+   failNextPreparationPage=false;
+   return route.fulfill({status:503,json:{message:'History temporarily unavailable'}});
+  }
+  const items=available.slice(start,start+limit);
+  return route.fulfill({json:{[key]:items,nextAfterId:start+limit<available.length ? items.at(-1).id : ''}});
+ }
+ await page.route('**/api/ListRuntimePreparations',route=>respond(route,'operations',operations));
+ await page.route('**/api/ListRepositoryInspections',route=>respond(route,'inspections',inspections));
+ await page.goto(`${origin}/repositories/${repositoryId}?tab=status`);
+ const currentEntry=page.getByRole('region',{name:'Current preparation details',exact:true})
+  .getByRole('article',{name:`Runtime preparation ${current.id}`,exact:true});
+ await currentEntry.waitFor();
+
+ const preparationHistory=page.locator('[data-preparation-history]');
+ await preparationHistory.locator('summary').click();
+ const preparationPages=preparationHistory.getByRole('navigation',{name:'Previous preparations pages'});
+ const preparationRows=preparationHistory.getByRole('article');
+ await preparationPages.getByText('Page 1',{exact:true}).waitFor();
+ assert.equal(await preparationRows.count(),5);
+ assert.deepEqual(calls.filter(call=>call.key==='operations' && call.excludeId===current.id).map(call=>call.afterId),['']);
+ assert.equal(await preparationHistory.getByRole('article',{name:`Runtime preparation ${current.id}`,exact:true}).count(),0);
+ await preparationPages.getByRole('button',{name:'Go to next page'}).click();
+ await preparationPages.getByText('Page 2',{exact:true}).waitFor();
+ await preparationHistory.getByRole('alert').waitFor();
+ assert.equal(await preparationRows.count(),5);
+ assert.equal(await preparationRows.first().getAttribute('aria-label'),`Runtime preparation ${operations[6].id}`);
+ await preparationHistory.getByRole('button',{name:'Retry',exact:true}).click();
+ await preparationPages.getByRole('button',{name:'Go to next page'}).click();
+ await preparationPages.getByText('Page 3',{exact:true}).waitFor();
+ assert.equal(await preparationRows.count(),1);
+ assert.equal(await preparationRows.first().getAttribute('aria-label'),`Runtime preparation ${operations.at(-1).id}`);
+ assert.equal(await preparationPages.getByRole('button',{name:'Go to next page'}).isDisabled(),true);
+ await preparationPages.getByRole('button',{name:'Go to previous page'}).click();
+ await preparationPages.getByText('Page 2',{exact:true}).waitFor();
+ await preparationHistory.locator('summary').click();
+ await preparationHistory.locator('summary').click();
+ await preparationPages.getByText('Page 2',{exact:true}).waitFor();
+ await preparationPages.getByRole('button',{name:'Go to previous page'}).click();
+ await preparationPages.getByText('Page 1',{exact:true}).waitFor();
+ assert.deepEqual(calls.filter(call=>call.key==='operations' && call.excludeId===current.id).map(call=>call.afterId),['',operations[10].id,operations[10].id]);
+ assert.equal(await currentEntry.isVisible(),true);
+
+ const inspectionHistory=page.locator('[data-inspection-history]');
+ await inspectionHistory.locator('summary').click();
+ const inspectionPages=inspectionHistory.getByRole('navigation',{name:'Inspection history pages'});
+ const inspectionRows=inspectionHistory.getByRole('article');
+ await inspectionPages.getByText('Page 1',{exact:true}).waitFor();
+ assert.equal(await inspectionRows.count(),5);
+ const beforePrefetch=calls.length;
+ const nextInspectionPage=inspectionPages.getByRole('button',{name:'Go to next page'});
+ for(let pageNumber=2;pageNumber<=5;pageNumber++){
+  await nextInspectionPage.click();
+  await inspectionPages.getByText(`Page ${pageNumber}`,{exact:true}).waitFor();
+ }
+ assert.equal(await inspectionRows.count(),3);
+ assert.equal(await inspectionRows.first().getAttribute('aria-label'),`Inspection ${inspections[20].commitSha}`);
+ await inspectionPages.getByRole('button',{name:'Go to previous page'}).click();
+ await inspectionPages.getByText('Page 4',{exact:true}).waitFor();
+ assert.equal(await inspectionRows.count(),5);
+ assert.deepEqual(calls.slice(beforePrefetch).filter(call=>call.key==='inspections').map(call=>call.afterId),[inspections[9].id,inspections[19].id]);
+ let releaseRefresh;
+ const refreshGate=new Promise(resolve=>{releaseRefresh=resolve;});
+ await page.route('**/api/ListRepositoryInspections',async route=>{await refreshGate;await respond(route,'inspections',inspections);});
+ await page.getByRole('button',{name:'Refresh inspection history',exact:true}).click();
+ assert.equal(await inspectionRows.count(),5,'refresh must keep the cached page visible');
+ assert.equal(await inspectionHistory.locator('[data-slot=skeleton]').count(),0);
+ assert.equal(await inspectionPages.getByText('Page 4',{exact:true}).isVisible(),true);
+ releaseRefresh();
+ await inspectionPages.getByText('Page 1',{exact:true}).waitFor();
+ assert.equal(await inspectionRows.first().getAttribute('aria-label'),`Inspection ${inspections[0].commitSha}`);
+}
+
 export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  const catalog=await (await page.request.post(`${origin}/api/ListRepositories`,{headers:{'x-console-request':'1'},data:{limit:100}})).json();
  const repo=catalog.repositories.find(value=>value.id===repositoryId);
  const registryId=randomUUID(),signerId=randomUUID(),inspectionId=randomUUID();
  let run,operation,starts=[],inspections=[],deploymentEnabled=false;
+ let releaseStart;
+ const startGate=new Promise(resolve=>{releaseStart=resolve;});
  const hash=`sha256:${'2'.repeat(64)}`;
  async function routeRetainedState(session) {
   await session.route('**/api/ListConnections',route=>route.fulfill({json:{connections:[{id:repo.connectionId,displayName:'Source',capability:'source_control',enabled:true,revision:'1',activeCredentialRevision:'source'},{id:registryId,displayName:'Registry',capability:'container_registry',enabled:true,revision:'1',activeCredentialRevision:'registry',registryDestination:'ghcr.io/fixture'}]}}));
@@ -423,10 +657,11 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  }
  await routeRetainedState(page);
  await page.route('**/api/StartRuntimePreparation',()=>{throw new Error('browser must not sequence or submit a separate preparation');});
- await page.route('**/api/StartRepositoryRuntime',route=>{
+ await page.route('**/api/StartRepositoryRuntime',async route=>{
   const settings=route.request().postDataJSON();starts.push(settings);
   assert.equal('inspectionId' in settings,false);assert.equal('commitSha' in settings,false);
   assert.equal(settings.expectedConnectionRevision,'1');assert.equal(settings.allowBuild,true);assert.equal(settings.maxBuilds,1);
+  if(starts.length===1)await startGate;
   run={id:randomUUID(),idempotencyKey:settings.idempotencyKey,settings,state:'resolving'};
   return route.fulfill({json:{run}});
  });
@@ -456,16 +691,35 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  await status.getByRole('heading',{name:'Review and start',exact:true}).waitFor();
  assert.equal(await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).isChecked(),false);
  await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).check();
+ const steps=preparation.getByRole('list',{name:'Runtime onboarding steps'});
+ const reviewHeading=status.getByRole('heading',{name:'Review and start',exact:true});
+ const startSent=page.waitForRequest(request=>request.url().endsWith('/api/StartRepositoryRuntime'));
  await preparation.getByRole('button',{name:'Build and publish runtime',exact:true}).click();
+ await startSent;
+ await status.getByText('Submitting preparation…',{exact:true}).waitFor();
+ assert.equal(await reviewHeading.isVisible(),true);
+ assert.equal(await steps.getByRole('button',{name:/Review and start/}).locator('..').getAttribute('aria-current'),'step');
+ assert.equal(await steps.getByRole('button',{name:/Prepare image/}).isDisabled(),true);
+ releaseStart();
  await preparation.getByText('Checking the branch head…',{exact:true}).waitFor();
+ assert.equal(await reviewHeading.isVisible(),true);
  run={...run,state:'inspecting',commitSha:'c'.repeat(40)};
  await preparation.getByText('Checking the committed ayni policy, lock and build inputs…',{exact:true}).waitFor();
+ assert.equal(await reviewHeading.isVisible(),true);
+ assert.equal(await status.getByLabel('Time limit (seconds)',{exact:true}).isDisabled(),true);
+ run={...run,state:'admitting'};
+ await status.getByText('Validating build capability, signer trust and preparation settings…',{exact:true}).waitFor();
+ assert.equal(await reviewHeading.isVisible(),true);
+ assert.equal(await steps.getByRole('button',{name:/Prepare image/}).isDisabled(),true);
  deploymentEnabled=false;
  run={...run,state:'blocked',safeReason:'runtime_profile_unavailable'};
  await preparation.getByText('Runtime building is not enabled on this deployment. Ask the deployment administrator to enable a qualified runtime build profile.',{exact:true}).waitFor();
  deploymentEnabled=true;
+ await page.locator('[data-sonner-toast]').getByText('Preparation needs attention',{exact:true}).waitFor();
+ assert.equal(await reviewHeading.isVisible(),true);
  await page.reload();
- await preparation.getByRole('heading',{name:'Prepare image',exact:true}).waitFor();
+ await reviewHeading.waitFor();
+ assert.equal(await steps.getByRole('button',{name:/Prepare image/}).isDisabled(),true);
  assert.equal(await preparation.getByText(/Cluster network isolation/).count(),0);
  await preparation.getByRole('list',{name:'Runtime onboarding steps'}).getByRole('button',{name:/Check ayni.lock/}).click();
  await review();
@@ -475,11 +729,18 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  await preparation.getByText('Checking the branch head…',{exact:true}).waitFor();
  assert.equal(starts.length,2);assert.notEqual(starts[0].idempotencyKey,starts[1].idempotencyKey);
  inspections=[{id:inspectionId,repositoryId,connectionRevision:'1',commitSha:'c'.repeat(40),state:'completed',updatedAtUnixMs:String(Date.now()),result:{ayniVersion:'0.17.1',trustKeyIds:['named-key'],findings:[]}}];
- operation={id:randomUUID(),idempotencyKey:randomUUID(),generation:'1',frozenInputDigest:hash,acceptedAtUnixMs:String(Date.now()),repositoryId,inspectionId,registryConnectionId:registryId,signerId,platform:'linux/arm64',state:'running',developmentOnly:true,stage:'build',buildMilestone:'RUNTIME_BUILD_MILESTONE_BUILD_IMAGE',buildsStarted:1,sourceCommit:'c'.repeat(40),registryDestination:'ghcr.io/fixture/sandbox',imageDigest:hash,contentVerified:false,managedCompatible:false,cleanupComplete:false,updatedAtUnixMs:String(Date.now())};
+ const admittedId=randomUUID();
+ run={...run,state:'completed',commitSha:'c'.repeat(40),inspectionId,preparationId:admittedId};
+ await status.getByText('Loading the accepted preparation…',{exact:true}).waitFor();
+ assert.equal(await reviewHeading.isVisible(),true);
+ assert.equal(await steps.getByRole('button',{name:/Prepare image/}).isDisabled(),true);
+ operation={id:admittedId,idempotencyKey:randomUUID(),generation:'1',frozenInputDigest:hash,acceptedAtUnixMs:String(Date.now()),repositoryId,inspectionId,registryConnectionId:registryId,signerId,platform:'linux/arm64',state:'running',developmentOnly:true,stage:'build',buildMilestone:'RUNTIME_BUILD_MILESTONE_BUILD_IMAGE',buildsStarted:1,sourceCommit:'c'.repeat(40),registryDestination:'ghcr.io/fixture/sandbox',imageDigest:hash,contentVerified:false,managedCompatible:false,cleanupComplete:false,updatedAtUnixMs:String(Date.now())};
  run={...run,state:'completed',commitSha:operation.sourceCommit,inspectionId,preparationId:operation.id};
  const summary=status.getByRole('region',{name:'Preparation summary',exact:true});
  await status.getByRole('heading',{name:'Prepare image',exact:true}).locator('..').getByText('Running',{exact:true}).waitFor();
  await summary.getByText('Build unsigned runtime',{exact:true}).waitFor();
+ await steps.getByRole('button',{name:/Completed:.*Review and start/}).waitFor();
+ assert.equal(await steps.getByRole('button',{name:/Prepare image/}).locator('..').getAttribute('aria-current'),'step');
  const buildReport=status.getByRole('region',{name:'Build report',exact:true});
  const buildStep=label=>buildReport.getByRole('listitem').filter({hasText:label});
  await buildStep('Copy source').getByText('Complete',{exact:true}).waitFor();
@@ -506,7 +767,18 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  operation={...operation,state:'ready',stage:'cleanup',contentVerified:true,managedCompatible:true,cleanupComplete:true};
  await next.click();
  await status.getByRole('heading',{name:'Verify and finish',exact:true}).locator('..').getByText('Ready',{exact:true}).waitFor();
- await preparation.getByText(`ghcr.io/fixture/sandbox@${hash}`,{exact:true}).waitFor();
+ const imageReference=`ghcr.io/fixture/sandbox@${hash}`;
+ const imageBlock=preparation.locator('div:has(> pre > code)').filter({hasText:imageReference});
+ const copyImage=imageBlock.getByRole('button',{name:'Copy image reference',exact:true});
+ await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin});
+ try {
+  await copyImage.click();
+  assert.equal(await copyImage.textContent(),'');
+  await page.getByText('Image reference copied',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),imageReference);
+ } finally {
+  await page.context().clearPermissions();
+ }
  assert.equal(await preparation.getByRole('link',{name:'Open registry package',exact:true}).getAttribute('href'),'https://github.com/orgs/fixture/packages/container/package/sandbox');
  const completedRun=run,completedOperation=operation;
  const fresh=await page.context().browser().newPage();
@@ -532,8 +804,10 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
   operation=completedOperation;
  }
  run={...run,id:randomUUID(),state:'resolving',preparationId:undefined,inspectionId:undefined};
- await summary.getByText('Checking the branch head…',{exact:true}).waitFor({timeout:15000});
- assert.equal(await buildReport.getByText('Pending',{exact:true}).count(),5);
+ await status.getByText('Checking the branch head…',{exact:true}).waitFor({timeout:15000});
+ assert.equal(await reviewHeading.isVisible(),true);
+ assert.equal(await status.getByRole('region',{name:'Build report',exact:true}).count(),0);
+ assert.equal(await steps.getByRole('button',{name:/Prepare image/}).isDisabled(),true);
  for(const method of ['ListConnections','ListRuntimeSigners','ListRepositoryInspections','ListRuntimePreparations','GetRepositoryRuntime','StartRepositoryRuntime','StartRuntimePreparation','ResolveRepositoryDefaultCommit','InspectRepository']) await page.unroute(`**/api/${method}`);
  console.log('repository-onboarding-ui: no-inspection setup, retained settings, automatic progress, deployment blocker and immutable registry link passed; provider/build/publication replies are fixtures.');
 }

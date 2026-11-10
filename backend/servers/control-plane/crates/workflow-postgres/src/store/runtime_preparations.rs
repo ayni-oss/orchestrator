@@ -184,6 +184,7 @@ impl WorkflowStore {
         &self,
         repository_id: &str,
         after_id: &str,
+        exclude_id: &str,
         limit: u32,
     ) -> Result<(Vec<Operation>, String), StoreError> {
         if !repository_id.is_empty() {
@@ -192,12 +193,22 @@ impl WorkflowStore {
         if !after_id.is_empty() {
             validate_id(after_id, "after_id")?;
         }
+        if !exclude_id.is_empty() {
+            validate_id(exclude_id, "exclude_id")?;
+        }
         if limit > 100 {
             return Err(StoreError::InvalidInput("limit"));
         }
         let limit = i64::from(if limit == 0 { 50 } else { limit });
         let (client, driver) = crate::connect(&self.database_url).await?;
-        let rows=client.query("SELECT * FROM workflow_runtime_preparations WHERE ($1='' OR repository_id=$1) AND ($2='' OR id<$2) ORDER BY id DESC LIMIT $3",&[&repository_id,&after_id,&(limit+1)]).await?;
+        let rows = client
+            .query(
+                "SELECT * FROM workflow_runtime_preparations
+             WHERE ($1='' OR repository_id=$1) AND ($2='' OR id<$2) AND id<>$3
+             ORDER BY id DESC LIMIT $4",
+                &[&repository_id, &after_id, &exclude_id, &(limit + 1)],
+            )
+            .await?;
         let mut values = rows.iter().map(operation).collect::<Result<Vec<_>, _>>()?;
         let page_size = usize::try_from(limit).map_err(|_| StoreError::CorruptState)?;
         let next = if values.len() > page_size {

@@ -27,11 +27,10 @@ flowchart LR
 5. Choose **Connect repository** for the repository you want to use. If you need a new GitHub App connection, add it in the discovery panel and continue with it selected.
 
 Available repositories appear as compact cards, like projects. Open a connected
-repository card to see its **Source code** and **Ayni runtime** tabs. The card’s
-three-dot menu also opens either tab directly.
-
-**Source code** shows the GitHub connection and configuration status. Expand
-**Source integration details** for GitHub IDs and connection time. Connected source
+repository card to see its **Status** and **ayni** tabs. The connection
+status appears next to the repository name. Select the info icon in the header or
+**Source integration details** in the card’s three-dot menu to see the GitHub
+connection, IDs, and connection time. Connected source
 access does not mean a runtime is ready or a task can execute.
 
 ## Use it from a project
@@ -58,18 +57,15 @@ the saved App connection or its installation access.
 
 ## Check runtime status
 
-Open a repository card and choose **Ayni runtime**. The tab loads saved status
+Open a repository card and choose **ayni**. The tab loads saved status
 without starting a preparation. It shows the inspected commit, known setup issues
 and the next step together. Choose **Configure runtime** to review the registry, named signing key, platform and allowance. **Build and publish runtime** starts one server-owned run: it reads the latest default branch, inspects Ayni setup, then builds if needed, certifies, publishes and verifies the image. A missing setup input or disabled build profile stops the run with an actionable issue. The step list highlights the current part of onboarding, from integration setup to verification. Open preparation details for technical evidence and history. Current progress and recovery controls stay visible. Previous preparations and inspection attempts are collapsed into history. Inspection findings include their
-saved date and Ayni version. Choose **Recheck default branch** to resolve GitHub’s
-current default branch and inspect its latest commit. Each click resolves the
-branch again; cached repository metadata and a previously entered SHA do not
-choose the commit. Preparation history and configuration are refreshed afterward.
+saved date and Ayni version. The lock check resolves the selected branch and
+inspects its latest commit.
 
 If inspection is interrupted, recover or retry that exact request before another
 recheck. Recovery keeps its original SHA even if the branch has advanced. A new
-recheck creates a fresh request. You can still inspect a specific SHA explicitly
-under **Inspect a specific commit**.
+recheck creates a fresh request.
 
 A ready result applies to the exact inspection and platform shown. It does not
 establish readiness for another commit. Interrupted commands show receipt recovery;
@@ -79,17 +75,20 @@ preparation is requested.
 
 ## Inspect Ayni setup
 
-Enter a branch in **Runtime branch** and choose **Check branch**. Leave the field
-empty to check the default branch. After checking, the runtime settings show the
-exact commit. If the branch advances after review, check it again before starting
-a new run. A named branch requires a check before preparation.
+Changing **Runtime branch** automatically runs **Check ayni.lock**. Choose
+**Default branch** to check the repository’s default branch. Use the refresh
+icon to check the current selection again. The report shows the exact commit.
+If the branch advances after review, check it again before starting a new run.
+A named branch requires a check before preparation.
 
-Open a connected repository card, choose **Ayni runtime**, then expand **Inspect a specific commit**. Paste the full lowercase
-commit SHA from GitHub, and choose **Inspect commit**. The result shows the exact
-commit and next steps for missing or invalid inputs. Expand **Inspection technical
-details** for policy and lock digests, locked tools and trusted public key IDs.
+In **Status**, open **Inspection history** and select the ellipsis next to the
+result to see findings, policy and lock digests, locked tools and trusted public
+key IDs.
+**Previous preparations** and **Inspection history** show up to five entries per
+page. The next two pages load when you reach the last cached page. Use the arrows
+below each list to browse older or newer entries.
 
-If the response is interrupted, reopen the repository’s **Ayni runtime** tab and choose **Recover inspection**. Use
+If the response is interrupted, reopen the repository’s **ayni** tab and choose **Recover inspection**. Use
 **Retry same inspection** when GitHub becomes available again. A new commit needs
 a new inspection; earlier results remain in history.
 
@@ -140,7 +139,7 @@ Local testing may use an explicitly enabled development profile; the UI labels
 its results **Development runtime ready**, without claiming cluster qualification. In **Configuration**, select a registry connection and set up a signer.
 The committed repository policy must trust that signer.
 
-On the repository’s **Ayni runtime** tab, choose **Configure runtime**. Review the registry, named signer, platform and time/build allowance. You can add a registry or signing key from this form and continue with it selected. A single available registry and signer are selected automatically. Enable building to permit an absent image to be built and published, then choose **Build and publish runtime**. The server checks the latest default-branch commit and continues the complete pipeline without further browser actions. Leave building
+On the repository’s **ayni** tab, choose **Configure runtime**. Review the registry, named signer, platform and time/build allowance. You can add a registry or signing key from this form and continue with it selected. A single available registry and signer are selected automatically. Enable building to permit an absent image to be built and published, then choose **Build and publish runtime**. The server checks the latest default-branch commit and continues the complete pipeline without further browser actions. Leave building
 disabled to check an existing image. Enable building for a confirmed missing image;
 replacing an invalid image requires the separate replacement choice.
 

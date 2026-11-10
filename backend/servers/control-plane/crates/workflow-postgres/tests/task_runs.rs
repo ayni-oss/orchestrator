@@ -492,6 +492,20 @@ async fn verify_quality_receipts(
             .await
             .is_err()
     );
+    let diagnostics = store
+        .list_execution_diagnostics(
+            ayni_orchestrator_events::execution_diagnostics::Kind::Task,
+            &task.attempt_id,
+            0,
+        )
+        .await?;
+    let quality_reports: Vec<_> = diagnostics
+        .iter()
+        .filter(|entry| entry.diagnostic.stage == "quality")
+        .collect();
+    assert_eq!(quality_reports.len(), 1);
+    assert_eq!(quality_reports[0].diagnostic.outcome, quality.state);
+    assert_eq!(quality_reports[0].diagnostic.reason, quality.safe_reason);
     Ok(())
 }
 

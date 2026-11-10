@@ -58,6 +58,34 @@ pub(super) async fn authority(
     bounded_json(response, 256 * 1024).await
 }
 
+pub(super) async fn retain_lifecycle(
+    diagnostic: &ayni_orchestrator_events::execution_diagnostics::Diagnostic,
+) -> RuntimeResult<()> {
+    let result = async {
+        let runtime = ProviderRuntime::from_environment("openai")?;
+        let mut url = reqwest::Url::parse(&runtime.authority_url)?;
+        url.set_path("/v1/session-diagnostics");
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(3))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()?
+            .post(url)
+            .bearer_auth(runtime.authority_token.trim())
+            .json(diagnostic)
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
+    }
+    .await;
+    if result.is_err() {
+        tracing::warn!(target: "ayni_orchestrator_observability::workload",
+            session_id = %diagnostic.execution_id, generation = diagnostic.generation,
+            "Session workload diagnostic was not retained");
+    }
+    result
+}
+
 pub(super) async fn bounded_json<T: serde::de::DeserializeOwned>(
     mut response: reqwest::Response,
     maximum: usize,

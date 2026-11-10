@@ -33,7 +33,10 @@ CASES = {
 def authenticate(port, password):
     with socket.create_connection(("127.0.0.1", port), timeout=2) as connection:
         connection.settimeout(2)
-        greeting = connection.recv(8192)
+        with connection.makefile("rb") as stream:
+            greeting = stream.readline(8192)
+        if not greeting:
+            raise ConnectionError("NATS closed before the greeting")
         if not greeting.startswith(b"INFO "):
             raise RuntimeError("NATS greeting missing")
         packet = json.dumps({"user": "fixture", "pass": password, "verbose": True})

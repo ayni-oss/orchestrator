@@ -123,7 +123,7 @@ grep -q 'ORCHESTRATOR_GRPC_BIND_ADDRESS: "127.0.0.1:50051"' "$reusable_render"
 service_block="$(awk '/^kind: Service$/{in_service=1} /^---$/{if(in_service){exit}} in_service{print}' "$reusable_render")"
 ! grep -q 'trusted-grpc' <<<"$service_block"
 
-# The local chart pins stateful dependencies, renders the isolated three-stream
+# The local chart pins stateful dependencies, renders the isolated workflow and diagnostics
 # profile, and injects four distinct broker roles only through Secret refs.
 grep -q 'image: "postgres:17.6-bookworm@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3"' "$local_render"
 grep -q 'image: "nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4"' "$local_render"
@@ -133,7 +133,7 @@ grep -q "stat -c '%u:%g' /var/lib/postgresql/data" "$local_render"
 grep -q 'chown -R 999:999 /var/lib/postgresql/data' "$local_render"
 ! grep -q 'ALTER DEFAULT PRIVILEGES' "$local_render"
 grep -q 'max_payload: 327680' "$local_render"
-for stream in ORCHESTRATOR_WORKFLOW_COMMAND_V1 ORCHESTRATOR_WORKFLOW_REPORT_V1 ORCHESTRATOR_WORKFLOW_DECISION_V1; do
+for stream in ORCHESTRATOR_WORKFLOW_COMMAND_V1 ORCHESTRATOR_WORKFLOW_REPORT_V1 ORCHESTRATOR_WORKFLOW_DECISION_V1 ORCHESTRATOR_EXECUTION_DIAGNOSTICS_V1; do
   grep -q "$stream" "$local_render"
 done
 grep -q '"max_bytes": 268435456' "$local_render"

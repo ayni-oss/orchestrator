@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from "./ui/skeleton/skeleton.svelte";
   import { goto } from '$app/navigation';
   import { Plus, RefreshCw } from '@lucide/svelte';
   import { onMount } from 'svelte';
@@ -48,6 +49,8 @@
   let history = $state.raw<Operation[]>([]);
   let next = $state('');
   let historyNext = $state('');
+  let historyLoaded = $state(false);
+  let listLoaded = $state(false);
   let pendingOperationId = $state('');
   let pendingKey = $state('');
   let name = $state('');
@@ -119,6 +122,7 @@
       connections = sources;
     }
     next = result.nextAfterId ?? '';
+    listLoaded = true;
   }
 
   async function loadHistory(id: string, append = false) {
@@ -126,6 +130,7 @@
     const operations = result.operations ?? [];
     history = append ? [...history, ...operations] : operations;
     historyNext = result.nextAfterId ?? '';
+    historyLoaded = true;
   }
 
   async function loadDetails(id: string, resetForm: boolean) {
@@ -389,14 +394,14 @@
         <Plus aria-hidden="true" />
       </Button>
     {/if}
-    <Button size="icon" variant="outline" aria-label={connectionId ? 'Refresh settings' : 'Refresh connections'} title={connectionId ? 'Refresh settings' : 'Refresh connections'} disabled={busy} onclick={() => perform(() => refresh())}>
+    <Button size="icon" variant="ghost" aria-label={connectionId ? 'Refresh settings' : 'Refresh connections'} title={connectionId ? 'Refresh settings' : 'Refresh connections'} disabled={busy} onclick={() => perform(() => refresh())}>
       <RefreshCw class={{ 'motion-safe:animate-spin': refreshing }} aria-hidden="true" />
     </Button>
 {/snippet}
 {#if createOnMount}
   <div class="flex justify-end gap-2">{@render headerActions()}</div>
 {:else}
-  <PageHeader eyebrow={connectionId ? surface.label : surface.section} title={connection?.displayName ?? (connectionId ? 'Connection settings' : surface.title)} actions={headerActions} />
+  <PageHeader loading={!!connectionId && !connection && busy} eyebrow={connectionId ? surface.label : surface.section} title={connection?.displayName ?? (connectionId ? 'Connection settings' : surface.title)} actions={headerActions} />
 {/if}
 
 <PageContent>
@@ -448,6 +453,9 @@
 
       <section class="space-y-4" aria-labelledby="connection-operation-history">
         <h2 id="connection-operation-history" class="text-lg font-semibold">Operation history</h2>
+        {#if !historyLoaded && busy}
+          <InformationCard title="Operation history"><InformationTable loading rows={[{label:'Operation',value:''},{label:'Revision',value:''}]} /></InformationCard>
+        {/if}
         {#each history as operation (operation.id)}
           <InformationCard title={operation.kind === 'save' ? 'Credential submission' : operation.kind === 'delete' ? 'Connection deletion' : 'Connection state'} status={operation.state}>
             <InformationTable rows={[
@@ -489,7 +497,26 @@
         </Dialog.Content>
       </Dialog.Root>
     {:else if busy}
-      <p role="status" class="text-sm text-muted-foreground">Loading connection…</p>
+      <InformationCard title="Connection details" headingLevel={2}>
+        <InformationTable loading rows={[
+          {label:github ? 'App ID' : registry ? 'Organization destination' : 'Provider',value:''},
+          {label:'Credential',value:''},{label:'Revision',value:''},
+        ]} />
+        <p class="text-sm text-muted-foreground">{surface.validation}</p>
+        <Button variant="outline" disabled>Revalidate credentials</Button>
+      </InformationCard>
+      <InformationCard title="Edit connection" headingLevel={2}>
+        <form class="space-y-5" onsubmit={event => event.preventDefault()} aria-busy="true">
+          {@render credentials(true)}
+          <p class="text-sm text-muted-foreground">Saving validates the replacement credentials before they become active.</p>
+          <Button disabled>Save and validate</Button>
+        </form>
+      </InformationCard>
+      <section class="space-y-4"><h2 class="text-lg font-semibold">Operation history</h2><Skeleton class="h-32 w-full" /></section>
+      <InformationCard title="Danger zone" danger headingLevel={2}>
+        <p class="text-sm text-muted-foreground">Disabling or deleting this connection blocks new work that uses it.</p>
+        <div class="flex flex-wrap gap-3"><Button variant="destructive" disabled>Disable connection</Button><Button variant="destructive" disabled>Delete connection</Button></div>
+      </InformationCard>
     {/if}
   {:else}
     <div class="space-y-4">
@@ -498,6 +525,14 @@
         <InformationCard title={submittingName} status="validating" headingLevel={2}>
           <p role="status" class="text-sm text-muted-foreground">Submitting credentials for validation…</p>
         </InformationCard>
+      {/if}
+      {#if !listLoaded && busy}
+        {#each [1, 2, 3] as row (row)}
+          <InformationCard title="Connection" loadingTitle headingLevel={2}>
+            {#snippet titleAccessory()}<Skeleton class="h-5 w-20" />{/snippet}
+            <InformationTable loading rows={[{label:github ? 'App ID' : registry ? 'Organization destination' : 'Provider',value:''},{label:'Credential',value:''},{label:'Revision',value:''}]} />
+          </InformationCard>
+        {/each}
       {/if}
       {#each connections as item (item.id)}
         {@const href = `${indexPath}/${encodeURIComponent(item.id)}`}

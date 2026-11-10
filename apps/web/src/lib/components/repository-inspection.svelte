@@ -1,21 +1,23 @@
 <script lang="ts">
  import { onDestroy, onMount } from 'svelte';
+ import { RefreshCw } from '@lucide/svelte';
  import { Tabs } from 'bits-ui';
  import { toast } from 'svelte-sonner';
+ import ActivityEntry from '$lib/components/activity-entry.svelte';
+ import HistoryPages from '$lib/components/history-pages.svelte';
  import AutosaveField from '$lib/components/autosave-field.svelte';
  import * as NativeSelect from '$lib/components/ui/native-select/index.js';
  import { Button } from '$lib/components/ui/button/index.js';
- import { Input } from '$lib/components/ui/input/index.js';
  import { Label } from '$lib/components/ui/label/index.js';
  import Feedback from '$lib/components/feedback.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
  import RuntimePreparation from '$lib/components/runtime-preparation.svelte';
+ import type { StatusTone } from '$lib/presentation.js';
  import { readRuntimeProgress } from '$lib/runtime-preparation';
  import { rpc, RpcError, type Connection } from '$lib/api';
  import { inspectionReasons, type Repository, type RepositoryInspection, type InspectRequest } from '$lib/repositories';
+ import { historyBatchSize, readRecentHistory, type HistoryPage } from '$lib/repository-history';
  let { repo, connection = $bindable() }: { repo: Repository; connection?: Connection } = $props();
- let expanded = $state(false);
- let commitSha = $state('');
  let branch = $state('');
  let hasBranchPreference = false;
  let branchSavedRevision = $state(0);
@@ -34,12 +36,19 @@
  let recoveryToast: string | number | undefined;
  let inspections = $state.raw<RepositoryInspection[]>([]);
  let next = $state('');
+ let inspectionHistoryOpened = $state(false);
+ let inspectionHistoryRevision = $state(0);
  const storageKey = $derived(`ayni.repository.inspection.pending.${repo.id}`);
  const branchStorageKey = $derived(`ayni.repository.runtime.branch.${repo.id}`);
  const canInspect = $derived(!!connection?.enabled && !!connection?.activeCredentialRevision);
  const currentInspection = $derived(inspections.find(value => value.commitSha === checked?.sha &&
   value.connectionRevision === connection?.revision && value.state === 'completed') ?? inspections[0] ?? null);
- const validCommit = $derived(/^[a-f0-9]{40}$/.test(commitSha));
+ const inspectionStates: Record<string, {label: string; tone: StatusTone}> = {
+  completed:{label:'Complete',tone:'success'},
+  accepted:{label:'Awaiting retry',tone:'warning'},
+  superseded:{label:'Source connection changed',tone:'neutral'},
+  failed:{label:'Failed',tone:'danger'},
+ };
  function dismissRecoveryToast() {
   if (recoveryToast !== undefined) toast.dismiss(recoveryToast);
   recoveryToast = undefined;
@@ -74,13 +83,19 @@
    }
   }
  }
- async function load(append = false) {
-  const response = await rpc('ListRepositoryInspections', { repositoryId: repo.id, afterId: append ? next : '', limit: 20 });
-  inspections = append ? [...inspections, ...(response.inspections || [])] : response.inspections || [];
-  next = response.nextAfterId || ''; inspectionLoaded = true;
+ async function readInspections(afterId: string): Promise<HistoryPage<RepositoryInspection>> {
+  const response = await rpc('ListRepositoryInspections', {repositoryId:repo.id, afterId, limit:historyBatchSize});
+  return {items:response.inspections || [], next:response.nextAfterId || ''};
+ }
+ async function load() {
+  const result = await readRecentHistory(readInspections);
+  inspections = result.items;
+  next = result.next;
+  inspectionLoaded = true;
  }
  async function accept(value: RepositoryInspection) {
   inspections = [value, ...inspections.filter(i => i.id !== value.id)].sort((a,b) => Number(b.acceptedAtUnixMs || b.updatedAtUnixMs) - Number(a.acceptedAtUnixMs || a.updatedAtUnixMs) || b.id.localeCompare(a.id));
+  inspectionHistoryRevision += 1;
   if (value.state !== 'accepted') persist(null);
  }
  async function acceptPending(value: RepositoryInspection, request: PendingInspection) {
@@ -108,13 +123,6 @@
   } catch (cause) {
    if (!(cause instanceof RpcError) || cause.status !== 404) throw cause;
   }
-  await resume(request);
- }
- async function inspect() {
-  if (pending) return recoverOrRetry(pending);
-  if (!connection || !validCommit) return;
-  const request = {idempotencyKey:crypto.randomUUID(),repositoryId:repo.id,expectedConnectionRevision:connection.revision,commitSha};
-  persist(request);
   await resume(request);
  }
  async function loadBranches(page = 1) {
@@ -184,7 +192,6 @@
    const revision = connection.revision;
    const sha = await resolveBranch(selectedBranch, revision);
    if (selectedBranch !== branch.trim() || revision !== connection?.revision) return;
-   commitSha = sha;
    const request = {idempotencyKey:crypto.randomUUID(), repositoryId:repo.id, expectedConnectionRevision:revision, commitSha:sha, branch:selectedBranch};
    persist(request);
    await resume(request);
@@ -196,6 +203,7 @@
  function saveBranch(event: Event & { currentTarget: HTMLSelectElement }) {
   const select = event.currentTarget;
   const value = select.value;
+  if (value === branch) return;
   try {
    localStorage.setItem(branchStorageKey, value);
    hasBranchPreference = true;
@@ -205,7 +213,9 @@
   } catch {
    select.value = branch;
    toast.error('Could not save the runtime branch', { description: 'Check that this browser allows site storage, then try again.' });
+   return;
   }
+  if (canInspect) void perform(recheckDefaultBranch);
  }
  onMount(() => {
   mounted = true;
@@ -233,12 +243,12 @@
   dismissRecoveryToast();
  });
 </script>
-{#snippet branchPicker()}
+{#snippet branchPicker(disabled: boolean)}
  <div class="space-y-2">
   <Label for={`runtime-branch-${repo.id}`}>Runtime branch</Label>
   <AutosaveField savedRevision={branchSavedRevision}>
    <NativeSelect.Root data-slot="input-group-control" id={`runtime-branch-${repo.id}`} class="w-full" value={branch}
-    onchange={saveBranch} disabled={busy || !!pending} aria-describedby={`runtime-branch-help-${repo.id}`}>
+    onchange={saveBranch} disabled={disabled || busy || !!pending}>
     <NativeSelect.Option value="">Default branch</NativeSelect.Option>
     {#if branch && !branches.includes(branch)}
      <NativeSelect.Option value={branch}>{branch} (saved selection)</NativeSelect.Option>
@@ -246,8 +256,7 @@
     {#each branches as name (name)}<NativeSelect.Option value={name}>{name}</NativeSelect.Option>{/each}
    </NativeSelect.Root>
   </AutosaveField>
-  <p id={`runtime-branch-help-${repo.id}`} class="text-xs text-muted-foreground">Check the selected branch before reviewing its commit.</p>
-  {#if loadingBranches}<p role="status" class="text-xs text-muted-foreground">Loading branches…</p>
+  {#if loadingBranches}<p role="status" class="sr-only">Loading branches…</p>
   {:else if branchError}
    <Feedback kind="error" title="Could not list branches" message={branchError}/>
    <Button variant="outline" onclick={() => loadBranches(nextBranchPage || 1)}>Retry branch list</Button>
@@ -257,69 +266,90 @@
  </div>
 {/snippet}
 
-{#snippet inspectionActivity()}
- <details bind:open={expanded} class="rounded-xl border p-4">
-  <summary class="cursor-pointer text-sm font-medium">Inspect a specific commit</summary>
-  <div class="space-y-4 pt-4">
-   <p class="text-sm text-muted-foreground">Enter an exact commit SHA to check a specific revision. The runtime branch check uses the latest commit on the selected branch.</p>
-   {#if error && !pending}<Feedback kind="error" title="Inspection needs attention" message={error}/>{/if}
-   <div class="space-y-2"><Label for={`inspection-commit-${repo.id}`}>Commit SHA</Label><Input id={`inspection-commit-${repo.id}`} bind:value={commitSha} placeholder="Full 40-character lowercase commit SHA" disabled={busy || !!pending} maxlength={40}/></div>
-   {#if !canInspect}<p class="text-sm">Enable and validate the repository's source connection before starting an inspection.</p>{/if}
-   <div class="flex flex-wrap gap-2"><Button disabled={busy || (!pending && (!canInspect || !validCommit))} onclick={() => perform(inspect)}>Inspect commit</Button><Button variant="outline" disabled={busy} onclick={() => perform(() => load())}>Refresh inspections</Button></div>
-  </div>
- </details>
- <details class="rounded-xl border p-4" data-inspection-history>
-  <summary class="cursor-pointer text-sm font-medium">Inspection history ({inspections.length}{next ? '+' : ''})</summary>
-  <div class="space-y-4 pt-4"><p class="text-sm text-muted-foreground">Saved checks are historical evidence. An older awaiting-retry check does not block the latest completed check.</p>
-  {#each inspections as item (item.id)}
-   <section class="space-y-3 rounded-md border p-4" aria-label={`Inspection ${item.commitSha}`}>
-    <p class="font-medium">{item.state === 'completed' ? 'Static inspection complete' : item.state === 'accepted' ? 'Inspection awaiting retry' : item.state === 'superseded' ? 'Source connection changed' : 'Inspection failed'}</p>
-    <p class="text-sm text-muted-foreground">Commit <code>{item.commitSha.slice(0,12)}</code> · {new Date(Number(item.updatedAtUnixMs)).toLocaleString()}</p>
-    {#if item.safeReason}<p class="text-sm">{inspectionReasons[item.safeReason] || 'Source inspection needs attention. Check the source connection and retry.'}</p>{/if}
-    <details class="rounded-md border p-3"><summary class="cursor-pointer text-sm font-medium">Inspection technical details</summary><div class="space-y-3 pt-3">
-    <InformationTable rows={[
-     { label: 'Commit', value: item.commitSha, monospace: true },
-     { label: 'Operation', value: item.id, monospace: true },
-     { label: 'Source connection revision', value: item.connectionRevision },
-     { label: 'Updated', value: new Date(Number(item.updatedAtUnixMs)).toLocaleString() },
-    ]} />
-    {#if item.result}
-     <InformationTable rows={[
-      { label: 'Policy digest', value: item.result.policyDigest || 'Unavailable', monospace: true },
-      { label: 'Lock digest', value: item.result.lockDigest || 'Unavailable', monospace: true },
-      { label: 'Lock fingerprint', value: item.result.lockFingerprint || 'Not validated', monospace: true },
-      { label: 'ayni version', value: item.result.ayniVersion || 'Unavailable' },
-      { label: 'Lock schema', value: item.result.lockSchema || 'Unavailable' },
-      { label: 'Locked tools', value: item.result.tools?.join(', ') || 'None inspected' },
-      { label: 'Trusted key IDs', value: item.result.trustKeyIds?.join(', ') || 'None inspected' },
-     ]} />
-    {/if}
-    </div></details>
-    <details><summary class="cursor-pointer text-sm">Inspection findings</summary><div class="space-y-3 pt-3">    {#if item.result}
-     {#each item.result.findings || [] as finding (finding.code + finding.path)}
-      <div class="space-y-1 border-t pt-3"><p class="text-sm font-medium">{finding.path || 'Preparation requirements'}</p><p class="text-sm">{finding.action}</p><details><summary class="cursor-pointer text-xs text-muted-foreground">Finding code</summary><code class="text-xs text-muted-foreground">{finding.code}</code></details></div>
-     {/each}
-    {/if}
-</div></details>
-    {#if item.state === 'accepted'}<Button variant="outline" disabled={busy || !!pending} onclick={() => perform(async () => {const request = {idempotencyKey:item.idempotencyKey, repositoryId:item.repositoryId, expectedConnectionRevision:item.connectionRevision, commitSha:item.commitSha}; persist(request); await resume(request);})}>Resume inspection</Button>{/if}
+{#snippet inspectionEntry(item: RepositoryInspection)}
+   {@const state = inspectionStates[item.state] ?? inspectionStates.failed}
+   {@const result = item.result}
+   {#snippet inspectionActions()}
+    <Button variant="outline" disabled={busy || !!pending} onclick={() => perform(async () => {
+     const request = {idempotencyKey:item.idempotencyKey, repositoryId:item.repositoryId, expectedConnectionRevision:item.connectionRevision, commitSha:item.commitSha};
+     persist(request);
+     await resume(request);
+    })}>Resume inspection</Button>
+   {/snippet}
+   <ActivityEntry label={`Inspection ${item.commitSha}`} updatedAtUnixMs={item.updatedAtUnixMs}
+    identifiers={[
+     {label:'Inspection ID', value:item.id},
+     {label:result?.lockFingerprint ? 'Lock fingerprint' : 'Lock digest', value:result?.lockFingerprint || result?.lockDigest},
+    ]}
+    title="Inspection details" description={state.label} statuses={[{label:'Status', status:state.label, tone:state.tone}]}
+    actions={item.state === 'accepted' ? inspectionActions : undefined}>
+    {#snippet information()}
+     <span class="text-muted-foreground">Commit</span> <code title={item.commitSha}>{item.commitSha.slice(0,12)}</code>
+    {/snippet}
+    {#snippet details(fullTime)}
+     {#if item.safeReason}<p>{inspectionReasons[item.safeReason] || 'Source inspection needs attention. Check the source connection and retry.'}</p>{/if}
+     <InformationTable aligned rows={[
+      {label:'Commit',value:item.commitSha,monospace:true},
+      {label:'Inspection ID',value:item.id,monospace:true},
+      {label:'Source connection revision',value:item.connectionRevision},
+      {label:'Updated',value:fullTime},
+      ...(result ? [
+       {label:'Policy digest',value:result.policyDigest || 'Unavailable',monospace:true},
+       {label:'Lock digest',value:result.lockDigest || 'Unavailable',monospace:true},
+       {label:'Lock fingerprint',value:result.lockFingerprint || 'Not validated',monospace:true},
+       {label:'ayni version',value:result.ayniVersion || 'Unavailable'},
+       {label:'Lock schema',value:result.lockSchema || 'Unavailable'},
+       {label:'Locked tools',value:result.tools?.join(', ') || 'None inspected'},
+       {label:'Trusted key IDs',value:result.trustKeyIds?.join(', ') || 'None inspected'},
+      ] : []),
+     ]}/>
+     {#if result?.findings?.length}
+      <h3 class="border-t pt-3 font-medium">Inspection findings</h3>
+      {#each result.findings as finding (finding.code + finding.path)}
+       <div class="space-y-1">
+        <p class="font-medium break-all">{finding.path || 'Preparation requirements'}</p>
+        <p>{finding.action}</p>
+        <code class="break-all text-xs text-muted-foreground">{finding.code}</code>
+       </div>
+      {/each}
+     {/if}
+    {/snippet}
+   </ActivityEntry>
+{/snippet}
 
-   </section>
-  {/each}
-
-   {#if next}<Button variant="outline" disabled={busy} onclick={() => perform(() => load(true))}>More inspections</Button>{/if}
-  </div>
+{#snippet inspectionHistory()}
+ <div class="relative">
+ <details class="rounded-xl border p-4" data-inspection-history
+  ontoggle={(event) => { if (event.currentTarget.open) inspectionHistoryOpened = true; }}>
+  <summary class="cursor-pointer pr-10 text-sm font-medium">Inspection history ({inspections.length}{next ? '+' : ''})</summary>
+  {#if inspectionHistoryOpened}
+   <div class="space-y-2 pt-4">
+    <p class="text-sm text-muted-foreground">Saved checks are historical evidence. An older awaiting-retry check does not block the latest completed check.</p>
+     <HistoryPages revision={inspectionHistoryRevision} label="Inspection history pages" empty="No inspections yet." readPage={readInspections}>
+      {#snippet children(items)}
+       {#each items as item (item.id)}{@render inspectionEntry(item)}{/each}
+      {/snippet}
+     </HistoryPages>
+   </div>
+  {/if}
  </details>
+ <Button class="absolute top-3 right-4" variant="ghost" size="icon-sm" aria-label="Refresh inspection history" title="Refresh inspection history" aria-busy={busy} disabled={busy}
+  onclick={() => perform(async () => { await load(); inspectionHistoryRevision += 1; })}>
+  <RefreshCw class={{ 'motion-safe:animate-spin': busy }} aria-hidden="true" />
+ </Button>
+ </div>
 {/snippet}
 
 <div data-repository-inspection={repo.id}>
  <RuntimePreparation {repo} {connection} {branchPicker} onSourceRefresh={refreshSource} onRestoreBranch={restoreBranch} branch={branch.trim()} checkedCommit={checked?.branch === branch.trim() ? checked?.sha : undefined} latestInspection={currentInspection} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || (!pending && !canInspect)} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}>
-  {#snippet children(runtime, preparationActivity)}
+  {#snippet children(runtime, currentPreparation, preparationHistory)}
    <Tabs.Content value="runtime" class="space-y-6">
     {@render runtime()}
    </Tabs.Content>
-   <Tabs.Content value="activity" class="space-y-6">
-    {@render preparationActivity()}
-    {@render inspectionActivity()}
+   <Tabs.Content value="status" class="space-y-6">
+     {@render currentPreparation()}
+     {@render preparationHistory()}
+     {@render inspectionHistory()}
    </Tabs.Content>
   {/snippet}
  </RuntimePreparation>

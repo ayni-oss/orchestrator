@@ -10,6 +10,9 @@ pub mod source;
 pub mod supervisor;
 pub mod transport;
 
+use ayni_orchestrator_events::execution_diagnostics::{
+    CERTIFICATION_DIAGNOSTIC, CertificationDiagnostic,
+};
 use serde::{Deserialize, Serialize};
 
 /// Closed diagnostics: child output, provider text and credentials are not errors.
@@ -37,6 +40,7 @@ pub enum Failure {
     RegistryUnavailable,
     PublicationUncertain,
     CertificationFailed,
+    CertificationRejected(CertificationDiagnostic),
     CompatibilityFailed,
     CleanupPending,
 }
@@ -71,7 +75,7 @@ impl Failure {
             Self::RegistryAccessDenied => "registry_access_denied",
             Self::RegistryUnavailable => "registry_unavailable",
             Self::PublicationUncertain => "publication_uncertain",
-            Self::CertificationFailed => "certification_failed",
+            Self::CertificationFailed | Self::CertificationRejected(_) => "certification_failed",
             Self::CompatibilityFailed => "compatibility_failed",
             Self::CleanupPending => "cleanup_pending",
         }

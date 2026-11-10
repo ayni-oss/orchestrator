@@ -391,6 +391,8 @@ dependencies = [
 name = "ayni-orchestrator-observability"
 version = "0.1.0"
 dependencies = [
+ "ayni-orchestrator-events",
+ "k8s-openapi",
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
@@ -437,6 +439,7 @@ dependencies = [
  "ayni-core",
  "ayni-environment",
  "ayni-orchestrator-events",
+ "ayni-orchestrator-observability",
  "ayni-orchestrator-oci",
  "ayni-orchestrator-registry",
  "ayni-orchestrator-worker-sandbox",
@@ -454,6 +457,7 @@ dependencies = [
  "tar",
  "tempfile",
  "tokio",
+ "tracing",
  "uuid",
  "zstd",
 ]

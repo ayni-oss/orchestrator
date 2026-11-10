@@ -1,9 +1,10 @@
 //! Only the trusted supervisor can hydrate frozen context and admit a paid call.
 use axum::{
-    Router,
+    Json, Router,
     body::Bytes,
-    extract::{DefaultBodyLimit, State},
+    extract::{DefaultBodyLimit, Query, State},
     http::{HeaderMap, StatusCode},
+    response::{IntoResponse as _, Response},
     routing::post,
 };
 use ayni_orchestrator_observability::{
@@ -43,12 +44,47 @@ pub fn router(store: WorkflowStore) -> Result<Router, io::Error> {
     }
     Ok(Router::new()
         .route("/v1/session-authority", post(authority))
+        .route(
+            "/v1/session-diagnostics",
+            post(retain_diagnostic).get(replay_diagnostics),
+        )
+        .route(
+            "/v1/session-diagnostics/stream",
+            axum::routing::get(tail_diagnostics),
+        )
         .route("/v1/session-credential", post(credential))
         .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
         .with_state(Authority {
             store,
             token: token.into(),
         }))
+}
+
+async fn retain_diagnostic(
+    State(state): State<Authority>,
+    headers: HeaderMap,
+    Json(diagnostic): Json<ayni_orchestrator_events::execution_diagnostics::Diagnostic>,
+) -> Result<Json<()>, StatusCode> {
+    authenticate(&state, &headers)?;
+    crate::execution_diagnostics::retain(&state.store, diagnostic, false).await
+}
+
+async fn replay_diagnostics(
+    State(state): State<Authority>,
+    headers: HeaderMap,
+    Query(query): Query<crate::execution_diagnostics::Replay>,
+) -> Result<Json<Vec<ayni_orchestrator_events::execution_diagnostics::Entry>>, StatusCode> {
+    authenticate(&state, &headers)?;
+    crate::execution_diagnostics::replay(&state.store, query, false).await
+}
+
+async fn tail_diagnostics(
+    State(state): State<Authority>,
+    headers: HeaderMap,
+    Query(query): Query<crate::execution_diagnostics::Replay>,
+) -> Result<Response, StatusCode> {
+    authenticate(&state, &headers)?;
+    Ok(crate::execution_diagnostics::tail(state.store, query, false, &headers)?.into_response())
 }
 
 async fn authority(

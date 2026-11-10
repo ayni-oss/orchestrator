@@ -3,7 +3,7 @@ pub(crate) mod progress;
 use axum::{
     Json, Router,
     extract::Request,
-    extract::{DefaultBodyLimit, Path, State},
+    extract::{DefaultBodyLimit, Path, Query, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -43,6 +43,14 @@ pub fn router(store: WorkflowStore) -> Result<Router, io::Error> {
     }
     Ok(Router::new()
         .route("/v1/runtime-supervisor", post(supervisor))
+        .route(
+            "/v1/runtime-supervisor/diagnostics",
+            post(retain_diagnostic).get(replay_diagnostics),
+        )
+        .route(
+            "/v1/runtime-supervisor/diagnostics/stream",
+            axum::routing::get(tail_diagnostics),
+        )
         .route(
             "/v1/runtime-supervisor/certification",
             post(supervisor_certification),
@@ -91,6 +99,33 @@ fn authorized(headers: &HeaderMap, expected: &str) -> Result<(), StatusCode> {
     }
 }
 
+async fn retain_diagnostic(
+    State(authority): State<Authority>,
+    headers: HeaderMap,
+    Json(diagnostic): Json<ayni_orchestrator_events::execution_diagnostics::Diagnostic>,
+) -> Result<Json<()>, StatusCode> {
+    authorized(&headers, &authority.token)?;
+    crate::execution_diagnostics::retain(&authority.store, diagnostic, true).await
+}
+
+async fn replay_diagnostics(
+    State(authority): State<Authority>,
+    headers: HeaderMap,
+    Query(query): Query<crate::execution_diagnostics::Replay>,
+) -> Result<Json<Vec<ayni_orchestrator_events::execution_diagnostics::Entry>>, StatusCode> {
+    authorized(&headers, &authority.token)?;
+    crate::execution_diagnostics::replay(&authority.store, query, true).await
+}
+
+async fn tail_diagnostics(
+    State(authority): State<Authority>,
+    headers: HeaderMap,
+    Query(query): Query<crate::execution_diagnostics::Replay>,
+) -> Result<Response, StatusCode> {
+    authorized(&headers, &authority.token)?;
+    Ok(crate::execution_diagnostics::tail(authority.store, query, true, &headers)?.into_response())
+}
+
 /// Only trusted supervision may obtain node-pull authority before Pod creation.
 /// It is never attached to the candidate's process or command input.
 async fn supervisor_pull_credential(
@@ -128,10 +163,19 @@ async fn supervisor_certification(
         .report_runtime_stage(&report)
         .await
         .map_err(|_| StatusCode::CONFLICT)?;
+    log_stage_report(&report);
     Ok(Json(WorkerResponse {
         claim: None,
         accepted: true,
     }))
+}
+
+fn log_stage_report(report: &StageReport) {
+    // Called only after the authority validates the binding and closed outcome/reason.
+    let binding = &report.binding;
+    tracing::info!(operation_id = %binding.operation_id, stage = %binding.stage,
+        generation = binding.generation, pod_uid = %binding.pod_uid,
+        outcome = %report.outcome, reason = %report.safe_reason, "Runtime stage report accepted");
 }
 
 fn supervisor_store_failure(
@@ -281,10 +325,21 @@ async fn worker(
             }
             authority
                 .store
-                .runtime_stage_input(&binding)
+                .record_runtime_build_checkpoint(&binding, milestone)
                 .await
                 .map_err(|_| StatusCode::CONFLICT)?;
             progress::record(&binding, milestone);
+            response.accepted = true;
+        }
+        WorkerRequest::BuildOutput { output } => {
+            if binding.stage != "build" || !output.valid() {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            authority
+                .store
+                .record_runtime_build_output(&binding, output)
+                .await
+                .map_err(|_| StatusCode::CONFLICT)?;
             response.accepted = true;
         }
         WorkerRequest::PreparePublication {
@@ -311,6 +366,7 @@ async fn worker(
                 .report_runtime_stage_with_timings(&report, elapsed_ms)
                 .await
                 .map_err(|_| StatusCode::CONFLICT)?;
+            log_stage_report(&report);
             response.accepted = true;
         }
     }

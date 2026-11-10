@@ -287,6 +287,8 @@ export interface ListRuntimePreparationsRequest {
   repositoryId: string;
   afterId: string;
   limit: number;
+  /** Omit the current preparation when listing previous preparations. */
+  excludeId: string;
 }
 
 export interface ListRuntimePreparationsResponse {
@@ -3212,7 +3214,7 @@ export const GetRuntimePreparationResponse: MessageFns<GetRuntimePreparationResp
 };
 
 function createBaseListRuntimePreparationsRequest(): ListRuntimePreparationsRequest {
-  return { repositoryId: "", afterId: "", limit: 0 };
+  return { repositoryId: "", afterId: "", limit: 0, excludeId: "" };
 }
 
 export const ListRuntimePreparationsRequest: MessageFns<ListRuntimePreparationsRequest> = {
@@ -3225,6 +3227,9 @@ export const ListRuntimePreparationsRequest: MessageFns<ListRuntimePreparationsR
     }
     if (message.limit !== 0) {
       writer.uint32(24).uint32(message.limit);
+    }
+    if (message.excludeId !== "") {
+      writer.uint32(34).string(message.excludeId);
     }
     return writer;
   },
@@ -3266,6 +3271,14 @@ export const ListRuntimePreparationsRequest: MessageFns<ListRuntimePreparationsR
             message.limit = reader.uint32();
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.excludeId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3291,6 +3304,11 @@ export const ListRuntimePreparationsRequest: MessageFns<ListRuntimePreparationsR
         ? globalThis.String(object.after_id)
         : "",
       limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
+      excludeId: isSet(object.excludeId)
+        ? globalThis.String(object.excludeId)
+        : isSet(object.exclude_id)
+        ? globalThis.String(object.exclude_id)
+        : "",
     };
   },
 
@@ -3305,6 +3323,9 @@ export const ListRuntimePreparationsRequest: MessageFns<ListRuntimePreparationsR
     if (message.limit !== 0) {
       obj.limit = Math.round(message.limit);
     }
+    if (message.excludeId !== "") {
+      obj.excludeId = message.excludeId;
+    }
     return obj;
   },
 
@@ -3316,6 +3337,7 @@ export const ListRuntimePreparationsRequest: MessageFns<ListRuntimePreparationsR
     message.repositoryId = object.repositoryId ?? "";
     message.afterId = object.afterId ?? "";
     message.limit = object.limit ?? 0;
+    message.excludeId = object.excludeId ?? "";
     return message;
   },
 };

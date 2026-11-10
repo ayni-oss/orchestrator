@@ -1,3 +1,4 @@
+use ayni_orchestrator_events::execution_diagnostics::{Diagnostic, Kind};
 mod rejections;
 use super::{StoreError, WorkflowStore};
 use crate::{
@@ -201,11 +202,37 @@ impl WorkflowStore {
                 super::plans::proposals::retain(&transaction, binding, &proposal).await?;
             }
             apply_accepted_outcome(&transaction, binding, &outcome.report, outcome.kind).await?;
+            retain_session_diagnostic(&transaction, binding, &outcome.report, decision.turn_state)
+                .await?;
         }
         transaction.commit().await?;
         driver.abort();
         Ok(receipt)
     }
+}
+
+async fn retain_session_diagnostic(
+    transaction: &Transaction<'_>,
+    binding: &ConversationTurnBinding,
+    report: &ConversationTurnReport,
+    state: &str,
+) -> Result<(), StoreError> {
+    let Some(row) = transaction
+        .query_opt(
+            "SELECT session_id,generation FROM workflow_turn_sessions WHERE turn_id=$1",
+            &[&binding.turn_id],
+        )
+        .await?
+    else {
+        return Ok(());
+    };
+    let id: String = row.get(0);
+    let generation = u64::try_from(row.get::<_, i64>(1)).map_err(|_| StoreError::CorruptState)?;
+    let mut diagnostic = Diagnostic::new(Kind::Session, &id, generation, "turn", "stage_report");
+    diagnostic.related_id.clone_from(&binding.turn_id);
+    diagnostic.outcome = state.into();
+    diagnostic.reason.clone_from(&report.failure_reason);
+    super::execution_diagnostics::append(transaction, &diagnostic).await
 }
 
 struct PreparedOutcome {

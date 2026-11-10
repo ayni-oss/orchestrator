@@ -1,12 +1,20 @@
 <script lang="ts">
+ import BranchLabel from './branch-label.svelte';
+ import CopyableCode from './copyable-code.svelte';
+ import InfoTooltip from "./info-tooltip.svelte";
+ import TitleRow from "./title-row.svelte";
+ import ActivitySkeleton from "./activity-skeleton.svelte";
+ import RuntimeLoading from "./runtime-loading.svelte";
  import { protectUnsavedChanges } from "$lib/unsaved-changes.svelte";
  import { onMount, tick, untrack, type Snippet } from 'svelte';
- import { RefreshCw } from '@lucide/svelte';
+ import { CircleCheck, CircleAlert, RefreshCw } from '@lucide/svelte';
  import { Button } from '$lib/components/ui/button/index.js';
  import { Input } from '$lib/components/ui/input/index.js';
  import { Label } from '$lib/components/ui/label/index.js';
  import * as NativeSelect from '$lib/components/ui/native-select/index.js';
  import { toast } from 'svelte-sonner';
+ import ActivityEntry from '$lib/components/activity-entry.svelte';
+ import HistoryPages from '$lib/components/history-pages.svelte';
  import AutosaveField from '$lib/components/autosave-field.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
  import StatusBadge from '$lib/components/status-badge.svelte';
@@ -14,8 +22,9 @@
  import { rpc, RpcError, type Connection } from '$lib/api';
  import { trustSnippet } from '$lib/runtime-signing';
  import { inspectionReasons, type Repository, type RepositoryInspection } from '$lib/repositories';
+ import { historyBatchSize, readRecentHistory, type HistoryPage } from '$lib/repository-history';
  import { runtimeOverview, runtimeStages, runtimeReasons, onboardingReasons, runtimeRegistryImage, runtimeProgressKey, readRuntimeProgress, runtimeDefaultKey, type RuntimeIntegration, type RepositoryRuntimeRun, type RuntimePreparation, type RuntimeSigner, type RuntimeCommand } from '$lib/runtime-preparation';
- let { repo, branch = '', checkedCommit, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections, onSourceRefresh, onRestoreBranch, branchPicker, children }: { repo: Repository; branch?: string; checkedCommit?: string; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void>; onSourceRefresh: (value: Connection | undefined) => void; onRestoreBranch: (value?: string) => void; branchPicker: Snippet; children: Snippet<[Snippet, Snippet]> } = $props();
+ let { repo, branch = '', checkedCommit, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections, onSourceRefresh, onRestoreBranch, branchPicker, children }: { repo: Repository; branch?: string; checkedCommit?: string; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void>; onSourceRefresh: (value: Connection | undefined) => void; onRestoreBranch: (value?: string) => void; branchPicker: Snippet<[boolean]>; children: Snippet<[Snippet, Snippet, Snippet]> } = $props();
  let onboarding = $state.raw<RepositoryRuntimeRun | null>(null);
  let deploymentEnabled = $state(false);
  let loaded = $state(false);
@@ -42,9 +51,12 @@
  let polling = false, mounted = false, historySequence = 0, lastPoll = 0;
  let pending = $state<RuntimeCommand | null>(null);
  let recoveryToast: string | number | undefined;
+ let onboardingToast: string | number | undefined;
  let rejected = $state(false);
  let registries = $state.raw<Connection[]>([]), signers = $state.raw<RuntimeSigner[]>([]), operations = $state.raw<RuntimePreparation[]>([]);
  let next = $state(''), registryId = $state(''), signerId = $state(''), platform = $state('linux/arm64');
+ let preparationHistoryOpened = $state(false);
+ let preparationHistoryRevision = $state(0);
  let seconds = $state(1800), builds = $state(1), allowBuild = $state(false), allowReplace = $state(false);
  let reviewedSettings = $state('');
  let savedIntegrationRevision = $state<Record<RuntimeIntegration, number>>({registry:0, signer:0});
@@ -52,6 +64,7 @@
  protectUnsavedChanges(()=>!pending&&!!reviewedSettings&&settingsDraft!==reviewedSettings);
  const storage = $derived(`ayni.runtime.preparation.pending.${repo.id}`);
  const candidateInspection = $derived(latestInspection);
+ const starting = $derived(pending?.method === 'StartRepositoryRuntime' || pending?.method === 'StartRuntimePreparation');
  const onboardingActive = $derived(!!onboarding && ['resolving','inspecting','admitting'].includes(onboarding.state));
  const onboardingBlocked = $derived(onboarding?.state === 'blocked');
  const workActive = $derived(operations.some(value => activeStates.has(value.state) || value.state === 'publication_uncertain' || !value.cleanupComplete));
@@ -83,7 +96,11 @@
  const registryReady = $derived(!!registry?.enabled && !!registry.activeCredentialRevision);
  const signerReady = $derived(!!signer?.enabled);
  const integrationsReady = $derived(sourceReady && registryReady && signerReady);
- const readyIntegrationCount = $derived(Number(sourceReady) + Number(registryReady) + Number(signerReady));
+ const integrationReadiness = $derived([
+  {label:'Source control',ready:sourceReady},
+  {label:'Runtime registry',ready:registryReady},
+  {label:'Signing key',ready:signerReady},
+ ]);
  const reviewedCommit = $derived(
   !inspectionPending && !checkingDefault && latestInspection?.state === 'completed' &&
   latestInspection.commitSha === checkedCommit &&
@@ -92,6 +109,21 @@
   !blockingFindings.length
    ? checkedCommit : undefined
  );
+ const lockCheckStatus: {label: string; tone: StatusTone} = $derived.by(() => {
+  if (checkingDefault || inspectionLoading) return {label:'Checking',tone:'active'};
+  if (inspectionPending) return {label:'Needs recovery',tone:'warning'};
+  if (inspectionError) return {label:'Unavailable',tone:'danger'};
+  if (!candidateInspection) return {label:'Not checked',tone:'neutral'};
+  if (candidateInspection.state === 'accepted') return {label:'Pending',tone:'active'};
+  if (candidateInspection.state === 'superseded' || candidateInspection.connectionRevision !== connection?.revision)
+   return {label:'Recheck required',tone:'warning'};
+  if (candidateInspection.state !== 'completed' || !candidateInspection.result || blockingFindings.length)
+   return {label:'Needs attention',tone:'warning'};
+  if (!reviewedCommit) return {label:'Recheck required',tone:'warning'};
+  if (signerTrustMissing) return {label:'Signing key not trusted',tone:'warning'};
+  if (signerTrust !== 'matches') return {label:'Signing key unverified',tone:'warning'};
+  return {label:'Passed',tone:'success'};
+ });
  const validSigningReview = $derived(
   signerReady && !!signer?.publicKey && signerTrustMissing &&
   !inspectionPending && !checkingDefault && candidateInspection?.state === 'completed' &&
@@ -106,6 +138,15 @@
  const signingUpdateBase = $derived(branch || repo.defaultBranch);
  const currentPullStatus = $derived(pullStatus?.scope === signingUpdateScope ? pullStatus : undefined);
  const signingPullRequest = $derived(currentPullStatus?.state === 'found' ? currentPullStatus.pull : undefined);
+ const checkingSigningPull = $derived(!currentPullStatus || currentPullStatus.state === 'checking');
+ const signingPullBadge: {label: string; tone: StatusTone} = $derived.by(() => {
+  if (signingPublicationBusy) return {label:'Opening PR',tone:'active'};
+  if (signingPullRequest) return {label:signingPullRequest.state,tone:signingPullRequest.state === 'Merged' ? 'success' : 'neutral'};
+  if (currentPullStatus?.state === 'missing') return {label:'No pull request',tone:'neutral'};
+  if (currentPullStatus?.state === 'forbidden') return {label:'Permission required',tone:'warning'};
+  if (currentPullStatus?.state === 'error') return {label:'Status unavailable',tone:'warning'};
+  return {label:'Checking',tone:'active'};
+ });
  const signingReview = $derived(signingUpdateRequested && candidateInspection && signer && signingUpdateBase ? {
   repositoryId: repo.id,
   inspectionId: candidateInspection.id,
@@ -123,6 +164,9 @@
   (!checkedCommit || (onboarding.commitSha || onboarding.settings.expectedCommitSha) === checkedCommit) ? onboarding : null);
  const overview = $derived(runtimeOverview({loaded,error,rejected,inspectionPending,moreHistory:!!next,pending:!!pending,inspectionLoading,inspectionError,inspectionReason:inspectionReasons[latestInspection?.safeReason || ''],inspection:latestInspection,operations,operationId:retainedRun?.preparationId,registries,signers,sourceReady,sourceRevision:connection?.revision}));
  const operation = $derived(overview.operation);
+ // Keep retained evidence visible while unrelated configuration or inspection reads finish.
+ const displayedOperation = $derived(overview.operation ??
+  ((!loaded || inspectionLoading || error || inspectionError) ? operations[0] : undefined));
  const runStatuses: Record<string, { label: string; tone: StatusTone }> = {
   pending: {label:'Queued',tone:'active'}, running: {label:'Running',tone:'active'},
   ready: {label:'Ready',tone:'success'}, failed: {label:'Failed',tone:'danger'},
@@ -152,9 +196,13 @@
   !building && buildTimings.size ? 'Unconfirmed' : 'Pending');
  const sourceIssue = $derived(operation?.safeReason?.startsWith('source_') && !operation.buildsStarted);
  const summaryOperation = $derived(sourceIssue ? undefined : buildOperation);
- const preparationMessage = $derived(pending ? overview.description : sourceIssue ? 'See Activity for preparation details.' :
+ const matchingOperation = $derived(operation && (retainedRun?.preparationId === operation.id ||
+  (!onboarding && !!reviewedCommit && operation.sourceCommit === reviewedCommit)) ? operation : undefined);
+ const admitted = $derived(!starting && !onboardingActive && !!matchingOperation);
+ const preparationMessage = $derived(busy && starting ? 'Submitting preparation…' : pending ? overview.description :
   onboardingActive ? ({resolving:'Checking the branch head…',inspecting:'Checking the committed ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') :
   onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' :
+  retainedRun?.preparationId && !matchingOperation ? 'Loading the accepted preparation…' : sourceIssue ? 'See Status for preparation details.' :
   !operation ? overview.description : '');
  const preparationStatus = $derived([...new Set([
   summaryOperation && (runtimeStages[summaryOperation.stage] || summaryOperation.stage),
@@ -162,11 +210,10 @@
   building && activeBuildStep < 0 && 'Waiting for the build worker to report progress.',
   ...(sourceIssue ? [] : overview.issues),
  ].filter(Boolean))]);
- const previousOperations = $derived(operations.filter(value => value.id !== overview.operation?.id));
- const matchingOperation = $derived(operation && (retainedRun?.preparationId === operation.id ||
-  (!onboarding && !!reviewedCommit && operation.sourceCommit === reviewedCommit)) ? operation : undefined);
- const preparing = $derived(onboardingActive || !!pending || workActive);
- const canViewPreparation = $derived(preparing || !!retainedRun || !!matchingOperation);
+ const previousOperations = $derived(operations.filter(value => value.id !== displayedOperation?.id));
+ const preparing = $derived(onboardingActive || !!pending || workActive || !!retainedRun?.preparationId && !matchingOperation);
+ const reviewPending = $derived(starting || onboardingActive || onboardingBlocked && !admitted || !!retainedRun?.preparationId && !admitted);
+ const canViewPreparation = $derived(!reviewPending && (workActive || admitted));
  const verificationReached = $derived(!onboardingActive && !!operation && (operation === matchingOperation || workActive) &&
   (operation.state === 'ready' || verificationStages.has(operation.stage)));
  const verified = $derived(!!matchingOperation && matchingOperation.state === 'ready' &&
@@ -175,7 +222,6 @@
  const integrationCheckpoint = $derived(JSON.stringify([connection?.revision, registryId, registry?.revision, signerId, signer?.revision]));
  const inspectionCheckpoint = $derived(signingUpdateRequested ? signingUpdateScope :
   JSON.stringify([branch || repo.defaultBranch, reviewedCommit, connection?.revision, signerId, signer?.revision]));
- const admitted = $derived(!!matchingOperation || !!retainedRun?.preparationId);
  const completed = $derived([
   integrationsReady && (passedIntegrations === integrationCheckpoint || admitted),
   (!!reviewedCommit && canReview && passedInspection === inspectionCheckpoint) || admitted,
@@ -183,7 +229,7 @@
   verificationReached && (passedPreparation === operation?.id || !!verified),
   !!verified,
  ]);
- const lastAvailableStep = $derived(completed[3] ? 4 : canViewPreparation ? 3 :
+ const lastAvailableStep = $derived(reviewPending ? 2 : completed[3] ? 4 : canViewPreparation ? 3 :
   completed[0] ? (completed[1] || (signingUpdateRequested && passedInspection === inspectionCheckpoint) ? 2 : 1) : 0);
  const currentStep = $derived(Math.min(viewedStep ?? (verified ? 4 : canViewPreparation ? 3 : lastAvailableStep), lastAvailableStep));
  const canStart = $derived(deploymentEnabled && integrationsReady && !!reviewedCommit && !signerTrustMissing &&
@@ -241,11 +287,16 @@
    }
   }
  }
- async function history(append = false) {
+ async function readPreparations(afterId: string, excludeId = ''): Promise<HistoryPage<RuntimePreparation>> {
+  const result = await rpc('ListRuntimePreparations', {repositoryId:repo.id, afterId, limit:historyBatchSize, ...(excludeId ? {excludeId} : {})});
+  return {items:result.operations || [], next:result.nextAfterId || ''};
+ }
+ async function history() {
   const sequence = ++historySequence;
-  const result = await rpc('ListRuntimePreparations', { repositoryId: repo.id, afterId: append ? next : '', limit: 20 });
+  const result = await readRecentHistory(readPreparations);
   if (!mounted || sequence !== historySequence) return;
-  operations = append ? [...operations, ...(result.operations || [])] : result.operations || []; next = result.nextAfterId || '';
+  operations = result.items;
+  next = result.next;
  }
  async function configuration(refreshSource = false) {
   const connections: Connection[] = [], identities: RuntimeSigner[] = [];
@@ -323,17 +374,31 @@
   const changed = result.run && (result.run.id !== onboarding?.id || result.run.state !== onboarding?.state);
   onboarding = result.run || null;
   deploymentEnabled = result.preparationEnabled === true;
+  if (changed && onboarding) {
+   if (onboardingActive) {
+    onboardingToast = toast.loading('Reviewing preparation', {id:onboardingToast,description:preparationMessage});
+   } else if (onboardingBlocked) {
+    onboardingToast = toast.warning('Preparation needs attention', {id:onboardingToast,description:preparationMessage});
+   } else if (onboarding.preparationId && onboardingToast !== undefined) {
+    toast.success('Preparation started', {id:onboardingToast});
+    onboardingToast = undefined;
+   }
+  }
   if (changed && onboarding?.inspectionId) await refreshInspections?.();
  }
  async function refresh() {
-  await Promise.all([configuration(), loadOnboarding()]);
-  await history();
+  await Promise.all([configuration(), loadOnboarding(), history()]);
   if (!loaded) {
    restoreSettings();
    restoreIntegrationSelections();
    reviewedSettings = settingsDraft;
   }
   loaded = true;
+  if (viewedStep === null && admitted && !verified) await visit(3);
+ }
+ async function refreshStatus() {
+  refreshingStatus = true;
+  try { await perform(refresh); } finally { refreshingStatus = false; }
  }
  async function refreshIntegrations() {
   refreshingIntegrations = true;
@@ -387,6 +452,7 @@
   persist(null);
   const current = await rpc('GetRuntimePreparation', { id: operation.id });
   operations = [current.operation, ...operations.filter(value => value.id !== operation.id)]; await history();
+  preparationHistoryRevision += 1;
  }
  async function resume() {
   if (!pending) return;
@@ -407,7 +473,7 @@
   if (!connection || !registry || !signer || !reviewedCommit || !canStart) return;
   persist({method:'StartRepositoryRuntime',request:{idempotencyKey:crypto.randomUUID(),repositoryId:repo.id,expectedConnectionRevision:connection.revision,registryConnectionId:registryId,signerId,platform,maxSeconds:seconds,maxBuilds:allowBuild ? builds : 0,allowBuild,allowReplace:allowBuild && allowReplace,branch,expectedCommitSha:reviewedCommit,expectedRegistryRevision:registry.revision,expectedSignerRevision:signer.revision}});
   reviewedSettings = settingsDraft;
-  viewedStep = 3;
+  viewedStep = null;
   await perform(resume);
   await tick();
   stepHeading?.focus();
@@ -423,7 +489,7 @@
    (currentStep < 3 || document.visibilityState !== 'visible' || now - lastPoll < 10000)) return;
   lastPoll = now;
   polling = true;
-  try { await loadOnboarding(); await history(); } catch { if (mounted) error = 'Live updates paused. Refresh history to reconnect; accepted work remains retained.'; } finally { polling = false; }
+  try { await loadOnboarding(); await history(); if (viewedStep === null && admitted && !verified) await visit(3); } catch { if (mounted) error = 'Live updates paused. Refresh history to reconnect; accepted work remains retained.'; } finally { polling = false; }
  }
  function elapsedTime(ms: number) {
   const seconds = Math.floor(ms / 1000);
@@ -440,11 +506,11 @@
   }
   const saved = sessionStorage.getItem(storage);
   if (saved) {
-   try { const value = JSON.parse(saved); if (!['StartRepositoryRuntime', 'StartRuntimePreparation', 'CancelRuntimePreparation', 'RetryRuntimePreparation'].includes(value.method) || typeof value.request?.idempotencyKey !== 'string' || ['StartRepositoryRuntime','StartRuntimePreparation'].includes(value.method) && value.request.repositoryId !== repo.id) throw new Error(); pending = value; viewedStep = 3; void perform(refresh); }
+   try { const value = JSON.parse(saved); if (!['StartRepositoryRuntime', 'StartRuntimePreparation', 'CancelRuntimePreparation', 'RetryRuntimePreparation'].includes(value.method) || typeof value.request?.idempotencyKey !== 'string' || ['StartRepositoryRuntime','StartRuntimePreparation'].includes(value.method) && value.request.repositoryId !== repo.id) throw new Error(); pending = value; viewedStep = value.method === 'StartRepositoryRuntime' || value.method === 'StartRuntimePreparation' ? null : 3; void perform(refresh); }
    catch { error = 'The saved preparation command could not be read. Refresh retained history before starting another.'; }
   } else { void perform(refresh); }
   const timer = setInterval(() => void poll(), 2000);
-  return () => { mounted = false; clearInterval(timer); dismissRecoveryToast(); };
+  return () => { mounted = false; clearInterval(timer); dismissRecoveryToast(); if (onboardingToast !== undefined) toast.dismiss(onboardingToast); };
  });
 </script>
 {#snippet statusReport()}
@@ -453,43 +519,63 @@
  </div>
 {/snippet}
 {#snippet preparationEvidence(operation: RuntimePreparation)}
-   <article class="space-y-3 rounded-md border p-4" aria-label={`Runtime preparation ${operation.id}`}>
-    <p class="font-medium">{operation.state === 'ready' ? 'Runtime ready' : operation.state.replaceAll('_', ' ')} · {runtimeStages[operation.stage] || operation.stage}</p>
-    <InformationTable rows={[
-     {label:'Platform',value:operation.platform},
-     {label:'Content verification',value:operation.contentVerified ? 'Verified' : 'Not verified'},
-     {label:'Managed compatibility',value:operation.managedCompatible ? 'Verified' : 'Not verified'},
-     {label:'Cleanup',value:operation.cleanupComplete ? 'Complete' : 'Not complete'},
-    ]}/>
-    <details class="rounded-md border p-3"><summary class="cursor-pointer text-sm font-medium">Preparation technical details</summary><div class="pt-3">
-    <InformationTable rows={[
-     {label:'Operation',value:operation.id,monospace:true},{label:'Inspection',value:operation.inspectionId,monospace:true},{label:'Generation',value:operation.generation},
-     {label:'Frozen input digest',value:operation.frozenInputDigest,monospace:true},
-     {label:'Source commit',value:operation.sourceCommit || 'Not retained',monospace:true},
-     {label:'Source tree',value:operation.sourceTree || 'Not retained',monospace:true},
-     {label:'Policy digest',value:operation.policyDigest || 'Not retained',monospace:true},
-     {label:'Lock digest',value:operation.lockDigest || 'Not retained',monospace:true},
-     {label:'Lock fingerprint',value:operation.lockFingerprint || 'Not retained',monospace:true},
-     {label:'Registry destination',value:operation.registryDestination || 'Not retained'},
-     {label:'Builds started / allowance',value:`${operation.buildsStarted || 0} / ${operation.maxBuilds || 0}`},
-     {label:'Image digest',value:operation.imageDigest || 'Not retained',monospace:true},
-     {label:'Publication intent',value:operation.expectedManifestDigest || 'Not retained',monospace:true},
-     {label:'Protected content root',value:operation.protectedContentRoot || 'Not retained',monospace:true},
-     {label:'Certificate digest',value:operation.certificateDigest || 'Not retained',monospace:true},
-     {label:'Unsigned manifest digest',value:operation.unsignedManifestDigest || 'Not retained',monospace:true},
-     {label:'Certification layer digest',value:operation.certificationLayerDigest || 'Not retained',monospace:true},
-     {label:'Managed check digest',value:operation.managedCheckDigest || 'Not retained',monospace:true},
-     {label:'Updated',value:new Date(Number(operation.updatedAtUnixMs)).toLocaleString()},
-    ]}/>
-    </div></details>
-    {#if operation.safeReason}<p class="text-sm">{runtimeReasons[operation.safeReason] || 'This stage needs attention. Review the retained reason and configuration before retrying.'}</p><code class="text-xs">{operation.safeReason}</code>{/if}
-    <div class="flex flex-wrap gap-2">{#if activeStates.has(operation.state) && operation.state !== 'cancelling'}<Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => command('CancelRuntimePreparation', operation))}>Cancel preparation</Button>{/if}{#if retryStates.has(operation.state)}<Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => command('RetryRuntimePreparation', operation))}>{operation.state === 'publication_uncertain' ? 'Reconcile publication' : 'Retry preparation'}</Button>{/if}</div>
-   </article>
+ {@const canCancel = activeStates.has(operation.state) && operation.state !== 'cancelling'}
+ {@const canRetry = retryStates.has(operation.state)}
+ {#snippet preparationActions()}
+  {#if canCancel}
+   <Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => command('CancelRuntimePreparation', operation))}>Cancel preparation</Button>
+  {:else if canRetry}
+   <Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => command('RetryRuntimePreparation', operation))}>{operation.state === 'publication_uncertain' ? 'Reconcile publication' : 'Retry preparation'}</Button>
+  {/if}
+ {/snippet}
+ <ActivityEntry label={`Runtime preparation ${operation.id}`} updatedAtUnixMs={operation.updatedAtUnixMs}
+  identifiers={[
+   {label:'Operation ID', value:operation.id},
+   {label:operation.lockFingerprint ? 'Lock fingerprint' : 'Lock digest', value:operation.lockFingerprint || operation.lockDigest},
+  ]}
+  title="Preparation details"
+  description={`${operation.state === 'ready' ? 'Runtime ready' : operation.state.replaceAll('_', ' ')} · ${runtimeStages[operation.stage] || operation.stage}`}
+  statusesFirst statuses={[
+   {label:'Content', status:operation.contentVerified ? 'Verified' : 'Not verified', tone:operation.contentVerified ? 'success' : 'neutral'},
+   {label:'Managed', status:operation.managedCompatible ? 'Verified' : 'Not verified', tone:operation.managedCompatible ? 'success' : 'neutral'},
+   {label:'Cleanup', status:operation.cleanupComplete ? 'Complete' : 'Not complete', tone:operation.cleanupComplete ? 'success' : 'neutral'},
+  ]}
+  actions={canCancel || canRetry ? preparationActions : undefined}>
+  {#snippet information()}
+   <span class="text-muted-foreground">Platform</span> <code>{operation.platform}</code>
+  {/snippet}
+  {#snippet details(fullTime)}
+   {#if operation.safeReason}
+    <div class="space-y-1"><p>{runtimeReasons[operation.safeReason] || 'This stage needs attention. Review the retained reason and configuration before retrying.'}</p><code class="text-xs">{operation.safeReason}</code></div>
+   {/if}
+   <InformationTable aligned rows={[
+    {label:'Operation ID',value:operation.id,monospace:true},
+    {label:'Inspection',value:operation.inspectionId,monospace:true},
+    {label:'Generation',value:operation.generation},
+    {label:'Frozen input digest',value:operation.frozenInputDigest,monospace:true},
+    {label:'Source commit',value:operation.sourceCommit || 'Not retained',monospace:true},
+    {label:'Source tree',value:operation.sourceTree || 'Not retained',monospace:true},
+    {label:'Policy digest',value:operation.policyDigest || 'Not retained',monospace:true},
+    {label:'Lock digest',value:operation.lockDigest || 'Not retained',monospace:true},
+    {label:'Lock fingerprint',value:operation.lockFingerprint || 'Not retained',monospace:true},
+    {label:'Registry destination',value:operation.registryDestination || 'Not retained'},
+    {label:'Builds started / allowance',value:`${operation.buildsStarted || 0} / ${operation.maxBuilds || 0}`},
+    {label:'Image digest',value:operation.imageDigest || 'Not retained',monospace:true},
+    {label:'Publication intent',value:operation.expectedManifestDigest || 'Not retained',monospace:true},
+    {label:'Protected content root',value:operation.protectedContentRoot || 'Not retained',monospace:true},
+    {label:'Certificate digest',value:operation.certificateDigest || 'Not retained',monospace:true},
+    {label:'Unsigned manifest digest',value:operation.unsignedManifestDigest || 'Not retained',monospace:true},
+    {label:'Certification layer digest',value:operation.certificationLayerDigest || 'Not retained',monospace:true},
+    {label:'Managed check digest',value:operation.managedCheckDigest || 'Not retained',monospace:true},
+    {label:'Updated',value:fullTime},
+   ]}/>
+  {/snippet}
+ </ActivityEntry>
 {/snippet}
 {#snippet runtime()}
 <section class="space-y-5" data-runtime-preparation={repo.id} aria-label={`Runtime preparation for ${repo.fullName}`}>
  {#if !loaded}
-  <p role="status">Loading runtime onboarding…</p>
+  <RuntimeLoading failed={!!error} />
   {#if error}<Button onclick={() => perform(refresh)}>Retry</Button>{/if}
  {:else}
   <ol aria-label="Runtime onboarding steps" class="grid gap-2 sm:grid-cols-5">
@@ -506,33 +592,63 @@
    {/each}
   </ol>
   <section class="space-y-4 rounded-xl border bg-card p-5" aria-label="Runtime status">
-   <div class="flex items-center justify-between gap-3">
+   <TitleRow>
+    {#snippet children()}
     {#key currentStep}
-     <h3 bind:this={stepHeading} tabindex="-1" class="text-lg font-semibold focus:outline-none">{onboardingSteps[currentStep]}</h3>
+     <h3 bind:this={stepHeading} tabindex="-1" class="text-lg font-semibold focus:outline-none">{currentStep === 2 && signingUpdateRequested ? 'Signing key update pull request' : onboardingSteps[currentStep]}</h3>
     {/key}
+    {/snippet}
+    {#snippet badge()}
+     {#if currentStep === 0}
+      <span aria-live="polite"><StatusBadge status={integrationsReady ? 'Ready' : 'Needs attention'} tone={integrationsReady ? 'success' : 'warning'} /></span>
+     {:else if currentStep === 1}<span aria-live="polite"><StatusBadge status={lockCheckStatus.label} tone={lockCheckStatus.tone} /></span>
+     {:else if currentStep === 2 && signingUpdateRequested}<span aria-live="polite"><StatusBadge status={signingPullBadge.label} tone={signingPullBadge.tone} /></span>
+     {:else if currentStep === 2 && reviewPending}
+      <span aria-live="polite"><StatusBadge status={pending ? busy ? 'Submitting' : 'Needs recovery' : onboardingBlocked ? 'Needs attention' : 'Checking'} tone={pending && !busy || onboardingBlocked ? 'warning' : 'active'} /></span>
+     {:else if currentStep >= 3 && !pending}<span aria-live="polite"><StatusBadge status={runStatus.label} tone={runStatus.tone} /></span>{/if}
+    {/snippet}
+    {#snippet actions()}
     {#if currentStep === 0}
-     <Button variant="outline" size="icon" aria-label="Refresh integrations" title="Reload available integrations from Configuration"
+     <InfoTooltip label="View source control connection" size="icon" rows={[
+      {label:'Source control connection',value:connection?.displayName || 'Unavailable',monospace:false},
+      {label:'Status',value:sourceReady ? 'Ready' : 'Unavailable or needs validation',monospace:false},
+     ]} />
+     <Button variant="ghost" size="icon" aria-label="Refresh integrations" title="Reload available integrations from Configuration"
       aria-busy={refreshingIntegrations} disabled={busy} onclick={refreshIntegrations}>
       <RefreshCw class={{ 'motion-safe:animate-spin': refreshingIntegrations }} aria-hidden="true"/>
      </Button>
-    {:else if currentStep >= 3 && !pending}
+    {:else if currentStep === 1}
+     <Button variant="ghost" size="icon" aria-label="Check ayni.lock" title="Check ayni.lock on the selected branch"
+      aria-busy={checkingDefault} disabled={busy || recheckDisabled || checkingDefault || !!pending || onboardingActive}
+      onclick={recheckDefaultBranch}>
+      <RefreshCw class={{ 'motion-safe:animate-spin': checkingDefault }} aria-hidden="true" />
+     </Button>
+    {:else if currentStep === 2 && signingUpdateRequested}
+     <Button variant="ghost" size="icon" aria-label="Refresh pull request status" title="Refresh pull request status"
+      aria-busy={checkingSigningPull} disabled={!signingReview || signingPublicationBusy || checkingSigningPull}
+      onclick={() => refreshSigningPullRequest()}>
+      <RefreshCw class={{ 'motion-safe:animate-spin': checkingSigningPull }} aria-hidden="true" />
+     </Button>
+    {:else if (currentStep >= 3 || currentStep === 2 && reviewPending) && !pending}
      <div class="flex shrink-0 items-center gap-2">
-      <span aria-live="polite"><StatusBadge status={runStatus.label} tone={runStatus.tone} /></span>
-      <Button variant="outline" size="icon" aria-label="Refresh status" title="Refresh status"
-       aria-busy={refreshingStatus} disabled={busy} onclick={async () => {
-        refreshingStatus = true;
-        try { await perform(refresh); } finally { refreshingStatus = false; }
-       }}>
+      <Button variant="ghost" size="icon" aria-label="Refresh status" title="Refresh status"
+       aria-busy={refreshingStatus} disabled={busy} onclick={refreshStatus}>
        <RefreshCw class={{ 'motion-safe:animate-spin': refreshingStatus }} aria-hidden="true" />
       </Button>
      </div>
     {/if}
-   </div>
+    {/snippet}
+   </TitleRow>
    {#if currentStep === 0}
-    <p role="status" class="text-sm text-muted-foreground">{readyIntegrationCount} of 3 integrations ready</p>
-    <InformationTable rows={[
-     {label:'Source control connection',value:sourceReady ? connection?.displayName || 'Connected' : 'Unavailable or needs validation'},
-    ]}/>
+    <ul aria-label="Integration readiness" aria-live="polite" class="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+     {#each integrationReadiness as integration (integration.label)}
+      <li class="inline-flex items-center gap-2" aria-label={`${integration.label}: ${integration.ready ? 'Ready' : 'Not ready'}`}>
+       {#if integration.ready}<CircleCheck class="size-4 shrink-0 text-emerald-700 dark:text-emerald-300" aria-hidden="true" />
+       {:else}<CircleAlert class="size-4 shrink-0 text-amber-800 dark:text-amber-300" aria-hidden="true" />{/if}
+       <span>{integration.label}</span>
+      </li>
+     {/each}
+    </ul>
     {#if !sourceReady}<Button variant="link" class="px-0" href="/settings/source-control/github">Manage source connections</Button>{/if}
     <div class="grid gap-4 sm:grid-cols-2">
      <div class="min-w-0 space-y-2">
@@ -571,21 +687,11 @@
      </div>
     </div>
    {:else if currentStep === 1}
-    {@render branchPicker()}
-    <p class="text-sm text-muted-foreground">Check the selected branch to inspect the exact commit’s policy, lock, and trust requirements.</p>
-    <Button variant="outline" disabled={busy || recheckDisabled || checkingDefault || !!pending || onboardingActive}
-     onclick={recheckDefaultBranch}>
-     {checkingDefault ? 'Checking ayni.lock…' : 'Check ayni.lock'}
-    </Button>
+    {@render branchPicker(busy || !!pending || onboardingActive)}
     <div class="space-y-2" aria-live="polite">
-     {#if checkingDefault}
-      <p class="text-sm">Resolving the selected branch and inspecting its latest commit…</p>
-     {:else if candidateInspection}
+     {#if candidateInspection}
       <h4 class="text-sm font-medium">Lock check report</h4>
       <InformationTable aligned rows={[
-       {label:'ayni.lock check',value:candidateInspection.state === 'accepted' ? 'Pending' :
-        candidateInspection.state === 'completed' && candidateInspection.result && !blockingFindings.length ? 'Passed' :
-        candidateInspection.state === 'superseded' ? 'Source connection changed' : 'Needs attention'},
        {label:reviewedCommit ? 'Checked commit' : 'Last inspected commit',value:candidateInspection.commitSha,monospace:true},
        {label:'Signing key',value:signer ? `${signer.keyId} · ${signingKeyStatus[signerTrust]}` : 'Choose a signing key in Connect integrations'},
        ...(candidateInspection.result ? [
@@ -596,86 +702,96 @@
       {#if candidateInspection.state === 'completed' && !reviewedCommit}
        <p class="text-sm text-muted-foreground">Check the selected branch for a current result.</p>
       {/if}
-      {#if signerTrustMissing}
-       <p class="text-sm">Choose a matching key in Connect integrations, or review the proposed update to the repository trust policy.</p>
-       {#if canRequestSigningUpdate}
-        <label class="flex items-center gap-2 text-sm">
-         <input type="checkbox" class="accent-primary" checked={signingUpdateRequested}
-          onchange={event => {
-           requestedSigningUpdate = event.currentTarget.checked ? signingUpdateScope : '';
-           if (!event.currentTarget.checked) saveProgress();
-          }}/>
-         Update signing key
-        </label>
-       {/if}
+      {#if canRequestSigningUpdate}
+       <label class="flex items-start gap-2 text-sm">
+        <input type="checkbox" class="mt-0.5 accent-primary" checked={signingUpdateRequested}
+         onchange={event => {
+          requestedSigningUpdate = event.currentTarget.checked ? signingUpdateScope : '';
+          if (!event.currentTarget.checked) saveProgress();
+         }}/>
+        I accept adding the signing key by creating a new change request
+       </label>
       {/if}
       {#if candidateInspection.safeReason}<p class="text-sm">{inspectionReasons[candidateInspection.safeReason] || 'The inspection needs attention.'}</p>{/if}
       {#each blockingFindings as finding (finding.code + finding.path)}
        <p class="text-sm">{finding.action}</p>
       {/each}
+     {:else if checkingDefault}
+      <h4 class="text-sm font-medium">Lock check report</h4>
+      <InformationTable aligned loading rows={[
+       {label:'Checked commit',value:''},
+       {label:'Signing key',value:''},{label:'ayni version',value:''},{label:'Lock fingerprint',value:''},
+      ]} />
      {:else}
       <p class="text-sm">No repository check has been saved.</p>
      {/if}
     </div>
    {:else if currentStep === 2 && signingUpdateRequested && signer && candidateInspection}
-    <div class="space-y-3">
-     <h4 class="font-medium">Signing key update pull request</h4>
+    {@const signingChange = trustSnippet(signer)}
+    {#snippet targetBranch()}<BranchLabel name={signingUpdateBase} label="Target branch" />{/snippet}
+    <div class="min-w-0 space-y-3">
      <p class="text-sm">The proposed change pins the selected public key in <code>.ayni.toml</code>, preserves the other trusted keys, and regenerates <code>.ayni.lock</code>.</p>
      <InformationTable aligned rows={[
       {label:'Repository',value:repo.fullName},
-      {label:'Target branch',value:signingUpdateBase},
+      {label:'Target branch',value:targetBranch},
       {label:'Inspected commit',value:candidateInspection.commitSha,monospace:true},
       {label:'Signing key',value:signer.keyId},
      ]}/>
-     <pre class="overflow-x-auto rounded-md bg-muted p-2 text-xs">{trustSnippet(signer)}</pre>
-     <div class="space-y-3" aria-live="polite">
+     <CopyableCode value={signingChange} label="Copy signing key change" disabled={busy}
+      oncopy={() => perform(async () => {
+       await navigator.clipboard.writeText(signingChange);
+       toast.success('Signing key change copied');
+      })} />
+    </div>
+    <div class="space-y-3 border-t pt-4">
+     <div class="space-y-2" aria-live="polite">
       {#if signingPullRequest}
        <InformationTable aligned rows={[
-        {label:'Pull request status',value:signingPullRequest.state},
         {label:'Pull request branch',value:signingPullRequest.branch,monospace:true},
        ]}/>
       {:else if currentPullStatus?.state === 'forbidden'}
        <p class="text-sm">Grant the installed GitHub App write access to Contents and Pull requests, then refresh.</p>
-      {:else if signingPublicationBusy}
-       <p class="text-sm">Opening a draft pull request…</p>
-      {:else if currentPullStatus?.state === 'missing'}
-       <p class="text-sm">No pull request exists for this signing key update.</p>
       {:else if currentPullStatus?.state === 'error'}
-       <p class="text-sm">Pull request status is unavailable. Refresh to try again.</p>
-      {:else}
-       <p class="text-sm">Checking for an existing pull request…</p>
+       <p class="text-sm">Refresh to try again.</p>
       {/if}
-      <div class="flex flex-wrap gap-2">
-       {#if signingPullRequest}
-        <Button href={signingPullRequest.url} target="_blank" rel="noopener noreferrer">View PR</Button>
-       {:else}
-        <Button disabled={signingPublicationBusy || !canRequestSigningUpdate || currentPullStatus?.state !== 'missing'}
-         onclick={openSigningPullRequest}>{signingPublicationBusy ? 'Opening PR…' : 'Open PR'}</Button>
-       {/if}
-       <Button variant="outline" size="icon" aria-label="Refresh pull request status" title="Refresh pull request status"
-        disabled={signingPublicationBusy || currentPullStatus?.state === 'checking'} onclick={() => refreshSigningPullRequest()}>
-        <RefreshCw aria-hidden="true"/>
-       </Button>
-      </div>
+      {#if signingPullRequest?.state === 'Merged' || !canRequestSigningUpdate}
+       <p class="text-sm text-muted-foreground">Check the current branch before continuing runtime preparation.</p>
+      {:else}
+       <p class="text-sm text-muted-foreground">After the pull request is merged, check <code>ayni.lock</code> again to continue runtime preparation.</p>
+      {/if}
      </div>
-     {#if signingPullRequest?.state === 'Merged' || !canRequestSigningUpdate}
-      <p class="text-sm text-muted-foreground">Check the current branch before continuing runtime preparation.</p>
-      <Button variant="outline" disabled={busy || recheckDisabled || checkingDefault || signingPublicationBusy}
-       onclick={() => visit(1)}>Go to lock check</Button>
-     {:else}
-      <p class="text-sm text-muted-foreground">After the pull request is merged, check <code>ayni.lock</code> again to continue runtime preparation.</p>
-     {/if}
+     <div class="flex flex-wrap gap-2">
+      {#if signingPullRequest}
+       <Button href={signingPullRequest.url} target="_blank" rel="noopener noreferrer">View PR</Button>
+      {:else}
+       <Button disabled={signingPublicationBusy || !canRequestSigningUpdate || currentPullStatus?.state !== 'missing'}
+        onclick={openSigningPullRequest}>{signingPublicationBusy ? 'Opening PR…' : 'Open PR'}</Button>
+      {/if}
+      {#if signingPullRequest?.state === 'Merged' || !canRequestSigningUpdate}
+       <Button variant="outline" disabled={busy || recheckDisabled || checkingDefault || signingPublicationBusy}
+        onclick={() => visit(1)}>Go to lock check</Button>
+      {/if}
+     </div>
     </div>
    {:else if currentStep === 2}
-    {#if reviewedCommit}<p class="text-sm">Reviewed commit <code class="break-all">{reviewedCommit}</code> on {branch || 'the default branch'}.</p>
-    {:else}<p class="text-sm">Recheck the branch before starting a new preparation.</p>{/if}
+    {#if reviewPending}
+     <p class="text-sm" role={onboardingBlocked ? 'alert' : 'status'} aria-live="polite">{preparationMessage}</p>
+    {/if}
+    <div class="flex justify-end"><BranchLabel name={branch || repo.defaultBranch} /></div>
+    <div class="space-y-2">
+     <p class="text-sm font-medium">Reviewed commit</p>
+     <CopyableCode value={reviewedCommit || 'Check the branch before starting a new preparation.'} label="Copy reviewed commit" disabled={busy}
+      oncopy={reviewedCommit ? () => perform(async () => {
+       await navigator.clipboard.writeText(reviewedCommit!);
+       toast.success('Commit copied');
+      }) : undefined} />
+    </div>
     {#if !deploymentEnabled}<p class="text-sm">Preparing a runtime image requires a worker profile configured by the deployment administrator.</p><Button variant="link" class="px-0" href="/settings/runtime-signing">View ayni runtime settings</Button>{/if}
-    <p class="text-sm text-muted-foreground">Review the registry, signer, and limits for this run. The run continues if you close the browser.</p>
    <InformationTable rows={[
     {label:'Runtime registry',value:registryReady ? registry?.displayName || 'Selected' : 'Choose a registry in Connect integrations'},
     {label:'Runtime signer',value:signerReady ? signer?.keyId || 'Selected' : 'Choose a signing key in Connect integrations'},
    ]}/>
-   {#if signer}<details class="rounded-md border p-3"><summary class="cursor-pointer text-sm font-medium">Signing key details</summary><div class="space-y-3 pt-3"><InformationTable rows={[{label:'Key name',value:signer.keyId},{label:'Public key',value:signer.publicKey || 'Unavailable',monospace:true}]}/><Button variant="outline" onclick={() => perform(() => navigator.clipboard.writeText(signer!.publicKey))}>Copy public key</Button><p class="text-xs text-muted-foreground">Use this key name and public key together in the repository’s .ayni.toml trust policy.</p></div></details>{/if}
+
    {#if signer && signerTrustMissing}
     <div class="space-y-2 rounded-md border p-3">
      <p class="text-sm font-medium">The checked commit does not trust this signing key.</p>
@@ -684,9 +800,9 @@
      <pre class="overflow-x-auto rounded-md bg-muted p-2 text-xs">{trustSnippet(signer)}</pre>
     </div>
    {/if}
-   <div class="flex flex-wrap gap-4"><div class="space-y-2"><Label for={`runtime-platform-${repo.id}`}>Runtime platform</Label><NativeSelect.Root id={`runtime-platform-${repo.id}`} bind:value={platform} disabled={busy || !!pending}><NativeSelect.Option value="linux/arm64">Linux arm64</NativeSelect.Option><NativeSelect.Option value="linux/amd64">Linux amd64</NativeSelect.Option></NativeSelect.Root></div><div class="space-y-2"><Label for={`runtime-seconds-${repo.id}`}>Time limit (seconds)</Label><Input id={`runtime-seconds-${repo.id}`} type="number" min={1} max={86400} bind:value={seconds} disabled={busy || !!pending}/></div></div>
-   <label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowBuild} onchange={() => { if (!allowBuild) allowReplace = false; }} disabled={busy || !!pending}/>Allow a bounded build if the image is missing</label>
-   {#if allowBuild}<div class="space-y-2"><Label for={`runtime-builds-${repo.id}`}>Maximum build attempts</Label><Input id={`runtime-builds-${repo.id}`} type="number" min={1} max={10} bind:value={builds} disabled={busy || !!pending}/><p class="text-xs text-muted-foreground">The qualified deployment resource limits also apply. Interrupted builds consume their retained attempt allowance.</p></div><label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowReplace} disabled={busy || !!pending}/>Also allow replacement if an existing image is invalid</label>{/if}
+   <div class="flex flex-wrap gap-4"><div class="space-y-2"><Label for={`runtime-platform-${repo.id}`}>Runtime platform</Label><NativeSelect.Root id={`runtime-platform-${repo.id}`} bind:value={platform} disabled={busy || !!pending || onboardingActive}><NativeSelect.Option value="linux/arm64">Linux arm64</NativeSelect.Option><NativeSelect.Option value="linux/amd64">Linux amd64</NativeSelect.Option></NativeSelect.Root></div><div class="space-y-2"><Label for={`runtime-seconds-${repo.id}`}>Time limit (seconds)</Label><Input id={`runtime-seconds-${repo.id}`} type="number" min={1} max={86400} bind:value={seconds} disabled={busy || !!pending || onboardingActive}/></div></div>
+   <label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowBuild} onchange={() => { if (!allowBuild) allowReplace = false; }} disabled={busy || !!pending || onboardingActive}/>Allow a bounded build if the image is missing</label>
+   <div class="space-y-2"><Label for={`runtime-builds-${repo.id}`}>Maximum build attempts</Label><Input id={`runtime-builds-${repo.id}`} type="number" min={1} max={10} bind:value={builds} disabled={!allowBuild || busy || !!pending || onboardingActive}/><p class="text-xs text-muted-foreground">The qualified deployment resource limits also apply. Interrupted builds consume their retained attempt allowance.</p></div><label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowReplace} disabled={!allowBuild || busy || !!pending || onboardingActive}/>Also allow replacement if an existing image is invalid</label>
    {:else}
     <section class="rounded-md border bg-muted/30 p-4" aria-label="Preparation summary">
      <InformationTable aligned rows={[
@@ -721,10 +837,18 @@
       {label:'Cleanup',value:operation.cleanupComplete ? 'Complete' : 'Not complete'},
      ]}/>
     {/if}
-  {#if currentStep === 4 && !pending && image}<div class="space-y-2 border-t pt-3"><p class="text-sm font-medium">{image.confirmed ? 'Registry image available' : 'Image destination'}</p><code class="block break-all text-xs">{image.reference || image.destination}</code>{#if !image.confirmed}<p class="text-xs text-muted-foreground">No published image is confirmed by this status yet.</p>{/if}{#if image.reference && verified}
-   {@const reference = image.reference}
-   <Button variant="outline" onclick={() => perform(() => navigator.clipboard.writeText(reference))}>Copy image reference</Button>
-  {/if}<a class="text-sm text-primary underline underline-offset-4" href={image.url} target="_blank" rel="noreferrer">Open registry package</a></div>{/if}
+    {#if currentStep === 4 && !pending && image}
+     <div class="space-y-2 border-t pt-3">
+      <p class="text-sm font-medium">{image.confirmed ? 'Registry image available' : 'Image destination'}</p>
+      <CopyableCode value={image.reference || image.destination} label="Copy image reference" disabled={busy}
+       oncopy={image.reference && verified ? () => perform(async () => {
+        await navigator.clipboard.writeText(image.reference!);
+        toast.success('Image reference copied');
+       }) : undefined} />
+      {#if !image.confirmed}<p class="text-xs text-muted-foreground">No published image is confirmed by this status yet.</p>{/if}
+      <a class="text-sm text-primary underline underline-offset-4" href={image.url} target="_blank" rel="noreferrer">Open registry package</a>
+     </div>
+    {/if}
     {#if !pending && operation && (retryStates.has(operation.state) || (activeStates.has(operation.state) && operation.state !== 'cancelling'))}
     <div class="flex flex-wrap gap-2">
      {#if operation && retryStates.has(operation.state)}{@const current = operation}<Button disabled={busy || !!pending} onclick={() => perform(() => command('RetryRuntimePreparation',current))}>{current.state === 'publication_uncertain' ? 'Reconcile publication' : 'Retry preparation'}</Button>{/if}
@@ -732,7 +856,7 @@
     </div>
     {/if}
    {/if}
-   {#if pending && currentStep >= 3}
+   {#if pending && currentStep >= 2}
     <div class="flex flex-wrap gap-2" role="group" aria-label="Preparation recovery actions">
      <Button disabled={busy} onclick={() => perform(recover)}>Recover preparation receipt</Button>
      <Button variant="outline" disabled={busy} onclick={() => perform(resume)}>Retry same preparation command</Button>
@@ -752,16 +876,47 @@
 </section>
 {/snippet}
 
-{#snippet preparationActivity()}
- {#if overview.operation}<details class="rounded-xl border p-4"><summary class="cursor-pointer text-sm font-medium">Current preparation details</summary><div class="pt-4">{@render preparationEvidence(overview.operation)}</div></details>{/if}
- <details class="rounded-xl border p-4" data-preparation-history>
-  <summary class="cursor-pointer text-sm font-medium">Previous preparations ({previousOperations.length}{next ? '+' : ''})</summary>
-  <div class="space-y-4 pt-4"><Button variant="outline" disabled={busy} onclick={() => perform(refresh)}>Refresh preparation history</Button>
-   {#if !previousOperations.length}<p class="text-sm text-muted-foreground">No earlier runtime preparations.</p>{/if}
-   {#each previousOperations as operation (operation.id)}{@render preparationEvidence(operation)}{/each}
-   {#if next}<Button variant="outline" disabled={busy} onclick={() => perform(() => history(true))}>More preparations</Button>{/if}
+{#snippet currentPreparation()}
+ <section class="min-h-[66px]" aria-label="Current preparation details" aria-busy={!loaded || inspectionLoading}>
+ {#if displayedOperation}
+   {#key displayedOperation.id}{@render preparationEvidence(displayedOperation)}{/key}
+ {:else if (!loaded || inspectionLoading) && !error && !inspectionError}
+  <ActivitySkeleton />
+ {:else}
+  <div class="flex min-h-[66px] items-center rounded-md border px-3 py-2 text-sm text-muted-foreground">
+   {#if error || inspectionError}<span role="alert">Preparation status could not be loaded.</span><Button variant="outline" class="ml-auto" onclick={async () => { await refreshInspections?.(); await perform(refresh); }}>Retry</Button>
+   {:else}No runtime preparation yet.{/if}
   </div>
- </details>
+ {/if}
+ </section>
 {/snippet}
 
-{@render children(runtime, preparationActivity)}
+{#snippet preparationHistory()}
+ {@const currentId = displayedOperation?.id || ''}
+ <div class="relative">
+  <details class="rounded-xl border p-4" data-preparation-history
+   ontoggle={(event) => { if (event.currentTarget.open) preparationHistoryOpened = true; }}>
+   <summary class="cursor-pointer pr-10 text-sm font-medium">Previous preparations ({previousOperations.length}{next ? '+' : ''})</summary>
+   {#if preparationHistoryOpened}
+    <div class="space-y-2 pt-4">
+     <p class="text-sm text-muted-foreground">Earlier preparations retain the results for their source commit, lock and platform. Their verification and cleanup badges describe that run, not the current preparation.</p>
+     {#key currentId}
+      <HistoryPages revision={preparationHistoryRevision} label="Previous preparations pages" empty="No earlier runtime preparations."
+       readPage={(afterId) => readPreparations(afterId, currentId)}>
+       {#snippet children(items)}
+        {#each items as operation (operation.id)}{@render preparationEvidence(operation)}{/each}
+       {/snippet}
+      </HistoryPages>
+     {/key}
+    </div>
+   {/if}
+  </details>
+  <Button class="absolute top-3 right-4" variant="ghost" size="icon-sm" aria-label="Refresh preparation history"
+   title="Refresh preparation history" aria-busy={refreshingStatus} disabled={busy}
+   onclick={async () => { await refreshStatus(); preparationHistoryRevision += 1; }}>
+   <RefreshCw class={{ 'motion-safe:animate-spin': refreshingStatus }} aria-hidden="true" />
+  </Button>
+ </div>
+{/snippet}
+
+{@render children(runtime, currentPreparation, preparationHistory)}

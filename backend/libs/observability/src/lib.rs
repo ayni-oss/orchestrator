@@ -4,6 +4,7 @@ use std::env;
 use tracing_subscriber::{Layer, prelude::*};
 mod telemetry;
 pub mod workflow;
+pub mod workload;
 pub use telemetry::{
     TelemetryGuard, TraceContext, current_context, event_context, exporter_endpoint,
     record_failure, verification_span, with_event_context,
@@ -14,6 +15,7 @@ use tracing_subscriber::{EnvFilter, fmt::format::FmtSpan};
 const LOG_TARGETS: &[&str] = &[
     "ayni_orchestrator_control_plane",
     "ayni_orchestrator_observability",
+    "ayni_orchestrator_runtime_preparation",
     "ayni_orchestrator_worker",
 ];
 

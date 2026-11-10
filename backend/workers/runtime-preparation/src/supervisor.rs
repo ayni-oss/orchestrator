@@ -202,6 +202,18 @@ impl Supervisor {
             return self.existing(&api, claim, &pod).await;
         }
         if !claim.attempt.pod_uid.is_empty() {
+            if claim.operation.state == "running" {
+                let mut diagnostic = ayni_orchestrator_observability::workload::record(
+                    ayni_orchestrator_observability::workload::Kind::Runtime,
+                    &claim.operation.id,
+                    claim.attempt.generation,
+                    &claim.attempt.stage,
+                    "pod_lost",
+                    None,
+                );
+                diagnostic.pod_uid.clone_from(&claim.attempt.pod_uid);
+                self.retain_lifecycle(&diagnostic).await?;
+            }
             self.call(&SupervisorRequest::Stopped {
                 binding: Self::binding(claim, &claim.attempt.pod_uid),
             })
@@ -228,9 +240,11 @@ impl Supervisor {
         }
         if let Err(reason) = resources::prepare(self, claim).await {
             if reason == Failure::CertificationFailed {
-                return self
-                    .fail_before_start(&api, claim, "certification_failed")
-                    .await;
+                self.fail_before_start(&api, claim, "certification_failed")
+                    .await?;
+                tracing::warn!(operation_id = %claim.operation.id, generation = claim.attempt.generation,
+                    cause = "signer_identity_rejected_before_execution", "Runtime certification failed");
+                return Ok(());
             }
             return Err(reason);
         }
@@ -244,6 +258,8 @@ impl Supervisor {
             Err(kube::Error::Api(error))
                 if (400..500).contains(&error.code) && ![408, 429].contains(&error.code) =>
             {
+                tracing::warn!(operation_id = %claim.operation.id, generation = claim.attempt.generation,
+                    stage = %claim.attempt.stage, status = error.code, "Runtime workload creation rejected");
                 self.fail_before_start(
                     &api,
                     claim,
@@ -257,6 +273,13 @@ impl Supervisor {
             }
             Err(_) => Err(Failure::ExecutionFailed),
         }
+    }
+    async fn retain_lifecycle(
+        &self,
+        diagnostic: &ayni_orchestrator_events::execution_diagnostics::Diagnostic,
+    ) -> Result<(), Failure> {
+        self.request("/v1/runtime-supervisor/diagnostics", diagnostic)
+            .await
     }
     async fn fail_before_start(
         &self,
@@ -295,6 +318,20 @@ impl Supervisor {
             return self.bind(claim, pod).await;
         }
         if matches!(claim.operation.state.as_str(), "stopping" | "cancelling") {
+            if pod.metadata.deletion_timestamp.is_none() {
+                let diagnostic = ayni_orchestrator_observability::workload::record(
+                    ayni_orchestrator_observability::workload::Kind::Runtime,
+                    &claim.operation.id,
+                    claim.attempt.generation,
+                    &claim.attempt.stage,
+                    "retiring",
+                    Some(pod),
+                );
+                let retained = self.retain_lifecycle(&diagnostic).await;
+                if claim.operation.state != "cancelling" {
+                    retained?;
+                }
+            }
             return delete_pod(api, pod).await;
         }
         if claim.attempt.stage == "cleanup" {

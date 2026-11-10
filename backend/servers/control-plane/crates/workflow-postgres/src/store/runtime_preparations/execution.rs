@@ -1,6 +1,11 @@
 use super::admission::current;
 use super::*;
-use ayni_orchestrator_events::runtime_preparation::{BUILD_REPORT_KEY, BUILD_STEPS, BuildReport};
+use ayni_orchestrator_events::execution_diagnostics::{
+    BuildOutput, CERTIFICATION_DIAGNOSTIC, CertificationDiagnostic, Diagnostic, Kind,
+};
+use ayni_orchestrator_events::runtime_preparation::{
+    BUILD_REPORT_KEY, BUILD_STEPS, BuildMilestone, BuildReport,
+};
 pub(super) mod transitions;
 
 async fn active_attempt(
@@ -43,6 +48,89 @@ async fn authorized(
     Ok((op, a))
 }
 impl WorkflowStore {
+    /// Save one bounded build checkpoint from the currently bound worker.
+    /// # Errors
+    /// Reject a stale binding or an unavailable diagnostic store.
+    pub async fn record_runtime_build_checkpoint(
+        &self,
+        b: &Binding,
+        milestone: BuildMilestone,
+    ) -> Result<(), StoreError> {
+        if b.stage != "build" {
+            return Err(StoreError::InvalidInput("runtime build checkpoint"));
+        }
+        let (mut client, driver) = crate::connect(&self.database_url).await?;
+        let tx = client.transaction().await?;
+        authorized(&tx, b).await?;
+        let mut record = Diagnostic::new(
+            Kind::Runtime,
+            &b.operation_id,
+            b.generation,
+            &b.stage,
+            "build_checkpoint",
+        );
+        record.pod_uid.clone_from(&b.pod_uid);
+        record.outcome = match milestone {
+            BuildMilestone::CopySource => "copy_source",
+            BuildMilestone::VerifyInputs => "verify_inputs",
+            BuildMilestone::BuildImage => "build_image",
+            BuildMilestone::ExportImage => "export_image",
+            BuildMilestone::InspectImage => "inspect_image",
+            BuildMilestone::ImageReady => "image_ready",
+        }
+        .into();
+        crate::store::execution_diagnostics::append(&tx, &record).await?;
+        tx.commit().await?;
+        driver.abort();
+        Ok(())
+    }
+    /// Save one bounded output chunk from the currently bound build worker.
+    /// # Errors
+    /// Reject invalid output, conflicting sequence reuse or a stale binding.
+    pub async fn record_runtime_build_output(
+        &self,
+        b: &Binding,
+        output: BuildOutput,
+    ) -> Result<(), StoreError> {
+        if b.stage != "build" || !output.valid() {
+            return Err(StoreError::InvalidInput("runtime build output"));
+        }
+        let (mut client, driver) = crate::connect(&self.database_url).await?;
+        let tx = client.transaction().await?;
+        authorized(&tx, b).await?;
+        let generation = b.generation.to_string();
+        let stream = serde_json::to_value(output.stream).map_err(|_| StoreError::CorruptState)?;
+        let stream = stream.as_str().ok_or(StoreError::CorruptState)?;
+        let sequence = output.sequence.to_string();
+        // The operation lock in authorized serializes output writes for this binding.
+        let previous = tx.query_opt(
+            "SELECT diagnostic FROM workflow_execution_diagnostics WHERE kind='runtime' AND execution_id=$1
+             AND diagnostic::jsonb->>'event'='build_output' AND diagnostic::jsonb->>'generation'=$2
+             AND diagnostic::jsonb->'output'->>'stream'=$3 AND diagnostic::jsonb->'output'->>'sequence'=$4",
+            &[&b.operation_id, &generation, &stream, &sequence],
+        ).await?;
+        if let Some(previous) = previous {
+            let value: Diagnostic =
+                serde_json::from_str(previous.get(0)).map_err(|_| StoreError::CorruptState)?;
+            if value.output.as_ref() != Some(&output) {
+                return Err(StoreError::ConfigurationRevisionConflict);
+            }
+        } else {
+            let mut record = Diagnostic::new(
+                Kind::Runtime,
+                &b.operation_id,
+                b.generation,
+                &b.stage,
+                "build_output",
+            );
+            record.pod_uid.clone_from(&b.pod_uid);
+            record.output = Some(output);
+            crate::store::execution_diagnostics::append(&tx, &record).await?;
+        }
+        tx.commit().await?;
+        driver.abort();
+        Ok(())
+    }
     /// Claim or replay one exact retained stage, including existing pod adoption.
     /// # Errors
     /// Reject terminal/blocked operations, exhausted budgets and unavailable state.
@@ -155,6 +243,7 @@ impl WorkflowStore {
         if op.stage == "cleanup" {
             transition.reason = reason.into();
         }
+        retain_stage_diagnostic(&tx, &report, None).await?;
         tx.execute("UPDATE workflow_runtime_preparation_attempts SET state='stopped',report_digest=$2,report=$3 WHERE id=$1",&[&a.id,&report_digest,&report_json]).await?;
         tx.execute("UPDATE workflow_runtime_preparations SET state=$2,stage=$3,terminal_state=$4,safe_reason=$5,generation=generation+1,updated_at_unix_ms=$6 WHERE id=$1",&[&op.id,&transition.state,&transition.stage,&transition.terminal,&transition.reason,&integer(now(&tx).await?)?]).await?;
         let result = locked(&tx, &op.id).await?;
@@ -260,6 +349,7 @@ impl WorkflowStore {
         elapsed_ms: [Option<u64>; BUILD_STEPS.len()],
     ) -> Result<Operation, StoreError> {
         validation::report(report)?;
+        let diagnostic = certification_diagnostic(report)?;
         let report_digest = digest(json(report)?);
         let b = &report.binding;
         let (mut client, driver) = crate::connect(&self.database_url).await?;
@@ -276,7 +366,14 @@ impl WorkflowStore {
             return Ok(op);
         }
         let (mut op, _) = authorized(&tx, b).await?;
-        transitions::accept_evidence(&mut op, report)?;
+        if diagnostic.is_some() {
+            let mut report = report.clone();
+            report.evidence.details.remove(CERTIFICATION_DIAGNOSTIC);
+            transitions::accept_evidence(&mut op, &report)?;
+        } else {
+            transitions::accept_evidence(&mut op, report)?;
+        }
+        retain_stage_diagnostic(&tx, report, diagnostic).await?;
         if op.stage == "build" {
             op.evidence.details.insert(
                 BUILD_REPORT_KEY.into(),
@@ -449,6 +546,51 @@ impl WorkflowStore {
         driver.abort();
         Ok(result)
     }
+}
+
+fn certification_diagnostic(
+    report: &StageReport,
+) -> Result<Option<CertificationDiagnostic>, StoreError> {
+    let Some(encoded) = report.evidence.details.get(CERTIFICATION_DIAGNOSTIC) else {
+        return Ok(None);
+    };
+    if report.binding.stage != "certify" || report.outcome == "completed" {
+        return Err(StoreError::InvalidInput(
+            "runtime certification diagnostic scope",
+        ));
+    }
+    serde_json::from_str(encoded)
+        .map(Some)
+        .map_err(|_| StoreError::InvalidInput("runtime certification diagnostic"))
+}
+
+async fn retain_stage_diagnostic(
+    tx: &Transaction<'_>,
+    report: &StageReport,
+    cause: Option<CertificationDiagnostic>,
+) -> Result<(), StoreError> {
+    let b = &report.binding;
+    let mut diagnostic = Diagnostic::new(
+        Kind::Runtime,
+        &b.operation_id,
+        b.generation,
+        &b.stage,
+        "stage_report",
+    );
+    diagnostic.pod_uid.clone_from(&b.pod_uid);
+    diagnostic.outcome.clone_from(&report.outcome);
+    diagnostic.reason.clone_from(&report.safe_reason);
+    if b.stage == "certify" && report.outcome != "completed" {
+        diagnostic.certification = cause;
+        if diagnostic.certification.is_none()
+            && b.pod_uid.is_empty()
+            && report.safe_reason == "certification_failed"
+        {
+            diagnostic.certification =
+                Some(CertificationDiagnostic::SignerIdentityRejectedBeforeExecution);
+        }
+    }
+    crate::store::execution_diagnostics::append(tx, &diagnostic).await
 }
 
 async fn reserve_build(tx: &Transaction<'_>, op: &mut Operation) -> Result<(), StoreError> {

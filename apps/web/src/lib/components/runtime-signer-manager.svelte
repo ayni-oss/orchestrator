@@ -1,4 +1,7 @@
 <script lang="ts">
+ import TitleRow from "./title-row.svelte";
+ import FieldsSkeleton from "./fields-skeleton.svelte";
+ import Skeleton from "./ui/skeleton/skeleton.svelte";
  import { protectUnsavedChanges } from "$lib/unsaved-changes.svelte";
  import { goto } from '$app/navigation';
  import { Plus, RefreshCw } from '@lucide/svelte';
@@ -25,6 +28,7 @@
  const indexPath = '/settings/runtime-signing';
  let current = $state.raw<Signer | null>(null);
  let refreshing = $state(false);
+ let listLoaded = $state(false);
  let validatingName = $state('');
  let deleteOpen = $state(false);
  let editorOpen=$state(false);
@@ -63,6 +67,7 @@
    signers = page;
   }
   next = result.nextAfterId ?? '';
+  listLoaded = true;
  }
  async function refresh() {
   refreshing = true;
@@ -237,7 +242,7 @@
  {#if !signerId}
   <Button size="icon" aria-label="Add signing key" title="Add signing key" disabled={busy || hasPending} onclick={() => select(null)}><Plus aria-hidden="true" /></Button>
  {/if}
- <Button size="icon" variant="outline" aria-label={signerId ? 'Refresh signer settings' : 'Refresh signers'} title={signerId ? 'Refresh signer settings' : 'Refresh signers'} disabled={busy} onclick={() => perform(refresh)}>
+ <Button size="icon" variant="ghost" aria-label={signerId ? 'Refresh signer settings' : 'Refresh signers'} title={signerId ? 'Refresh signer settings' : 'Refresh signers'} disabled={busy} onclick={() => perform(refresh)}>
   <RefreshCw class={{ 'motion-safe:animate-spin': refreshing }} aria-hidden="true" />
  </Button>
 {/snippet}
@@ -245,17 +250,16 @@
 {#if createOnMount}
  <div class="flex justify-end gap-2">{@render actions()}</div>
 {:else}
- <PageHeader title={signerId ? current?.keyId ?? 'Signing key settings' : 'ayni'} titleMark={signerId ? undefined : titleMark} actions={signerId ? actions : undefined} />
+ <PageHeader loading={!!signerId && !current && busy} title={signerId ? current?.keyId ?? 'Signing key settings' : 'ayni'} titleMark={signerId ? undefined : titleMark} actions={signerId ? actions : undefined} />
 {/if}
 
 <PageContent>
  {#if !signerId && !createOnMount}
   <AyniRuntimeSettings {signers} loadingSigners={busy} />
   <div class="space-y-2">
-   <div class="flex items-center justify-between gap-3">
+   <TitleRow {actions} actionsLabel="Signing key actions">
     <h2 class="text-lg font-semibold">Signing keys</h2>
-    <div role="group" aria-label="Signing key actions" class="flex shrink-0 gap-2">{@render actions()}</div>
-   </div>
+   </TitleRow>
    <p class="text-sm text-muted-foreground">Create or import signing keys for runtime images. Add the public key to each repository that trusts it.</p>
   </div>
  {/if}
@@ -274,6 +278,15 @@
   <Button disabled={busy} onclick={recoverSetup}>Recover signer setup</Button>
   {#if canResume&&setup.mode==='generate'}<Button variant="outline" disabled={busy} onclick={submitSetup}>Resume signer setup</Button>{/if}
  </InformationCard>{/if}
+ {#if signerId && !current && busy}
+  <InformationCard title="Signing key details" headingLevel={2}>
+   <InformationTable loading rows={[{label:'Public key',value:''},{label:'Secret name',value:''},{label:'Secret UID',value:''},{label:'Configuration revision',value:''}]} />
+   <Button variant="outline" disabled>Copy public key</Button>
+   <details><summary class="text-sm font-medium">Repository trust policy</summary><Skeleton class="h-24 w-full" /></details>
+  </InformationCard>
+  <InformationCard title="Update signer reference"><FieldsSkeleton labels={['Name', 'Public key', 'Immutable Secret name', 'Secret UID']} /><Skeleton class="h-8 w-40" /></InformationCard>
+  <InformationCard title="Danger zone" danger headingLevel={2}><p class="text-sm text-muted-foreground">Disabling or deleting this signer reference blocks new runtime preparations that use it.</p><div class="flex flex-wrap gap-3"><Button variant="destructive" disabled>Disable signer</Button><Button variant="destructive" disabled>Delete signer reference</Button></div></InformationCard>
+ {/if}
  {#if current && signerId}
   <InformationCard title="Signing key details" status={current.enabled ? 'enabled' : 'disabled'} headingLevel={2}>
    <InformationTable rows={[{label:'Public key',value:current.publicKey,monospace:true},{label:'Secret name',value:current.secretName},{label:'Secret UID',value:current.secretUid,monospace:true},{label:'Configuration revision',value:current.revision}]} />
@@ -349,8 +362,10 @@
    <InformationCard title={validatingName} status="validating" headingLevel={2}>
     <p role="status" class="text-sm text-muted-foreground">Setting up the signing key…</p>
    </InformationCard>
-  {:else if refreshing}
-   <p role="status" class="text-sm text-muted-foreground">Loading signer configuration…</p>
+  {:else if !listLoaded && busy}
+   {#each [1, 2, 3] as row (row)}
+    <InformationCard title="Signing key" loadingTitle headingLevel={2}><InformationTable loading rows={[{label:'Public key',value:''},{label:'Configuration revision',value:''}]} /></InformationCard>
+   {/each}
   {/if}
   {#each signers as item (item.id)}
    {@const href = `${indexPath}/${encodeURIComponent(item.id)}`}

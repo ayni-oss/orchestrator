@@ -71,7 +71,7 @@
 {/snippet}
 <svelte:document onclickcapture={closeConfigurationOnOutsideClick} />
 <a class="skip" href="#main-content">Skip to content</a>
-<div class:configuration-open={configurationOpen} class:sidebar-collapsed={sidebarCollapsed} class="workspace-shell">
+<div class:sidebar-auto={collapsePreference === undefined} class:configuration-open={configurationOpen} class:sidebar-collapsed={sidebarCollapsed} class="workspace-shell">
   <aside id="workspace-navigation" class:mobile-open={sidebarOpen} aria-label="Workspace navigation">
     <a class="brand" href="/" aria-label="ayni orchestrator home" title="ayni orchestrator home"><AyniMark class="size-[33px]" orchestrator /><span class="sidebar-label">orchestrator<small>ayni</small></span></a>
     <p class="section-label">Workspaces</p>
@@ -175,6 +175,30 @@
     }
     .sidebar-collapsed .workspace-actions :global(.rail-icon) { display: block; }
     .sidebar-collapsed aside :global([data-slot="button"]) { justify-content: center; }
+  }
+
+  /* Match the responsive rail before hydration knows the viewport. */
+  @media (540px < width <= 800px) {
+    .workspace-shell.sidebar-auto { --sidebar-width: 64px; }
+    .sidebar-auto aside { padding-inline: 8px; }
+    .sidebar-auto .brand {
+      justify-content: center;
+      margin-inline: 0;
+    }
+    .sidebar-auto aside .section-label,
+    .sidebar-auto aside .sidebar-label,
+    .sidebar-auto .workspace-actions :global(svg.sidebar-label) {
+      display: none;
+    }
+    .sidebar-auto .workspace-actions { flex-direction: column; }
+    .sidebar-auto .workspace-actions :global(.workspace-picker) {
+      flex: none;
+      width: 36px;
+      justify-content: center;
+      padding: 0;
+    }
+    .sidebar-auto .workspace-actions :global(.rail-icon) { display: block; }
+    .sidebar-auto aside :global([data-slot="button"]) { justify-content: center; }
   }
 
   @media (540px < width <= 800px) {

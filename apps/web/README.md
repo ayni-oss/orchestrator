@@ -26,6 +26,9 @@ design tokens and locally bundled fonts, with the input token mapped to the bord
 
 ## Shared UI components
 
+Follow the [product design manual](../../docs/technical/contributing/design-manual.md)
+for titles, badges, icon actions, loading states and history presentation.
+
 Use shadcn-svelte components from `src/lib/components/ui` for interactive controls,
 including Button, Input, Textarea, Dialog and NativeSelect. Keep theme tokens in
 `src/app.css`; `--input` is a control border color, not a field background.
@@ -37,11 +40,13 @@ with the upstream Nova style utilities expanded into component classes and its i
 resolved to the existing Lucide dependency. Other controls use the same compact
 shadcn styling. Update shared components and tokens instead of adding page-specific
 field borders or raw form controls.
+History controls use the [shadcn-svelte Pagination](https://www.shadcn-svelte.com/docs/components/pagination)
+registry components for previous and next navigation.
 
 Repository catalog UI: `/repositories`. Available repositories use the same compact, clickable grid cards as projects.
-Opening a connected repository shows Source code and Ayni runtime tabs. Source code covers connection status and
-GitHub integration details; Ayni runtime covers exact-commit inspection and
-preparation. Switching tabs preserves in-progress selections. Technical inspection
+Opening a connected repository shows **Status** and **ayni** tabs. The header
+shows connection status and reveals source integration details on hover or focus of its info icon.
+Switching tabs preserves in-progress selections. Technical inspection
 metadata is collapsed by default. Selecting a source control connection
 automatically discovers repositories through its single active GitHub App
 installation. Project cards link to
@@ -71,14 +76,12 @@ reapplying the old name over a later edit.
 
 ### Inspect committed Ayni setup
 
-In Repositories, open a connected repository card and choose **Ayni runtime**.
-**Recheck default branch** resolves GitHub’s current default branch and inspects
-its latest SHA on every click. Recovery retries the frozen SHA from the original
-request. For an explicit commit, choose
-**Inspect a specific commit**, and enter a
-full lowercase commit SHA. The retained result shows policy/lock digests, locked
-tools, public trust key IDs and corrective findings. Reload after an interrupted
-request and choose **Recover inspection** or **Retry same inspection**.
+In Repositories, open a connected repository card and choose **ayni**.
+Changing the runtime branch checks its latest commit. Use the refresh icon on
+**Check ayni.lock** to check the current branch again. If a check is interrupted,
+the next check recovers the original request. In **Status**, open the matching
+result’s details from **Inspection history** to see policy and lock digests,
+locked tools, public trust key IDs and corrective findings.
 
 Static inspection never enables preparation or starts work. Full adapter discovery
 remains pending; signer admission and independent runtime verification are separate
@@ -94,7 +97,7 @@ preserves old receipts and frozen preparation inputs. Exact setup,
 updates and original receipt recovery survive reloads. Public identities and
 references do not by themselves grant builds or establish runtime readiness.
 
-The repository’s Ayni runtime tab keeps current status, issues and the next action together. Choose **Configure runtime** after a successful check to review the checked commit and configuration. Current progress and recovery controls stay visible; previous preparations and inspections are collapsed by default. Preparation retains frozen source/configuration, explicit build
+The repository’s **ayni** tab keeps current status, issues and the next action together. Choose **Configure runtime** after a successful check to review the checked commit and configuration. Current progress and recovery controls stay visible; previous preparations and inspections are collapsed by default. Preparation retains frozen source/configuration, explicit build
 and replacement grants, stage history, independent verification, cleanup and exact
 command recovery. Runtime preparation needs an admitted deployment profile. See
 [the user guide](../../docs/site/repositories.md) for setup and recovery; verified

@@ -212,6 +212,9 @@ class Qualification:
         before = self.request('/result')
         if before['stopped']:
             raise RuntimeError('stopped_before_external_absence_confirmation')
+        if not any(record['event'] == 'retiring' and record['pod_uid'] == cleanup_uid
+                   for record in before['diagnostics']):
+            raise RuntimeError('retirement_diagnostic_missing_after_pod_deletion')
         self.request('/observe-absent', {'pod_uid': cleanup_uid})
         final = self.until(lambda: (r if (r := self.request('/result'))['stopped'] else None), 'stopped_not_confirmed')
         for (kind, name), uid in self.unrelated_uids.items():
@@ -249,6 +252,11 @@ def self_test():
     assert state.worker(path, args[1], 'Bearer ' + state.token, *args[-2:])[0] == 403
     state.master('/release', {})
     assert state.worker(*args)[0] == 200
+    diagnostic = dict(kind='runtime', execution_id=binding['operation_id'], generation=binding['generation'],
+        stage=binding['stage'], pod_uid=binding['pod_uid'], event='retiring', outcome='running', reason='')
+    assert state.master('/v1/runtime-supervisor/diagnostics', diagnostic | {'pod_uid': str(uuid.uuid4())})[0] == 409
+    assert state.master('/v1/runtime-supervisor/diagnostics', diagnostic) == (200, None)
+    assert state.result()['diagnostics'] == [diagnostic]
     assert state.master('/v1/runtime-supervisor', {'action': 'stopped', 'binding': binding})[0] == 409
     state.master('/observe-absent', {'pod_uid': binding['pod_uid']})
     assert state.master('/v1/runtime-supervisor', {'action': 'stopped', 'binding': binding})[0] == 200

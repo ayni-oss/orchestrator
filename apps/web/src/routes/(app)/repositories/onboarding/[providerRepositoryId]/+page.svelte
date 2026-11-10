@@ -36,7 +36,7 @@
         : await rpc('GetRepositoryOperation', { idempotencyKey: current.request.idempotencyKey });
       retain(connectionAttemptResult(current, operation));
       if (operation.state === 'completed' && operation.repository) {
-        await goto(repositoryPath(operation.repository.id));
+        await goto(`${repositoryPath(operation.repository.id)}?tab=runtime`);
       }
     } catch (cause) {
       if (retry) retain(connectionAttemptError(current, cause));

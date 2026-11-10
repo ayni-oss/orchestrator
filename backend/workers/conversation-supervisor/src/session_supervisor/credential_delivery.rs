@@ -81,7 +81,7 @@ pub(super) async fn acknowledge_configured_route(
     if let Some(pod) = pods.get_opt(name).await? {
         verify_labels(pod.metadata.labels.as_ref(), scope)?;
         let token = ensure_token(secrets, name, scope).await?;
-        let ip = wait_address(pods, name).await?;
+        let ip = wait_address(pods, name, scope).await?;
         reqwest::Client::builder()
             .timeout(Duration::from_secs(3))
             .build()?

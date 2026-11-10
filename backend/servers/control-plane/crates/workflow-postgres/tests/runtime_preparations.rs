@@ -1,4 +1,9 @@
 //! Synthetic authority qualification: no provider requests or signing material.
+#[path = "runtime_preparations/diagnostics.rs"]
+mod diagnostics;
+#[path = "runtime_preparations/history.rs"]
+mod history;
+
 use ayni_orchestrator_events::runtime_preparation::{BUILD_REPORT_KEY, BuildReport};
 use ayni_orchestrator_workflow_postgres::{
     StoreError, WorkflowStore,
@@ -22,6 +27,7 @@ fn key() -> String {
 fn hash(input: &str) -> String {
     format!("sha256:{:x}", Sha256::digest(input.as_bytes()))
 }
+
 struct Fixture {
     store: WorkflowStore,
     repository: String,

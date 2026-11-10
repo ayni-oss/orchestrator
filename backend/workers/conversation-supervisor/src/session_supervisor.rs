@@ -91,7 +91,7 @@ pub async fn execute(
     ensure_pod(&pods, &name, scope, binding, &image, credential.is_some())
         .instrument(workflow.span_with_context("session.pod.prepare", diagnostic.as_ref(), false))
         .await?;
-    let address = wait_address(&pods, &name)
+    let address = wait_address(&pods, &name, scope)
         .instrument(workflow.span_with_context("session.pod.ready", diagnostic.as_ref(), false))
         .await?;
     retain_route(
@@ -129,6 +129,17 @@ async fn retire_previous_pod(
     let previous_name = name(&previous)?;
     if let Some(pod) = api.get_opt(&previous_name).await? {
         let delete = retirement_preconditions(&pod, &previous, binding)?;
+        if pod.metadata.deletion_timestamp.is_none() {
+            let diagnostic = ayni_orchestrator_observability::workload::record(
+                ayni_orchestrator_observability::workload::Kind::Session,
+                &previous.session_id,
+                previous.generation,
+                "",
+                "retiring",
+                Some(&pod),
+            );
+            provider_authority::retain_lifecycle(&diagnostic).await?;
+        }
         match api.delete(&previous_name, &delete).await {
             Ok(_) => {}
             Err(kube::Error::Api(error)) if error.code == 404 => {}
@@ -318,6 +329,17 @@ async fn ensure_pod(
         }
         // Adopt the same retained generation/PVC. A sending ledger survives this
         // process restart as uncertainty; changing a workload never admits a call.
+        if existing.metadata.deletion_timestamp.is_none() {
+            let diagnostic = ayni_orchestrator_observability::workload::record(
+                ayni_orchestrator_observability::workload::Kind::Session,
+                &scope.session_id,
+                scope.generation,
+                "",
+                "replacing",
+                Some(&existing),
+            );
+            provider_authority::retain_lifecycle(&diagnostic).await?;
+        }
         let delete = DeleteParams {
             preconditions: Some(kube::api::Preconditions {
                 uid: existing.metadata.uid,
@@ -455,19 +477,34 @@ async fn wait_deleted(api: &Api<Pod>, name: &str) -> RuntimeResult {
     Err(io::Error::other("session restart waiting for retained workload termination").into())
 }
 
-async fn wait_address(api: &Api<Pod>, name: &str) -> RuntimeResult<String> {
-    for _ in 0..120 {
+async fn wait_address(
+    api: &Api<Pod>,
+    name: &str,
+    scope: &SessionExecutionScope,
+) -> RuntimeResult<String> {
+    for attempt in 0..120 {
         let pod = api.get(name).await?;
-        if let Some(status) = pod.status
+        if let Some(status) = &pod.status
             && status.conditions.as_ref().is_some_and(|conditions| {
                 conditions
                     .iter()
                     .any(|condition| condition.type_ == "Ready" && condition.status == "True")
             })
-            && let Some(ip) = status.pod_ip
+            && let Some(ip) = &status.pod_ip
         {
             ip.parse::<std::net::IpAddr>()?;
-            return Ok(ip);
+            return Ok(ip.clone());
+        }
+        if attempt == 119 {
+            let diagnostic = ayni_orchestrator_observability::workload::record(
+                ayni_orchestrator_observability::workload::Kind::Session,
+                &scope.session_id,
+                scope.generation,
+                "",
+                "readiness_timeout",
+                Some(&pod),
+            );
+            let _ = provider_authority::retain_lifecycle(&diagnostic).await;
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
@@ -601,7 +638,7 @@ async fn acknowledge_route(command_id: &str, name: &str, command_bytes: &[u8]) -
             .is_some_and(|c| !c.connection_id.is_empty()),
     )
     .await?;
-    let ip = wait_address(&pods, name).await?;
+    let ip = wait_address(&pods, name, &scope).await?;
     reqwest::Client::builder()
         .timeout(Duration::from_secs(3))
         .build()?
