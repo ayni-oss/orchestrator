@@ -414,11 +414,14 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  const registryId=randomUUID(),signerId=randomUUID(),inspectionId=randomUUID();
  let run,operation,starts=[],inspections=[],deploymentEnabled=false;
  const hash=`sha256:${'2'.repeat(64)}`;
- await page.route('**/api/ListConnections',route=>route.fulfill({json:{connections:[{id:repo.connectionId,displayName:'Source',capability:'source_control',enabled:true,revision:'1',activeCredentialRevision:'source'},{id:registryId,displayName:'Registry',capability:'container_registry',enabled:true,revision:'1',activeCredentialRevision:'registry',registryDestination:'ghcr.io/fixture'}]}}));
- await page.route('**/api/ListRuntimeSigners',route=>route.fulfill({json:{signers:[{id:signerId,keyId:'named-key',publicKey:'e'.repeat(64),enabled:true,revision:'1'}]}}));
- await page.route('**/api/ListRepositoryInspections',route=>route.fulfill({json:{inspections}}));
- await page.route('**/api/ListRuntimePreparations',route=>route.fulfill({json:{operations:operation?[operation]:[]}}));
- await page.route('**/api/GetRepositoryRuntime',route=>route.fulfill({json:{run,preparationEnabled:deploymentEnabled,developmentOnly:deploymentEnabled}}));
+ async function routeRetainedState(session) {
+  await session.route('**/api/ListConnections',route=>route.fulfill({json:{connections:[{id:repo.connectionId,displayName:'Source',capability:'source_control',enabled:true,revision:'1',activeCredentialRevision:'source'},{id:registryId,displayName:'Registry',capability:'container_registry',enabled:true,revision:'1',activeCredentialRevision:'registry',registryDestination:'ghcr.io/fixture'}]}}));
+  await session.route('**/api/ListRuntimeSigners',route=>route.fulfill({json:{signers:[{id:signerId,keyId:'named-key',publicKey:'e'.repeat(64),enabled:true,revision:'1'}]}}));
+  await session.route('**/api/ListRepositoryInspections',route=>route.fulfill({json:{inspections}}));
+  await session.route('**/api/ListRuntimePreparations',route=>route.fulfill({json:{operations:operation?[operation]:[]}}));
+  await session.route('**/api/GetRepositoryRuntime',route=>route.fulfill({json:{run,preparationEnabled:deploymentEnabled,developmentOnly:deploymentEnabled}}));
+ }
+ await routeRetainedState(page);
  await page.route('**/api/StartRuntimePreparation',()=>{throw new Error('browser must not sequence or submit a separate preparation');});
  await page.route('**/api/StartRepositoryRuntime',route=>{
   const settings=route.request().postDataJSON();starts.push(settings);
@@ -505,6 +508,29 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  await status.getByRole('heading',{name:'Verify and finish',exact:true}).locator('..').getByText('Ready',{exact:true}).waitFor();
  await preparation.getByText(`ghcr.io/fixture/sandbox@${hash}`,{exact:true}).waitFor();
  assert.equal(await preparation.getByRole('link',{name:'Open registry package',exact:true}).getAttribute('href'),'https://github.com/orgs/fixture/packages/container/package/sandbox');
+ const completedRun=run,completedOperation=operation;
+ const fresh=await page.context().browser().newPage();
+ try {
+  await routeRetainedState(fresh);
+  const url=`${origin}/repositories/${repositoryId}?tab=runtime`;
+  const freshStatus=fresh.getByRole('region',{name:'Runtime status',exact:true});
+  const finished=freshStatus.getByRole('heading',{name:'Verify and finish',exact:true});
+  run={...run,settings:{...run.settings,branch:repo.defaultBranch}};
+  await fresh.goto(url);
+  await finished.locator('..').getByText('Ready',{exact:true}).waitFor({timeout:5000});
+  await freshStatus.getByText(`ghcr.io/fixture/sandbox@${hash}`,{exact:true}).waitFor();
+
+  run={...run,settings:{...run.settings,branch:'release'}};
+  operation={...operation,state:'running',stage:'build',contentVerified:false,managedCompatible:false,cleanupComplete:false};
+  await fresh.reload();
+  await freshStatus.getByRole('heading',{name:'Prepare image',exact:true}).locator('..').getByText('Running',{exact:true}).waitFor();
+  await fresh.getByRole('list',{name:'Runtime onboarding steps'}).getByRole('button',{name:/Check ayni.lock/}).click();
+  assert.equal(await freshStatus.getByLabel('Runtime branch',{exact:true}).inputValue(),'release');
+ } finally {
+  await fresh.close();
+  run=completedRun;
+  operation=completedOperation;
+ }
  run={...run,id:randomUUID(),state:'resolving',preparationId:undefined,inspectionId:undefined};
  await summary.getByText('Checking the branch head…',{exact:true}).waitFor({timeout:15000});
  assert.equal(await buildReport.getByText('Pending',{exact:true}).count(),5);

@@ -17,6 +17,7 @@
  let expanded = $state(false);
  let commitSha = $state('');
  let branch = $state('');
+ let hasBranchPreference = false;
  let branchSavedRevision = $state(0);
  let branches = $state.raw<string[]>([]);
  let nextBranchPage = $state(0);
@@ -189,11 +190,15 @@
    await resume(request);
   } finally { checkingDefault = false; }
  }
+ function restoreBranch(value?: string) {
+  if (!hasBranchPreference) branch = value === repo.defaultBranch ? '' : value || '';
+ }
  function saveBranch(event: Event & { currentTarget: HTMLSelectElement }) {
   const select = event.currentTarget;
   const value = select.value;
   try {
    localStorage.setItem(branchStorageKey, value);
+   hasBranchPreference = true;
    branch = value;
    checked = null;
    branchSavedRevision += 1;
@@ -206,7 +211,10 @@
   mounted = true;
   try {
    const savedBranch = localStorage.getItem(branchStorageKey) ?? sessionStorage.getItem(branchStorageKey);
-   if (savedBranch && savedBranch.length <= 255) branch = savedBranch;
+   if (savedBranch !== null && savedBranch.length <= 255) {
+    hasBranchPreference = true;
+    branch = savedBranch;
+   }
   } catch {
    // The branch remains at its default when browser storage is unavailable.
   }
@@ -304,7 +312,7 @@
 {/snippet}
 
 <div data-repository-inspection={repo.id}>
- <RuntimePreparation {repo} {connection} {branchPicker} onSourceRefresh={refreshSource} branch={branch.trim()} checkedCommit={checked?.branch === branch.trim() ? checked?.sha : undefined} latestInspection={currentInspection} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || (!pending && !canInspect)} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}>
+ <RuntimePreparation {repo} {connection} {branchPicker} onSourceRefresh={refreshSource} onRestoreBranch={restoreBranch} branch={branch.trim()} checkedCommit={checked?.branch === branch.trim() ? checked?.sha : undefined} latestInspection={currentInspection} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || (!pending && !canInspect)} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}>
   {#snippet children(runtime, preparationActivity)}
    <Tabs.Content value="runtime" class="space-y-6">
     {@render runtime()}
