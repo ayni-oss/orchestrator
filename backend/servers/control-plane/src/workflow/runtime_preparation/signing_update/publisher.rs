@@ -288,6 +288,43 @@ async fn publish(
     if existing.is_none() {
         confirm_base(publisher, request).await?;
     }
+    let head = create_commit(publisher, request).await?;
+    if let Some(existing) = existing {
+        if existing != head {
+            return Err(Status::aborted(
+                "The signing update branch has different changes.",
+            ));
+        }
+    } else {
+        confirm_base(publisher, request).await?;
+        let creation = publisher
+            .post(
+                &["git", "refs"],
+                json!({"ref":format!("refs/heads/{branch}"),"sha":head}),
+            )
+            .await;
+        if publisher.head(&branch).await?.as_deref() != Some(head.as_str()) {
+            return Err(creation.err().unwrap_or_else(|| {
+                Status::aborted("The signing update branch has different changes.")
+            }));
+        }
+    }
+    confirm_base(publisher, request).await?;
+    let result = publisher.post(&["pulls"], json!({
+        "title":TITLE,"base":request.base,"head":branch,"draft":true,"maintainer_can_modify":false,
+        "body":"Updates the selected public signing key in .ayni.toml and refreshes .ayni.lock while preserving the other trusted keys."
+    })).await;
+    match result {
+        Ok(pull) if sha(&pull["head"]["sha"])? == head => {
+            let number = pull_number(&pull, request, &branch)?;
+            public_pull(&pull, request, &branch, number)
+        }
+        Ok(_) => Err(unavailable()),
+        Err(error) => publisher.pull(request, &branch).await?.ok_or(error),
+    }
+}
+
+async fn create_commit(publisher: &Publisher, request: &Change<'_>) -> Result<String, Status> {
     let base_commit = publisher
         .get(&["git", "commits", request.commit])
         .await?
@@ -330,39 +367,7 @@ async fn publish(
     {
         return Err(unavailable());
     }
-    if let Some(existing) = existing {
-        if existing != head {
-            return Err(Status::aborted(
-                "The signing update branch has different changes.",
-            ));
-        }
-    } else {
-        confirm_base(publisher, request).await?;
-        let creation = publisher
-            .post(
-                &["git", "refs"],
-                json!({"ref":format!("refs/heads/{branch}"),"sha":head}),
-            )
-            .await;
-        if publisher.head(&branch).await?.as_deref() != Some(head) {
-            return Err(creation.err().unwrap_or_else(|| {
-                Status::aborted("The signing update branch has different changes.")
-            }));
-        }
-    }
-    confirm_base(publisher, request).await?;
-    let result = publisher.post(&["pulls"], json!({
-        "title":TITLE,"base":request.base,"head":branch,"draft":true,"maintainer_can_modify":false,
-        "body":"Updates the selected public signing key in .ayni.toml and refreshes .ayni.lock while preserving the other trusted keys."
-    })).await;
-    match result {
-        Ok(pull) if sha(&pull["head"]["sha"])? == head => {
-            let number = pull_number(&pull, request, &branch)?;
-            public_pull(&pull, request, &branch, number)
-        }
-        Ok(_) => Err(unavailable()),
-        Err(error) => publisher.pull(request, &branch).await?.ok_or(error),
-    }
+    Ok(head.to_owned())
 }
 
 async fn confirm_base(publisher: &Publisher, request: &Change<'_>) -> Result<(), Status> {

@@ -112,10 +112,6 @@ macro_rules! forward {
     }};
 }
 
-#[allow(
-    clippy::too_many_lines,
-    reason = "the conversation RPC allowlist is kept together for auditability"
-)]
 async fn rpc(
     State(gateway): State<Gateway>,
     Path(method): Path<String>,
@@ -193,7 +189,20 @@ async fn rpc(
             list_connection_operations,
             v1::ListConnectionOperationsRequest
         ),
+        _ => conversation_rpc(&gateway, &method, body).await,
+    }
+}
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "the conversation RPC allowlist is kept together for auditability"
+)]
+async fn conversation_rpc(
+    gateway: &Gateway,
+    method: &str,
+    body: Value,
+) -> Result<Json<Value>, ApiError> {
+    match method {
         "CreatePlan" => forward!(
             body,
             gateway.conversations(),
@@ -308,7 +317,7 @@ async fn rpc(
             list_conversation_history,
             v1::ListConversationHistoryRequest
         ),
-        _ => task_rpc(&gateway, &method, body).await,
+        _ => task_rpc(gateway, method, body).await,
     }
 }
 

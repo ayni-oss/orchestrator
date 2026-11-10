@@ -8,6 +8,31 @@ enum Edit<'a> {
     Goal(&'a str),
 }
 
+impl Edit<'_> {
+    fn safe_request(
+        &self,
+        workspace: &str,
+        project: Option<&str>,
+        expected: u64,
+    ) -> Result<String, StoreError> {
+        match self {
+            Edit::Name(name) => {
+                validate_name(name, "display_name")?;
+                if name.len() > 120 {
+                    return Err(StoreError::InvalidInput("rename"));
+                }
+                // Keep the exact retained representation for preexisting rename receipts.
+                serde_json::to_string(&(workspace, project, expected, name))
+            }
+            Edit::Goal(goal) => {
+                validate_text(goal, 16_384, true, "goal")?;
+                serde_json::to_string(&("SetProjectGoal", workspace, project, expected, goal))
+            }
+        }
+        .map_err(|_| StoreError::CorruptState)
+    }
+}
+
 impl WorkflowStore {
     /// Rename a workspace once under its expected resource version.
     /// # Errors
@@ -64,21 +89,7 @@ impl WorkflowStore {
             .ok()
             .filter(|version| *version > 0)
             .ok_or(StoreError::InvalidInput("resource_version"))?;
-        let safe = match edit {
-            Edit::Name(name) => {
-                validate_name(name, "display_name")?;
-                if name.len() > 120 {
-                    return Err(StoreError::InvalidInput("rename"));
-                }
-                // Keep the exact retained representation for preexisting rename receipts.
-                serde_json::to_string(&(workspace, project, expected, name))
-            }
-            Edit::Goal(goal) => {
-                validate_text(goal, 16_384, true, "goal")?;
-                serde_json::to_string(&("SetProjectGoal", workspace, project, expected, goal))
-            }
-        }
-        .map_err(|_| StoreError::CorruptState)?;
+        let safe = edit.safe_request(workspace, project, expected)?;
         let (mut client, driver) = crate::connect(&self.database_url).await?;
         let tx = client.transaction().await?;
         connections::serialize_key(&tx, key).await?;
