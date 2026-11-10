@@ -76,21 +76,54 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  const next=()=>status.getByRole('button',{name:'Next',exact:true});
  const steps=preparation.getByRole('list',{name:'Runtime onboarding steps'});
  await status.getByRole('heading',{name:'Connect integrations',exact:true}).waitFor();
- assert.ok(await steps.getByRole('button',{name:/Completed:.*Connect integrations/}).isEnabled());
+ const integrations=steps.getByRole('button',{name:'1. Connect integrations',exact:true});
+ assert.ok(await integrations.isEnabled());
+ assert.equal(await integrations.locator('svg').count(),0);
+ assert.ok(await steps.getByRole('button',{name:/Check ayni\.lock/}).isDisabled());
+ await status.getByText('3 of 3 integrations ready',{exact:true}).waitFor();
+ const refresh=status.getByRole('button',{name:'Refresh integrations',exact:true});
+ const [connectionsReloaded,signersReloaded]=await Promise.all([
+  page.waitForResponse(response=>response.url().endsWith('/api/ListConnections')),
+  page.waitForResponse(response=>response.url().endsWith('/api/ListRuntimeSigners')),
+  refresh.click(),
+ ]);
+ assert.ok(connectionsReloaded.ok() && signersReloaded.ok());
+ assert.equal(await refresh.locator('svg').count(),1);
+ const registryPicker=status.getByLabel('Runtime registry',{exact:true});
+ const signerPicker=status.getByLabel('Runtime signer',{exact:true});
+ const saved = field => field.locator('xpath=ancestor::*[@data-slot="input-group"][1]').locator('[data-autosave-state="saved"]');
+ await registryPicker.selectOption('');
+ await saved(registryPicker).waitFor();
+ await status.getByText('2 of 3 integrations ready',{exact:true}).waitFor();
+ assert.ok(await next().isDisabled());
+ await signerPicker.selectOption('');
+ await saved(signerPicker).waitFor();
+ await page.reload();
+ await registryPicker.waitFor();
+ assert.equal(await registryPicker.inputValue(),'');
+ assert.equal(await signerPicker.inputValue(),'');
+ assert.ok(await next().isDisabled());
+ await registryPicker.selectOption(registryId);
+ await signerPicker.selectOption(signerId);
+ await saved(registryPicker).waitFor();
+ await saved(signerPicker).waitFor();
+ assert.equal(await signerPicker.locator('option:checked').textContent(),'fixture-signer');
  assert.ok(await steps.getByRole('button',{name:/Review and start/}).isDisabled());
  await next().click();
+ await steps.getByRole('button',{name:/Completed:.*Connect integrations/}).waitFor();
  assert.ok(await next().isDisabled());
- await status.getByRole('button',{name:'Recheck default branch',exact:true}).click();
+ await status.getByRole('button',{name:'Check ayni.lock',exact:true}).click();
+ await status.getByRole('heading',{name:'Lock check report',exact:true}).waitFor();
+ await status.getByText('ayni.lock check passed',{exact:true}).waitFor();
+ assert.equal(await steps.getByRole('button',{name:/Completed:.*Check ayni\.lock/}).count(),0);
+ await status.getByText('Lock fingerprint',{exact:true}).waitFor();
  await next().click();
  await status.getByRole('heading',{name:'Review and start',exact:true}).waitFor();
- await steps.getByRole('button',{name:/Completed:.*Check repository/}).click();
- await status.getByRole('heading',{name:'Check repository',exact:true}).waitFor();
+ await steps.getByRole('button',{name:/Completed:.*Check ayni.lock/}).click();
+ await status.getByRole('heading',{name:'Check ayni.lock',exact:true}).waitFor();
  await next().click();
  await page.unroute('**/api/ResolveRepositoryDefaultCommit');
  await page.unroute('**/api/InspectRepository');
- await preparation.getByLabel('Runtime registry',{exact:true}).selectOption(registryId);
- await preparation.getByLabel('Runtime signer',{exact:true}).selectOption(signerId);
- assert.equal(await preparation.getByLabel('Runtime signer',{exact:true}).locator('option:checked').textContent(),'fixture-signer');
  await preparation.getByText('Signing key details',{exact:true}).click();
  await preparation.getByText('Key name',{exact:true}).waitFor();
  await preparation.locator('details').filter({hasText:'Signing key details'}).getByText('fixture-signer',{exact:true}).waitFor();
@@ -106,10 +139,12 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await page.getByRole('tab',{name:'Source code',exact:true}).click();
  assert.equal(await preparation.isVisible(),false);
  await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
- assert.equal(await preparation.getByLabel('Runtime registry',{exact:true}).inputValue(),registryId);
+ await status.getByText('Fixture runtime registry',{exact:true}).waitFor();
  await preparation.getByRole('button',{name:'Start preparation',exact:true}).click();await lost;
  await page.reload();
  await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
+ await page.locator('[data-sonner-toast]').getByText('Preparation result not confirmed',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('region',{name:'Current preparation recovery',exact:true}).count(),0);
  await preparation.getByRole('button',{name:'Recover preparation receipt',exact:true}).click();
  await preparation.getByRole('button',{name:'Reconcile publication',exact:true}).waitFor();
  assert.equal(await preparation.getByText('Runtime ready',{exact:true}).count(),0);
@@ -142,13 +177,14 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.ok(retryRequest.idempotencyKey && cancelRequest.idempotencyKey && retryRequest.idempotencyKey!==cancelRequest.idempotencyKey);
  operation={...operation,state:'cancelled',cleanupComplete:true};originalReceipt=operation;
  inspectionId=randomUUID();inspection={...inspection,id:inspectionId,idempotencyKey:randomUUID(),acceptedAtUnixMs:String(Date.now()),updatedAtUnixMs:String(Date.now())};
- await steps.getByRole('button',{name:/Check repository/}).click();
+ await steps.getByRole('button',{name:/Check ayni.lock/}).click();
  await page.getByRole('button',{name:'More branches',exact:true}).click();
  const branchPicker=page.getByRole('combobox',{name:'Runtime branch',exact:true});
  await branchPicker.selectOption('release/next');
  await branchPicker.locator('xpath=ancestor::*[@data-slot="input-group"][1]').locator('[data-autosave-state="saved"]').waitFor();
  await page.reload();
- await steps.getByRole('button',{name:/Check repository/}).click();
+ await steps.getByRole('button',{name:/Connect integrations/}).click();
+ await next().click();
  await branchPicker.waitFor();
  assert.equal(await branchPicker.inputValue(),'release/next');
  await page.route('**/api/ResolveRepositoryDefaultCommit',route=>{
@@ -156,10 +192,8 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
   return route.fulfill({json:{defaultBranch:'release/next',commitSha:inspection.commitSha}});
  });
  await page.route('**/api/InspectRepository',route=>route.fulfill({json:{inspection}}));
- await preparation.getByRole('button',{name:'Check branch',exact:true}).click();
+ await preparation.getByRole('button',{name:'Check ayni.lock',exact:true}).click();
  await next().click();
- await preparation.getByLabel('Runtime registry',{exact:true}).selectOption(registryId);
- await preparation.getByLabel('Runtime signer',{exact:true}).selectOption(signerId);
  await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).check();
  await preparation.getByLabel('Maximum build attempts',{exact:true}).fill('2');
  await preparation.getByRole('checkbox',{name:'Also allow replacement if an existing image is invalid',exact:true}).check();
@@ -187,8 +221,12 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await preparation.getByRole('button',{name:'Dismiss rejected command',exact:true}).click();
  assert.equal(await page.evaluate(id=>sessionStorage.getItem(`ayni.runtime.preparation.pending.${id}`),repositoryId),null);
  await preparation.screenshot({path:'/tmp/runtime-preparation-ui.png'});
- await steps.getByRole('button',{name:/Check repository/}).click();
+ await steps.getByRole('button',{name:/Check ayni.lock/}).click();
  await branchPicker.selectOption('');
+ await page.evaluate(id => {
+  localStorage.removeItem(`ayni.repository.runtime.registry.${id}`);
+  localStorage.removeItem(`ayni.repository.runtime.signer.${id}`);
+ },repositoryId);
  for(const method of ['ListRepositoryBranches','ListRepositoryInspections','ListConnections','ListRuntimeSigners','ListRuntimePreparations','GetRuntimePreparation','GetRuntimePreparationReceipt','StartRepositoryRuntime','GetRepositoryRuntime','GetRepositoryRuntimeReceipt','RetryRuntimePreparation','CancelRuntimePreparation','ResolveRepositoryDefaultCommit','InspectRepository']) await page.unroute(`**/api/${method}`);
  console.log('runtime-preparation-ui: intercepted UI contract coverage passed for explicit grants, lost-response receipt recovery, current-generation publication reconciliation, separate cleanup gate and cancellation; no registry/build qualification claimed.');
 }
@@ -197,8 +235,10 @@ export async function exerciseDefaultBranchRecheck(page, origin, repositoryId) {
  let head='a'.repeat(40), resolutions=0, failResolution=false, loseResponse=false;
  let inspections=[], requests=[];
  const {connections}=await (await page.request.post(`${origin}/api/ListConnections`,{headers:{'x-console-request':'1'},data:{limit:100}})).json();
- await page.route('**/api/ListConnections',route=>route.fulfill({json:{connections:[...connections,{id:randomUUID(),capability:'container_registry',enabled:true,activeCredentialRevision:'1'}]}}));
- await page.route('**/api/ListRuntimeSigners',route=>route.fulfill({json:{signers:[{id:randomUUID(),enabled:true}]}}));
+ const registry={id:randomUUID(),capability:'container_registry',enabled:true,activeCredentialRevision:'1'};
+ const signer={id:randomUUID(),enabled:true};
+ await page.route('**/api/ListConnections',route=>route.fulfill({json:{connections:[...connections,registry]}}));
+ await page.route('**/api/ListRuntimeSigners',route=>route.fulfill({json:{signers:[signer]}}));
  await page.route('**/api/ListRepositoryInspections',route=>route.fulfill({json:{inspections}}));
  await page.route('**/api/ListRuntimePreparations',route=>route.fulfill({json:{operations:[]}}));
  await page.route('**/api/ResolveRepositoryDefaultCommit',route=>{
@@ -217,21 +257,23 @@ export async function exerciseDefaultBranchRecheck(page, origin, repositoryId) {
  await page.goto(`${origin}/repositories/${repositoryId}?tab=runtime`);
  const summary=page.getByRole('region',{name:'Runtime status',exact:true});
  await summary.getByRole('button',{name:'Next',exact:true}).click();
- const recheck=summary.getByRole('button',{name:'Recheck default branch',exact:true});
+ const recheck=summary.getByRole('button',{name:'Check ayni.lock',exact:true});
  await recheck.click();
- await summary.getByText(`Repository check passed for ${'a'.repeat(40)}.`,{exact:true}).waitFor();
+ await summary.getByText('a'.repeat(40),{exact:true}).waitFor();
  assert.equal(resolutions,1);assert.equal(requests[0].commitSha,head);
  head='b'.repeat(40);loseResponse=true;
  await recheck.click();
+ await page.locator('[data-sonner-toast]').getByText('Inspection result not confirmed',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('region',{name:'Current inspection recovery',exact:true}).count(),0);
  await page.getByRole('button',{name:'Retry same inspection',exact:true}).waitFor();
  assert.equal(resolutions,2);assert.equal(requests[1].commitSha,head);
  head='c'.repeat(40);
  await page.getByRole('button',{name:'Retry same inspection',exact:true}).click();
- await summary.getByText(`Last inspected commit ${'b'.repeat(40)}.`,{exact:true}).waitFor();
+ await summary.getByText('b'.repeat(40),{exact:true}).waitFor();
  assert.deepEqual(requests[2],requests[1],'inspection retry must preserve the exact commit and key');
  assert.equal(resolutions,2,'retry must not resolve a moving branch');
  await recheck.click();
- await summary.getByText(`Repository check passed for ${'c'.repeat(40)}.`,{exact:true}).waitFor();
+ await summary.getByText('c'.repeat(40),{exact:true}).waitFor();
  assert.equal(resolutions,3);assert.equal(requests[3].commitSha,head);
  assert.notEqual(requests[3].idempotencyKey,requests[1].idempotencyKey);
  failResolution=true;
@@ -270,7 +312,7 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  const preparation=page.locator(`[data-runtime-preparation="${repositoryId}"]`);
  const status=preparation.getByRole('region',{name:'Runtime status',exact:true});
  const next=status.getByRole('button',{name:'Next',exact:true});
- const check=status.getByRole('button',{name:'Recheck default branch',exact:true});
+ const check=status.getByRole('button',{name:'Check ayni.lock',exact:true});
  async function review() {
   await check.click();
   await next.click();
@@ -297,9 +339,9 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  deploymentEnabled=true;
  await page.reload();
  await preparation.getByText('Local development build mode. Cluster network isolation is not qualified; this result is for local development testing.',{exact:true}).waitFor();
- await preparation.getByRole('list',{name:'Runtime onboarding steps'}).getByRole('button',{name:/Check repository/}).click();
+ await preparation.getByRole('list',{name:'Runtime onboarding steps'}).getByRole('button',{name:/Check ayni.lock/}).click();
  await review();
- assert.equal(await preparation.getByLabel('Runtime signer',{exact:true}).inputValue(),signerId);
+ await status.getByText('named-key',{exact:true}).first().waitFor();
  assert.equal(await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).isChecked(),true);
  await preparation.getByRole('button',{name:'Build and publish runtime',exact:true}).click();
  await preparation.getByText('Checking the branch head…',{exact:true}).waitFor();

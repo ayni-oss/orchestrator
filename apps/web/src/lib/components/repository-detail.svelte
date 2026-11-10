@@ -65,7 +65,7 @@
     {label:'Connected',value:new Date(Number(repo.connectedAtUnixMs)).toLocaleString()},
    ]}/>
   </Tabs.Content>
-  <RepositoryInspection {repo} {connection}/>
+  <RepositoryInspection {repo} bind:connection/>
  </Tabs.Root>
  {/if}
 </div>

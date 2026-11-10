@@ -1,5 +1,5 @@
 <script lang="ts">
- import { onMount } from 'svelte';
+ import { onDestroy, onMount } from 'svelte';
  import { Tabs } from 'bits-ui';
  import { toast } from 'svelte-sonner';
  import AutosaveField from '$lib/components/autosave-field.svelte';
@@ -12,7 +12,7 @@
  import RuntimePreparation from '$lib/components/runtime-preparation.svelte';
  import { rpc, RpcError, type Connection } from '$lib/api';
  import { inspectionReasons, type Repository, type RepositoryInspection, type InspectRequest } from '$lib/repositories';
- let { repo, connection }: { repo: Repository; connection?: Connection } = $props();
+ let { repo, connection = $bindable() }: { repo: Repository; connection?: Connection } = $props();
  let expanded = $state(false);
  let commitSha = $state('');
  let branch = $state('');
@@ -27,16 +27,25 @@
  let inspectionLoaded = $state(false);
  let checkingDefault = $state(false);
  let pending = $state<InspectRequest | null>(null);
+ let mounted = false;
+ let recoveryToast: string | number | undefined;
  let inspections = $state.raw<RepositoryInspection[]>([]);
  let next = $state('');
  const storageKey = $derived(`ayni.repository.inspection.pending.${repo.id}`);
  const branchStorageKey = $derived(`ayni.repository.runtime.branch.${repo.id}`);
  const canInspect = $derived(!!connection?.enabled && !!connection?.activeCredentialRevision);
  const validCommit = $derived(/^[a-f0-9]{40}$/.test(commitSha));
+ function dismissRecoveryToast() {
+  if (recoveryToast !== undefined) toast.dismiss(recoveryToast);
+  recoveryToast = undefined;
+ }
  function persist(value: InspectRequest | null) {
   pending = value;
   if (value) sessionStorage.setItem(storageKey, JSON.stringify(value));
-  else sessionStorage.removeItem(storageKey);
+  else {
+   sessionStorage.removeItem(storageKey);
+   dismissRecoveryToast();
+  }
  }
  async function perform(action: () => Promise<void>) {
   busy = true; error = '';
@@ -47,7 +56,16 @@
     : e instanceof RpcError && e.status === 404
     ? 'The inspection has not been found. Retry the same request if its response was interrupted.'
     : e instanceof Error ? e.message : 'Inspection could not be loaded. Retry to recover the retained result.';
-  } finally { busy = false; }
+  } finally {
+   busy = false;
+   if (mounted && pending) {
+    recoveryToast = toast.warning('Inspection result not confirmed', {
+     id: recoveryToast, duration: Infinity,
+     description: error || `Recover the result for commit ${pending.commitSha.slice(0, 12)} before checking another commit.`,
+     action: {label:'Recover', onClick:() => { if (!busy) void perform(recover); }},
+    });
+   }
+  }
  }
  async function load(append = false) {
   const response = await rpc('ListRepositoryInspections', { repositoryId: repo.id, afterId: append ? next : '', limit: 20 });
@@ -70,18 +88,36 @@
  }
  async function loadBranches(page = 1) {
   if (!connection || !canInspect || loadingBranches) return;
+  const revision = connection.revision;
   loadingBranches = true;
   branchError = '';
   try {
-   const result = await rpc('ListRepositoryBranches', { repositoryId: repo.id, expectedConnectionRevision: connection.revision, page });
+   const result = await rpc('ListRepositoryBranches', { repositoryId: repo.id, expectedConnectionRevision: revision, page });
+   if (connection?.revision !== revision || !canInspect) return;
    if (result.safeReason) throw new Error(inspectionReasons[result.safeReason] || 'Check the source connection and repository access.');
    branches = [...new Set([...(page === 1 ? [] : branches), ...(result.branches || [])])];
    nextBranchPage = result.nextPage || 0;
   } catch (cause) {
+   if (connection?.revision !== revision || !canInspect) return;
    branchError = cause instanceof RpcError && cause.status === 409
     ? 'The source connection changed. Reload this page to list branches.'
     : cause instanceof Error && !(cause instanceof RpcError) ? cause.message : 'Check the source connection and try again.';
-  } finally { loadingBranches = false; }
+  } finally {
+   loadingBranches = false;
+   if (canInspect && connection?.revision !== revision) void loadBranches();
+  }
+ }
+ function refreshSource(value: Connection | undefined) {
+  const changed = value?.revision !== connection?.revision || value?.enabled !== connection?.enabled ||
+   value?.activeCredentialRevision !== connection?.activeCredentialRevision;
+  connection = value;
+  if (changed) {
+   checked = null;
+   branches = [];
+   nextBranchPage = 0;
+   branchError = '';
+   if (canInspect) void loadBranches();
+  }
  }
  async function recheckDefaultBranch() {
   if (!connection || pending) return;
@@ -117,6 +153,7 @@
   }
  }
  onMount(() => {
+  mounted = true;
   try {
    const savedBranch = localStorage.getItem(branchStorageKey) ?? sessionStorage.getItem(branchStorageKey);
    if (savedBranch && savedBranch.length <= 255) branch = savedBranch;
@@ -133,14 +170,18 @@
    void perform(() => load());
   } catch { error = 'The saved inspection request could not be read. Reload repository history before starting another.'; }
  });
+ onDestroy(() => {
+  mounted = false;
+  dismissRecoveryToast();
+ });
 </script>
 {#snippet recovery()}
  {#if pending}
-  <section class="space-y-3 rounded-xl border bg-card p-5" aria-label="Current inspection recovery">
-   <h3 class="font-semibold">Finish the interrupted check</h3>
-   <p class="text-sm">The result for commit <code>{pending.commitSha.slice(0,12)}</code> is not confirmed. Recover it before checking a newer commit.</p>
-   <div class="flex flex-wrap gap-2"><Button disabled={busy} onclick={() => perform(recover)}>Recover inspection</Button><Button variant="outline" disabled={busy} onclick={() => perform(resume)}>Retry same inspection</Button><Button variant="outline" disabled={busy} onclick={() => persist(null)}>Dismiss inspection recovery</Button></div>
-  </section>
+  <div class="flex flex-wrap gap-2" role="group" aria-label="Inspection recovery actions">
+   <Button disabled={busy} onclick={() => perform(recover)}>Recover inspection</Button>
+   <Button variant="outline" disabled={busy} onclick={() => perform(resume)}>Retry same inspection</Button>
+   <Button variant="outline" disabled={busy} onclick={() => persist(null)}>Dismiss inspection recovery</Button>
+  </div>
  {/if}
 {/snippet}
 
@@ -165,6 +206,7 @@
   {:else if nextBranchPage}
    <Button variant="outline" onclick={() => loadBranches(nextBranchPage)}>More branches</Button>
   {/if}
+  {@render recovery()}
  </div>
 {/snippet}
 
@@ -173,7 +215,7 @@
   <summary class="cursor-pointer text-sm font-medium">Inspect a specific commit</summary>
   <div class="space-y-4 pt-4">
    <p class="text-sm text-muted-foreground">Enter an exact commit SHA to check a specific revision. The runtime branch check uses the latest commit on the selected branch.</p>
-   {#if error}<Feedback kind="error" title="Inspection needs attention" message={error}/>{/if}
+   {#if error && !pending}<Feedback kind="error" title="Inspection needs attention" message={error}/>{/if}
    <div class="space-y-2"><Label for={`inspection-commit-${repo.id}`}>Commit SHA</Label><Input id={`inspection-commit-${repo.id}`} bind:value={commitSha} placeholder="Full 40-character lowercase commit SHA" disabled={busy || !!pending} maxlength={40}/></div>
    {#if !canInspect}<p class="text-sm">Enable and validate the repository's source connection before starting an inspection.</p>{/if}
    <div class="flex flex-wrap gap-2"><Button disabled={busy || !!pending || !canInspect || !validCommit} onclick={() => perform(inspect)}>Inspect commit</Button><Button variant="outline" disabled={busy} onclick={() => perform(() => load())}>Refresh inspections</Button></div>
@@ -223,10 +265,9 @@
 {/snippet}
 
 <div data-repository-inspection={repo.id}>
- <RuntimePreparation {repo} {connection} {branchPicker} branch={branch.trim()} checkedCommit={checked?.branch === branch.trim() ? checked?.sha : undefined} latestInspection={inspections[0] || null} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || !!pending || !canInspect} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}>
+ <RuntimePreparation {repo} {connection} {branchPicker} onSourceRefresh={refreshSource} branch={branch.trim()} checkedCommit={checked?.branch === branch.trim() ? checked?.sha : undefined} latestInspection={inspections[0] || null} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || !!pending || !canInspect} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}>
   {#snippet children(runtime, preparationActivity)}
    <Tabs.Content value="runtime" class="space-y-6">
-    {@render recovery()}
     {@render runtime()}
    </Tabs.Content>
    <Tabs.Content value="activity" class="space-y-6">

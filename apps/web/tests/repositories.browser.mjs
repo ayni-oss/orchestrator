@@ -49,9 +49,9 @@ test('repository catalog and workspace availability and project settings use can
   });
   await inspectionCard.getByRole('button',{name:'Inspect commit',exact:true}).click();
   await lostInspection;await page.unroute('**/api/InspectRepository');await page.reload();
-  await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
-  await inspectionCard.getByRole('button',{name:'Recover inspection',exact:true}).click();
+  await page.locator('[data-sonner-toast]').getByText('Inspection result not confirmed',{exact:true}).waitFor();
   await page.getByRole('tab',{name:'Activity',exact:true}).click();
+  await inspectionCard.getByRole('button',{name:'Recover inspection',exact:true}).click();
   await inspectionCard.getByText(/Inspection history/).click();
   await inspectionCard.getByText('The saved App key is invalid. Update the source connection.',{exact:true}).first().waitFor();
   await page.waitForFunction(id=>sessionStorage.getItem(`ayni.repository.inspection.pending.${id}`)===null,fixture);
