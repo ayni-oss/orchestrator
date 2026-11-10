@@ -24,7 +24,7 @@
  import { inspectionReasons, type Repository, type RepositoryInspection } from '$lib/repositories';
  import { historyBatchSize, readRecentHistory, type HistoryPage } from '$lib/repository-history';
  import { runtimeOverview, runtimeStages, runtimeReasons, onboardingReasons, runtimeRegistryImage, runtimeProgressKey, readRuntimeProgress, runtimeDefaultKey, type RuntimeIntegration, type RepositoryRuntimeRun, type RuntimePreparation, type RuntimeSigner, type RuntimeCommand } from '$lib/runtime-preparation';
- let { repo, branch = '', checkedCommit, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections, onSourceRefresh, onRestoreBranch, branchPicker, children }: { repo: Repository; branch?: string; checkedCommit?: string; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void>; onSourceRefresh: (value: Connection | undefined) => void; onRestoreBranch: (value?: string) => void; branchPicker: Snippet; children: Snippet<[Snippet, Snippet, Snippet]> } = $props();
+ let { repo, branch = '', checkedCommit, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections, onSourceRefresh, onRestoreBranch, branchPicker, children }: { repo: Repository; branch?: string; checkedCommit?: string; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void>; onSourceRefresh: (value: Connection | undefined) => void; onRestoreBranch: (value?: string) => void; branchPicker: Snippet<[boolean]>; children: Snippet<[Snippet, Snippet, Snippet]> } = $props();
  let onboarding = $state.raw<RepositoryRuntimeRun | null>(null);
  let deploymentEnabled = $state(false);
  let loaded = $state(false);
@@ -651,7 +651,7 @@
      </div>
     </div>
    {:else if currentStep === 1}
-    {@render branchPicker()}
+    {@render branchPicker(busy || !!pending || onboardingActive)}
     <div class="space-y-2" aria-live="polite">
      {#if candidateInspection}
       <h4 class="text-sm font-medium">Lock check report</h4>

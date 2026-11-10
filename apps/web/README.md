@@ -77,11 +77,11 @@ reapplying the old name over a later edit.
 ### Inspect committed Ayni setup
 
 In Repositories, open a connected repository card and choose **ayni**.
-Choose a runtime branch and use the refresh icon on **Check ayni.lock** to
-inspect its latest commit. If a check is interrupted, the next check recovers
-the original request. In **Status**, open the matching result’s details from
-**Inspection history** to see policy and lock digests, locked tools, public trust
-key IDs and corrective findings.
+Changing the runtime branch checks its latest commit. Use the refresh icon on
+**Check ayni.lock** to check the current branch again. If a check is interrupted,
+the next check recovers the original request. In **Status**, open the matching
+result’s details from **Inspection history** to see policy and lock digests,
+locked tools, public trust key IDs and corrective findings.
 
 Static inspection never enables preparation or starts work. Full adapter discovery
 remains pending; signer admission and independent runtime verification are separate

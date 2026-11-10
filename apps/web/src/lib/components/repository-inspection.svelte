@@ -203,6 +203,7 @@
  function saveBranch(event: Event & { currentTarget: HTMLSelectElement }) {
   const select = event.currentTarget;
   const value = select.value;
+  if (value === branch) return;
   try {
    localStorage.setItem(branchStorageKey, value);
    hasBranchPreference = true;
@@ -212,7 +213,9 @@
   } catch {
    select.value = branch;
    toast.error('Could not save the runtime branch', { description: 'Check that this browser allows site storage, then try again.' });
+   return;
   }
+  if (canInspect) void perform(recheckDefaultBranch);
  }
  onMount(() => {
   mounted = true;
@@ -240,12 +243,12 @@
   dismissRecoveryToast();
  });
 </script>
-{#snippet branchPicker()}
+{#snippet branchPicker(disabled: boolean)}
  <div class="space-y-2">
   <Label for={`runtime-branch-${repo.id}`}>Runtime branch</Label>
   <AutosaveField savedRevision={branchSavedRevision}>
    <NativeSelect.Root data-slot="input-group-control" id={`runtime-branch-${repo.id}`} class="w-full" value={branch}
-    onchange={saveBranch} disabled={busy || !!pending}>
+    onchange={saveBranch} disabled={disabled || busy || !!pending}>
     <NativeSelect.Option value="">Default branch</NativeSelect.Option>
     {#if branch && !branches.includes(branch)}
      <NativeSelect.Option value={branch}>{branch} (saved selection)</NativeSelect.Option>

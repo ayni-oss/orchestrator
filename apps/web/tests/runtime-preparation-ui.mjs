@@ -394,18 +394,21 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await steps.getByRole('button',{name:/Check ayni.lock/}).click();
  await page.getByRole('button',{name:'More branches',exact:true}).click();
  const branchPicker=page.getByRole('combobox',{name:'Runtime branch',exact:true});
+ await page.route('**/api/ResolveRepositoryDefaultCommit',route=>{
+  assert.equal(route.request().postDataJSON().branch,'release/next');
+  return route.fulfill({json:{defaultBranch:'release/next',commitSha:inspection.commitSha}});
+ });
+ await page.route('**/api/InspectRepository',route=>route.fulfill({json:{inspection}}));
+ const checkedBranch = page.waitForRequest(request=>request.url().endsWith('/api/InspectRepository'));
  await branchPicker.selectOption('release/next');
+ assert.equal((await checkedBranch).postDataJSON().commitSha,inspection.commitSha);
+ await status.locator('[data-title-content]').getByText('Passed',{exact:true}).waitFor();
  await branchPicker.locator('xpath=ancestor::*[@data-slot="input-group"][1]').locator('[data-autosave-state="saved"]').waitFor();
  await page.reload();
  await steps.getByRole('button',{name:/Connect integrations/}).click();
  await next().click();
  await branchPicker.waitFor();
  assert.equal(await branchPicker.inputValue(),'release/next');
- await page.route('**/api/ResolveRepositoryDefaultCommit',route=>{
-  assert.equal(route.request().postDataJSON().branch,'release/next');
-  return route.fulfill({json:{defaultBranch:'release/next',commitSha:inspection.commitSha}});
- });
- await page.route('**/api/InspectRepository',route=>route.fulfill({json:{inspection}}));
  await preparation.getByRole('button',{name:'Check ayni.lock',exact:true}).click();
  await next().click();
  await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).check();
@@ -461,9 +464,8 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await preparation.getByRole('button',{name:'Dismiss rejected command',exact:true}).click();
  assert.equal(await page.evaluate(id=>sessionStorage.getItem(`ayni.runtime.preparation.pending.${id}`),repositoryId),null);
  await preparation.screenshot({path:'/tmp/runtime-preparation-ui.png'});
- await steps.getByRole('button',{name:/Check ayni.lock/}).click();
- await branchPicker.selectOption('');
  await page.evaluate(id => {
+  localStorage.removeItem(`ayni.repository.runtime.branch.${id}`);
   localStorage.removeItem(`ayni.repository.runtime.registry.${id}`);
   localStorage.removeItem(`ayni.repository.runtime.signer.${id}`);
   localStorage.removeItem(`ayni.repository.runtime.progress.${id}`);

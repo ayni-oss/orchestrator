@@ -75,11 +75,11 @@ preparation is requested.
 
 ## Inspect Ayni setup
 
-Select a **Runtime branch** and use the refresh icon on **Check ayni.lock**.
-Choose **Default branch** to check the repository’s default branch. After
-checking, the runtime settings show the exact commit. If the branch advances
-after review, check it again before starting a new run. A named branch requires
-a check before preparation.
+Changing **Runtime branch** automatically runs **Check ayni.lock**. Choose
+**Default branch** to check the repository’s default branch. Use the refresh
+icon to check the current selection again. The report shows the exact commit.
+If the branch advances after review, check it again before starting a new run.
+A named branch requires a check before preparation.
 
 In **Status**, open **Inspection history** and select the ellipsis next to the
 result to see findings, policy and lock digests, locked tools and trusted public

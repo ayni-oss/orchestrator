@@ -87,8 +87,8 @@ when ready or an attention icon when incomplete. Put read-only connection detail
 in the shared info hover; keep the registry and signer selectors visible.
 
 The lock-check step keeps the branch selector as its main control and preserves
-the detailed report below it. Show check status beside the title and use a ghost
-refresh icon at the right to run the check. Keep the last report visible during
+the detailed report below it. Run the check when the branch changes. Show check
+status beside the title and put a ghost refresh icon at the right to recheck. Keep the last report visible during
 a recheck; a changed branch or source revision requires a fresh check before
 showing a passing current status.
 
