@@ -1,6 +1,7 @@
 <script lang="ts">
  import { protectUnsavedChanges } from "$lib/unsaved-changes.svelte";
- import { onMount, type Snippet } from 'svelte';
+ import { onMount, tick, type Snippet } from 'svelte';
+ import { Check } from '@lucide/svelte';
  import { Button } from '$lib/components/ui/button/index.js';
  import { Input } from '$lib/components/ui/input/index.js';
  import { Label } from '$lib/components/ui/label/index.js';
@@ -13,12 +14,14 @@
  import { trustSnippet } from '$lib/runtime-signing';
  import { inspectionReasons, type Repository, type RepositoryInspection } from '$lib/repositories';
  import { runtimeOverview, runtimeStages, runtimeReasons, onboardingReasons, runtimeRegistryImage, type RepositoryRuntimeRun, type RuntimePreparation, type RuntimeSigner, type RuntimeCommand } from '$lib/runtime-preparation';
- let { repo, branch = '', checkedCommit, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections, children }: { repo: Repository; branch?: string; checkedCommit?: string; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void>; children: Snippet<[Snippet, Snippet]> } = $props();
+ let { repo, branch = '', checkedCommit, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections, branchPicker, children }: { repo: Repository; branch?: string; checkedCommit?: string; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void>; branchPicker: Snippet; children: Snippet<[Snippet, Snippet]> } = $props();
  let onboarding = $state.raw<RepositoryRuntimeRun | null>(null);
  let deploymentEnabled = $state(false), developmentOnly = $state(false);
  let loaded = $state(false);
  let integrationSetup = $state<'registry' | 'signer' | null>(null);
- let expanded = $state(false), busy = $state(false), error = $state('');
+ let viewedStep = $state<number | null>(null);
+ let stepHeading = $state<HTMLHeadingElement>();
+ let busy = $state(false), error = $state('');
  let polling = false, mounted = false, historySequence = 0;
  let pending = $state<RuntimeCommand | null>(null);
  let rejected = $state(false);
@@ -27,42 +30,67 @@
  let seconds = $state(1800), builds = $state(1), allowBuild = $state(false), allowReplace = $state(false);
  let reviewedSettings = $state('');
  const settingsDraft = $derived(JSON.stringify({registryId,signerId,platform,seconds,builds,allowBuild,allowReplace}));
- protectUnsavedChanges(()=>expanded&&!pending&&!!reviewedSettings&&settingsDraft!==reviewedSettings);
- const overview = $derived(runtimeOverview({loaded,error,rejected,inspectionPending,moreHistory:!!next,pending:!!pending,inspectionLoading,inspectionError,inspectionReason:inspectionReasons[latestInspection?.safeReason || ''],inspection:latestInspection,operations,registries,signers,sourceReady:!!connection?.enabled && !!connection?.activeCredentialRevision,sourceRevision:connection?.revision}));
+ protectUnsavedChanges(()=>!pending&&!!reviewedSettings&&settingsDraft!==reviewedSettings);
  const storage = $derived(`ayni.runtime.preparation.pending.${repo.id}`);
  const candidateInspection = $derived(latestInspection);
  const onboardingActive = $derived(!!onboarding && ['resolving','inspecting','admitting'].includes(onboarding.state));
  const onboardingBlocked = $derived(onboarding?.state === 'blocked');
- const profileRestored = $derived(onboardingBlocked && onboarding?.safeReason === 'runtime_profile_unavailable' && deploymentEnabled);
  const workActive = $derived(operations.some(value => activeStates.has(value.state) || value.state === 'publication_uncertain' || !value.cleanupComplete));
- const canConfigure = $derived(loaded && !busy && !pending && !inspectionPending && !checkingDefault && !onboardingActive && !workActive && !!connection?.enabled && !!connection?.activeCredentialRevision);
- const savedSettingsAvailable = $derived(!!onboarding?.settings && registries.some(value => value.id === onboarding?.settings.registryConnectionId && value.enabled && value.activeCredentialRevision) && signers.some(value => value.id === onboarding?.settings.signerId && value.enabled));
- const previousOperations = $derived(operations.filter(value => value.id !== overview.operation?.id));
  const registry = $derived(registries.find(value => value.id === registryId));
  const signer = $derived(signers.find(value => value.id === signerId));
  const trustedSigners = $derived(signers.filter(value => value.enabled && candidateInspection?.result?.trustKeyIds?.includes(value.keyId)));
  const signerTrustMissing = $derived(!!signer && candidateInspection?.state === 'completed' &&
   !!candidateInspection.result?.lockFingerprint && !candidateInspection.result.trustKeyIds?.includes(signer.keyId));
  const destination = $derived(registry?.registryDestination ? `${registry.registryDestination}/${repo.fullName.split('/').at(-1)?.toLowerCase()}` : registries.find(value => value.id === onboarding?.settings.registryConnectionId)?.registryDestination ? `${registries.find(value => value.id === onboarding?.settings.registryConnectionId)?.registryDestination}/${repo.fullName.split('/').at(-1)?.toLowerCase()}` : '');
- const image = $derived(runtimeRegistryImage(onboardingActive || onboardingBlocked ? undefined : overview.operation,destination));
  const onboardingSteps = ['Connect integrations', 'Check repository', 'Review and start', 'Prepare image', 'Verify and finish'];
- const currentStep = $derived.by(() => {
-  const operation = overview.operation;
-  if (onboardingActive) return onboarding?.state === 'admitting' ? 2 : 1;
-  if (!onboardingBlocked && operation) {
-   return operation.state === 'ready' || ['pull_final', 'verify_content', 'verify_compatibility', 'cleanup'].includes(operation.stage) ? 4 : 3;
-  }
-  if (!connection?.enabled || !connection.activeCredentialRevision ||
-   !registries.some(value => value.enabled && value.activeCredentialRevision) ||
-   !signers.some(value => value.enabled)) return 0;
-  if (checkingDefault || !latestInspection || overview.issues.length) return 1;
-  return 2;
- });
  const activeStates = new Set(['pending', 'running', 'stopping', 'cancelling', 'cleanup_pending']);
  const retryStates = new Set(['failed', 'blocked', 'unavailable', 'publication_uncertain']);
+ const verificationStages = new Set(['pull_final', 'verify_content', 'verify_compatibility', 'cleanup']);
  const validAllowance = $derived(Number.isInteger(seconds) && seconds >= 1 && seconds <= 86400 && (!allowBuild || Number.isInteger(builds) && builds >= 1 && builds <= 10));
- const reviewedCommit = $derived(latestInspection?.state === 'completed' && latestInspection.commitSha === checkedCommit && latestInspection.connectionRevision === connection?.revision ? checkedCommit : undefined);
- const canStart = $derived(!!connection?.enabled && !!connection.activeCredentialRevision && !onboardingActive && !workActive && !!registry?.enabled && !!registry?.activeCredentialRevision && !!signer?.enabled && validAllowance && !pending && !busy && (!branch || !!reviewedCommit));
+ const sourceReady = $derived(!!connection?.enabled && !!connection.activeCredentialRevision);
+ const registryReady = $derived(registries.some(value => value.enabled && value.activeCredentialRevision));
+ const signerReady = $derived(signers.some(value => value.enabled));
+ const integrationsReady = $derived(sourceReady && registryReady && signerReady);
+ const reviewedCommit = $derived(
+  latestInspection?.state === 'completed' &&
+  latestInspection.commitSha === checkedCommit &&
+  latestInspection.connectionRevision === connection?.revision &&
+  latestInspection.result &&
+  !latestInspection.result.findings?.some(finding => !['adapter_discovery_pending', 'runtime_verification_pending'].includes(finding.code))
+   ? checkedCommit : undefined
+ );
+ const retainedRun = $derived(onboarding && (onboarding.settings.branch || '') === branch &&
+  onboarding.settings.expectedConnectionRevision === connection?.revision &&
+  (!checkedCommit || (onboarding.commitSha || onboarding.settings.expectedCommitSha) === checkedCommit) ? onboarding : null);
+ const overview = $derived(runtimeOverview({loaded,error,rejected,inspectionPending,moreHistory:!!next,pending:!!pending,inspectionLoading,inspectionError,inspectionReason:inspectionReasons[latestInspection?.safeReason || ''],inspection:latestInspection,operations,operationId:retainedRun?.preparationId,registries,signers,sourceReady,sourceRevision:connection?.revision}));
+ const operation = $derived(overview.operation);
+ const previousOperations = $derived(operations.filter(value => value.id !== overview.operation?.id));
+ const matchingOperation = $derived(operation && (retainedRun?.preparationId === operation.id ||
+  (!onboarding && !!reviewedCommit && operation.sourceCommit === reviewedCommit)) ? operation : undefined);
+ const preparing = $derived(onboardingActive || !!pending || workActive);
+ const canViewPreparation = $derived(preparing || !!retainedRun || !!matchingOperation);
+ const verificationReached = $derived(!onboardingActive && !!operation && (operation === matchingOperation || workActive) &&
+  (operation.state === 'ready' || verificationStages.has(operation.stage)));
+ const verified = $derived(!!matchingOperation && matchingOperation.state === 'ready' &&
+  matchingOperation.contentVerified && matchingOperation.managedCompatible && matchingOperation.cleanupComplete);
+ const image = $derived(runtimeRegistryImage(onboardingActive || onboardingBlocked ? undefined : overview.operation,destination));
+ const completed = $derived([
+  integrationsReady, !!reviewedCommit || !!matchingOperation || !!retainedRun?.preparationId,
+  !!matchingOperation || !!retainedRun?.preparationId, verificationReached, !!verified,
+ ]);
+ const lastAvailableStep = $derived(verificationReached ? 4 : canViewPreparation ? 3 :
+  integrationsReady ? (reviewedCommit ? 2 : 1) : 0);
+ const currentStep = $derived(Math.min(viewedStep ?? (verificationReached ? 4 : canViewPreparation ? 3 : 0), lastAvailableStep));
+ const canStart = $derived(deploymentEnabled && integrationsReady && !!reviewedCommit && !signerTrustMissing &&
+  !preparing && !!registry?.enabled && !!registry.activeCredentialRevision && !!signer?.enabled && validAllowance && !busy);
+
+ async function visit(step: number) {
+  if (step > lastAvailableStep) return;
+  if (step === 2 && !reviewedSettings) selectRuntimeDefaults();
+  viewedStep = step;
+  await tick();
+  stepHeading?.focus();
+ }
  function persist(value: RuntimeCommand | null) { pending = value; rejected = false; if (value) sessionStorage.setItem(storage, JSON.stringify(value)); else sessionStorage.removeItem(storage); }
  async function perform(action: () => Promise<void>) {
   busy = true; error = '';
@@ -91,38 +119,32 @@
   if (changed && onboarding?.inspectionId) await refreshInspections?.();
  }
  async function refresh() { await Promise.all([configuration(), loadOnboarding()]); await history(); loaded = true; }
- async function open() { expanded = true; await refresh(); }
  function restoreSettings() {
   if (!onboarding?.settings) return;
   const saved=onboarding.settings;
   registryId=saved.registryConnectionId; signerId=saved.signerId; platform=saved.platform;
   seconds=saved.maxSeconds; builds=saved.maxBuilds || 1; allowBuild=saved.allowBuild; allowReplace=saved.allowReplace;
  }
- async function configure() {
-  await open();
-  allowBuild=false; allowReplace=false; builds=1;
+ function selectRuntimeDefaults() {
   restoreSettings();
   const availableRegistries=registries.filter(value=>value.enabled && value.activeCredentialRevision);
   const availableSigners=signers.filter(value=>value.enabled);
   if (!registryId && availableRegistries.length===1) registryId=availableRegistries[0].id;
   if (!signerId && trustedSigners.length === 1) signerId = trustedSigners[0].id;
   if (!signerId && availableSigners.length===1) signerId=availableSigners[0].id;
-  if (!availableRegistries.length) integrationSetup = 'registry';
-  else if (!availableSigners.length) integrationSetup = 'signer';
   reviewedSettings=settingsDraft;
  }
- async function prepareLatest() { restoreSettings(); await start(); }
 
  async function accept(operation: RuntimePreparation) {
   if (operation.repositoryId !== repo.id) throw new Error('The retained preparation belongs to another repository.');
   persist(null);
   const current = await rpc('GetRuntimePreparation', { id: operation.id });
-  operations = [current.operation, ...operations.filter(value => value.id !== operation.id)]; expanded = false; await history();
+  operations = [current.operation, ...operations.filter(value => value.id !== operation.id)]; await history();
  }
  async function resume() {
   if (!pending) return;
   if (pending.method === 'StartRepositoryRuntime') {
-   try { await rpc(pending.method,pending.request); persist(null); expanded=false; await refresh(); }
+   try { await rpc(pending.method,pending.request); persist(null); await refresh(); }
    catch (cause) { if (cause instanceof RpcError && [400,403,409].includes(cause.status)) rejected=true; throw cause; }
    return;
   }
@@ -133,11 +155,15 @@
   try { const result = await rpc(pending.method, pending.request); await accept(result.operation); }
   catch (cause) { if (cause instanceof RpcError && [400, 403, 409].includes(cause.status)) rejected = true; throw cause; }
  }
- async function recover() { if (pending?.method === 'StartRepositoryRuntime') { await rpc('GetRepositoryRuntimeReceipt',{idempotencyKey:pending.request.idempotencyKey}); persist(null); expanded=false; await refresh(); return; } if (pending) { const result = await rpc('GetRuntimePreparationReceipt', { idempotencyKey: pending.request.idempotencyKey }); await accept(result.operation); } }
+ async function recover() { if (pending?.method === 'StartRepositoryRuntime') { await rpc('GetRepositoryRuntimeReceipt',{idempotencyKey:pending.request.idempotencyKey}); persist(null); await refresh(); return; } if (pending) { const result = await rpc('GetRuntimePreparationReceipt', { idempotencyKey: pending.request.idempotencyKey }); await accept(result.operation); } }
  async function start() {
-  if (!connection || pending || !registry?.enabled || !registry.activeCredentialRevision || !signer?.enabled || !validAllowance || onboardingActive || workActive || (branch && !reviewedCommit)) return;
-  persist({method:'StartRepositoryRuntime',request:{idempotencyKey:crypto.randomUUID(),repositoryId:repo.id,expectedConnectionRevision:connection.revision,registryConnectionId:registryId,signerId,platform,maxSeconds:seconds,maxBuilds:allowBuild ? builds : 0,allowBuild,allowReplace:allowBuild && allowReplace,...(reviewedCommit ? {branch,expectedCommitSha:reviewedCommit,expectedRegistryRevision:registry.revision,expectedSignerRevision:signer.revision} : {})}});
-  await resume();
+  if (!connection || !registry || !signer || !reviewedCommit || !canStart) return;
+  persist({method:'StartRepositoryRuntime',request:{idempotencyKey:crypto.randomUUID(),repositoryId:repo.id,expectedConnectionRevision:connection.revision,registryConnectionId:registryId,signerId,platform,maxSeconds:seconds,maxBuilds:allowBuild ? builds : 0,allowBuild,allowReplace:allowBuild && allowReplace,branch,expectedCommitSha:reviewedCommit,expectedRegistryRevision:registry.revision,expectedSignerRevision:signer.revision}});
+  reviewedSettings = settingsDraft;
+  viewedStep = 3;
+  await perform(resume);
+  await tick();
+  stepHeading?.focus();
  }
  async function command(method: 'CancelRuntimePreparation' | 'RetryRuntimePreparation', operation: RuntimePreparation) {
   if (pending) return;
@@ -152,8 +178,8 @@
   mounted = true;
   const saved = sessionStorage.getItem(storage);
   if (saved) {
-   try { const value = JSON.parse(saved); if (!['StartRepositoryRuntime', 'StartRuntimePreparation', 'CancelRuntimePreparation', 'RetryRuntimePreparation'].includes(value.method) || typeof value.request?.idempotencyKey !== 'string' || ['StartRepositoryRuntime','StartRuntimePreparation'].includes(value.method) && value.request.repositoryId !== repo.id) throw new Error(); pending = value; expanded = true; void perform(open); }
-   catch { error = 'The saved preparation command could not be read. Refresh retained history before starting another.'; expanded = true; }
+   try { const value = JSON.parse(saved); if (!['StartRepositoryRuntime', 'StartRuntimePreparation', 'CancelRuntimePreparation', 'RetryRuntimePreparation'].includes(value.method) || typeof value.request?.idempotencyKey !== 'string' || ['StartRepositoryRuntime','StartRuntimePreparation'].includes(value.method) && value.request.repositoryId !== repo.id) throw new Error(); pending = value; viewedStep = 3; void perform(refresh); }
+   catch { error = 'The saved preparation command could not be read. Refresh retained history before starting another.'; }
   } else { void perform(refresh); }
   const timer = setInterval(() => void poll(), 2000);
   return () => { mounted = false; clearInterval(timer); };
@@ -195,50 +221,39 @@
 {/snippet}
 {#snippet runtime()}
 <section class="space-y-5" data-runtime-preparation={repo.id} aria-label={`Runtime preparation for ${repo.fullName}`}>
- <section class="space-y-4 rounded-xl border bg-card p-5" aria-label="Runtime status" aria-live="polite">
-  {#if loaded}
-   <ol aria-label="Runtime onboarding steps" class="grid gap-2 sm:grid-cols-5">
-    {#each onboardingSteps as step, index (step)}
-     <li aria-current={index === currentStep ? 'step' : undefined} class="rounded-md border px-2 py-1.5 text-xs" class:font-semibold={index === currentStep} class:bg-muted={index === currentStep}>
-      <span class="tabular-nums">{index}.</span> {step}
-     </li>
-    {/each}
-   </ol>
-  {/if}
-  <div class="space-y-2"><h3 class="text-lg font-semibold">{onboardingActive ? 'Preparing repository runtime' : profileRestored ? 'Ready to prepare runtime' : onboardingBlocked ? 'Runtime onboarding needs attention' : checkingDefault ? 'Checking branch' : overview.title}</h3><p class="text-sm text-muted-foreground">{onboardingActive ? ({resolving:'Checking the branch head…',inspecting:'Checking the committed Ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') : profileRestored ? 'Runtime building is now enabled. Prepare the latest commit to start a new run.' : onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' : checkingDefault ? 'Resolving the selected branch and inspecting its latest commit…' : overview.description}</p></div>
-  {#if candidateInspection}<p class="text-xs text-muted-foreground">Last check: {new Date(Number(candidateInspection.updatedAtUnixMs)).toLocaleString()}{candidateInspection.result?.ayniVersion ? ` · Ayni ${candidateInspection.result.ayniVersion}` : ''}</p>{/if}
-  {#if overview.issues.length && !checkingDefault && !onboardingActive}<div class="space-y-2"><h4 class="font-medium">What needs attention</h4><ul class="list-disc space-y-2 break-words pl-5 text-sm">{#each overview.issues as issue (issue)}<li>{issue}</li>{/each}</ul></div>{/if}
-  {#if developmentOnly || overview.operation?.developmentOnly}<p class="rounded-md border p-3 text-sm">Local development build mode. Cluster network isolation is not qualified; this result is for local development testing.</p>{/if}
-  {#if loaded && !deploymentEnabled && !onboardingBlocked}<p class="text-sm">You can check the branch and review its commit. Preparing a runtime image requires a worker profile configured by the deployment administrator.</p>{/if}
-  {#if deploymentEnabled && overview.nextAction && !checkingDefault && !onboardingActive && !onboardingBlocked}<p class="text-sm"><span class="font-medium">Next step:</span> {expanded && !pending ? 'Review the configuration below, then prepare the latest commit on the selected branch.' : canConfigure ? 'Prepare the latest commit using the reviewed registry and signing settings.' : overview.nextAction}</p>{/if}
-  <div class="flex flex-wrap gap-2">
-   {#if canConfigure && !expanded}{#if onboarding?.settings}<Button disabled={!savedSettingsAvailable || (!!branch && !reviewedCommit)} onclick={() => perform(prepareLatest)}>Prepare latest commit</Button><Button variant="outline" onclick={() => perform(configure)}>Change runtime settings</Button>{:else}<Button onclick={() => perform(configure)}>Configure runtime</Button>{/if}{/if}
-   {#if overview.operation && retryStates.has(overview.operation.state)}{@const current = overview.operation}<Button disabled={busy || !!pending} onclick={() => perform(() => command('RetryRuntimePreparation',current))}>{current.state === 'publication_uncertain' ? 'Reconcile publication' : 'Retry preparation'}</Button>{/if}
-   {#if overview.operation && activeStates.has(overview.operation.state) && overview.operation.state !== 'cancelling'}{@const current = overview.operation}<Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => command('CancelRuntimePreparation',current))}>Cancel preparation</Button>{/if}
-   <Button variant={canConfigure || !!overview.operation ? 'outline' : 'default'} disabled={busy || recheckDisabled || checkingDefault || !!pending || onboardingActive} onclick={() => perform(async () => { await recheckDefaultBranch?.(); await refresh(); })}>{branch ? 'Check branch' : 'Recheck default branch'}</Button>
-  </div>
-  {#if loaded && !registries.some(value => value.enabled && value.activeCredentialRevision)}<Button variant="link" href="/settings/container-registries">Configure a runtime registry</Button>{/if}
-  {#if loaded && !signers.some(value => value.enabled)}<Button variant="link" href="/settings/runtime-signing">Add a signing key</Button>{/if}
-  {#if onboarding?.settings && !savedSettingsAvailable && !onboardingActive}<p class="text-sm">The saved registry or signing key is unavailable. Change runtime settings to choose enabled connections.</p>{/if}
-  {#if onboarding?.settings && !expanded}<p class="text-xs text-muted-foreground">Reviewed allowance: {onboarding.settings.allowBuild ? `up to ${onboarding.settings.maxBuilds} build(s)` : 'existing images only'} · {onboarding.settings.maxSeconds} seconds · {onboarding.settings.platform}. Each preparation is a separate bounded run.</p>{/if}
-  {#if image}<div class="space-y-2 border-t pt-3"><p class="text-sm font-medium">{image.confirmed ? 'Registry image available' : 'Image destination'}</p><code class="block break-all text-xs">{image.reference || image.destination}</code>{#if !image.confirmed}<p class="text-xs text-muted-foreground">No published image is confirmed by this status yet.</p>{/if}{#if image.reference && overview.operation?.state === 'ready'}
-   {@const reference = image.reference}
-   <Button variant="outline" onclick={() => perform(() => navigator.clipboard.writeText(reference))}>Copy image reference</Button>
-  {/if}<a class="text-sm text-primary underline underline-offset-4" href={image.url} target="_blank" rel="noreferrer">Open registry package</a></div>{/if}
-  <p class="text-xs text-muted-foreground">Prepare latest commit runs the complete pipeline using the reviewed settings. Recheck only inspects source. Runtime readiness applies to the exact commit and platform shown.</p>
- </section>
- {#if error && !pending}<Feedback kind="error" title="Preparation needs attention" message={error}/>{/if}
- {#if pending}<section class="space-y-3 rounded-xl border p-5" aria-label="Current preparation recovery"><h3 class="font-semibold">Confirm the last preparation command</h3><p class="text-sm">The response was interrupted. Recover the saved receipt before starting another command.</p>{#if error}<p class="text-sm" role="alert">{error}</p>{/if}<div class="flex flex-wrap gap-2"><Button disabled={busy} onclick={() => perform(recover)}>Recover preparation receipt</Button><Button variant="outline" disabled={busy} onclick={() => perform(resume)}>Retry same preparation command</Button>{#if rejected}<Button variant="outline" disabled={busy} onclick={() => {persist(null);error='';}}>Dismiss rejected command</Button>{/if}</div></section>{/if}
- {#if expanded && !onboardingActive && !pending}
-  <section class="space-y-4 rounded-xl border p-5" aria-label="Configure current runtime">
-   <h3 class="font-semibold">Prepare and publish the repository runtime</h3>
-   {#if reviewedCommit}
-    <p class="text-sm">Reviewed commit <code class="break-all">{reviewedCommit}</code> on {branch || 'the default branch'}.</p>
-   {:else if branch}
-    <p class="text-sm">Check this branch before starting preparation.</p>
-   {/if}
-   <p class="text-sm text-muted-foreground">Orchestrator checks the selected branch and Ayni setup, then verifies an existing image or builds, certifies and publishes one within the allowance below. This run continues if you close the browser.</p>
-
+ {#if !loaded}
+  <p role="status">Loading runtime onboarding…</p>
+  {#if error}<Feedback kind="error" title="Could not load runtime onboarding" message={error}/><Button onclick={() => perform(refresh)}>Retry</Button>{/if}
+ {:else}
+  <ol aria-label="Runtime onboarding steps" class="grid gap-2 sm:grid-cols-5">
+   {#each onboardingSteps as step, index (step)}
+    <li aria-current={index === currentStep ? 'step' : undefined} class="min-w-0">
+     <Button variant={completed[index] ? 'default' : index === currentStep ? 'secondary' : 'outline'}
+      class="h-full min-h-10 w-full justify-start whitespace-normal text-left" disabled={index > lastAvailableStep}
+      onclick={() => visit(index)}>
+      {#if completed[index]}<Check class="size-4 shrink-0" aria-hidden="true"/><span class="sr-only">Completed: </span>{/if}
+      <span>{index + 1}. {step}</span>
+     </Button>
+    </li>
+   {/each}
+  </ol>
+  <section class="space-y-4 rounded-xl border bg-card p-5" aria-label="Runtime status">
+   {#key currentStep}
+    <h3 bind:this={stepHeading} tabindex="-1" class="text-lg font-semibold focus:outline-none">{onboardingSteps[currentStep]}</h3>
+   {/key}
+   {#if currentStep === 0}
+    <p class="text-sm text-muted-foreground">Source access, an image registry, and a signing key are required to prepare this repository.</p>
+    <InformationTable rows={[
+     {label:'Source control connection',value:sourceReady ? connection?.displayName || 'Connected' : 'Unavailable or needs validation'},
+     {label:'Runtime registry',value:registryReady ? 'Ready' : 'No enabled, validated connection'},
+     {label:'Runtime signer',value:signerReady ? 'Ready' : 'No enabled signing key'},
+    ]}/>
+    <div class="flex flex-wrap gap-2">
+     {#if !sourceReady}<Button variant="outline" href="/settings/source-control/github">Manage source connections</Button>{/if}
+     <Button variant="outline" onclick={() => { integrationSetup = 'registry'; }}>Add registry</Button>
+     <Button variant="outline" onclick={() => { integrationSetup = 'signer'; }}>Add signing key</Button>
+     <Button variant="outline" disabled={busy} onclick={() => perform(refresh)}>Refresh integrations</Button>
+    </div>
    {#if integrationSetup === 'registry'}
     <div class="space-y-3 rounded-md border p-3">
      <p class="text-sm">Connect a registry so Orchestrator can reuse or publish runtime images.</p>
@@ -252,6 +267,35 @@
      <Button variant="outline" onclick={() => { integrationSetup = null; }}>Close signing setup</Button>
     </div>
    {/if}
+   {:else if currentStep === 1}
+    {@render branchPicker()}
+    <p class="text-sm text-muted-foreground">Check the selected branch to inspect the exact commit’s policy, lock, and trust requirements.</p>
+    <Button variant="outline" disabled={busy || recheckDisabled || checkingDefault || !!pending || onboardingActive}
+     onclick={() => perform(async () => { await recheckDefaultBranch?.(); await refresh(); })}>
+     {checkingDefault ? 'Checking branch…' : branch ? 'Check branch' : 'Recheck default branch'}
+    </Button>
+    <div class="space-y-2" aria-live="polite">
+     {#if checkingDefault}
+      <p class="text-sm">Resolving the selected branch and inspecting its latest commit…</p>
+     {:else if reviewedCommit}
+      <p class="text-sm">Repository check passed for <code class="break-all">{reviewedCommit}</code>.</p>
+     {:else if inspectionError}
+      <p class="text-sm">{inspectionError}</p>
+     {:else if candidateInspection}
+      <p class="text-sm">Last inspected commit <code class="break-all">{candidateInspection.commitSha}</code>.</p>
+      {#if candidateInspection.safeReason}<p class="text-sm">{inspectionReasons[candidateInspection.safeReason] || 'The inspection needs attention.'}</p>{/if}
+      {#each candidateInspection.result?.findings || [] as finding (finding.code + finding.path)}
+       {#if !['adapter_discovery_pending', 'runtime_verification_pending'].includes(finding.code)}<p class="text-sm">{finding.action}</p>{/if}
+      {/each}
+     {:else}
+      <p class="text-sm">No repository check has been saved.</p>
+     {/if}
+    </div>
+   {:else if currentStep === 2}
+    {#if reviewedCommit}<p class="text-sm">Reviewed commit <code class="break-all">{reviewedCommit}</code> on {branch || 'the default branch'}.</p>
+    {:else}<p class="text-sm">Recheck the branch before starting a new preparation.</p>{/if}
+    {#if !deploymentEnabled}<p class="text-sm">Preparing a runtime image requires a worker profile configured by the deployment administrator.</p>{/if}
+    <p class="text-sm text-muted-foreground">Review the registry, signer, and limits for this run. The run continues if you close the browser.</p>
    <div class="space-y-2"><Label for={`runtime-registry-${repo.id}`}>Runtime registry</Label><NativeSelect.Root id={`runtime-registry-${repo.id}`} bind:value={registryId} disabled={busy || !!pending}><NativeSelect.Option value="">Choose a registry connection</NativeSelect.Option>{#each registries as value (value.id)}<NativeSelect.Option value={value.id} disabled={!value.enabled || !value.activeCredentialRevision}>{value.displayName} · {value.registryDestination}{!value.enabled ? ' (disabled)' : !value.activeCredentialRevision ? ' (validation required)' : ''}</NativeSelect.Option>{/each}</NativeSelect.Root></div>
    <div class="space-y-2"><Label for={`runtime-signer-${repo.id}`}>Runtime signer</Label><NativeSelect.Root id={`runtime-signer-${repo.id}`} bind:value={signerId} disabled={busy || !!pending}><NativeSelect.Option value="">Choose a signer</NativeSelect.Option>{#each signers as value (value.id)}<NativeSelect.Option value={value.id} disabled={!value.enabled}>{value.keyId}{!value.enabled ? ' (disabled)' : ''}</NativeSelect.Option>{/each}</NativeSelect.Root></div>
    {#if signer}<details class="rounded-md border p-3"><summary class="cursor-pointer text-sm font-medium">Signing key details</summary><div class="space-y-3 pt-3"><InformationTable rows={[{label:'Key name',value:signer.keyId},{label:'Public key',value:signer.publicKey || 'Unavailable',monospace:true}]}/><Button variant="outline" onclick={() => perform(() => navigator.clipboard.writeText(signer!.publicKey))}>Copy public key</Button><p class="text-xs text-muted-foreground">Use this key name and public key together in the repository’s .ayni.toml trust policy.</p></div></details>{/if}
@@ -271,10 +315,47 @@
    <div class="flex flex-wrap gap-4"><div class="space-y-2"><Label for={`runtime-platform-${repo.id}`}>Runtime platform</Label><NativeSelect.Root id={`runtime-platform-${repo.id}`} bind:value={platform} disabled={busy || !!pending}><NativeSelect.Option value="linux/arm64">Linux arm64</NativeSelect.Option><NativeSelect.Option value="linux/amd64">Linux amd64</NativeSelect.Option></NativeSelect.Root></div><div class="space-y-2"><Label for={`runtime-seconds-${repo.id}`}>Time limit (seconds)</Label><Input id={`runtime-seconds-${repo.id}`} type="number" min={1} max={86400} bind:value={seconds} disabled={busy || !!pending}/></div></div>
    <label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowBuild} onchange={() => { if (!allowBuild) allowReplace = false; }} disabled={busy || !!pending}/>Allow a bounded build if the image is missing</label>
    {#if allowBuild}<div class="space-y-2"><Label for={`runtime-builds-${repo.id}`}>Maximum build attempts</Label><Input id={`runtime-builds-${repo.id}`} type="number" min={1} max={10} bind:value={builds} disabled={busy || !!pending}/><p class="text-xs text-muted-foreground">The qualified deployment resource limits also apply. Interrupted builds consume their retained attempt allowance.</p></div><label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowReplace} disabled={busy || !!pending}/>Also allow replacement if an existing image is invalid</label>{/if}
-   <div class="flex flex-wrap gap-2"><Button disabled={!canStart} onclick={() => perform(start)}>{allowBuild ? 'Build and publish runtime' : 'Check and prepare runtime'}</Button><Button variant="outline" disabled={busy || !!pending} onclick={() => {expanded=false;}}>Close setup</Button><Button variant="outline" onclick={() => { integrationSetup = 'registry'; }}>Add registry</Button><Button variant="outline" onclick={() => { integrationSetup = 'signer'; }}>Add signing key</Button></div>
+   {:else}
+    <div class="space-y-2" aria-live="polite">
+     <p class="font-medium">{onboardingActive ? 'Preparing repository runtime' : onboardingBlocked ? 'Runtime onboarding needs attention' : overview.title}</p>
+     <p class="text-sm text-muted-foreground">{onboardingActive ? ({resolving:'Checking the branch head…',inspecting:'Checking the committed Ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') : onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' : overview.description}</p>
+     {#each overview.issues as issue (issue)}<p class="text-sm">{issue}</p>{/each}
+     {#if developmentOnly || operation?.developmentOnly}<p class="rounded-md border p-3 text-sm">Local development build mode. Cluster network isolation is not qualified; this result is for local development testing.</p>{/if}
+    </div>
+    {#if currentStep === 3 && operation}
+     <InformationTable rows={[
+      {label:'Build attempts',value:`${operation.buildsStarted || 0} of ${operation.maxBuilds || 0}`},
+      {label:'Build permission',value:operation.allowBuild ? 'Build allowed' : 'Reuse an existing image'},
+     ]}/>
+    {:else if currentStep === 4 && operation}
+     <InformationTable rows={[
+      {label:'Content verification',value:operation.contentVerified ? 'Verified' : 'Not verified'},
+      {label:'Managed compatibility',value:operation.managedCompatible ? 'Verified' : 'Not verified'},
+      {label:'Cleanup',value:operation.cleanupComplete ? 'Complete' : 'Not complete'},
+     ]}/>
+    {/if}
+  {#if currentStep === 4 && image}<div class="space-y-2 border-t pt-3"><p class="text-sm font-medium">{image.confirmed ? 'Registry image available' : 'Image destination'}</p><code class="block break-all text-xs">{image.reference || image.destination}</code>{#if !image.confirmed}<p class="text-xs text-muted-foreground">No published image is confirmed by this status yet.</p>{/if}{#if image.reference && verified}
+   {@const reference = image.reference}
+   <Button variant="outline" onclick={() => perform(() => navigator.clipboard.writeText(reference))}>Copy image reference</Button>
+  {/if}<a class="text-sm text-primary underline underline-offset-4" href={image.url} target="_blank" rel="noreferrer">Open registry package</a></div>{/if}
+    <div class="flex flex-wrap gap-2">
+     <Button variant="outline" disabled={busy} onclick={() => perform(refresh)}>Refresh status</Button>
+     {#if operation && retryStates.has(operation.state)}{@const current = operation}<Button disabled={busy || !!pending} onclick={() => perform(() => command('RetryRuntimePreparation',current))}>{current.state === 'publication_uncertain' ? 'Reconcile publication' : 'Retry preparation'}</Button>{/if}
+     {#if operation && activeStates.has(operation.state) && operation.state !== 'cancelling'}{@const current = operation}<Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => command('CancelRuntimePreparation',current))}>Cancel preparation</Button>{/if}
+    </div>
+   {/if}
+   <div class="flex flex-wrap justify-between gap-2 border-t pt-4">
+    {#if currentStep > 0}<Button variant="outline" onclick={() => visit(currentStep - 1)}>Back</Button>{/if}
+    {#if currentStep === 0 || currentStep === 1 || currentStep === 3}
+     <Button class="ml-auto" disabled={busy || (currentStep === 0 ? !integrationsReady : currentStep === 1 ? !reviewedCommit : !verificationReached)} onclick={() => visit(currentStep + 1)}>Next</Button>
+    {:else if currentStep === 2}
+     <Button class="ml-auto" disabled={!canStart} onclick={start}>{allowBuild ? 'Build and publish runtime' : 'Start preparation'}</Button>
+    {/if}
+   </div>
   </section>
-
+  {#if error && !pending}<Feedback kind="error" title="Preparation needs attention" message={error}/>{/if}
  {/if}
+ {#if pending}<section class="space-y-3 rounded-xl border p-5" aria-label="Current preparation recovery"><h3 class="font-semibold">Confirm the last preparation command</h3><p class="text-sm">The response was interrupted. Recover the saved receipt before starting another command.</p>{#if error}<p class="text-sm" role="alert">{error}</p>{/if}<div class="flex flex-wrap gap-2"><Button disabled={busy} onclick={() => perform(recover)}>Recover preparation receipt</Button><Button variant="outline" disabled={busy} onclick={() => perform(resume)}>Retry same preparation command</Button>{#if rejected}<Button variant="outline" disabled={busy} onclick={() => {persist(null);error='';}}>Dismiss rejected command</Button>{/if}</div></section>{/if}
 </section>
 {/snippet}
 

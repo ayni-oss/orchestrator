@@ -223,11 +223,10 @@
 {/snippet}
 
 <div data-repository-inspection={repo.id}>
- <RuntimePreparation {repo} {connection} branch={branch.trim()} checkedCommit={checked?.branch === branch.trim() ? checked?.sha : undefined} latestInspection={inspections[0] || null} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || !!pending || !canInspect} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}>
+ <RuntimePreparation {repo} {connection} {branchPicker} branch={branch.trim()} checkedCommit={checked?.branch === branch.trim() ? checked?.sha : undefined} latestInspection={inspections[0] || null} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || !!pending || !canInspect} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}>
   {#snippet children(runtime, preparationActivity)}
    <Tabs.Content value="runtime" class="space-y-6">
     {@render recovery()}
-    {@render branchPicker()}
     {@render runtime()}
    </Tabs.Content>
    <Tabs.Content value="activity" class="space-y-6">

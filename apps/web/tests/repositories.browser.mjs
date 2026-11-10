@@ -33,7 +33,6 @@ test('repository catalog and workspace availability and project settings use can
   assert.equal((await branches.json()).safeReason,'github_key_invalid');
   assert.equal((await listBranches('999')).status(),409);
   const inspectionCard = page.locator(`[data-repository-inspection="${fixture}"]`);
-  await inspectionCard.getByText('Commit an Ayni policy before preparing this repository.',{exact:true}).first().waitFor();
   await page.getByRole('tab',{name:'Activity',exact:true}).click();
   await inspectionCard.getByText('Inspect a specific commit',{exact:true}).click();
   const commitInput = inspectionCard.getByLabel('Commit SHA',{exact:true});
@@ -152,7 +151,7 @@ test('repository catalog and workspace availability and project settings use can
   assert.equal(startRuntime.status(),200);const runtimeReceipt=(await startRuntime.json()).run;
   assert.equal(runtimeReceipt.state,'resolving');
   await page.goto(`${origin}/repositories/${fixture}?tab=runtime`);
-  await page.getByRole('heading',{name:'Runtime onboarding needs attention',exact:true}).waitFor();
+  await page.getByText('Runtime onboarding needs attention',{exact:true}).waitFor();
   await page.getByText('The selected branch could not be read. Check the source control connection and repository access, then prepare again.',{exact:true}).waitFor();
   const recovered=await page.request.post(`${origin}/api/GetRepositoryRuntimeReceipt`,{headers:{'x-console-request':'1'},data:{idempotencyKey:runtimeSettings.idempotencyKey}});
   assert.equal(recovered.status(),200);assert.deepEqual((await recovered.json()).run,runtimeReceipt);

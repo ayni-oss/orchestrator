@@ -153,7 +153,10 @@ The repository runtime tab lists branches through `ListRepositoryBranches`.
 The service reads one bounded page using the catalog entry's installation and
 repository-scoped credential, and checks the source connection revision before
 and after the provider request. Selecting a branch still requires resolving its
-head to an exact commit before inspection. Preparation and inspection history
+head to an exact commit before inspection. Runtime onboarding separates
+integration checks, branch inspection, review and start, preparation, and
+verification. Starting a run requires an explicit action and submits the
+reviewed commit and integration revisions. Preparation and inspection history
 are available in the repository's Activity tab.
 
 `InspectRepository` accepts an existing catalog ID, the displayed source connection

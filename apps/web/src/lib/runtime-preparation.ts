@@ -77,10 +77,11 @@ export function runtimeOverview(input: {
  inspectionLoading: boolean; inspectionError: string; inspectionReason?: string;
  inspection: import('./repositories').RepositoryInspection | null;
  operations: RuntimePreparation[]; registries: import('./api').Connection[]; signers: RuntimeSigner[];
- sourceReady: boolean; sourceRevision?: string; moreHistory?: boolean;
+ sourceReady: boolean; sourceRevision?: string; moreHistory?: boolean; operationId?: string;
 }): { title: string; description: string; issues: string[]; nextAction: string; operation?: RuntimePreparation } {
  const candidate = input.inspection;
- const operation = candidate ? input.operations.find(value => value.inspectionId === candidate.id) || input.operations.find(value => ['pending','running','stopping','cancelling','cleanup_pending','publication_uncertain'].includes(value.state) || value.state !== 'ready' && !value.cleanupComplete) : input.operations[0];
+ const operation = input.operations.find(value => value.id === input.operationId) ||
+  (candidate ? input.operations.find(value => value.inspectionId === candidate.id) || input.operations.find(value => ['pending','running','stopping','cancelling','cleanup_pending','publication_uncertain'].includes(value.state) || value.state !== 'ready' && !value.cleanupComplete) : input.operations[0]);
  if (input.inspectionPending) return {title:'Inspection result needs recovery',description:'The last check has an unconfirmed result. Older saved checks do not establish the result of this request.',issues:[],nextAction:'Recover the interrupted check using the controls above.'};
  if (input.rejected) return {title:'Preparation request rejected',description:input.error,issues:[],nextAction:'Review the rejected command below, dismiss it and correct the selection before trying again.'};
  if (input.pending) return {title:'Preparation response needs recovery',description:'The last command has an uncertain response. Its retained receipt determines whether work started.',issues:[],nextAction:'Recover the preparation receipt below before starting another command.'};
