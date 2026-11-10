@@ -256,9 +256,18 @@ pub struct BuildReport {
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum WorkerRequest {
     Input,
-    BuildProgress { milestone: BuildMilestone },
-    PreparePublication { expected_manifest_digest: String },
-    Report { report: Box<StageReport> },
+    BuildProgress {
+        milestone: BuildMilestone,
+    },
+    BuildOutput {
+        output: super::execution_diagnostics::BuildOutput,
+    },
+    PreparePublication {
+        expected_manifest_digest: String,
+    },
+    Report {
+        report: Box<StageReport>,
+    },
 }
 
 /// Stage credentials use a separate no-store response and never enter this envelope.

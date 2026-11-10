@@ -3,6 +3,10 @@ use serde::{Deserialize, Serialize};
 
 pub const SUBJECT: &str = "orchestrator.diagnostics.execution.v1";
 pub const MAX_BYTES: usize = 8192;
+pub const MAX_OUTPUT_CHUNK_BYTES: usize = 1024;
+pub const OUTPUT_PREFIX_CHUNKS: u16 = 48;
+pub const OUTPUT_TAIL_CHUNKS: u16 = 16;
+pub const OUTPUT_END_SEQUENCE: u16 = OUTPUT_PREFIX_CHUNKS + OUTPUT_TAIL_CHUNKS;
 pub const CERTIFICATION_DIAGNOSTIC: &str = "worker_certification_diagnostic";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -21,6 +25,41 @@ impl Kind {
             Self::Task => "task",
             Self::Session => "session",
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputStream {
+    Stdout,
+    Stderr,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BuildOutput {
+    pub stream: OutputStream,
+    pub sequence: u16,
+    pub text: String,
+    pub complete: bool,
+    pub truncated: bool,
+}
+
+impl BuildOutput {
+    #[must_use]
+    pub fn valid(&self) -> bool {
+        if self.sequence == OUTPUT_END_SEQUENCE {
+            return self.text.is_empty();
+        }
+        self.sequence < OUTPUT_END_SEQUENCE
+            && !self.complete
+            && !self.truncated
+            && !self.text.is_empty()
+            && self.text.len() <= MAX_OUTPUT_CHUNK_BYTES
+            && !self
+                .text
+                .chars()
+                .any(|ch| ch.is_control() && !matches!(ch, '\n' | '\t'))
     }
 }
 
@@ -43,6 +82,8 @@ pub struct Diagnostic {
     pub certification: Option<CertificationDiagnostic>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub containers: Vec<ContainerDiagnostic>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<BuildOutput>,
 }
 
 impl Diagnostic {
@@ -61,6 +102,7 @@ impl Diagnostic {
             exit_code: None,
             certification: None,
             containers: Vec::new(),
+            output: None,
         }
     }
 
@@ -89,6 +131,7 @@ impl Diagnostic {
             )
             && valid_reason(&self.reason)
             && self.certification.is_none()
+            && self.output.is_none()
             && self.related_id.is_empty()
             && self.exit_code.is_none()
             && self.containers.len() <= 16

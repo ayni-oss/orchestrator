@@ -331,6 +331,17 @@ async fn worker(
             progress::record(&binding, milestone);
             response.accepted = true;
         }
+        WorkerRequest::BuildOutput { output } => {
+            if binding.stage != "build" || !output.valid() {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            authority
+                .store
+                .record_runtime_build_output(&binding, output)
+                .await
+                .map_err(|_| StatusCode::CONFLICT)?;
+            response.accepted = true;
+        }
         WorkerRequest::PreparePublication {
             expected_manifest_digest,
         } => {

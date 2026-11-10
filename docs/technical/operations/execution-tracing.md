@@ -13,9 +13,19 @@ while the build runs. Supervisors also save Kubernetes lifecycle observations
 before normal retirement, including exit codes, signals, restart counts and
 known wait or termination reasons. A missing pod is recorded as `pod_lost`.
 Certification records carry a closed cause, such as `signer_trust_mismatch` or
-`protected_content_root_mismatch`, alongside the existing result code. Only
-trusted code projects these records. Raw stdout, stderr, termination messages,
-source, credentials, and provider responses stay out of the diagnostic stream.
+`protected_content_root_mismatch`, alongside the existing result code. Trusted code projects these records. The runtime image build also forwards
+sanitized stdout and stderr from `ayni env build` through the exact build-stage
+capability. Capture starts with the build command and preserves its final output
+when earlier lines exceed the budget. The build child receives neither the stage
+capability nor registry or signing credentials. Output may contain repository
+or dependency details and is available through the private operator listener.
+
+Each `build_output` record carries a stream, sequence, and text of up to 1 KiB.
+Each stream keeps up to 48 live chunks and 16 final chunks per build attempt.
+A final marker reports whether capture finished and whether lines or chunks were
+omitted. A missing marker means capture did not finish. A stream that exceeded
+its budget can be complete and truncated. The ordinary lifecycle records continue
+to exclude raw container termination messages, credentials, and provider responses.
 
 PostgreSQL retains these observations for 30 days. The control plane forwards
 them after commit to the separate `ORCHESTRATOR_EXECUTION_DIAGNOSTICS_V1`

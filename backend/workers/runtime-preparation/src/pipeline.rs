@@ -325,8 +325,8 @@ async fn build(
     ]);
     fs::create_dir_all("/scratch/run").map_err(|_| Failure::ExecutionFailed)?;
     client.build_progress(BuildMilestone::BuildImage).await;
-    command::checked(
-        "/usr/local/bin/ayni",
+    command::checked_build(
+        client,
         &[
             "env".into(),
             "build".into(),

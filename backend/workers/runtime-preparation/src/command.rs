@@ -1,10 +1,11 @@
 //! Bounded child execution. Kubernetes owns the outer process/cgroup deadline;
 //! this timeout also kills and reaps the immediate child on interrupted stages.
-use crate::Failure;
+use crate::{Failure, client::WorkerClient};
+use ayni_orchestrator_events::execution_diagnostics::OutputStream;
 use std::{collections::BTreeMap, path::Path, process::Stdio, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncReadExt as _},
-    process::Command,
+    process::{Child, Command},
 };
 
 const OUTPUT_BYTES: u64 = 1024 * 1024;
@@ -42,20 +43,7 @@ pub async fn run(
     if seconds == 0 || !Path::new(program).is_absolute() {
         return Err(Failure::InvalidInput);
     }
-    let mut child = Command::new(program)
-        .args(args)
-        .current_dir(directory)
-        .env_clear()
-        .env("PATH", "/usr/local/bin:/usr/bin:/bin")
-        .env("LANG", "C.UTF-8")
-        .env("TMPDIR", "/tmp")
-        .envs(environment)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|_| Failure::ToolUnavailable)?;
+    let mut child = spawn(program, args, directory, environment)?;
     let stdout = child.stdout.take().ok_or(Failure::ExecutionFailed)?;
     let stderr = child.stderr.take().ok_or(Failure::ExecutionFailed)?;
     let execution = async {
@@ -91,6 +79,60 @@ pub async fn run(
         }
     }
 }
+
+fn spawn(
+    program: &str,
+    args: &[String],
+    directory: &Path,
+    environment: &BTreeMap<String, String>,
+) -> Result<Child, Failure> {
+    Command::new(program)
+        .args(args)
+        .current_dir(directory)
+        .env_clear()
+        .env("PATH", "/usr/local/bin:/usr/bin:/bin")
+        .env("LANG", "C.UTF-8")
+        .env("TMPDIR", "/tmp")
+        .envs(environment)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|_| Failure::ToolUnavailable)
+}
+
+pub(crate) async fn checked_build(
+    client: &WorkerClient,
+    args: &[String],
+    directory: &Path,
+    environment: &BTreeMap<String, String>,
+    seconds: u64,
+) -> Result<(), Failure> {
+    let mut child = spawn("/usr/local/bin/ayni", args, directory, environment)?;
+    let stdout = child.stdout.take().ok_or(Failure::ExecutionFailed)?;
+    let stderr = child.stderr.take().ok_or(Failure::ExecutionFailed)?;
+    let execution = async {
+        let (status, (), ()) = tokio::join!(
+            child.wait(),
+            build_output::capture(client, OutputStream::Stdout, stdout),
+            build_output::capture(client, OutputStream::Stderr, stderr),
+        );
+        match status {
+            Ok(status) if status.success() => Ok(()),
+            _ => Err(Failure::ExecutionFailed),
+        }
+    };
+    if let Ok(result) = tokio::time::timeout(Duration::from_secs(seconds), execution).await {
+        result
+    } else {
+        let _ = child.kill().await;
+        let _ = child.wait().await;
+        Err(Failure::ExecutionDeadline)
+    }
+}
+
+mod build_output;
 
 async fn bounded(reader: impl AsyncRead + Unpin) -> Result<Vec<u8>, Failure> {
     let mut bytes = Vec::new();

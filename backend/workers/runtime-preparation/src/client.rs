@@ -1,5 +1,6 @@
 //! Exact stage capability transport. No token, credential or provider response is logged.
 use crate::Failure;
+use ayni_orchestrator_events::execution_diagnostics::BuildOutput;
 use ayni_orchestrator_events::runtime_preparation::{
     Binding, BuildMilestone, MAX_SUPERVISOR_RESPONSE_BYTES, StageClaim, StageReport, WorkerRequest,
     WorkerResponse,
@@ -90,6 +91,22 @@ impl WorkerClient {
             self.call::<WorkerResponse>(&WorkerRequest::BuildProgress { milestone }),
         )
         .await;
+    }
+
+    pub(crate) async fn build_output(&self, output: BuildOutput) -> bool {
+        let request = WorkerRequest::BuildOutput { output };
+        for _ in 0..2 {
+            if let Ok(Ok(response)) = tokio::time::timeout(
+                Duration::from_millis(750),
+                self.call::<WorkerResponse>(&request),
+            )
+            .await
+                && response.accepted
+            {
+                return true;
+            }
+        }
+        false
     }
 
     /// # Errors

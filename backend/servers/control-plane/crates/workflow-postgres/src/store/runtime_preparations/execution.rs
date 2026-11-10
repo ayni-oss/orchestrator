@@ -1,7 +1,7 @@
 use super::admission::current;
 use super::*;
 use ayni_orchestrator_events::execution_diagnostics::{
-    CERTIFICATION_DIAGNOSTIC, CertificationDiagnostic, Diagnostic, Kind,
+    BuildOutput, CERTIFICATION_DIAGNOSTIC, CertificationDiagnostic, Diagnostic, Kind,
 };
 use ayni_orchestrator_events::runtime_preparation::{
     BUILD_REPORT_KEY, BUILD_STEPS, BuildMilestone, BuildReport,
@@ -80,6 +80,53 @@ impl WorkflowStore {
         }
         .into();
         crate::store::execution_diagnostics::append(&tx, &record).await?;
+        tx.commit().await?;
+        driver.abort();
+        Ok(())
+    }
+    /// Save one bounded output chunk from the currently bound build worker.
+    /// # Errors
+    /// Reject invalid output, conflicting sequence reuse or a stale binding.
+    pub async fn record_runtime_build_output(
+        &self,
+        b: &Binding,
+        output: BuildOutput,
+    ) -> Result<(), StoreError> {
+        if b.stage != "build" || !output.valid() {
+            return Err(StoreError::InvalidInput("runtime build output"));
+        }
+        let (mut client, driver) = crate::connect(&self.database_url).await?;
+        let tx = client.transaction().await?;
+        authorized(&tx, b).await?;
+        let generation = b.generation.to_string();
+        let stream = serde_json::to_value(output.stream).map_err(|_| StoreError::CorruptState)?;
+        let stream = stream.as_str().ok_or(StoreError::CorruptState)?;
+        let sequence = output.sequence.to_string();
+        // The operation lock in authorized serializes output writes for this binding.
+        let previous = tx.query_opt(
+            "SELECT diagnostic FROM workflow_execution_diagnostics WHERE kind='runtime' AND execution_id=$1
+             AND diagnostic::jsonb->>'event'='build_output' AND diagnostic::jsonb->>'generation'=$2
+             AND diagnostic::jsonb->'output'->>'stream'=$3 AND diagnostic::jsonb->'output'->>'sequence'=$4",
+            &[&b.operation_id, &generation, &stream, &sequence],
+        ).await?;
+        if let Some(previous) = previous {
+            let value: Diagnostic =
+                serde_json::from_str(previous.get(0)).map_err(|_| StoreError::CorruptState)?;
+            if value.output.as_ref() != Some(&output) {
+                return Err(StoreError::ConfigurationRevisionConflict);
+            }
+        } else {
+            let mut record = Diagnostic::new(
+                Kind::Runtime,
+                &b.operation_id,
+                b.generation,
+                &b.stage,
+                "build_output",
+            );
+            record.pod_uid.clone_from(&b.pod_uid);
+            record.output = Some(output);
+            crate::store::execution_diagnostics::append(&tx, &record).await?;
+        }
         tx.commit().await?;
         driver.abort();
         Ok(())
