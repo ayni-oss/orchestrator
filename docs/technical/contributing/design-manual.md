@@ -87,6 +87,17 @@ requirement (source control, runtime registry and signing key) with a checkmark
 when ready or an attention icon when incomplete. Put read-only connection details
 in the shared info hover; keep the registry and signer selectors visible.
 
+The lock-check step keeps the branch selector as its main control and preserves
+the detailed report below it. Show check status beside the title and use a ghost
+refresh icon at the right to run the check. Keep the last report visible during
+a recheck; a changed branch or source revision requires a fresh check before
+showing a passing current status.
+
+The review step uses the shared branch label and copyable code block for its
+reviewed commit. Keep build-attempt and replacement controls visible, disabling
+them when build permission is off; removing permission also clears replacement
+permission. This keeps the form stable without granting extra authority.
+
 ## Verification
 
 Exercise delayed responses as well as fast responses. Check that known page

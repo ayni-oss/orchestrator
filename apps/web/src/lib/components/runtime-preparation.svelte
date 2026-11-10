@@ -1,11 +1,13 @@
 <script lang="ts">
+ import BranchLabel from './branch-label.svelte';
+ import CopyableCode from './copyable-code.svelte';
  import InfoTooltip from "./info-tooltip.svelte";
  import TitleRow from "./title-row.svelte";
  import ActivitySkeleton from "./activity-skeleton.svelte";
  import RuntimeLoading from "./runtime-loading.svelte";
  import { protectUnsavedChanges } from "$lib/unsaved-changes.svelte";
  import { onMount, tick, untrack, type Snippet } from 'svelte';
- import { CircleCheck, CircleAlert, Copy, RefreshCw } from '@lucide/svelte';
+ import { CircleCheck, CircleAlert, RefreshCw } from '@lucide/svelte';
  import { Button } from '$lib/components/ui/button/index.js';
  import { Input } from '$lib/components/ui/input/index.js';
  import { Label } from '$lib/components/ui/label/index.js';
@@ -105,6 +107,18 @@
   !blockingFindings.length
    ? checkedCommit : undefined
  );
+ const lockCheckStatus: {label: string; tone: StatusTone} = $derived.by(() => {
+  if (checkingDefault || inspectionLoading) return {label:'Checking',tone:'active'};
+  if (inspectionPending) return {label:'Needs recovery',tone:'warning'};
+  if (inspectionError) return {label:'Unavailable',tone:'danger'};
+  if (!candidateInspection) return {label:'Not checked',tone:'neutral'};
+  if (candidateInspection.state === 'accepted') return {label:'Pending',tone:'active'};
+  if (candidateInspection.state === 'superseded' || candidateInspection.connectionRevision !== connection?.revision)
+   return {label:'Recheck required',tone:'warning'};
+  if (candidateInspection.state !== 'completed' || !candidateInspection.result || blockingFindings.length)
+   return {label:'Needs attention',tone:'warning'};
+  return reviewedCommit ? {label:'Passed',tone:'success'} : {label:'Recheck required',tone:'warning'};
+ });
  const validSigningReview = $derived(
   signerReady && !!signer?.publicKey && signerTrustMissing &&
   !inspectionPending && !checkingDefault && candidateInspection?.state === 'completed' &&
@@ -560,6 +574,7 @@
     {#snippet badge()}
      {#if currentStep === 0}
       <span aria-live="polite"><StatusBadge status={integrationsReady ? 'Ready' : 'Needs attention'} tone={integrationsReady ? 'success' : 'warning'} /></span>
+     {:else if currentStep === 1}<span aria-live="polite"><StatusBadge status={lockCheckStatus.label} tone={lockCheckStatus.tone} /></span>
      {:else if currentStep >= 3 && !pending}<span aria-live="polite"><StatusBadge status={runStatus.label} tone={runStatus.tone} /></span>{/if}
     {/snippet}
     {#snippet actions()}
@@ -571,6 +586,12 @@
      <Button variant="ghost" size="icon" aria-label="Refresh integrations" title="Reload available integrations from Configuration"
       aria-busy={refreshingIntegrations} disabled={busy} onclick={refreshIntegrations}>
       <RefreshCw class={{ 'motion-safe:animate-spin': refreshingIntegrations }} aria-hidden="true"/>
+     </Button>
+    {:else if currentStep === 1}
+     <Button variant="ghost" size="icon" aria-label="Check ayni.lock" title="Check ayni.lock on the selected branch"
+      aria-busy={checkingDefault} disabled={busy || recheckDisabled || checkingDefault || !!pending || onboardingActive}
+      onclick={recheckDefaultBranch}>
+      <RefreshCw class={{ 'motion-safe:animate-spin': checkingDefault }} aria-hidden="true" />
      </Button>
     {:else if currentStep >= 3 && !pending}
      <div class="flex shrink-0 items-center gap-2">
@@ -631,15 +652,8 @@
     </div>
    {:else if currentStep === 1}
     {@render branchPicker()}
-    <p class="text-sm text-muted-foreground">Check the selected branch to inspect the exact commit’s policy, lock, and trust requirements.</p>
-    <Button variant="outline" disabled={busy || recheckDisabled || checkingDefault || !!pending || onboardingActive}
-     onclick={recheckDefaultBranch}>
-     {checkingDefault ? 'Checking ayni.lock…' : 'Check ayni.lock'}
-    </Button>
     <div class="space-y-2" aria-live="polite">
-     {#if checkingDefault}
-      <p class="text-sm">Resolving the selected branch and inspecting its latest commit…</p>
-     {:else if candidateInspection}
+     {#if candidateInspection}
       <h4 class="text-sm font-medium">Lock check report</h4>
       <InformationTable aligned rows={[
        {label:'ayni.lock check',value:candidateInspection.state === 'accepted' ? 'Pending' :
@@ -672,6 +686,12 @@
       {#each blockingFindings as finding (finding.code + finding.path)}
        <p class="text-sm">{finding.action}</p>
       {/each}
+     {:else if checkingDefault}
+      <h4 class="text-sm font-medium">Lock check report</h4>
+      <InformationTable aligned loading rows={[
+       {label:'ayni.lock check',value:''},{label:'Checked commit',value:''},
+       {label:'Signing key',value:''},{label:'ayni version',value:''},{label:'Lock fingerprint',value:''},
+      ]} />
      {:else}
       <p class="text-sm">No repository check has been saved.</p>
      {/if}
@@ -726,15 +746,21 @@
      {/if}
     </div>
    {:else if currentStep === 2}
-    {#if reviewedCommit}<p class="text-sm">Reviewed commit <code class="break-all">{reviewedCommit}</code> on {branch || 'the default branch'}.</p>
-    {:else}<p class="text-sm">Recheck the branch before starting a new preparation.</p>{/if}
+    <div class="flex justify-end"><BranchLabel name={branch || repo.defaultBranch} /></div>
+    <div class="space-y-2">
+     <p class="text-sm font-medium">Reviewed commit</p>
+     <CopyableCode value={reviewedCommit || 'Check the branch before starting a new preparation.'} label="Copy reviewed commit" disabled={busy}
+      oncopy={reviewedCommit ? () => perform(async () => {
+       await navigator.clipboard.writeText(reviewedCommit!);
+       toast.success('Commit copied');
+      }) : undefined} />
+    </div>
     {#if !deploymentEnabled}<p class="text-sm">Preparing a runtime image requires a worker profile configured by the deployment administrator.</p><Button variant="link" class="px-0" href="/settings/runtime-signing">View ayni runtime settings</Button>{/if}
-    <p class="text-sm text-muted-foreground">Review the registry, signer, and limits for this run. The run continues if you close the browser.</p>
    <InformationTable rows={[
     {label:'Runtime registry',value:registryReady ? registry?.displayName || 'Selected' : 'Choose a registry in Connect integrations'},
     {label:'Runtime signer',value:signerReady ? signer?.keyId || 'Selected' : 'Choose a signing key in Connect integrations'},
    ]}/>
-   {#if signer}<details class="rounded-md border p-3"><summary class="cursor-pointer text-sm font-medium">Signing key details</summary><div class="space-y-3 pt-3"><InformationTable rows={[{label:'Key name',value:signer.keyId},{label:'Public key',value:signer.publicKey || 'Unavailable',monospace:true}]}/><Button variant="outline" onclick={() => perform(() => navigator.clipboard.writeText(signer!.publicKey))}>Copy public key</Button><p class="text-xs text-muted-foreground">Use this key name and public key together in the repository’s .ayni.toml trust policy.</p></div></details>{/if}
+
    {#if signer && signerTrustMissing}
     <div class="space-y-2 rounded-md border p-3">
      <p class="text-sm font-medium">The checked commit does not trust this signing key.</p>
@@ -745,7 +771,7 @@
    {/if}
    <div class="flex flex-wrap gap-4"><div class="space-y-2"><Label for={`runtime-platform-${repo.id}`}>Runtime platform</Label><NativeSelect.Root id={`runtime-platform-${repo.id}`} bind:value={platform} disabled={busy || !!pending}><NativeSelect.Option value="linux/arm64">Linux arm64</NativeSelect.Option><NativeSelect.Option value="linux/amd64">Linux amd64</NativeSelect.Option></NativeSelect.Root></div><div class="space-y-2"><Label for={`runtime-seconds-${repo.id}`}>Time limit (seconds)</Label><Input id={`runtime-seconds-${repo.id}`} type="number" min={1} max={86400} bind:value={seconds} disabled={busy || !!pending}/></div></div>
    <label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowBuild} onchange={() => { if (!allowBuild) allowReplace = false; }} disabled={busy || !!pending}/>Allow a bounded build if the image is missing</label>
-   {#if allowBuild}<div class="space-y-2"><Label for={`runtime-builds-${repo.id}`}>Maximum build attempts</Label><Input id={`runtime-builds-${repo.id}`} type="number" min={1} max={10} bind:value={builds} disabled={busy || !!pending}/><p class="text-xs text-muted-foreground">The qualified deployment resource limits also apply. Interrupted builds consume their retained attempt allowance.</p></div><label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowReplace} disabled={busy || !!pending}/>Also allow replacement if an existing image is invalid</label>{/if}
+   <div class="space-y-2"><Label for={`runtime-builds-${repo.id}`}>Maximum build attempts</Label><Input id={`runtime-builds-${repo.id}`} type="number" min={1} max={10} bind:value={builds} disabled={!allowBuild || busy || !!pending}/><p class="text-xs text-muted-foreground">The qualified deployment resource limits also apply. Interrupted builds consume their retained attempt allowance.</p></div><label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowReplace} disabled={!allowBuild || busy || !!pending}/>Also allow replacement if an existing image is invalid</label>
    {:else}
     <section class="rounded-md border bg-muted/30 p-4" aria-label="Preparation summary">
      <InformationTable aligned rows={[
@@ -783,19 +809,11 @@
     {#if currentStep === 4 && !pending && image}
      <div class="space-y-2 border-t pt-3">
       <p class="text-sm font-medium">{image.confirmed ? 'Registry image available' : 'Image destination'}</p>
-      <div class="flex items-start gap-2 rounded-md border bg-muted/30 p-2">
-       <pre class="min-w-0 flex-1 px-1 py-2 text-xs whitespace-pre-wrap break-all"><code>{image.reference || image.destination}</code></pre>
-       {#if image.reference && verified}
-        {@const reference = image.reference}
-        <Button variant="outline" size="icon" aria-label="Copy image reference" title="Copy image reference" disabled={busy}
-         onclick={() => perform(async () => {
-          await navigator.clipboard.writeText(reference);
-          toast.success('Image reference copied');
-         })}>
-         <Copy aria-hidden="true" />
-        </Button>
-       {/if}
-      </div>
+      <CopyableCode value={image.reference || image.destination} label="Copy image reference" disabled={busy}
+       oncopy={image.reference && verified ? () => perform(async () => {
+        await navigator.clipboard.writeText(image.reference!);
+        toast.success('Image reference copied');
+       }) : undefined} />
       {#if !image.confirmed}<p class="text-xs text-muted-foreground">No published image is confirmed by this status yet.</p>{/if}
       <a class="text-sm text-primary underline underline-offset-4" href={image.url} target="_blank" rel="noreferrer">Open registry package</a>
      </div>

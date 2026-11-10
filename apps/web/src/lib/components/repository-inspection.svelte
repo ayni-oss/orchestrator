@@ -256,7 +256,7 @@
   <Label for={`runtime-branch-${repo.id}`}>Runtime branch</Label>
   <AutosaveField savedRevision={branchSavedRevision}>
    <NativeSelect.Root data-slot="input-group-control" id={`runtime-branch-${repo.id}`} class="w-full" value={branch}
-    onchange={saveBranch} disabled={busy || !!pending} aria-describedby={`runtime-branch-help-${repo.id}`}>
+    onchange={saveBranch} disabled={busy || !!pending}>
     <NativeSelect.Option value="">Default branch</NativeSelect.Option>
     {#if branch && !branches.includes(branch)}
      <NativeSelect.Option value={branch}>{branch} (saved selection)</NativeSelect.Option>
@@ -264,7 +264,6 @@
     {#each branches as name (name)}<NativeSelect.Option value={name}>{name}</NativeSelect.Option>{/each}
    </NativeSelect.Root>
   </AutosaveField>
-  <p id={`runtime-branch-help-${repo.id}`} class="text-xs text-muted-foreground">Check the selected branch before reviewing its commit.</p>
   {#if loadingBranches}<p role="status" class="sr-only">Loading branches…</p>
   {:else if branchError}
    <Feedback kind="error" title="Could not list branches" message={branchError}/>

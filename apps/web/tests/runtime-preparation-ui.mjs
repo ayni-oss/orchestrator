@@ -213,9 +213,15 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await next().click();
  await steps.getByRole('button',{name:/Completed:.*Connect integrations/}).waitFor();
  assert.ok(await next().isDisabled());
- await status.getByRole('button',{name:'Check ayni.lock',exact:true}).click();
+ const lockCheckAction=status.locator('[data-title-actions]').getByRole('button',{name:'Check ayni.lock',exact:true});
+ assert.equal(await lockCheckAction.locator('svg').count(),1);
+ assert.equal(await lockCheckAction.textContent(),'');
+ assert.equal(await status.getByText('Check the selected branch before reviewing its commit.',{exact:true}).count(),0);
+ assert.equal(await status.getByText('Check the selected branch to inspect the exact commit’s policy, lock, and trust requirements.',{exact:true}).count(),0);
+ await lockCheckAction.click();
  await status.getByRole('heading',{name:'Lock check report',exact:true}).waitFor();
- await status.getByText('Passed',{exact:true}).waitFor();
+ await status.locator('[data-title-content]').getByText('Passed',{exact:true}).waitFor();
+ await status.locator('dd').getByText('Passed',{exact:true}).waitFor();
  await status.getByText('fixture-signer · Public key does not match',{exact:true}).waitFor();
  const report= status.locator('dl').filter({hasText:'Lock fingerprint'});
  const valueStarts=await report.locator('dd').evaluateAll(values=>values.map(value=>value.getBoundingClientRect().left));
@@ -282,13 +288,27 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await next().click();
  await page.unroute('**/api/ResolveRepositoryDefaultCommit');
  await page.unroute('**/api/InspectRepository');
- await preparation.getByText('Signing key details',{exact:true}).click();
- await preparation.getByText('Key name',{exact:true}).waitFor();
- await preparation.locator('details').filter({hasText:'Signing key details'}).getByText('fixture-signer',{exact:true}).waitFor();
- await preparation.getByText('Signing key details',{exact:true}).click();
+ assert.equal(await preparation.getByText('Signing key details',{exact:true}).count(),0);
+ assert.equal(await preparation.getByText('Review the registry, signer, and limits for this run. The run continues if you close the browser.',{exact:true}).count(),0);
+ await preparation.locator('pre > code').filter({hasText:'f'.repeat(40)}).waitFor();
+ await preparation.getByText('Branch',{exact:true}).locator('..').getByText('main',{exact:true}).waitFor();
+ await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin});
+ try {
+  await preparation.getByRole('button',{name:'Copy reviewed commit',exact:true}).click();
+  assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),'f'.repeat(40));
+ } finally { await page.context().clearPermissions(); }
  assert.equal(await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).isChecked(),false);
- assert.equal(await preparation.getByRole('checkbox',{name:'Also allow replacement if an existing image is invalid',exact:true}).count(),0);
+ const replacement=preparation.getByRole('checkbox',{name:'Also allow replacement if an existing image is invalid',exact:true});
+ const attempts=preparation.getByLabel('Maximum build attempts',{exact:true});
+ assert.equal(await replacement.isVisible(),true);
+ assert.equal(await replacement.isDisabled(),true);
+ assert.equal(await attempts.isDisabled(),true);
+ const attemptsBefore=await attempts.boundingBox();
  await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).check();
+ assert.equal(await replacement.isEnabled(),true);
+ assert.equal(await attempts.isEnabled(),true);
+ assert.deepEqual(await attempts.boundingBox(),attemptsBefore);
+
  await preparation.getByRole('checkbox',{name:'Also allow replacement if an existing image is invalid',exact:true}).check();
  await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).uncheck();
  await preparation.getByRole('checkbox',{name:'Allow a bounded build if the image is missing',exact:true}).check();

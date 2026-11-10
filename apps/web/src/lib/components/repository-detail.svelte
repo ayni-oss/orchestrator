@@ -1,4 +1,5 @@
 <script lang="ts">
+ import BranchLabel from './branch-label.svelte';
  import InfoTooltip from './info-tooltip.svelte';
  import Skeleton from './ui/skeleton/skeleton.svelte';
  import RepositoryStatusLoading from './repository-status-loading.svelte';
@@ -7,7 +8,7 @@
  import { goto } from '$app/navigation';
  import { page } from '$app/state';
  import { Tabs } from 'bits-ui';
- import { Eye, EyeOff, GitBranch } from '@lucide/svelte';
+ import { Eye, EyeOff } from '@lucide/svelte';
  import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
  import * as Dialog from '$lib/components/ui/dialog/index.js';
  import AyniMark from './ayni-mark.svelte';
@@ -109,11 +110,7 @@
   <span class={metadataClass}>
    {#if repo.private}<EyeOff aria-hidden="true" />Private{:else}<Eye aria-hidden="true" />Public{/if}
   </span>
-  <span class={metadataClass}>
-   <GitBranch aria-hidden="true" />
-   <span class="sr-only">Default branch</span>
-   <span class="min-w-0 [overflow-wrap:anywhere]">{repo.defaultBranch}</span>
-  </span>
+  <BranchLabel name={repo.defaultBranch} label="Default branch" />
   {/if}
  </div>
  <Tabs.Root value={tab} onValueChange={selectTab}>
