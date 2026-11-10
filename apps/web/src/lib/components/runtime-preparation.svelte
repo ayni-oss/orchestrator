@@ -13,7 +13,11 @@
  import { trustSnippet } from '$lib/runtime-signing';
  import { inspectionReasons, type Repository, type RepositoryInspection } from '$lib/repositories';
  import { runtimeOverview, runtimeStages, runtimeReasons, onboardingReasons, runtimeRegistryImage, type RepositoryRuntimeRun, type RuntimePreparation, type RuntimeSigner, type RuntimeCommand } from '$lib/runtime-preparation';
- let { repo, branch = '', checkedCommit, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections, onSourceRefresh, branchPicker, children }: { repo: Repository; branch?: string; checkedCommit?: string; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void>; onSourceRefresh: (value: Connection | undefined) => void; branchPicker: Snippet; children: Snippet<[Snippet, Snippet]> } = $props();
+ type RepositoryBranches = {
+  names: string[]; loading: boolean; error: string;
+  refresh: () => Promise<void>; more?: () => Promise<void>;
+ };
+ let { repo, branch = '', checkedCommit, latestInspection = null, inspectionLoading = false, inspectionError = '', connection, recheckDefaultBranch, recheckDisabled = false, checkingDefault = false, inspectionPending = false, refreshInspections, onSourceRefresh, branchPicker, repositoryBranches, children }: { repo: Repository; branch?: string; checkedCommit?: string; latestInspection?: RepositoryInspection | null; inspectionLoading?: boolean; inspectionError?: string; connection?: Connection; recheckDefaultBranch?: () => Promise<void>; recheckDisabled?: boolean; checkingDefault?: boolean; inspectionPending?: boolean; refreshInspections?: () => Promise<void>; onSourceRefresh: (value: Connection | undefined) => void; branchPicker: Snippet; repositoryBranches: RepositoryBranches; children: Snippet<[Snippet, Snippet]> } = $props();
  let onboarding = $state.raw<RepositoryRuntimeRun | null>(null);
  let deploymentEnabled = $state(false), developmentOnly = $state(false);
  let loaded = $state(false);
@@ -23,6 +27,7 @@
  let passedInspection = $state('');
  let passedPreparation = $state('');
  let requestedSigningUpdate = $state('');
+ let signingChangeBranch = $state('');
  let stepHeading = $state<HTMLHeadingElement>();
  let busy = $state(false), error = $state('');
  let polling = false, mounted = false, historySequence = 0;
@@ -88,6 +93,19 @@
   branch, candidateInspection?.commitSha, connection?.revision, signer?.id, signer?.revision,
  ]));
  const signingUpdateRequested = $derived(canRequestSigningUpdate && requestedSigningUpdate === signingUpdateScope);
+ const signingUpdateBase = $derived(branch || repo.defaultBranch);
+ const signingChangeBranches = $derived(repositoryBranches.names.filter(name => name !== signingUpdateBase));
+ const signingPullRequest = $derived.by(() => {
+  if (!signingUpdateRequested || !signingUpdateBase || !signingChangeBranches.includes(signingChangeBranch)) return undefined;
+  const repository = repo.fullName.split('/').map(encodeURIComponent).join('/');
+  const comparison = `${encodeURIComponent(signingUpdateBase)}...${encodeURIComponent(signingChangeBranch)}`;
+  const query = new URLSearchParams({
+   quick_pull: '1',
+   title: 'fix(runtime): update the trusted signing key',
+   body: 'Update the runtime signing key in `.ayni.toml`, preserve the other trusted keys, and regenerate `.ayni.lock`.',
+  });
+  return `https://github.com/${repository}/compare/${comparison}?${query}`;
+ });
  const canReview = $derived(signerTrustMissing ? signingUpdateRequested : !!reviewedCommit);
  const retainedRun = $derived(onboarding && (onboarding.settings.branch || '') === branch &&
   onboarding.settings.expectedConnectionRevision === connection?.revision &&
@@ -434,7 +452,10 @@
        {#if canRequestSigningUpdate}
         <label class="flex items-center gap-2 text-sm">
          <input type="checkbox" class="accent-primary" checked={signingUpdateRequested}
-          onchange={event => { requestedSigningUpdate = event.currentTarget.checked ? signingUpdateScope : ''; }}/>
+          onchange={event => {
+           requestedSigningUpdate = event.currentTarget.checked ? signingUpdateScope : '';
+           signingChangeBranch = '';
+          }}/>
          Update signing key
         </label>
        {/if}
@@ -453,12 +474,31 @@
      <p class="text-sm">The proposed change pins the selected public key in <code>.ayni.toml</code>, preserves the other trusted keys, and regenerates <code>.ayni.lock</code>.</p>
      <InformationTable aligned rows={[
       {label:'Repository',value:repo.fullName},
-      {label:'Target branch',value:branch || 'Repository default'},
+      {label:'Target branch',value:signingUpdateBase},
       {label:'Inspected commit',value:candidateInspection.commitSha,monospace:true},
       {label:'Signing key',value:signer.keyId},
      ]}/>
      <pre class="overflow-x-auto rounded-md bg-muted p-2 text-xs">{trustSnippet(signer)}</pre>
-     <p class="text-sm">Automatic pull request creation is unavailable from runtime onboarding. After the trust change is merged, check <code>ayni.lock</code> again to continue runtime preparation.</p>
+     <p class="text-sm">Push the trust policy and regenerated lock to a separate branch, then select that branch to open a pull request on GitHub.</p>
+     <div class="space-y-2">
+      <Label for="signing-change-branch">Branch with signing key changes</Label>
+      <div class="flex items-center gap-2">
+       <NativeSelect.Root id="signing-change-branch" class="min-w-0 flex-1" bind:value={signingChangeBranch} disabled={repositoryBranches.loading}>
+        <NativeSelect.Option value="">Choose a branch</NativeSelect.Option>
+        {#each signingChangeBranches as name (name)}<NativeSelect.Option value={name}>{name}</NativeSelect.Option>{/each}
+       </NativeSelect.Root>
+       <Button variant="outline" size="icon" aria-label="Refresh branches" title="Refresh branches"
+        aria-busy={repositoryBranches.loading} disabled={repositoryBranches.loading} onclick={repositoryBranches.refresh}>
+        <RefreshCw class={{'motion-safe:animate-spin':repositoryBranches.loading}} aria-hidden="true"/>
+       </Button>
+      </div>
+      {#if repositoryBranches.error}
+       <p role="status" class="text-sm text-muted-foreground">{repositoryBranches.error}</p>
+      {:else if repositoryBranches.more}
+       <Button variant="outline" disabled={repositoryBranches.loading} onclick={repositoryBranches.more}>More branches</Button>
+      {/if}
+     </div>
+     <p class="text-sm text-muted-foreground">After the pull request is merged, check <code>ayni.lock</code> again to continue runtime preparation.</p>
     </div>
    {:else if currentStep === 2}
     {#if reviewedCommit}<p class="text-sm">Reviewed commit <code class="break-all">{reviewedCommit}</code> on {branch || 'the default branch'}.</p>
@@ -521,7 +561,9 @@
     {#if currentStep > 0}<Button variant="outline" onclick={() => visit(currentStep - 1)}>Back</Button>{/if}
     {#if currentStep === 0 || currentStep === 1 || currentStep === 3}
      <Button class="ml-auto" disabled={busy || (currentStep === 0 ? !integrationsReady : currentStep === 1 ? !canReview : !verificationReached)} onclick={advance}>Next</Button>
-    {:else if currentStep === 2 && !signingUpdateRequested}
+    {:else if currentStep === 2 && signingUpdateRequested}
+     <Button class="ml-auto" href={signingPullRequest} disabled={!signingPullRequest || repositoryBranches.loading} target="_blank" rel="noopener noreferrer">Open PR</Button>
+    {:else if currentStep === 2}
      <Button class="ml-auto" disabled={!canStart} onclick={start}>{allowBuild ? 'Build and publish runtime' : 'Start preparation'}</Button>
     {/if}
    </div>

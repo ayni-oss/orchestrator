@@ -278,7 +278,8 @@
 {/snippet}
 
 <div data-repository-inspection={repo.id}>
- <RuntimePreparation {repo} {connection} {branchPicker} onSourceRefresh={refreshSource} branch={branch.trim()} checkedCommit={checked?.branch === branch.trim() ? checked?.sha : undefined} latestInspection={inspections[0] || null} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || (!pending && !canInspect)} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}>
+ <RuntimePreparation {repo} {connection} {branchPicker} onSourceRefresh={refreshSource} branch={branch.trim()} checkedCommit={checked?.branch === branch.trim() ? checked?.sha : undefined} latestInspection={inspections[0] || null} inspectionLoading={!inspectionLoaded && !error} inspectionError={error} checkingDefault={checkingDefault} recheckDisabled={busy || (!pending && !canInspect)} inspectionPending={!!pending} refreshInspections={() => load()} recheckDefaultBranch={() => perform(recheckDefaultBranch)}
+  repositoryBranches={{names:branches, loading:loadingBranches, error:branchError, refresh:() => loadBranches(), more:nextBranchPage ? () => loadBranches(nextBranchPage) : undefined}}>
   {#snippet children(runtime, preparationActivity)}
    <Tabs.Content value="runtime" class="space-y-6">
     {@render runtime()}
