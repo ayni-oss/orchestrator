@@ -145,10 +145,7 @@
   (!!operation?.buildsStarted && (operation.stage === 'freeze_candidate' || !!operation.unsignedManifestDigest)));
  const activeBuildStep = $derived(buildComplete ? buildSteps.length :
   buildSteps.findIndex(step => step.milestone === operation?.buildMilestone));
- const buildReportMessage = $derived(!operation?.allowBuild ? 'This run can only reuse an existing image.' :
-  operation.state === 'ready' && !operation.buildsStarted ? 'An existing image was reused.' :
-  operation.buildsStarted ? 'There is no active build. See the preparation summary for the current status.' :
-  activeStates.has(operation.state) ? 'No build attempt has started.' : 'This run ended before starting a build.');
+ const sourceIssue = $derived(operation?.safeReason?.startsWith('source_') && !operation.buildsStarted);
  const previousOperations = $derived(operations.filter(value => value.id !== overview.operation?.id));
  const matchingOperation = $derived(operation && (retainedRun?.preparationId === operation.id ||
   (!onboarding && !!reviewedCommit && operation.sourceCommit === reviewedCommit)) ? operation : undefined);
@@ -661,9 +658,13 @@
      {:else}
       <p class="text-sm text-muted-foreground">{onboardingActive ? ({resolving:'Checking the branch head…',inspecting:'Checking the committed ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') : onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' : overview.description}</p>
      {/if}
-     {#each overview.issues as issue (issue)}<p class="text-sm">{issue}</p>{/each}
+     {#if sourceIssue}
+      <p class="text-sm text-muted-foreground">See Activity for preparation details.</p>
+     {:else}
+      {#each overview.issues as issue (issue)}<p class="text-sm">{issue}</p>{/each}
+     {/if}
     </section>
-    {#if currentStep === 3 && operation && !onboardingActive && !onboardingBlocked}
+    {#if currentStep === 3 && operation && (building || operation.buildsStarted) && !onboardingActive && !onboardingBlocked}
      <section class="space-y-2 rounded-md border p-4" aria-labelledby={`build-report-${repo.id}`}>
       <h4 id={`build-report-${repo.id}`} class="text-sm font-medium">Build report</h4>
       {#if building || buildComplete}
@@ -679,7 +680,7 @@
         {/each}
        </ol>
       {:else}
-       <p class="text-sm text-muted-foreground">{buildReportMessage}</p>
+       <p class="text-sm text-muted-foreground">There is no active build. See Activity for preparation details.</p>
       {/if}
      </section>
     {:else if currentStep === 4 && operation}
