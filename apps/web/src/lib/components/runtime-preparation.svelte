@@ -52,7 +52,7 @@
   if (!onboardingBlocked && operation) {
    return operation.state === 'ready' || ['pull_final', 'verify_content', 'verify_compatibility', 'cleanup'].includes(operation.stage) ? 4 : 3;
   }
-  if (!deploymentEnabled || !connection?.enabled || !connection.activeCredentialRevision ||
+  if (!connection?.enabled || !connection.activeCredentialRevision ||
    !registries.some(value => value.enabled && value.activeCredentialRevision) ||
    !signers.some(value => value.enabled)) return 0;
   if (checkingDefault || !latestInspection || overview.issues.length) return 1;
@@ -209,8 +209,8 @@
   {#if candidateInspection}<p class="text-xs text-muted-foreground">Last check: {new Date(Number(candidateInspection.updatedAtUnixMs)).toLocaleString()}{candidateInspection.result?.ayniVersion ? ` · Ayni ${candidateInspection.result.ayniVersion}` : ''}</p>{/if}
   {#if overview.issues.length && !checkingDefault && !onboardingActive}<div class="space-y-2"><h4 class="font-medium">What needs attention</h4><ul class="list-disc space-y-2 break-words pl-5 text-sm">{#each overview.issues as issue (issue)}<li>{issue}</li>{/each}</ul></div>{/if}
   {#if developmentOnly || overview.operation?.developmentOnly}<p class="rounded-md border p-3 text-sm">Local development build mode. Cluster network isolation is not qualified; this result is for local development testing.</p>{/if}
-  {#if loaded && !deploymentEnabled && currentStep === 0}<p class="text-sm">Ask your administrator to enable a Kubernetes runtime profile.</p>{/if}
-  {#if overview.nextAction && !checkingDefault && !onboardingActive && !onboardingBlocked}<p class="text-sm"><span class="font-medium">Next step:</span> {expanded && !pending ? 'Review the configuration below, then prepare the latest commit on the selected branch.' : canConfigure ? 'Prepare the latest commit using the reviewed registry and signing settings.' : overview.nextAction}</p>{/if}
+  {#if loaded && !deploymentEnabled && !onboardingBlocked}<p class="text-sm">You can check the branch and review its commit. Preparing a runtime image requires a worker profile configured by the deployment administrator.</p>{/if}
+  {#if deploymentEnabled && overview.nextAction && !checkingDefault && !onboardingActive && !onboardingBlocked}<p class="text-sm"><span class="font-medium">Next step:</span> {expanded && !pending ? 'Review the configuration below, then prepare the latest commit on the selected branch.' : canConfigure ? 'Prepare the latest commit using the reviewed registry and signing settings.' : overview.nextAction}</p>{/if}
   <div class="flex flex-wrap gap-2">
    {#if canConfigure && !expanded}{#if onboarding?.settings}<Button disabled={!savedSettingsAvailable || (!!branch && !reviewedCommit)} onclick={() => perform(prepareLatest)}>Prepare latest commit</Button><Button variant="outline" onclick={() => perform(configure)}>Change runtime settings</Button>{:else}<Button onclick={() => perform(configure)}>Configure runtime</Button>{/if}{/if}
    {#if overview.operation && retryStates.has(overview.operation.state)}{@const current = overview.operation}<Button disabled={busy || !!pending} onclick={() => perform(() => command('RetryRuntimePreparation',current))}>{current.state === 'publication_uncertain' ? 'Reconcile publication' : 'Retry preparation'}</Button>{/if}
