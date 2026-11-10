@@ -10,7 +10,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  const previousInspection={...inspection,id:randomUUID(),idempotencyKey:randomUUID(),commitSha:'a'.repeat(40),state:'accepted',acceptedAtUnixMs:'1',updatedAtUnixMs:'1',result:undefined};
  inspection.acceptedAtUnixMs=String(Date.now());
  let operation,originalReceipt,startRequest,retryRequest,cancelRequest,run;
- await page.route('**/api/GetRepositoryRuntime',route=>route.fulfill({json:{run,preparationEnabled:true,signingUpdatePublicationEnabled:true}}));
+ await page.route('**/api/GetRepositoryRuntime',route=>route.fulfill({json:{run,preparationEnabled:true}}));
  await page.route('**/api/GetRepositoryRuntimeReceipt',route=>route.fulfill({json:{run:{...run,state:'resolving',preparationId:''}}}));
  await page.route('**/api/ListRepositoryInspections',route=>route.fulfill({json:{inspections:[inspection,previousInspection]}}));
  const catalogReply=await page.request.post(`${origin}/api/ListRepositories`,{headers:{'x-console-request':'1'},data:{limit:100}});
@@ -125,11 +125,11 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.equal(new Set(valueStarts).size,1);
  assert.ok(await next().isDisabled());
  await status.getByRole('checkbox',{name:'Update signing key',exact:true}).check();
- let signingRequest, pullRequest, signingWrites=0;
+ let signingRequest, pullRequest, signingWrites=0, publicationAllowed=false;
  await page.route('**/api/GetRuntimeSigningPullRequest',async route=>{
   assert.deepEqual(route.request().postDataJSON().review,{repositoryId,inspectionId,expectedConnectionRevision:'1',
    signerId,expectedSignerRevision:'1',baseBranch:'main'});
-  await route.fulfill({json:{pullRequest}});
+  await route.fulfill({json:{pullRequest,publicationAllowed}});
  });
  await page.route('**/api/OpenRuntimeSigningPullRequest',async route=>{
   signingWrites++;
@@ -142,6 +142,10 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.equal(await status.getByRole('combobox',{name:'Branch with signing key changes',exact:true}).count(),0);
  const openPr=status.getByRole('button',{name:'Open PR',exact:true});
  assert.equal(await openPr.locator('..').getByRole('button',{name:'Back',exact:true}).count(),0);
+ await status.getByText('Grant the installed GitHub App write access to Contents and Pull requests, then refresh.',{exact:true}).waitFor();
+ assert.ok(await openPr.isDisabled());
+ publicationAllowed=true;
+ await status.getByRole('button',{name:'Refresh pull request status',exact:true}).click();
  await openPr.click();
  const viewPr=status.getByRole('link',{name:'View PR',exact:true});
  await viewPr.waitFor();

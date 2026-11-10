@@ -3,7 +3,6 @@ use ayni_core::sha256_fingerprint;
 use ayni_orchestrator_events::task_publication::github_repository;
 use reqwest::{Client, Method, Url};
 use serde_json::{Value, json};
-use std::io::Read as _;
 use std::time::Duration;
 use tonic::Status;
 use zeroize::Zeroizing;
@@ -29,30 +28,11 @@ struct Publisher {
 }
 
 impl Publisher {
-    fn new(repository: &str) -> Result<Self, Status> {
+    fn new(repository: &str, token: Zeroizing<String>) -> Result<Self, Status> {
         let canonical = format!("https://github.com/{repository}.git");
         if github_repository(&canonical).as_deref() != Some(canonical.as_str()) {
             return Err(Status::failed_precondition(
                 "Invalid publication repository.",
-            ));
-        }
-        let path = std::env::var_os("ORCHESTRATOR_SIGNING_UPDATE_TOKEN_FILE").ok_or_else(|| {
-            Status::failed_precondition("Configure a signing update publisher for this repository.")
-        })?;
-        let mut token = Zeroizing::new(String::new());
-        std::fs::File::open(path)
-            .and_then(|file| file.take(4097).read_to_string(&mut token))
-            .map_err(|_| {
-                Status::failed_precondition(
-                    "The signing update publisher credential is unavailable.",
-                )
-            })?;
-        if token.trim().is_empty()
-            || token.len() > 4096
-            || token.trim().chars().any(char::is_control)
-        {
-            return Err(Status::failed_precondition(
-                "The signing update publisher credential is invalid.",
             ));
         }
         let client = Client::builder()
@@ -102,7 +82,7 @@ impl Publisher {
             404 if read => return Ok(None),
             401 | 403 | 404 => {
                 return Err(Status::permission_denied(
-                    "The publisher needs Contents and Pull requests write permission on this repository.",
+                    "The installed GitHub App lacks permission for this repository action.",
                 ));
             }
             409 | 422 => {
@@ -278,16 +258,20 @@ fn change_branch(request: &Change<'_>) -> String {
 
 pub(super) async fn lookup(
     request: Change<'_>,
+    token: Zeroizing<String>,
 ) -> Result<Option<v1::RuntimeSigningPullRequest>, Status> {
-    let publisher = Publisher::new(request.repository)?;
+    let publisher = Publisher::new(request.repository, token)?;
     publisher.verify_repository(&request).await?;
     publisher.pull(&request, &change_branch(&request)).await
 }
 
-pub(super) async fn open(request: Change<'_>) -> Result<v1::RuntimeSigningPullRequest, Status> {
+pub(super) async fn open(
+    request: Change<'_>,
+    token: Zeroizing<String>,
+) -> Result<v1::RuntimeSigningPullRequest, Status> {
     // Keep simultaneous requests in this process from racing between PR lookup and creation.
     let _guard = PUBLICATION.lock().await;
-    let publisher = Publisher::new(request.repository)?;
+    let publisher = Publisher::new(request.repository, token)?;
     publish(&publisher, &request).await
 }
 

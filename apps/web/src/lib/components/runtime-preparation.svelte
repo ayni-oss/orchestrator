@@ -23,7 +23,6 @@
  let passedInspection = $state('');
  let passedPreparation = $state('');
  let requestedSigningUpdate = $state('');
- let signingPublicationEnabled = $state(false);
  let signingPublicationBusy = $state(false);
  const pullStates = {
   RUNTIME_SIGNING_PULL_REQUEST_STATE_DRAFT: 'Draft',
@@ -32,7 +31,7 @@
   RUNTIME_SIGNING_PULL_REQUEST_STATE_MERGED: 'Merged',
  } as const;
  type PullRequest = {url: string; branch: string; state: typeof pullStates[keyof typeof pullStates]};
- type PullStatus = {scope: string; state: 'checking' | 'missing' | 'error'} | {scope: string; state: 'found'; pull: PullRequest};
+ type PullStatus = {scope: string; state: 'checking' | 'missing' | 'forbidden' | 'error'} | {scope: string; state: 'found'; pull: PullRequest};
  let pullStatus = $state.raw<PullStatus>();
  let pullSequence = 0;
  let stepHeading = $state<HTMLHeadingElement>();
@@ -243,22 +242,22 @@
   const sequence = ++pullSequence;
   pullStatus = {scope, state:'checking'};
   try {
-   const {pullRequest} = await rpc('GetRuntimeSigningPullRequest', {review});
+   const {pullRequest, publicationAllowed} = await rpc('GetRuntimeSigningPullRequest', {review});
    if (sequence !== pullSequence) return;
-   pullStatus = pullRequest ? {scope, state:'found', pull:checkedPull(pullRequest)} : {scope, state:'missing'};
-  } catch {
-   if (sequence === pullSequence) pullStatus = {scope, state:'error'};
+   pullStatus = pullRequest ? {scope, state:'found', pull:checkedPull(pullRequest)} : {scope, state:publicationAllowed ? 'missing' : 'forbidden'};
+  } catch (cause) {
+   if (sequence === pullSequence) pullStatus = {scope, state:cause instanceof RpcError && cause.status === 403 ? 'forbidden' : 'error'};
   }
  }
  $effect(() => {
-  if (currentStep !== 2 || signingPublicationBusy || !signingPublicationEnabled || !signingReview) return;
+  if (currentStep !== 2 || signingPublicationBusy || !signingReview) return;
   const scope = signingUpdateScope, review = signingReview;
   untrack(() => {
    if (currentPullStatus?.state !== 'found') void refreshSigningPullRequest(scope, review);
   });
  });
  async function openSigningPullRequest() {
-  if (!signingPublicationEnabled || signingPublicationBusy || !canRequestSigningUpdate || !signingReview || currentPullStatus?.state !== 'missing') return;
+  if (signingPublicationBusy || !canRequestSigningUpdate || !signingReview || currentPullStatus?.state !== 'missing') return;
   const scope = signingUpdateScope;
   signingPublicationBusy = true;
   try {
@@ -266,9 +265,11 @@
    if (mounted && scope === signingUpdateScope) pullStatus = {scope, state:'found', pull:checkedPull(pullRequest)};
   } catch (cause) {
    toast.error('Could not confirm the signing key pull request', {
-    description: cause instanceof RpcError && cause.status === 409
-     ? 'Check the branch and signing key again before retrying.'
-     : 'Refresh the pull request status before trying again.',
+    description: cause instanceof RpcError && cause.status === 403
+     ? 'Grant the installed GitHub App write access to Contents and Pull requests, then refresh.'
+     : cause instanceof RpcError && cause.status === 409
+      ? 'Check the branch and signing key again before retrying.'
+      : 'Refresh the pull request status before trying again.',
    });
    if (mounted && scope === signingUpdateScope) pullStatus = {scope, state:'error'};
   } finally {
@@ -280,7 +281,6 @@
   if (!mounted) return;
   const changed = result.run && (result.run.id !== onboarding?.id || result.run.state !== onboarding?.state);
   onboarding = result.run || null;
-  signingPublicationEnabled = result.signingUpdatePublicationEnabled === true;
   deploymentEnabled = result.preparationEnabled === true; developmentOnly = result.developmentOnly === true;
   if (changed && onboarding?.inspectionId) await refreshInspections?.();
  }
@@ -561,8 +561,8 @@
         {label:'Pull request status',value:signingPullRequest.state},
         {label:'Pull request branch',value:signingPullRequest.branch,monospace:true},
        ]}/>
-      {:else if !signingPublicationEnabled}
-       <p class="text-sm">This repository needs a signing update publisher before you can open a pull request here.</p>
+      {:else if currentPullStatus?.state === 'forbidden'}
+       <p class="text-sm">Grant the installed GitHub App write access to Contents and Pull requests, then refresh.</p>
       {:else if signingPublicationBusy}
        <p class="text-sm">Opening a draft pull request…</p>
       {:else if currentPullStatus?.state === 'missing'}
@@ -576,15 +576,13 @@
        {#if signingPullRequest}
         <Button href={signingPullRequest.url} target="_blank" rel="noopener noreferrer">View PR</Button>
        {:else}
-        <Button disabled={!signingPublicationEnabled || signingPublicationBusy || !canRequestSigningUpdate || currentPullStatus?.state !== 'missing'}
+        <Button disabled={signingPublicationBusy || !canRequestSigningUpdate || currentPullStatus?.state !== 'missing'}
          onclick={openSigningPullRequest}>{signingPublicationBusy ? 'Opening PR…' : 'Open PR'}</Button>
        {/if}
-       {#if signingPublicationEnabled}
-        <Button variant="outline" size="icon" aria-label="Refresh pull request status" title="Refresh pull request status"
-         disabled={signingPublicationBusy || currentPullStatus?.state === 'checking'} onclick={() => refreshSigningPullRequest()}>
-         <RefreshCw aria-hidden="true"/>
-        </Button>
-       {/if}
+       <Button variant="outline" size="icon" aria-label="Refresh pull request status" title="Refresh pull request status"
+        disabled={signingPublicationBusy || currentPullStatus?.state === 'checking'} onclick={() => refreshSigningPullRequest()}>
+        <RefreshCw aria-hidden="true"/>
+       </Button>
       </div>
      </div>
      {#if signingPullRequest?.state === 'Merged' || !canRequestSigningUpdate}

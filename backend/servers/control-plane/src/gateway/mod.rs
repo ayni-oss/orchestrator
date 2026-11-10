@@ -843,6 +843,7 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let code = match self.0.code() {
             Code::InvalidArgument => StatusCode::BAD_REQUEST,
+            Code::PermissionDenied => StatusCode::FORBIDDEN,
             Code::NotFound | Code::Unimplemented => StatusCode::NOT_FOUND,
             Code::AlreadyExists | Code::Aborted | Code::FailedPrecondition => StatusCode::CONFLICT,
             Code::ResourceExhausted => StatusCode::TOO_MANY_REQUESTS,

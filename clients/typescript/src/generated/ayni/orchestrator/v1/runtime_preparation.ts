@@ -337,7 +337,6 @@ export interface GetRepositoryRuntimeResponse {
   /** Deployment configuration, independent of the retained last-run outcome. */
   preparationEnabled: boolean;
   developmentOnly: boolean;
-  signingUpdatePublicationEnabled: boolean;
 }
 
 export interface OpenRuntimeSigningPullRequestRequest {
@@ -359,6 +358,7 @@ export interface GetRuntimeSigningPullRequestRequest {
 
 export interface GetRuntimeSigningPullRequestResponse {
   pullRequest?: RuntimeSigningPullRequest | undefined;
+  publicationAllowed: boolean;
 }
 
 export interface RuntimeSigningPullRequest {
@@ -5107,7 +5107,7 @@ export const GetRepositoryRuntimeRequest: MessageFns<GetRepositoryRuntimeRequest
 };
 
 function createBaseGetRepositoryRuntimeResponse(): GetRepositoryRuntimeResponse {
-  return { run: undefined, preparationEnabled: false, developmentOnly: false, signingUpdatePublicationEnabled: false };
+  return { run: undefined, preparationEnabled: false, developmentOnly: false };
 }
 
 export const GetRepositoryRuntimeResponse: MessageFns<GetRepositoryRuntimeResponse> = {
@@ -5120,9 +5120,6 @@ export const GetRepositoryRuntimeResponse: MessageFns<GetRepositoryRuntimeRespon
     }
     if (message.developmentOnly !== false) {
       writer.uint32(24).bool(message.developmentOnly);
-    }
-    if (message.signingUpdatePublicationEnabled !== false) {
-      writer.uint32(32).bool(message.signingUpdatePublicationEnabled);
     }
     return writer;
   },
@@ -5164,14 +5161,6 @@ export const GetRepositoryRuntimeResponse: MessageFns<GetRepositoryRuntimeRespon
             message.developmentOnly = reader.bool();
             continue;
           }
-          case 4: {
-            if (tag !== 32) {
-              break;
-            }
-
-            message.signingUpdatePublicationEnabled = reader.bool();
-            continue;
-          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -5197,11 +5186,6 @@ export const GetRepositoryRuntimeResponse: MessageFns<GetRepositoryRuntimeRespon
         : isSet(object.development_only)
         ? globalThis.Boolean(object.development_only)
         : false,
-      signingUpdatePublicationEnabled: isSet(object.signingUpdatePublicationEnabled)
-        ? globalThis.Boolean(object.signingUpdatePublicationEnabled)
-        : isSet(object.signing_update_publication_enabled)
-        ? globalThis.Boolean(object.signing_update_publication_enabled)
-        : false,
     };
   },
 
@@ -5216,9 +5200,6 @@ export const GetRepositoryRuntimeResponse: MessageFns<GetRepositoryRuntimeRespon
     if (message.developmentOnly !== false) {
       obj.developmentOnly = message.developmentOnly;
     }
-    if (message.signingUpdatePublicationEnabled !== false) {
-      obj.signingUpdatePublicationEnabled = message.signingUpdatePublicationEnabled;
-    }
     return obj;
   },
 
@@ -5232,7 +5213,6 @@ export const GetRepositoryRuntimeResponse: MessageFns<GetRepositoryRuntimeRespon
       : undefined;
     message.preparationEnabled = object.preparationEnabled ?? false;
     message.developmentOnly = object.developmentOnly ?? false;
-    message.signingUpdatePublicationEnabled = object.signingUpdatePublicationEnabled ?? false;
     return message;
   },
 };
@@ -5562,13 +5542,16 @@ export const GetRuntimeSigningPullRequestRequest: MessageFns<GetRuntimeSigningPu
 };
 
 function createBaseGetRuntimeSigningPullRequestResponse(): GetRuntimeSigningPullRequestResponse {
-  return { pullRequest: undefined };
+  return { pullRequest: undefined, publicationAllowed: false };
 }
 
 export const GetRuntimeSigningPullRequestResponse: MessageFns<GetRuntimeSigningPullRequestResponse> = {
   encode(message: GetRuntimeSigningPullRequestResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.pullRequest !== undefined) {
       RuntimeSigningPullRequest.encode(message.pullRequest, writer.uint32(10).fork()).join();
+    }
+    if (message.publicationAllowed !== false) {
+      writer.uint32(16).bool(message.publicationAllowed);
     }
     return writer;
   },
@@ -5594,6 +5577,14 @@ export const GetRuntimeSigningPullRequestResponse: MessageFns<GetRuntimeSigningP
             message.pullRequest = RuntimeSigningPullRequest.decode(reader, reader.uint32());
             continue;
           }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.publicationAllowed = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -5613,6 +5604,11 @@ export const GetRuntimeSigningPullRequestResponse: MessageFns<GetRuntimeSigningP
         : isSet(object.pull_request)
         ? RuntimeSigningPullRequest.fromJSON(object.pull_request)
         : undefined,
+      publicationAllowed: isSet(object.publicationAllowed)
+        ? globalThis.Boolean(object.publicationAllowed)
+        : isSet(object.publication_allowed)
+        ? globalThis.Boolean(object.publication_allowed)
+        : false,
     };
   },
 
@@ -5620,6 +5616,9 @@ export const GetRuntimeSigningPullRequestResponse: MessageFns<GetRuntimeSigningP
     const obj: any = {};
     if (message.pullRequest !== undefined) {
       obj.pullRequest = RuntimeSigningPullRequest.toJSON(message.pullRequest);
+    }
+    if (message.publicationAllowed !== false) {
+      obj.publicationAllowed = message.publicationAllowed;
     }
     return obj;
   },
@@ -5632,6 +5631,7 @@ export const GetRuntimeSigningPullRequestResponse: MessageFns<GetRuntimeSigningP
     message.pullRequest = (object.pullRequest !== undefined && object.pullRequest !== null)
       ? RuntimeSigningPullRequest.fromPartial(object.pullRequest)
       : undefined;
+    message.publicationAllowed = object.publicationAllowed ?? false;
     return message;
   },
 };

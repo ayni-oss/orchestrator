@@ -122,8 +122,9 @@ accepted metadata and exact association receipts. Catalog records are append-onl
 removal and source rebinding require a later explicit lifecycle contract.
 
 GitHub requests use the fixed API origin, bounded response bodies and timeouts.
-The saved App credential creates read-only installation tokens with Contents and
-Metadata read permissions. Connecting restricts that token to the selected repository
+For source reads, the saved App credential creates installation tokens with
+Contents and Metadata read permissions. Runtime signing-key proposals use the
+same App with permissions scoped to reading PR status or opening a draft PR. Connecting restricts that token to the selected repository
 ID and checks GitHub's returned identity; browser names and branch values grant no authority.
 Tokens and provider response text never enter catalog receipts or diagnostics.
 

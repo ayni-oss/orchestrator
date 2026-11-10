@@ -23,6 +23,27 @@ pub async fn installation_read_token(
         .await
 }
 
+pub(super) struct SigningPullAccess {
+    pub token: Option<zeroize::Zeroizing<String>>,
+    pub can_publish: bool,
+}
+
+pub(super) async fn signing_pull_access(
+    source: &repositories::SourceCredential,
+    repository: &repositories::Repository,
+    publish: bool,
+) -> Result<SigningPullAccess, &'static str> {
+    identity(repository.installation_id).map_err(|_| "github_response_invalid")?;
+    identity(repository.provider_repository_id).map_err(|_| "github_response_invalid")?;
+    github::Github::new(source)?
+        .signing_pull_access(
+            repository.installation_id,
+            repository.provider_repository_id,
+            publish,
+        )
+        .await
+}
+
 pub struct RuntimeSourceInputs {
     pub tree_sha: String,
     pub policy: Vec<u8>,

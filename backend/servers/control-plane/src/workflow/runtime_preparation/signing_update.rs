@@ -3,32 +3,22 @@ mod lock;
 mod publisher;
 
 use super::{RequestContext, WorkflowGrpc, v1};
-use crate::workflow::repositories::runtime_source_inputs;
+use crate::workflow::repositories::{runtime_source_inputs, signing_pull_access};
 use ayni_orchestrator_events::task_publication::base_branch;
 use std::time::Duration;
 use tonic::Status;
-
-pub(super) fn enabled(repository: &str) -> bool {
-    std::env::var("ORCHESTRATOR_SIGNING_UPDATE_REPOSITORY").as_deref() == Ok(repository)
-        && std::env::var_os("ORCHESTRATOR_SIGNING_UPDATE_TOKEN_FILE").is_some()
-}
 
 pub(super) async fn run(
     service: &WorkflowGrpc,
     context: &RequestContext,
     value: v1::OpenRuntimeSigningPullRequestRequest,
     publish: bool,
-) -> Result<Option<v1::RuntimeSigningPullRequest>, Status> {
+) -> Result<v1::GetRuntimeSigningPullRequestResponse, Status> {
     let repository = service
         .store
         .inspection_repository(&value.repository_id)
         .await
         .map_err(|error| context.store(&error))?;
-    if !enabled(&repository.full_name) {
-        return Err(Status::failed_precondition(
-            "Configure a signing update publisher for this repository.",
-        ));
-    }
     let inspected = service
         .store
         .get_runtime_inspection_by_id(&value.inspection_id)
@@ -79,6 +69,9 @@ pub(super) async fn run(
         &signer.public_key,
     )
     .map_err(Status::failed_precondition)?;
+    let access = signing_pull_access(&source, &repository, publish)
+        .await
+        .map_err(access_error)?;
     service
         .store
         .repository_source(
@@ -97,11 +90,15 @@ pub(super) async fn run(
         policy: &policy,
         lock: &lock,
     };
-    if publish {
-        publisher::open(request).await.map(Some)
-    } else {
-        publisher::lookup(request).await
-    }
+    let pull_request = match access.token {
+        Some(token) if publish => Some(publisher::open(request, token).await?),
+        Some(token) => publisher::lookup(request, token).await?,
+        None => None,
+    };
+    Ok(v1::GetRuntimeSigningPullRequestResponse {
+        pull_request,
+        publication_allowed: access.can_publish,
+    })
 }
 
 async fn reviewed_signer(
@@ -120,4 +117,15 @@ async fn reviewed_signer(
         ));
     }
     Ok(signer)
+}
+
+fn access_error(reason: &'static str) -> Status {
+    match reason {
+        "github_signing_pull_write_required"
+        | "github_access_denied"
+        | "github_authentication_failed" => Status::permission_denied(
+            "Grant the installed GitHub App Contents and Pull requests write access to publish.",
+        ),
+        _ => Status::unavailable("Could not confirm the GitHub App's repository access."),
+    }
 }

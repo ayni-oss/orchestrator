@@ -224,11 +224,9 @@ returns the wizard to the affected step. Inspections and preparation runs remain
 in PostgreSQL, and pull request state is read from the provider. After merge,
 check the target branch again before preparing the runtime.
 
-Enable this action for one repository through the chart values
-`signingUpdatePublication.enabled`, `signingUpdatePublication.repository`
-(the exact `owner/name`), and `signingUpdatePublication.tokenSecretName`.
-The named Secret must contain a `token` key with a GitHub credential restricted
-to that repository and granted Contents and Pull requests write permissions.
-The chart mounts it into the control plane separately from the read-only source
-connection. For other deployments, set `ORCHESTRATOR_SIGNING_UPDATE_REPOSITORY`
-and point `ORCHESTRATOR_SIGNING_UPDATE_TOKEN_FILE` to the mounted credential.
+The source-control connection supplies the App credential. The control plane
+reads the current installation grants and requests a repository-scoped
+Pull requests read token for status. Open PR requests a separate short-lived
+installation token with Contents and Pull requests write permissions for the
+connected repository. The installation owner must grant both permissions.
+Source discovery and worker fetches continue to use Contents read tokens.

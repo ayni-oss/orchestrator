@@ -255,7 +255,6 @@ message GetRepositoryRuntimeResponse {
   // Deployment configuration, independent of the retained last-run outcome.
   bool preparation_enabled = 2;
   bool development_only = 3;
-  bool signing_update_publication_enabled = 4;
 }
 
 message OpenRuntimeSigningPullRequestRequest {
@@ -274,6 +273,7 @@ message GetRuntimeSigningPullRequestRequest {
 }
 message GetRuntimeSigningPullRequestResponse {
   RuntimeSigningPullRequest pull_request = 1;
+  bool publication_allowed = 2;
 }
 message RuntimeSigningPullRequest {
   string url = 1;
