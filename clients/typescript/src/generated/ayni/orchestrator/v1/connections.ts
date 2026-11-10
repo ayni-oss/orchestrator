@@ -70,6 +70,35 @@ export interface ValidateGithubConnectionRequest {
   operationId: string;
 }
 
+export interface GetConnectionRequest {
+  connectionId: string;
+}
+
+export interface GetConnectionResponse {
+  connection?: Connection | undefined;
+  pendingOperationId: string;
+}
+
+export interface CheckConnectionRequest {
+  connectionId: string;
+  expectedRevision: string;
+}
+
+export interface CheckConnectionResponse {
+  /** Empty when the provider authenticated the active credential. */
+  safeReason: string;
+}
+
+export interface DeleteConnectionRequest {
+  idempotencyKey: string;
+  connectionId: string;
+  expectedRevision: string;
+}
+
+export interface DeleteConnectionResponse {
+  operation?: ConnectionOperation | undefined;
+}
+
 export interface GetConnectionOperationRequest {
   idempotencyKey: string;
 }
@@ -1045,6 +1074,518 @@ export const ValidateGithubConnectionRequest: MessageFns<ValidateGithubConnectio
   fromPartial(object: DeepPartial<ValidateGithubConnectionRequest>): ValidateGithubConnectionRequest {
     const message = createBaseValidateGithubConnectionRequest();
     message.operationId = object.operationId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetConnectionRequest(): GetConnectionRequest {
+  return { connectionId: "" };
+}
+
+export const GetConnectionRequest: MessageFns<GetConnectionRequest> = {
+  encode(message: GetConnectionRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.connectionId !== "") {
+      writer.uint32(10).string(message.connectionId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetConnectionRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetConnectionRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.connectionId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetConnectionRequest {
+    return {
+      connectionId: isSet(object.connectionId)
+        ? globalThis.String(object.connectionId)
+        : isSet(object.connection_id)
+        ? globalThis.String(object.connection_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetConnectionRequest): unknown {
+    const obj: any = {};
+    if (message.connectionId !== "") {
+      obj.connectionId = message.connectionId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetConnectionRequest>): GetConnectionRequest {
+    return GetConnectionRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetConnectionRequest>): GetConnectionRequest {
+    const message = createBaseGetConnectionRequest();
+    message.connectionId = object.connectionId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetConnectionResponse(): GetConnectionResponse {
+  return { connection: undefined, pendingOperationId: "" };
+}
+
+export const GetConnectionResponse: MessageFns<GetConnectionResponse> = {
+  encode(message: GetConnectionResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.connection !== undefined) {
+      Connection.encode(message.connection, writer.uint32(10).fork()).join();
+    }
+    if (message.pendingOperationId !== "") {
+      writer.uint32(18).string(message.pendingOperationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetConnectionResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetConnectionResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.connection = Connection.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.pendingOperationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetConnectionResponse {
+    return {
+      connection: isSet(object.connection) ? Connection.fromJSON(object.connection) : undefined,
+      pendingOperationId: isSet(object.pendingOperationId)
+        ? globalThis.String(object.pendingOperationId)
+        : isSet(object.pending_operation_id)
+        ? globalThis.String(object.pending_operation_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetConnectionResponse): unknown {
+    const obj: any = {};
+    if (message.connection !== undefined) {
+      obj.connection = Connection.toJSON(message.connection);
+    }
+    if (message.pendingOperationId !== "") {
+      obj.pendingOperationId = message.pendingOperationId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetConnectionResponse>): GetConnectionResponse {
+    return GetConnectionResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetConnectionResponse>): GetConnectionResponse {
+    const message = createBaseGetConnectionResponse();
+    message.connection = (object.connection !== undefined && object.connection !== null)
+      ? Connection.fromPartial(object.connection)
+      : undefined;
+    message.pendingOperationId = object.pendingOperationId ?? "";
+    return message;
+  },
+};
+
+function createBaseCheckConnectionRequest(): CheckConnectionRequest {
+  return { connectionId: "", expectedRevision: "0" };
+}
+
+export const CheckConnectionRequest: MessageFns<CheckConnectionRequest> = {
+  encode(message: CheckConnectionRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.connectionId !== "") {
+      writer.uint32(10).string(message.connectionId);
+    }
+    if (message.expectedRevision !== "0") {
+      writer.uint32(16).uint64(message.expectedRevision);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CheckConnectionRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCheckConnectionRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.connectionId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.expectedRevision = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): CheckConnectionRequest {
+    return {
+      connectionId: isSet(object.connectionId)
+        ? globalThis.String(object.connectionId)
+        : isSet(object.connection_id)
+        ? globalThis.String(object.connection_id)
+        : "",
+      expectedRevision: isSet(object.expectedRevision)
+        ? globalThis.String(object.expectedRevision)
+        : isSet(object.expected_revision)
+        ? globalThis.String(object.expected_revision)
+        : "0",
+    };
+  },
+
+  toJSON(message: CheckConnectionRequest): unknown {
+    const obj: any = {};
+    if (message.connectionId !== "") {
+      obj.connectionId = message.connectionId;
+    }
+    if (message.expectedRevision !== "0") {
+      obj.expectedRevision = message.expectedRevision;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<CheckConnectionRequest>): CheckConnectionRequest {
+    return CheckConnectionRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CheckConnectionRequest>): CheckConnectionRequest {
+    const message = createBaseCheckConnectionRequest();
+    message.connectionId = object.connectionId ?? "";
+    message.expectedRevision = object.expectedRevision ?? "0";
+    return message;
+  },
+};
+
+function createBaseCheckConnectionResponse(): CheckConnectionResponse {
+  return { safeReason: "" };
+}
+
+export const CheckConnectionResponse: MessageFns<CheckConnectionResponse> = {
+  encode(message: CheckConnectionResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.safeReason !== "") {
+      writer.uint32(10).string(message.safeReason);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CheckConnectionResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCheckConnectionResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.safeReason = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): CheckConnectionResponse {
+    return {
+      safeReason: isSet(object.safeReason)
+        ? globalThis.String(object.safeReason)
+        : isSet(object.safe_reason)
+        ? globalThis.String(object.safe_reason)
+        : "",
+    };
+  },
+
+  toJSON(message: CheckConnectionResponse): unknown {
+    const obj: any = {};
+    if (message.safeReason !== "") {
+      obj.safeReason = message.safeReason;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<CheckConnectionResponse>): CheckConnectionResponse {
+    return CheckConnectionResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CheckConnectionResponse>): CheckConnectionResponse {
+    const message = createBaseCheckConnectionResponse();
+    message.safeReason = object.safeReason ?? "";
+    return message;
+  },
+};
+
+function createBaseDeleteConnectionRequest(): DeleteConnectionRequest {
+  return { idempotencyKey: "", connectionId: "", expectedRevision: "0" };
+}
+
+export const DeleteConnectionRequest: MessageFns<DeleteConnectionRequest> = {
+  encode(message: DeleteConnectionRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.connectionId !== "") {
+      writer.uint32(18).string(message.connectionId);
+    }
+    if (message.expectedRevision !== "0") {
+      writer.uint32(24).uint64(message.expectedRevision);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteConnectionRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDeleteConnectionRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.connectionId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.expectedRevision = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): DeleteConnectionRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      connectionId: isSet(object.connectionId)
+        ? globalThis.String(object.connectionId)
+        : isSet(object.connection_id)
+        ? globalThis.String(object.connection_id)
+        : "",
+      expectedRevision: isSet(object.expectedRevision)
+        ? globalThis.String(object.expectedRevision)
+        : isSet(object.expected_revision)
+        ? globalThis.String(object.expected_revision)
+        : "0",
+    };
+  },
+
+  toJSON(message: DeleteConnectionRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.connectionId !== "") {
+      obj.connectionId = message.connectionId;
+    }
+    if (message.expectedRevision !== "0") {
+      obj.expectedRevision = message.expectedRevision;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<DeleteConnectionRequest>): DeleteConnectionRequest {
+    return DeleteConnectionRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<DeleteConnectionRequest>): DeleteConnectionRequest {
+    const message = createBaseDeleteConnectionRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.connectionId = object.connectionId ?? "";
+    message.expectedRevision = object.expectedRevision ?? "0";
+    return message;
+  },
+};
+
+function createBaseDeleteConnectionResponse(): DeleteConnectionResponse {
+  return { operation: undefined };
+}
+
+export const DeleteConnectionResponse: MessageFns<DeleteConnectionResponse> = {
+  encode(message: DeleteConnectionResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operation !== undefined) {
+      ConnectionOperation.encode(message.operation, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteConnectionResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDeleteConnectionResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operation = ConnectionOperation.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): DeleteConnectionResponse {
+    return { operation: isSet(object.operation) ? ConnectionOperation.fromJSON(object.operation) : undefined };
+  },
+
+  toJSON(message: DeleteConnectionResponse): unknown {
+    const obj: any = {};
+    if (message.operation !== undefined) {
+      obj.operation = ConnectionOperation.toJSON(message.operation);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<DeleteConnectionResponse>): DeleteConnectionResponse {
+    return DeleteConnectionResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<DeleteConnectionResponse>): DeleteConnectionResponse {
+    const message = createBaseDeleteConnectionResponse();
+    message.operation = (object.operation !== undefined && object.operation !== null)
+      ? ConnectionOperation.fromPartial(object.operation)
+      : undefined;
     return message;
   },
 };
@@ -2350,6 +2891,38 @@ export const ConnectionServiceService = {
     responseDeserialize: (value: Buffer): ValidateGithubConnectionResponse =>
       ValidateGithubConnectionResponse.decode(value),
   },
+  getConnection: {
+    path: "/ayni.orchestrator.v1.ConnectionService/GetConnection" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetConnectionRequest): Buffer => Buffer.from(GetConnectionRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetConnectionRequest => GetConnectionRequest.decode(value),
+    responseSerialize: (value: GetConnectionResponse): Buffer =>
+      Buffer.from(GetConnectionResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetConnectionResponse => GetConnectionResponse.decode(value),
+  },
+  checkConnection: {
+    path: "/ayni.orchestrator.v1.ConnectionService/CheckConnection" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CheckConnectionRequest): Buffer =>
+      Buffer.from(CheckConnectionRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CheckConnectionRequest => CheckConnectionRequest.decode(value),
+    responseSerialize: (value: CheckConnectionResponse): Buffer =>
+      Buffer.from(CheckConnectionResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CheckConnectionResponse => CheckConnectionResponse.decode(value),
+  },
+  deleteConnection: {
+    path: "/ayni.orchestrator.v1.ConnectionService/DeleteConnection" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: DeleteConnectionRequest): Buffer =>
+      Buffer.from(DeleteConnectionRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DeleteConnectionRequest => DeleteConnectionRequest.decode(value),
+    responseSerialize: (value: DeleteConnectionResponse): Buffer =>
+      Buffer.from(DeleteConnectionResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): DeleteConnectionResponse => DeleteConnectionResponse.decode(value),
+  },
   getConnectionOperation: {
     path: "/ayni.orchestrator.v1.ConnectionService/GetConnectionOperation" as const,
     requestStream: false as const,
@@ -2394,6 +2967,9 @@ export interface ConnectionServiceServer extends UntypedServiceImplementation {
   validateProviderConnection: handleUnaryCall<ValidateProviderConnectionRequest, ValidateProviderConnectionResponse>;
   setConnectionEnabled: handleUnaryCall<SetConnectionEnabledRequest, SetConnectionEnabledResponse>;
   validateGithubConnection: handleUnaryCall<ValidateGithubConnectionRequest, ValidateGithubConnectionResponse>;
+  getConnection: handleUnaryCall<GetConnectionRequest, GetConnectionResponse>;
+  checkConnection: handleUnaryCall<CheckConnectionRequest, CheckConnectionResponse>;
+  deleteConnection: handleUnaryCall<DeleteConnectionRequest, DeleteConnectionResponse>;
   getConnectionOperation: handleUnaryCall<GetConnectionOperationRequest, GetConnectionOperationResponse>;
   listConnections: handleUnaryCall<ListConnectionsRequest, ListConnectionsResponse>;
   listConnectionOperations: handleUnaryCall<ListConnectionOperationsRequest, ListConnectionOperationsResponse>;
@@ -2474,6 +3050,51 @@ export interface ConnectionServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ValidateGithubConnectionResponse) => void,
+  ): ClientUnaryCall;
+  getConnection(
+    request: GetConnectionRequest,
+    callback: (error: ServiceError | null, response: GetConnectionResponse) => void,
+  ): ClientUnaryCall;
+  getConnection(
+    request: GetConnectionRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetConnectionResponse) => void,
+  ): ClientUnaryCall;
+  getConnection(
+    request: GetConnectionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetConnectionResponse) => void,
+  ): ClientUnaryCall;
+  checkConnection(
+    request: CheckConnectionRequest,
+    callback: (error: ServiceError | null, response: CheckConnectionResponse) => void,
+  ): ClientUnaryCall;
+  checkConnection(
+    request: CheckConnectionRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CheckConnectionResponse) => void,
+  ): ClientUnaryCall;
+  checkConnection(
+    request: CheckConnectionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CheckConnectionResponse) => void,
+  ): ClientUnaryCall;
+  deleteConnection(
+    request: DeleteConnectionRequest,
+    callback: (error: ServiceError | null, response: DeleteConnectionResponse) => void,
+  ): ClientUnaryCall;
+  deleteConnection(
+    request: DeleteConnectionRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: DeleteConnectionResponse) => void,
+  ): ClientUnaryCall;
+  deleteConnection(
+    request: DeleteConnectionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: DeleteConnectionResponse) => void,
   ): ClientUnaryCall;
   getConnectionOperation(
     request: GetConnectionOperationRequest,

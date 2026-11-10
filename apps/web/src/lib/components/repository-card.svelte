@@ -6,7 +6,7 @@
  let { repo }: { repo: Repository } = $props();
  const href = $derived(repositoryPath(repo.id));
 </script>
-<InformationCard title={repo.fullName} headingLevel={2} navigationHref={href} actions={[
+<InformationCard title={repo.fullName} status="connected" headingLevel={2} navigationHref={href} actions={[
  {label:'Source code',onSelect:()=>{void goto(href);}},
  {label:'Ayni runtime',onSelect:()=>{void goto(`${href}?tab=runtime`);}},
 ]}>

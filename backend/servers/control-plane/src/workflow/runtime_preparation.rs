@@ -233,6 +233,35 @@ impl v1::runtime_preparation_service_server::RuntimePreparationService for Workf
             signer: Some(signer(saved)),
         }))
     }
+    async fn get_runtime_signer(
+        &self,
+        request: Request<v1::GetRuntimeSignerRequest>,
+    ) -> Result<Response<v1::GetRuntimeSignerResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = self
+            .store
+            .get_runtime_signer(&request.into_inner().id)
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::GetRuntimeSignerResponse {
+            signer: Some(signer(value)),
+        }))
+    }
+    async fn delete_runtime_signer(
+        &self,
+        request: Request<v1::DeleteRuntimeSignerRequest>,
+    ) -> Result<Response<v1::DeleteRuntimeSignerResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let removed = self
+            .store
+            .delete_runtime_signer(&value.idempotency_key, &value.id, value.expected_revision)
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::DeleteRuntimeSignerResponse {
+            signer: Some(signer(removed)),
+        }))
+    }
     async fn list_runtime_signers(
         &self,
         request: Request<v1::ListRuntimeSignersRequest>,

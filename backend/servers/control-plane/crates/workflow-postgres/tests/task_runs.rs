@@ -132,6 +132,23 @@ async fn concurrent_dispatch_fences_cancellation_and_recovers_exact_retained_res
             b"fixture-pack",
         )
         .await?;
+    let goal_key = key();
+    let new_goal = "Make task execution recoverable";
+    let goal_receipt = store
+        .set_project_goal(&goal_key, &workspace.id, &project.id, 1, new_goal)
+        .await?;
+    assert_eq!(
+        store
+            .set_project_goal(&goal_key, &workspace.id, &project.id, 1, new_goal)
+            .await?,
+        goal_receipt
+    );
+    assert!(matches!(
+        store
+            .set_project_goal(&key(), &workspace.id, &project.id, 1, "Stale goal")
+            .await,
+        Err(StoreError::ConfigurationRevisionConflict)
+    ));
     assert_eq!(
         store
             .start_task_execution(
@@ -174,6 +191,20 @@ async fn concurrent_dispatch_fences_cancellation_and_recovers_exact_retained_res
     let source = store
         .task_worker(&first.attempt_id, 1, &uid, &W::Input)
         .await?;
+    assert_eq!(
+        source
+            .command
+            .as_ref()
+            .map(|command| command.project_goal.as_str()),
+        Some("Serial coding")
+    );
+    assert_eq!(
+        source
+            .command
+            .as_ref()
+            .map(|command| command.objective.as_str()),
+        Some("One task")
+    );
     assert_eq!(source.source_pack, b"fixture-pack");
     assert_eq!(
         source
@@ -188,6 +219,7 @@ async fn concurrent_dispatch_fences_cancellation_and_recovers_exact_retained_res
         .await?
         .ok_or("next claim missing")?;
     assert_eq!(next.command.attempt_id, second.attempt_id);
+    assert_eq!(next.command.project_goal, new_goal);
     let uid = key();
     store
         .task_supervisor(&S::Observe {

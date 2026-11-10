@@ -12,21 +12,30 @@
  import { Label } from '$lib/components/ui/label/index.js';
  import * as NativeSelect from '$lib/components/ui/native-select/index.js';
  import Skeleton from '$lib/components/ui/skeleton/skeleton.svelte';
+ import { repositoryOnboardingPath } from '$lib/paths';
+ import { connectionAttemptError, connectionAttemptResult, readConnectionAttempts, writeConnectionAttempt, type ConnectionAttempt } from '$lib/repository-onboarding';
  import { rpc, RpcError, type Connection } from '$lib/api';
  import { repositoryReasons, type Repository, type RepositoryOperation, type GithubInstallation, type GithubRepository, type ConnectRequest } from '$lib/repositories';
  let connections=$state.raw<Connection[]>([]);let catalog=$state.raw<Repository[]>([]);
  let discovered=$state.raw<GithubRepository[]>([]);
  let connectionId=$state('');let installationId=$state('');let busy=$state(true);let error=$state('');
  let nextCatalog=$state('');let nextRepositories=$state(0);
- let pending=$state<ConnectRequest|null>(null);
+ let attempts = $state.raw<Record<string, ConnectionAttempt>>({});
+ let connectingId = $state('');
+ const pending = $derived(Object.values(attempts).some(attempt => attempt.status === 'pending'));
  let refreshing=$state(false);
  let loadingGrid=$state(true);
  let search=$state('');
- const matchingCatalog=$derived(catalog.filter(repo=>repo.fullName.toLowerCase().includes(search.toLowerCase())));
- const available=$derived(discovered.filter(repo=>!catalog.some(c=>c.providerRepositoryId===repo.providerRepositoryId)&&repo.fullName.toLowerCase().includes(search.toLowerCase())));
- const source=$derived(connections.find(c=>c.id===connectionId));
- const storageKey='ayni.repository.connect.pending';
- function persist(value:ConnectRequest|null){pending=value;if(value)sessionStorage.setItem(storageKey,JSON.stringify(value));else sessionStorage.removeItem(storageKey);}
+ const matchingCatalog = $derived(catalog.filter(repo => repo.fullName.toLowerCase().includes(search.toLowerCase())));
+ const visibleAttempts = $derived(Object.values(attempts).filter(({ request, repository }) =>
+  !catalog.some(repo => repo.providerRepositoryId === request.providerRepositoryId) &&
+  (repository?.fullName ?? request.providerRepositoryId).toLowerCase().includes(search.toLowerCase())
+ ));
+ const available = $derived(discovered.filter(repo => !attempts[repo.providerRepositoryId] &&
+  !catalog.some(item => item.providerRepositoryId === repo.providerRepositoryId) &&
+  repo.fullName.toLowerCase().includes(search.toLowerCase())
+ ));
+ const source = $derived(connections.find(c => c.id === connectionId));
  async function perform(action:()=>Promise<void>){busy=true;error='';try{await action();}catch(e){error=e instanceof RpcError&&e.status===409?'The selection conflicts with current configuration or a retained request. Refresh and review the selection; recover an uncertain request before starting another.':e instanceof RpcError&&e.status===404?'The selected resource is unavailable in this scope. Refresh the catalog and check the project and source connection.':e instanceof Error?e.message:'Repository access could not be checked.';}finally{busy=false;}}
  async function loadGrid(action: () => Promise<void>) {
   loadingGrid = true;
@@ -39,7 +48,15 @@
   try { await loadGrid(load); }
   finally { refreshing=false; }
  }
- async function loadCatalog(append=false){const result=await rpc('ListRepositories',{afterId:append?nextCatalog:'',limit:50});catalog=append?[...catalog,...(result.repositories||[])]:result.repositories||[];nextCatalog=result.nextAfterId||'';}
+ async function loadCatalog(append = false) {
+  const result = await rpc('ListRepositories', { afterId: append ? nextCatalog : '', limit: 50 });
+  const items: Repository[] = result.repositories ?? [];
+  catalog = append ? [...new Map([...catalog, ...items].map(item => [item.id, item])).values()] : items;
+  nextCatalog = result.nextAfterId ?? '';
+  for (const { providerRepositoryId } of items) {
+   if (attempts[providerRepositoryId]) attempts = writeConnectionAttempt(providerRepositoryId, null);
+  }
+ }
  function changeSource(id:string) {
   connectionId=id;
   installationId='';discovered=[];nextRepositories=0;error='';
@@ -63,16 +80,36 @@
   await findRepositories();
  }
  async function findRepositories(append=false){if(!source||!installationId)return;const result=await rpc('ListGithubRepositories',{connectionId,expectedConnectionRevision:source.revision,installationId,page:append?nextRepositories:1});if(result.safeReason)throw new Error(repositoryReasons[result.safeReason]||'Repository discovery failed.');discovered=[...new Map((append?[...discovered,...(result.repositories||[])]:result.repositories||[]).map((v:GithubRepository)=>[v.providerRepositoryId,v])).values()] as GithubRepository[];nextRepositories=result.nextPage||0;if(!discovered.length)toast.info('No repositories found', { description: 'Check which repositories this installation can access.' });}
- async function accept(op:RepositoryOperation){if(op.state==='completed')toast.success(`${op.repository?.fullName||'Repository'} connected`, { description: 'Ayni inspection and runtime preparation are still required.' });else toast.info(repositoryReasons[op.safeReason||'']||'Source access is awaiting completion.');if(op.state!=='accepted')persist(null);await loadCatalog();}
- async function resume(){if(!pending)return;try{const result=await rpc('ConnectRepository',pending);await accept(result.operation);}catch(e){if(e instanceof RpcError&&e.status===400)persist(null);throw e;}}
- async function connect(repo:GithubRepository){if(!source||pending)return;persist({idempotencyKey:crypto.randomUUID(),connectionId,expectedConnectionRevision:source.revision,installationId,providerRepositoryId:repo.providerRepositoryId});await resume();}
- async function recover(){if(!pending)return;const result=await rpc('GetRepositoryOperation',{idempotencyKey:pending.idempotencyKey});await accept(result.operation);}
- onMount(()=>{void loadGrid(async()=>{const saved=sessionStorage.getItem(storageKey);if(saved)pending=JSON.parse(saved);await load();});});
+ async function connect(repo: GithubRepository) {
+  if (!source || pending) return;
+  const request: ConnectRequest = {
+   idempotencyKey: crypto.randomUUID(), connectionId, expectedConnectionRevision: source.revision,
+   installationId, providerRepositoryId: repo.providerRepositoryId,
+  };
+  const attempt: ConnectionAttempt = { request, repository: repo, status: 'pending' };
+  const id = repo.providerRepositoryId;
+  attempts = writeConnectionAttempt(id, attempt);
+  connectingId = id;
+  try {
+   const { operation }: { operation: RepositoryOperation } = await rpc('ConnectRepository', request);
+   if (operation.state === 'completed' && operation.repository) {
+    const connected = operation.repository;
+    catalog = [connected, ...catalog.filter(item => item.id !== connected.id)];
+   }
+   attempts = writeConnectionAttempt(id, connectionAttemptResult(attempt, operation));
+  } catch (cause) {
+   attempts = writeConnectionAttempt(id, connectionAttemptError(attempt, cause));
+  } finally {
+   connectingId = '';
+  }
+ }
+ onMount(() => {
+  void loadGrid(async () => { attempts = readConnectionAttempts(); await load(); });
+ });
 </script>
 <PageHeader eyebrow="Source code" title="Repositories" />
 <div class="space-y-6">
  {#if error}<Feedback kind="error" title="Repository needs attention" message={error}/>{/if}
- {#if pending}<InformationCard title="Recover repository connection"><p>The request is retained with its original source and repository selection. Recover its status or retry the same request.</p><code class="break-all text-xs">{pending.idempotencyKey}</code><div class="flex flex-wrap gap-3"><Button disabled={busy} onclick={()=>perform(recover)}>Recover status</Button><Button variant="outline" disabled={busy} onclick={()=>perform(resume)}>Retry same connection</Button><Button variant="outline" disabled={busy} onclick={()=>persist(null)}>Dismiss recovery</Button></div></InformationCard>{/if}
  <div class="space-y-4">
   <div class="space-y-2">
    <Label for="repository-source">Source control connection</Label>
@@ -112,6 +149,24 @@
   {/each}
  {:else}
  {#each matchingCatalog as repo (repo.id)}<RepositoryCard {repo}/>{/each}
+ {#each visibleAttempts as attempt (attempt.request.providerRepositoryId)}
+  {@const id = attempt.request.providerRepositoryId}
+  {@const repo = attempt.repository ?? discovered.find(item => item.providerRepositoryId === id)}
+  {@const href = repositoryOnboardingPath(id)}
+  <InformationCard title={repo?.fullName ?? `Repository ${id}`} headingLevel={2}
+   status={id === connectingId ? 'connecting' : attempt.status === 'failed' ? 'connection_failed' : 'pending'}
+   navigationHref={id === connectingId ? undefined : href}>
+   {#if repo}<p class="text-sm leading-relaxed text-muted-foreground">{repo.private ? 'Private repository' : 'Public repository'}<br />Default branch: {repo.defaultBranch}</p>{/if}
+   {#if id === connectingId}
+    <p role="status" class="text-sm text-muted-foreground">Checking source access…</p>
+   {:else}
+    <Button variant="outline" href={href}>Repository settings</Button>
+    {#if attempt.status === 'failed' && source && repo && discovered.some(item => item.providerRepositoryId === id)}
+     <Button disabled={busy || pending} onclick={() => perform(() => connect(repo))}>Connect repository</Button>
+    {/if}
+   {/if}
+  </InformationCard>
+ {/each}
  {#each available as repo (repo.providerRepositoryId)}
   <InformationCard title={repo.fullName} headingLevel={2}>
    <p class="min-h-16 text-sm leading-relaxed text-muted-foreground">{repo.private?'Private repository':'Public repository'}<br/>Default branch: {repo.defaultBranch}</p>
@@ -120,6 +175,6 @@
  {/each}
  {/if}
  </div>
- {#if !loadingGrid&&search&&!matchingCatalog.length&&!available.length}<p class="text-sm text-muted-foreground">No matching repositories.</p>{/if}
+ {#if !loadingGrid&&search&&!matchingCatalog.length&&!available.length&&!visibleAttempts.length}<p class="text-sm text-muted-foreground">No matching repositories.</p>{/if}
  {#if nextCatalog}<Button variant="outline" disabled={busy} onclick={()=>perform(()=>loadCatalog(true))}>More catalog repositories</Button>{/if}
 </div>

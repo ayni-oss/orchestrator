@@ -94,7 +94,7 @@ pub(super) fn validate(input: &SaveSigner<'_>) -> Result<String, StoreError> {
 async fn locked(tx: &Transaction<'_>, id: &str) -> Result<Signer, StoreError> {
     signer(
         &tx.query_opt(
-            "SELECT * FROM workflow_runtime_signers WHERE id=$1 FOR UPDATE",
+            "SELECT * FROM workflow_runtime_signers WHERE id=$1 AND NOT deleted FOR UPDATE",
             &[&id],
         )
         .await?
@@ -183,16 +183,41 @@ impl WorkflowStore {
         expected: u64,
         enabled: bool,
     ) -> Result<Signer, StoreError> {
+        self.change_runtime_signer_state(key, id, expected, Some(enabled))
+            .await
+    }
+    /// Remove a signer reference from configuration while preserving its frozen revisions.
+    /// # Errors
+    /// Reject missing identities, stale revisions and conflicting retries.
+    pub async fn delete_runtime_signer(
+        &self,
+        key: &str,
+        id: &str,
+        expected: u64,
+    ) -> Result<Signer, StoreError> {
+        self.change_runtime_signer_state(key, id, expected, None)
+            .await
+    }
+    async fn change_runtime_signer_state(
+        &self,
+        key: &str,
+        id: &str,
+        expected: u64,
+        enabled: Option<bool>,
+    ) -> Result<Signer, StoreError> {
         validate_key(key)?;
         validate_id(id, "signer_id")?;
         i64::try_from(expected).map_err(|_| StoreError::InvalidInput("signer_revision"))?;
-        let safe = serde_json::to_string(&(id, expected, enabled))
-            .map_err(|_| StoreError::CorruptState)?;
+        let (kind, safe) = enabled.map_or_else(
+            || ("delete", serde_json::to_string(&(id, expected))),
+            |value| ("enabled", serde_json::to_string(&(id, expected, value))),
+        );
+        let safe = safe.map_err(|_| StoreError::CorruptState)?;
         let (mut client, driver) = crate::connect(&self.database_url).await?;
         let tx = client.transaction().await?;
         connections::serialize_key(&tx, key).await?;
         super::runtime_signer_provisioning::reject_reserved(&tx, key).await?;
-        if let Some(value) = replay(&tx, key, "enabled", &safe).await? {
+        if let Some(value) = replay(&tx, key, kind, &safe).await? {
             tx.commit().await?;
             driver.abort();
             return Ok(value);
@@ -201,9 +226,11 @@ impl WorkflowStore {
         if current.revision != expected {
             return Err(StoreError::ConfigurationRevisionConflict);
         }
-        tx.execute("UPDATE workflow_runtime_signers SET enabled=$2,active_revision=$3,revision=revision+1 WHERE id=$1",&[&id,&enabled,&new_id()]).await?;
-        let value = locked(&tx, id).await?;
-        retain(&tx, key, "enabled", &safe, &value).await?;
+        let value = signer(&tx.query_one(
+            "UPDATE workflow_runtime_signers SET enabled=$2,active_revision=$3,deleted=$4,revision=revision+1 WHERE id=$1 RETURNING *",
+            &[&id, &enabled.unwrap_or(false), &new_id(), &enabled.is_none()],
+        ).await?)?;
+        retain(&tx, key, kind, &safe, &value).await?;
         tx.commit().await?;
         driver.abort();
         Ok(value)
@@ -234,7 +261,10 @@ impl WorkflowStore {
         let (client, driver) = crate::connect(&self.database_url).await?;
         let value = signer(
             &client
-                .query_opt("SELECT * FROM workflow_runtime_signers WHERE id=$1", &[&id])
+                .query_opt(
+                    "SELECT * FROM workflow_runtime_signers WHERE id=$1 AND NOT deleted",
+                    &[&id],
+                )
                 .await?
                 .ok_or(StoreError::NotFound)?,
         )?;
@@ -259,7 +289,7 @@ impl WorkflowStore {
         let (client, driver) = crate::connect(&self.database_url).await?;
         let rows = client
             .query(
-                "SELECT * FROM workflow_runtime_signers WHERE id>$1 ORDER BY id LIMIT $2",
+                "SELECT * FROM workflow_runtime_signers WHERE id>$1 AND NOT deleted ORDER BY id LIMIT $2",
                 &[&after, &(limit + 1)],
             )
             .await?;

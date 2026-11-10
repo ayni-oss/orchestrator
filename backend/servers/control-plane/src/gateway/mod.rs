@@ -153,6 +153,24 @@ async fn rpc(
             validate_github_connection,
             v1::ValidateGithubConnectionRequest
         ),
+        "GetConnection" => forward!(
+            body,
+            gateway.connections(),
+            get_connection,
+            v1::GetConnectionRequest
+        ),
+        "CheckConnection" => forward!(
+            body,
+            gateway.connections(),
+            check_connection,
+            v1::CheckConnectionRequest
+        ),
+        "DeleteConnection" => forward!(
+            body,
+            gateway.connections(),
+            delete_connection,
+            v1::DeleteConnectionRequest
+        ),
         "GetConnectionOperation" => forward!(
             body,
             gateway.connections(),
@@ -406,6 +424,12 @@ async fn project_rpc(
             rename_project,
             v1::RenameProjectRequest
         ),
+        "SetProjectGoal" => forward!(
+            body,
+            gateway.projects(),
+            set_project_goal,
+            v1::SetProjectGoalRequest
+        ),
         "CreateWorkspace" => forward!(
             body,
             gateway.projects(),
@@ -612,6 +636,16 @@ async fn runtime_preparation_rpc(
             retry_runtime_preparation,
             v1::RetryRuntimePreparationRequest
         ),
+        _ => runtime_signer_rpc(gateway, method, body).await,
+    }
+}
+
+async fn runtime_signer_rpc(
+    gateway: &Gateway,
+    method: &str,
+    body: Value,
+) -> Result<Json<Value>, ApiError> {
+    match method {
         "ProvisionRuntimeSigner" => forward!(
             body,
             gateway.runtime_preparation(),
@@ -635,6 +669,18 @@ async fn runtime_preparation_rpc(
             gateway.runtime_preparation(),
             set_runtime_signer_enabled,
             v1::SetRuntimeSignerEnabledRequest
+        ),
+        "GetRuntimeSigner" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            get_runtime_signer,
+            v1::GetRuntimeSignerRequest
+        ),
+        "DeleteRuntimeSigner" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            delete_runtime_signer,
+            v1::DeleteRuntimeSignerRequest
         ),
         "ListRuntimeSigners" => forward!(
             body,

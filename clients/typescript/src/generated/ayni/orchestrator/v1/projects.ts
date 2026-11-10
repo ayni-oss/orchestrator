@@ -196,6 +196,18 @@ export interface RenameProjectResponse {
   commandId: string;
 }
 
+export interface SetProjectGoalRequest {
+  idempotencyKey: string;
+  workspaceId: string;
+  projectId: string;
+  expectedResourceVersion: string;
+  goal: string;
+}
+
+export interface SetProjectGoalResponse {
+  commandId: string;
+}
+
 function createBaseWorkspace(): Workspace {
   return { id: "", displayName: "", createdAt: undefined, updatedAt: undefined, resourceVersion: "0" };
 }
@@ -3067,6 +3079,228 @@ export const RenameProjectResponse: MessageFns<RenameProjectResponse> = {
   },
 };
 
+function createBaseSetProjectGoalRequest(): SetProjectGoalRequest {
+  return { idempotencyKey: "", workspaceId: "", projectId: "", expectedResourceVersion: "0", goal: "" };
+}
+
+export const SetProjectGoalRequest: MessageFns<SetProjectGoalRequest> = {
+  encode(message: SetProjectGoalRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.workspaceId !== "") {
+      writer.uint32(18).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(26).string(message.projectId);
+    }
+    if (message.expectedResourceVersion !== "0") {
+      writer.uint32(32).uint64(message.expectedResourceVersion);
+    }
+    if (message.goal !== "") {
+      writer.uint32(42).string(message.goal);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetProjectGoalRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSetProjectGoalRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.expectedResourceVersion = reader.uint64().toString();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.goal = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): SetProjectGoalRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      expectedResourceVersion: isSet(object.expectedResourceVersion)
+        ? globalThis.String(object.expectedResourceVersion)
+        : isSet(object.expected_resource_version)
+        ? globalThis.String(object.expected_resource_version)
+        : "0",
+      goal: isSet(object.goal) ? globalThis.String(object.goal) : "",
+    };
+  },
+
+  toJSON(message: SetProjectGoalRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.expectedResourceVersion !== "0") {
+      obj.expectedResourceVersion = message.expectedResourceVersion;
+    }
+    if (message.goal !== "") {
+      obj.goal = message.goal;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<SetProjectGoalRequest>): SetProjectGoalRequest {
+    return SetProjectGoalRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<SetProjectGoalRequest>): SetProjectGoalRequest {
+    const message = createBaseSetProjectGoalRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.expectedResourceVersion = object.expectedResourceVersion ?? "0";
+    message.goal = object.goal ?? "";
+    return message;
+  },
+};
+
+function createBaseSetProjectGoalResponse(): SetProjectGoalResponse {
+  return { commandId: "" };
+}
+
+export const SetProjectGoalResponse: MessageFns<SetProjectGoalResponse> = {
+  encode(message: SetProjectGoalResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.commandId !== "") {
+      writer.uint32(10).string(message.commandId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetProjectGoalResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSetProjectGoalResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.commandId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): SetProjectGoalResponse {
+    return {
+      commandId: isSet(object.commandId)
+        ? globalThis.String(object.commandId)
+        : isSet(object.command_id)
+        ? globalThis.String(object.command_id)
+        : "",
+    };
+  },
+
+  toJSON(message: SetProjectGoalResponse): unknown {
+    const obj: any = {};
+    if (message.commandId !== "") {
+      obj.commandId = message.commandId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<SetProjectGoalResponse>): SetProjectGoalResponse {
+    return SetProjectGoalResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<SetProjectGoalResponse>): SetProjectGoalResponse {
+    const message = createBaseSetProjectGoalResponse();
+    message.commandId = object.commandId ?? "";
+    return message;
+  },
+};
+
 /** Minimal hierarchy commands and bounded discovery on the trusted operator listener. */
 export type ProjectServiceService = typeof ProjectServiceService;
 export const ProjectServiceService = {
@@ -3111,6 +3345,17 @@ export const ProjectServiceService = {
     responseSerialize: (value: RenameProjectResponse): Buffer =>
       Buffer.from(RenameProjectResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): RenameProjectResponse => RenameProjectResponse.decode(value),
+  },
+  setProjectGoal: {
+    path: "/ayni.orchestrator.v1.ProjectService/SetProjectGoal" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: SetProjectGoalRequest): Buffer =>
+      Buffer.from(SetProjectGoalRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetProjectGoalRequest => SetProjectGoalRequest.decode(value),
+    responseSerialize: (value: SetProjectGoalResponse): Buffer =>
+      Buffer.from(SetProjectGoalResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SetProjectGoalResponse => SetProjectGoalResponse.decode(value),
   },
   listWorkspaces: {
     path: "/ayni.orchestrator.v1.ProjectService/ListWorkspaces" as const,
@@ -3185,6 +3430,7 @@ export interface ProjectServiceServer extends UntypedServiceImplementation {
   createProject: handleUnaryCall<CreateProjectRequest, CreateProjectResponse>;
   renameWorkspace: handleUnaryCall<RenameWorkspaceRequest, RenameWorkspaceResponse>;
   renameProject: handleUnaryCall<RenameProjectRequest, RenameProjectResponse>;
+  setProjectGoal: handleUnaryCall<SetProjectGoalRequest, SetProjectGoalResponse>;
   listWorkspaces: handleUnaryCall<ListWorkspacesRequest, ListWorkspacesResponse>;
   listProjects: handleUnaryCall<ListProjectsRequest, ListProjectsResponse>;
   getAgentConfiguration: handleUnaryCall<GetAgentConfigurationRequest, GetAgentConfigurationResponse>;
@@ -3253,6 +3499,21 @@ export interface ProjectServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: RenameProjectResponse) => void,
+  ): ClientUnaryCall;
+  setProjectGoal(
+    request: SetProjectGoalRequest,
+    callback: (error: ServiceError | null, response: SetProjectGoalResponse) => void,
+  ): ClientUnaryCall;
+  setProjectGoal(
+    request: SetProjectGoalRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: SetProjectGoalResponse) => void,
+  ): ClientUnaryCall;
+  setProjectGoal(
+    request: SetProjectGoalRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: SetProjectGoalResponse) => void,
   ): ClientUnaryCall;
   listWorkspaces(
     request: ListWorkspacesRequest,

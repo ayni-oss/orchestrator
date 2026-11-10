@@ -22,12 +22,22 @@
     return workspace ? [workspaces, workspace, current] : [workspaces, current];
    case '/(app)/repositories/[id]':
     return [{ href: '/repositories', label: 'Repositories' }, { ...current, label: 'Repository' }];
+   case '/(app)/repositories/onboarding/[providerRepositoryId]':
+    return [{ href: '/repositories', label: 'Repositories' }, { ...current, label: 'Repository settings' }];
    case '/(app)/settings/source-control/github':
     return [{ href: '/settings/source-control', label: 'Source control' }, { ...current, label: 'GitHub' }];
+   case '/(app)/settings/source-control/github/[connectionId]':
+    return [{ href: '/settings/source-control', label: 'Source control' }, { href: '/settings/source-control/github', label: 'GitHub' }, { ...current, label: 'App settings' }];
    case '/(app)/settings/container-registries/github':
     return [{ href: '/settings/container-registries', label: 'Container registries' }, { ...current, label: 'GitHub' }];
+   case '/(app)/settings/container-registries/github/[connectionId]':
+    return [{ href: '/settings/container-registries', label: 'Container registries' }, { href: '/settings/container-registries/github', label: 'GitHub' }, { ...current, label: 'Connection settings' }];
    case '/(app)/settings/llm-providers/openai':
     return [{ href: '/settings/llm-providers', label: 'LLM providers' }, { ...current, label: 'OpenAI' }];
+   case '/(app)/settings/llm-providers/openai/[connectionId]':
+    return [{ href: '/settings/llm-providers', label: 'LLM providers' }, { href: '/settings/llm-providers/openai', label: 'OpenAI' }, { ...current, label: 'Connection settings' }];
+   case '/(app)/settings/runtime-signing/[signerId]':
+    return [{ href: '/settings/runtime-signing', label: 'Runtime signing' }, { ...current, label: 'Signing key settings' }];
    default: return [current];
   }
  });

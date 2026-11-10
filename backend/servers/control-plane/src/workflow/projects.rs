@@ -45,6 +45,26 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
         Ok(context.response(v1::RenameProjectResponse { command_id }))
     }
 
+    async fn set_project_goal(
+        &self,
+        request: Request<v1::SetProjectGoalRequest>,
+    ) -> Result<Response<v1::SetProjectGoalResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let command_id = self
+            .store
+            .set_project_goal(
+                &value.idempotency_key,
+                &value.workspace_id,
+                &value.project_id,
+                value.expected_resource_version,
+                &value.goal,
+            )
+            .await
+            .map_err(|error| context.store(&error))?;
+        Ok(context.response(v1::SetProjectGoalResponse { command_id }))
+    }
+
     async fn get_turn_context_inputs(
         &self,
         request: Request<v1::GetTurnContextInputsRequest>,

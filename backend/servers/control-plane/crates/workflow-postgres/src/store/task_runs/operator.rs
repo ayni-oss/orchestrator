@@ -169,7 +169,7 @@ async fn build_command(
     attempt: &str,
     pack: &[u8],
 ) -> Result<TaskCommand, StoreError> {
-    let row=tx.query_opt("SELECT a.inputs,a.configuration_revision_id,t.plan_id,t.version_id,t.content_digest,t.approval_id,t.specification,c.instructions,c.provider,c.model,c.max_input_tokens,c.max_output_tokens FROM workflow_task_attempts a JOIN workflow_tasks t ON t.id=a.task_id JOIN workflow_agent_configurations c ON c.workspace_id=a.workspace_id AND c.revision_id=a.configuration_revision_id WHERE a.workspace_id=$1 AND a.project_id=$2 AND a.conversation_id=$3 AND a.task_id=$4 AND a.id=$5",&[&scope.workspace,&scope.project,&scope.conversation,&task,&attempt]).await?.ok_or(StoreError::NotFound)?;
+    let row=tx.query_opt("SELECT a.inputs,a.configuration_revision_id,t.plan_id,t.version_id,t.content_digest,t.approval_id,t.specification,c.instructions,c.provider,c.model,c.max_input_tokens,c.max_output_tokens,p.goal FROM workflow_task_attempts a JOIN workflow_tasks t ON t.id=a.task_id JOIN workflow_agent_configurations c ON c.workspace_id=a.workspace_id AND c.revision_id=a.configuration_revision_id JOIN workflow_projects p ON p.workspace_id=a.workspace_id AND p.id=a.project_id WHERE a.workspace_id=$1 AND a.project_id=$2 AND a.conversation_id=$3 AND a.task_id=$4 AND a.id=$5",&[&scope.workspace,&scope.project,&scope.conversation,&task,&attempt]).await?.ok_or(StoreError::NotFound)?;
     let i: ExecutionInputs = decode(&row.get::<_, Vec<u8>>(0))?;
     let t: PlanTaskSpecification = decode(&row.get::<_, Vec<u8>>(6))?;
     Ok(TaskCommand {
@@ -193,6 +193,7 @@ async fn build_command(
         max_seconds: i.max_seconds,
         max_tokens: i.max_tokens,
         objective: t.objective,
+        project_goal: row.get(12),
         scope: t.scope,
         out_of_scope: t.out_of_scope,
         acceptance_criteria: t.acceptance_criteria,

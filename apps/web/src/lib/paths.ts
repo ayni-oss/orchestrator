@@ -7,6 +7,7 @@ export const workspacePath = (workspaceId: string) => `/workspaces/${segment(wor
 export const workspaceSettingsPath = (workspaceId: string) => `${workspacePath(workspaceId)}/settings`;
 export const projectSettingsPath = (workspaceId: string, projectId: string) => `${workspacePath(workspaceId)}/projects/${segment(projectId)}/settings`;
 export const repositoryPath = (repositoryId: string) => `/repositories/${segment(repositoryId)}`;
+export const repositoryOnboardingPath = (providerRepositoryId: string) => `/repositories/onboarding/${segment(providerRepositoryId)}`;
 export function withCursor(path: string, name: 'afterWorkspace' | 'afterProject', cursor: string): string {
   return cursor ? `${path}?${new URLSearchParams({ [name]: cursor })}` : path;
 }

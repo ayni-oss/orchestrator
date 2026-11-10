@@ -53,6 +53,8 @@ managed validation. An empty selection retains the existing full-tree bounds.
 
 The complete approved task specification, including natural-language limits,
 remains authoritative. Repository and source declarations cannot be substituted.
+Dispatch captures the saved project goal as broader context alongside the
+approved task objective. Linked recovery segments inherit the captured goal.
 Unresolved approved inputs remain blockers; no free-text answer silently changes
 approved scope. A linked follow-up plan is required to change the reviewed work. [Confirmed recovery](task-recovery.md)
 can link another execution segment using the same frozen inputs and a newly approved allowance.

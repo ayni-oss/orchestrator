@@ -49,7 +49,7 @@ mod tests {
         "ListRepositoryInspections",
     ];
 
-    const RUNTIME_PREPARATION_METHODS: [&str; 15] = [
+    const RUNTIME_PREPARATION_METHODS: [&str; 17] = [
         "StartRepositoryRuntime",
         "GetRepositoryRuntime",
         "GetRepositoryRuntimeReceipt",
@@ -63,6 +63,8 @@ mod tests {
         "CancelRuntimePreparation",
         "RetryRuntimePreparation",
         "SetRuntimeSignerEnabled",
+        "GetRuntimeSigner",
+        "DeleteRuntimeSigner",
         "ListRuntimeSigners",
         "GetRuntimeSignerReceipt",
     ];
@@ -101,6 +103,9 @@ mod tests {
                         "ValidateProviderConnection",
                         "SetConnectionEnabled",
                         "ValidateGithubConnection",
+                        "GetConnection",
+                        "CheckConnection",
+                        "DeleteConnection",
                         "GetConnectionOperation",
                         "ListConnections",
                         "ListConnectionOperations",
@@ -153,6 +158,7 @@ mod tests {
                         "CreateWorkspace",
                         "RenameWorkspace",
                         "RenameProject",
+                        "SetProjectGoal",
                         "ListWorkspaces",
                         "ListProjects",
                         "GetAgentConfiguration",

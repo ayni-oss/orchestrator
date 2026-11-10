@@ -281,5 +281,37 @@ async fn signer_key_name_corrections_preserve_key_material_and_original_receipts
             .await,
         Err(StoreError::IdempotencyConflict)
     ));
+    let delete = key();
+    let removed = store
+        .delete_runtime_signer(&delete, &original.id, 2)
+        .await?;
+    assert!(!removed.enabled);
+    assert_eq!(removed.secret_uid, named.secret_uid);
+    assert_eq!(
+        store
+            .delete_runtime_signer(&delete, &original.id, 2)
+            .await?,
+        removed
+    );
+    assert_eq!(store.get_runtime_signer_receipt(&delete).await?, removed);
+    assert_eq!(store.get_runtime_signer_receipt(&rename).await?, named);
+    assert!(matches!(
+        store.get_runtime_signer(&original.id).await,
+        Err(StoreError::NotFound)
+    ));
+    assert!(matches!(
+        store
+            .set_runtime_signer_enabled(&key(), &original.id, removed.revision, true)
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    assert!(
+        store
+            .list_runtime_signers("", 100)
+            .await?
+            .0
+            .iter()
+            .all(|signer| signer.id != original.id)
+    );
     Ok(())
 }

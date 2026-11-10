@@ -58,6 +58,24 @@ export interface SetRuntimeSignerEnabledResponse {
   signer?: RuntimeSigner | undefined;
 }
 
+export interface GetRuntimeSignerRequest {
+  id: string;
+}
+
+export interface GetRuntimeSignerResponse {
+  signer?: RuntimeSigner | undefined;
+}
+
+export interface DeleteRuntimeSignerRequest {
+  idempotencyKey: string;
+  id: string;
+  expectedRevision: string;
+}
+
+export interface DeleteRuntimeSignerResponse {
+  signer?: RuntimeSigner | undefined;
+}
+
 export interface ListRuntimeSignersRequest {
   afterId: string;
   limit: number;
@@ -983,6 +1001,320 @@ export const SetRuntimeSignerEnabledResponse: MessageFns<SetRuntimeSignerEnabled
   },
   fromPartial(object: DeepPartial<SetRuntimeSignerEnabledResponse>): SetRuntimeSignerEnabledResponse {
     const message = createBaseSetRuntimeSignerEnabledResponse();
+    message.signer = (object.signer !== undefined && object.signer !== null)
+      ? RuntimeSigner.fromPartial(object.signer)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetRuntimeSignerRequest(): GetRuntimeSignerRequest {
+  return { id: "" };
+}
+
+export const GetRuntimeSignerRequest: MessageFns<GetRuntimeSignerRequest> = {
+  encode(message: GetRuntimeSignerRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRuntimeSignerRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRuntimeSignerRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRuntimeSignerRequest {
+    return { id: isSet(object.id) ? globalThis.String(object.id) : "" };
+  },
+
+  toJSON(message: GetRuntimeSignerRequest): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRuntimeSignerRequest>): GetRuntimeSignerRequest {
+    return GetRuntimeSignerRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRuntimeSignerRequest>): GetRuntimeSignerRequest {
+    const message = createBaseGetRuntimeSignerRequest();
+    message.id = object.id ?? "";
+    return message;
+  },
+};
+
+function createBaseGetRuntimeSignerResponse(): GetRuntimeSignerResponse {
+  return { signer: undefined };
+}
+
+export const GetRuntimeSignerResponse: MessageFns<GetRuntimeSignerResponse> = {
+  encode(message: GetRuntimeSignerResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.signer !== undefined) {
+      RuntimeSigner.encode(message.signer, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRuntimeSignerResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRuntimeSignerResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.signer = RuntimeSigner.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRuntimeSignerResponse {
+    return { signer: isSet(object.signer) ? RuntimeSigner.fromJSON(object.signer) : undefined };
+  },
+
+  toJSON(message: GetRuntimeSignerResponse): unknown {
+    const obj: any = {};
+    if (message.signer !== undefined) {
+      obj.signer = RuntimeSigner.toJSON(message.signer);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRuntimeSignerResponse>): GetRuntimeSignerResponse {
+    return GetRuntimeSignerResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRuntimeSignerResponse>): GetRuntimeSignerResponse {
+    const message = createBaseGetRuntimeSignerResponse();
+    message.signer = (object.signer !== undefined && object.signer !== null)
+      ? RuntimeSigner.fromPartial(object.signer)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseDeleteRuntimeSignerRequest(): DeleteRuntimeSignerRequest {
+  return { idempotencyKey: "", id: "", expectedRevision: "0" };
+}
+
+export const DeleteRuntimeSignerRequest: MessageFns<DeleteRuntimeSignerRequest> = {
+  encode(message: DeleteRuntimeSignerRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.id !== "") {
+      writer.uint32(18).string(message.id);
+    }
+    if (message.expectedRevision !== "0") {
+      writer.uint32(24).uint64(message.expectedRevision);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteRuntimeSignerRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDeleteRuntimeSignerRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.expectedRevision = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): DeleteRuntimeSignerRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      expectedRevision: isSet(object.expectedRevision)
+        ? globalThis.String(object.expectedRevision)
+        : isSet(object.expected_revision)
+        ? globalThis.String(object.expected_revision)
+        : "0",
+    };
+  },
+
+  toJSON(message: DeleteRuntimeSignerRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.expectedRevision !== "0") {
+      obj.expectedRevision = message.expectedRevision;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<DeleteRuntimeSignerRequest>): DeleteRuntimeSignerRequest {
+    return DeleteRuntimeSignerRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<DeleteRuntimeSignerRequest>): DeleteRuntimeSignerRequest {
+    const message = createBaseDeleteRuntimeSignerRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.id = object.id ?? "";
+    message.expectedRevision = object.expectedRevision ?? "0";
+    return message;
+  },
+};
+
+function createBaseDeleteRuntimeSignerResponse(): DeleteRuntimeSignerResponse {
+  return { signer: undefined };
+}
+
+export const DeleteRuntimeSignerResponse: MessageFns<DeleteRuntimeSignerResponse> = {
+  encode(message: DeleteRuntimeSignerResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.signer !== undefined) {
+      RuntimeSigner.encode(message.signer, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteRuntimeSignerResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDeleteRuntimeSignerResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.signer = RuntimeSigner.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): DeleteRuntimeSignerResponse {
+    return { signer: isSet(object.signer) ? RuntimeSigner.fromJSON(object.signer) : undefined };
+  },
+
+  toJSON(message: DeleteRuntimeSignerResponse): unknown {
+    const obj: any = {};
+    if (message.signer !== undefined) {
+      obj.signer = RuntimeSigner.toJSON(message.signer);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<DeleteRuntimeSignerResponse>): DeleteRuntimeSignerResponse {
+    return DeleteRuntimeSignerResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<DeleteRuntimeSignerResponse>): DeleteRuntimeSignerResponse {
+    const message = createBaseDeleteRuntimeSignerResponse();
     message.signer = (object.signer !== undefined && object.signer !== null)
       ? RuntimeSigner.fromPartial(object.signer)
       : undefined;
@@ -5035,6 +5367,28 @@ export const RuntimePreparationServiceService = {
     responseDeserialize: (value: Buffer): SetRuntimeSignerEnabledResponse =>
       SetRuntimeSignerEnabledResponse.decode(value),
   },
+  getRuntimeSigner: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/GetRuntimeSigner" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetRuntimeSignerRequest): Buffer =>
+      Buffer.from(GetRuntimeSignerRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetRuntimeSignerRequest => GetRuntimeSignerRequest.decode(value),
+    responseSerialize: (value: GetRuntimeSignerResponse): Buffer =>
+      Buffer.from(GetRuntimeSignerResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetRuntimeSignerResponse => GetRuntimeSignerResponse.decode(value),
+  },
+  deleteRuntimeSigner: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/DeleteRuntimeSigner" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: DeleteRuntimeSignerRequest): Buffer =>
+      Buffer.from(DeleteRuntimeSignerRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DeleteRuntimeSignerRequest => DeleteRuntimeSignerRequest.decode(value),
+    responseSerialize: (value: DeleteRuntimeSignerResponse): Buffer =>
+      Buffer.from(DeleteRuntimeSignerResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): DeleteRuntimeSignerResponse => DeleteRuntimeSignerResponse.decode(value),
+  },
   listRuntimeSigners: {
     path: "/ayni.orchestrator.v1.RuntimePreparationService/ListRuntimeSigners" as const,
     requestStream: false as const,
@@ -5144,6 +5498,8 @@ export interface RuntimePreparationServiceServer extends UntypedServiceImplement
   >;
   saveRuntimeSigner: handleUnaryCall<SaveRuntimeSignerRequest, SaveRuntimeSignerResponse>;
   setRuntimeSignerEnabled: handleUnaryCall<SetRuntimeSignerEnabledRequest, SetRuntimeSignerEnabledResponse>;
+  getRuntimeSigner: handleUnaryCall<GetRuntimeSignerRequest, GetRuntimeSignerResponse>;
+  deleteRuntimeSigner: handleUnaryCall<DeleteRuntimeSignerRequest, DeleteRuntimeSignerResponse>;
   listRuntimeSigners: handleUnaryCall<ListRuntimeSignersRequest, ListRuntimeSignersResponse>;
   getRuntimeSignerReceipt: handleUnaryCall<GetRuntimeSignerReceiptRequest, GetRuntimeSignerReceiptResponse>;
   startRuntimePreparation: handleUnaryCall<StartRuntimePreparationRequest, StartRuntimePreparationResponse>;
@@ -5262,6 +5618,36 @@ export interface RuntimePreparationServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: SetRuntimeSignerEnabledResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimeSigner(
+    request: GetRuntimeSignerRequest,
+    callback: (error: ServiceError | null, response: GetRuntimeSignerResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimeSigner(
+    request: GetRuntimeSignerRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetRuntimeSignerResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimeSigner(
+    request: GetRuntimeSignerRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetRuntimeSignerResponse) => void,
+  ): ClientUnaryCall;
+  deleteRuntimeSigner(
+    request: DeleteRuntimeSignerRequest,
+    callback: (error: ServiceError | null, response: DeleteRuntimeSignerResponse) => void,
+  ): ClientUnaryCall;
+  deleteRuntimeSigner(
+    request: DeleteRuntimeSignerRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: DeleteRuntimeSignerResponse) => void,
+  ): ClientUnaryCall;
+  deleteRuntimeSigner(
+    request: DeleteRuntimeSignerRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: DeleteRuntimeSignerResponse) => void,
   ): ClientUnaryCall;
   listRuntimeSigners(
     request: ListRuntimeSignersRequest,

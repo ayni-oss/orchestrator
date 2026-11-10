@@ -107,6 +107,79 @@ async fn connection_retries_rotation_fencing_and_protected_credentials() -> Test
         "both concurrent stale writers were accepted"
     );
     assert_safe_storage(&store, &runtime_url, &first.connection_id).await?;
+    assert_connection_deletion(&store, &first.connection_id).await?;
+    Ok(())
+}
+
+async fn assert_connection_deletion(store: &WorkflowStore, id: &str) -> TestResult {
+    let (current, pending_operation_id) = store.connection_settings(id).await?;
+    assert!(!pending_operation_id.is_empty());
+    let delete_key = key();
+    assert!(matches!(
+        store
+            .delete_connection(&delete_key, id, current.revision - 1)
+            .await,
+        Err(StoreError::ConfigurationRevisionConflict)
+    ));
+    let deleted = store
+        .delete_connection(&delete_key, id, current.revision)
+        .await?;
+    assert_eq!(deleted.connection.status, "deleted");
+    assert!(!deleted.connection.enabled);
+    assert_eq!(
+        store.get_connection_operation(&delete_key).await?.id,
+        deleted.id
+    );
+    assert_eq!(
+        store
+            .delete_connection(&delete_key, id, current.revision)
+            .await?
+            .id,
+        deleted.id
+    );
+    assert!(matches!(
+        store.connection_settings(id).await,
+        Err(StoreError::NotFound)
+    ));
+    assert!(
+        store
+            .list_connections("", 100)
+            .await?
+            .iter()
+            .all(|connection| connection.id != id)
+    );
+    assert!(
+        store
+            .github_candidate(&pending_operation_id)
+            .await?
+            .private_key_pem
+            .is_none()
+    );
+    let late = store
+        .finish_github_validation(&pending_operation_id, "")
+        .await?;
+    assert_eq!(late.state, "superseded");
+    assert_eq!(
+        late.connection.active_credential_revision,
+        current.active_credential_revision
+    );
+    assert!(matches!(
+        store
+            .set_connection_enabled(&key(), id, deleted.connection.revision, true)
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    assert!(matches!(
+        store
+            .save_github_connection(candidate(
+                &key(),
+                id,
+                deleted.connection.revision,
+                "new-key"
+            ))
+            .await,
+        Err(StoreError::NotFound)
+    ));
     Ok(())
 }
 
@@ -367,8 +440,12 @@ async fn provider_configuration_preserves_credentials_and_freezes_project_admiss
         })
         .await?;
     assert_eq!(
-        store.provider_candidate(&registry.id).await?.credential,
-        credentials
+        store
+            .provider_candidate(&registry.id)
+            .await?
+            .credential
+            .as_deref(),
+        Some(credentials.as_str())
     );
     assert!(store.github_candidate(&registry.id).await.is_err());
     assert!(

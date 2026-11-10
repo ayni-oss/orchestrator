@@ -503,10 +503,10 @@ in another terminal. `pnpm web:build` builds the Node application; start it with
 The API gateway remains required; the frontend owns no database credentials.
 
 In Configuration → Source control, add a named GitHub App connection with its App ID
-and PEM private key. Save, then explicitly validate the retained candidate. App
-installation discovery follows in the next PR. Keys cannot be read back. Replace a
-key by selecting the connection and submitting a candidate; failed validation leaves
-any active credential in place. An interrupted response offers operation recovery.
+and PEM private key. Saving starts validation. Open the app's settings to retry
+validation, replace its key, or disable or delete the connection. Failed validation
+leaves any active credential in place. Recover an interrupted save before submitting
+again. The Repositories page uses validated connections to discover installations.
 
 Configuration → Container registries manages named GHCR destinations with separate
 push/pull classic PATs. Validation currently checks both accounts' authentication;

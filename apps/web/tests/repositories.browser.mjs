@@ -19,8 +19,9 @@ test('repository catalog and workspace availability and project settings use can
   let ready=false;for(let i=0;i<120;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await delay(250);}assert.ok(ready,'product did not start');
   browser=await chromium.launch({headless:true});const page=await browser.newPage();
   await page.goto(`${origin}/repositories`);await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');
-  await page.getByRole('region',{name:'fixture/browser-repository',exact:true}).first().waitFor();
-  await page.locator(`main a[href="/repositories/${fixture}"]`).click();
+  const repositoryLink=page.locator(`main a[href="/repositories/${fixture}"]`);
+  await repositoryLink.locator('..').getByText('Connected',{exact:true}).waitFor();
+  await repositoryLink.click();
   await page.getByRole('tab',{name:'Ayni runtime',exact:true}).click();
   const resolved=await page.request.post(`${origin}/api/ResolveRepositoryDefaultCommit`,{headers:{'x-console-request':'1'},data:{repositoryId:fixture,expectedConnectionRevision:'1'}});
   assert.equal(resolved.status(),200);assert.equal((await resolved.json()).safeReason,'github_key_invalid');assert.equal((await resolved.json()).commitSha || '','');
@@ -63,13 +64,24 @@ test('repository catalog and workspace availability and project settings use can
   await sourceConnection.selectOption('');
   await sourceConnection.selectOption(process.env.AYNI_REPOSITORY_SOURCE);
   let connectRequest;let confirm;const lost=new Promise(resolve=>{confirm=resolve;});
-  await page.route('**/api/ConnectRepository',async route=>{connectRequest=route.request().postDataJSON();const response=await route.fetch();assert.equal(response.status(),200);assert.equal((await response.json()).operation.state,'failed');await route.abort('failed');confirm();});
+  const onboardingCard=page.getByRole('region',{name:'fixture/not-connected',exact:true});
+  await page.route('**/api/ConnectRepository',async route=>{
+   connectRequest=route.request().postDataJSON();
+   const response=await route.fetch();assert.equal(response.status(),200);
+   assert.equal((await response.json()).operation.state,'failed');
+   await onboardingCard.getByText('Connecting',{exact:true}).waitFor();
+   assert.equal(await page.getByRole('button',{name:'Recover status',exact:true}).count(),0);
+   await route.abort('failed');confirm();
+  });
   await page.getByRole('button',{name:'Connect repository',exact:true}).click();await lost;
   await page.unroute('**/api/ConnectRepository');await page.reload();
+  await onboardingCard.getByText('Pending',{exact:true}).waitFor();
+  await onboardingCard.getByRole('link',{name:'Repository settings',exact:true}).click();
   await page.getByRole('button',{name:'Recover status',exact:true}).click();
   await page.getByText('The saved App key is invalid. Update the source connection.',{exact:true}).first().waitFor();
-  await page.waitForFunction(()=>sessionStorage.getItem('ayni.repository.connect.pending')===null);
-  assert.equal(await page.evaluate(()=>sessionStorage.getItem('ayni.repository.connect.pending')),null);
+  await page.getByRole('link',{name:'Back to repositories',exact:true}).click();
+  await onboardingCard.getByText('Connection failed',{exact:true}).waitFor();
+  assert.equal(await page.getByText('The saved App key is invalid. Update the source connection.',{exact:true}).count(),0);
   const retained=await page.request.post(`${origin}/api/GetRepositoryOperation`,{headers:{'x-console-request':'1'},data:{idempotencyKey:connectRequest.idempotencyKey}});
   assert.equal(retained.status(),200);assert.equal((await retained.json()).operation.state,'failed');
   const conflict=await page.request.post(`${origin}/api/ConnectRepository`,{headers:{'x-console-request':'1'},data:{...connectRequest,providerRepositoryId:'424244'}});assert.equal(conflict.status(),409);
@@ -92,6 +104,7 @@ test('repository catalog and workspace availability and project settings use can
   let renameRequest,renameReceipt,acknowledge;const lostRename=new Promise(resolve=>{acknowledge=resolve;});
   await page.route('**/api/RenameWorkspace',async route=>{renameRequest=route.request().postDataJSON();const response=await route.fetch();assert.equal(response.status(),200);renameReceipt=(await response.json()).commandId;await route.abort('failed');acknowledge();});
   await page.getByRole('textbox',{name:'Workspace name',exact:true}).fill('Renamed browser workspace');await lostRename;
+  await page.locator('[data-sonner-toast][data-type="error"]').getByText('Could not save the name',{exact:true}).waitFor();
   await page.unroute('**/api/RenameWorkspace');await page.reload();
   const [renamed]=await Promise.all([page.waitForResponse(r=>r.url().endsWith('/api/RenameWorkspace')),page.getByRole('button',{name:'Retry rename',exact:true}).click()]);
   assert.equal((await renamed.json()).commandId,renameReceipt);
@@ -101,6 +114,8 @@ test('repository catalog and workspace availability and project settings use can
    .and(page.locator(`input[value="${fixture}"]`));
   await workspaceRepository.click();
   await workspaceRepository.and(page.locator(':checked')).waitFor();
+  await workspaceRepository.locator('xpath=ancestor::*[@data-slot="input-group"][1]')
+   .locator('[data-autosave-state="saved"]').waitFor();
   const staleRename=await page.request.post(`${origin}/api/RenameWorkspace`,{headers:{'x-console-request':'1'},data:{...renameRequest,idempotencyKey:crypto.randomUUID(),displayName:'Stale'}});assert.equal(staleRename.status(),409);
   await page.getByRole('navigation',{name:'Breadcrumb'}).getByRole('link',{name:'Renamed browser workspace',exact:true}).click();
   await page.getByRole('heading',{name:'Renamed browser workspace',level:1,exact:true}).waitFor();
@@ -108,7 +123,7 @@ test('repository catalog and workspace availability and project settings use can
   await projectLink.locator('..').getByRole('button').click();
   assert.equal(await page.getByRole('menuitem',{name:'Rename',exact:true}).count(),0);
   await page.getByRole('menuitem',{name:'Project settings',exact:true}).click();
-  await page.getByRole('textbox',{name:'Project name',exact:true}).fill('Renamed browser project');
+  await page.getByRole('textbox',{name:'Project Name',exact:true}).fill('Renamed browser project');
   await page.getByRole('heading',{name:'Renamed browser project',level:1,exact:true}).waitFor();
   const projectRepos=await page.request.post(`${origin}/api/ListProjectRepositories`,{headers:{'x-console-request':'1'},data:{workspaceId:a,projectId:pa}});
   assert.equal(projectRepos.status(),200);

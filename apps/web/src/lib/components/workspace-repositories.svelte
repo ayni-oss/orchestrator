@@ -5,6 +5,7 @@
   import { rpc, RpcError } from '$lib/api';
   import type { Repository } from '$lib/repositories';
   import InformationCard from '$lib/components/information-card.svelte';
+  import AutosaveField from '$lib/components/autosave-field.svelte';
   import Skeleton from '$lib/components/ui/skeleton/skeleton.svelte';
   import Feedback from '$lib/components/feedback.svelte';
   import { Button } from '$lib/components/ui/button/index.js';
@@ -24,6 +25,7 @@
   let loading = $state(true);
   let membershipLoaded = $state(false);
   let error = $state('');
+  let saved = $state<{ id: string; revision: number } | null>(null);
   const storageKey = $derived(`ayni.workspace.${workspaceId}.repository.pending`);
   const memberIds = $derived(new Set(members.map(repository => repository.id)));
   const repositories = $derived([
@@ -31,13 +33,17 @@
     ...members.filter(repository => !catalog.some(entry => entry.id === repository.id)),
   ]);
 
-  async function perform(action: () => Promise<void>) {
+  async function perform(action: () => Promise<void>, savingMembership = false) {
     busy = true;
     error = '';
     try {
       await action();
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Workspace repositories could not be loaded.';
+      if (savingMembership) {
+        toast.error('Workspace repository change needs attention', { description: cause instanceof Error ? cause.message : 'The repository selection could not be saved.' });
+      } else {
+        error = cause instanceof Error ? cause.message : 'Workspace repositories could not be loaded.';
+      }
     } finally {
       busy = false;
     }
@@ -91,15 +97,19 @@
     }
     if (!change.available) members = members.filter(entry => entry.id !== change.repositoryId);
     clearPending();
-    toast.success(change.available ? 'Repository added to workspace' : 'Repository removed from workspace');
+    saved = { id: change.repositoryId, revision: Date.now() };
     await loadMembers();
   }
 
   function changeMembership(id: string, available: boolean) {
     if (!id || busy || pending) return;
-    pending = { idempotencyKey: crypto.randomUUID(), workspaceId, repositoryId: id, available };
-    sessionStorage.setItem(storageKey, JSON.stringify(pending));
-    void perform(retry);
+    saved = null;
+    const change = { idempotencyKey: crypto.randomUUID(), workspaceId, repositoryId: id, available };
+    void perform(async () => {
+      sessionStorage.setItem(storageKey, JSON.stringify(change));
+      pending = change;
+      await retry();
+    }, true);
   }
 
   onMount(() => {
@@ -132,7 +142,7 @@
   {#if pending && !busy}
     <div class="space-y-2">
       <p class="text-sm">Retry the saved change to recover its result.</p>
-      <Button variant="outline" disabled={busy} onclick={() => perform(retry)}>Retry repository change</Button>
+      <Button variant="outline" disabled={busy} onclick={() => perform(retry, true)}>Retry repository change</Button>
     </div>
   {/if}
   <fieldset class="space-y-2" disabled={busy || !!pending} aria-busy={busy}>
@@ -146,19 +156,24 @@
       <div class="grid grid-cols-2 gap-2">
         {#each repositories as repository (repository.id)}
           {@const selected = memberIds.has(repository.id)}
-          <label class="flex min-w-0 cursor-pointer items-center gap-2 rounded-md border border-input p-2 text-sm hover:bg-muted/50 dark:bg-input/30 dark:hover:bg-input/50">
-            <input
-              type="checkbox"
-              value={repository.id}
-              class="size-4 shrink-0 accent-primary"
-              checked={selected}
-              onclick={(event) => {
-                event.preventDefault();
-                changeMembership(repository.id, !selected);
-              }}
-            />
-            <span class="min-w-0 [overflow-wrap:anywhere]">{repository.fullName}</span>
-          </label>
+          <AutosaveField class="hover:bg-muted/50 dark:hover:bg-input/50"
+            saving={busy && pending?.repositoryId === repository.id}
+            savedRevision={saved?.id === repository.id ? saved.revision : undefined}>
+            <label class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 p-2 pr-0 text-sm">
+              <input
+                type="checkbox"
+                data-slot="input-group-control"
+                value={repository.id}
+                class="size-4 shrink-0 accent-primary"
+                checked={selected}
+                onclick={(event) => {
+                  event.preventDefault();
+                  changeMembership(repository.id, !selected);
+                }}
+              />
+              <span class="min-w-0 [overflow-wrap:anywhere]">{repository.fullName}</span>
+            </label>
+          </AutosaveField>
         {/each}
       </div>
     {:else if membershipLoaded && !busy}

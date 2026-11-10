@@ -10,6 +10,8 @@ service RuntimePreparationService {
   rpc RecoverRuntimeSignerProvisioning(RecoverRuntimeSignerProvisioningRequest) returns (RecoverRuntimeSignerProvisioningResponse);
   rpc SaveRuntimeSigner(SaveRuntimeSignerRequest) returns (SaveRuntimeSignerResponse);
   rpc SetRuntimeSignerEnabled(SetRuntimeSignerEnabledRequest) returns (SetRuntimeSignerEnabledResponse);
+  rpc GetRuntimeSigner(GetRuntimeSignerRequest) returns (GetRuntimeSignerResponse);
+  rpc DeleteRuntimeSigner(DeleteRuntimeSignerRequest) returns (DeleteRuntimeSignerResponse);
   rpc ListRuntimeSigners(ListRuntimeSignersRequest) returns (ListRuntimeSignersResponse);
   rpc GetRuntimeSignerReceipt(GetRuntimeSignerReceiptRequest) returns (GetRuntimeSignerReceiptResponse);
   rpc StartRuntimePreparation(StartRuntimePreparationRequest) returns (StartRuntimePreparationResponse);
@@ -51,6 +53,20 @@ message SetRuntimeSignerEnabledRequest {
   bool enabled = 4;
 }
 message SetRuntimeSignerEnabledResponse {
+  RuntimeSigner signer = 1;
+}
+message GetRuntimeSignerRequest {
+  string id = 1;
+}
+message GetRuntimeSignerResponse {
+  RuntimeSigner signer = 1;
+}
+message DeleteRuntimeSignerRequest {
+  string idempotency_key = 1;
+  string id = 2;
+  uint64 expected_revision = 3;
+}
+message DeleteRuntimeSignerResponse {
   RuntimeSigner signer = 1;
 }
 message ListRuntimeSignersRequest {
