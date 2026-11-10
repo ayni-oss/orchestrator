@@ -141,17 +141,26 @@
   {milestone:'RUNTIME_BUILD_MILESTONE_EXPORT_IMAGE',label:'Export OCI image'},
   {milestone:'RUNTIME_BUILD_MILESTONE_INSPECT_IMAGE',label:'Check exported image'},
  ];
- const building = $derived(operation?.stage === 'build' && operation.state === 'running');
- const buildComplete = $derived(operation?.buildMilestone === 'RUNTIME_BUILD_MILESTONE_IMAGE_READY' ||
-  (!!operation?.buildsStarted && (operation.stage === 'freeze_candidate' || !!operation.unsignedManifestDigest)));
+ const buildOperation = $derived(onboardingActive || onboardingBlocked || pending ? undefined : operation);
+ const building = $derived(buildOperation?.stage === 'build' && buildOperation.state === 'running');
+ const buildComplete = $derived(buildOperation?.buildMilestone === 'RUNTIME_BUILD_MILESTONE_IMAGE_READY' ||
+  (!!buildOperation?.buildsStarted && (buildOperation.stage === 'freeze_candidate' || !!buildOperation.unsignedManifestDigest)));
  const activeBuildStep = $derived(buildComplete ? buildSteps.length :
-  buildSteps.findIndex(step => step.milestone === operation?.buildMilestone));
+  building ? buildSteps.findIndex(step => step.milestone === buildOperation?.buildMilestone) : -1);
+ const inactiveBuildStatus = $derived(buildOperation?.state === 'ready' && !buildOperation.buildsStarted ? 'Skipped' :
+  !building && buildOperation?.buildsStarted ? 'Unconfirmed' : 'Pending');
  const sourceIssue = $derived(operation?.safeReason?.startsWith('source_') && !operation.buildsStarted);
- const summaryOperation = $derived(onboardingActive || onboardingBlocked || sourceIssue ? undefined : operation);
- const preparationMessage = $derived(sourceIssue ? 'See Activity for preparation details.' :
+ const summaryOperation = $derived(sourceIssue ? undefined : buildOperation);
+ const preparationMessage = $derived(pending ? overview.description : sourceIssue ? 'See Activity for preparation details.' :
   onboardingActive ? ({resolving:'Checking the branch head…',inspecting:'Checking the committed ayni policy, lock and build inputs…',admitting:'Validating build capability, signer trust and preparation settings…'}[onboarding?.state || ''] || 'Preparing…') :
   onboardingBlocked ? onboardingReasons[onboarding?.safeReason || ''] || 'The runtime setup needs attention. Review the current configuration.' :
   !operation ? overview.description : '');
+ const preparationStatus = $derived([...new Set([
+  summaryOperation && (runtimeStages[summaryOperation.stage] || summaryOperation.stage),
+  preparationMessage,
+  building && activeBuildStep < 0 && 'Waiting for the build worker to report progress.',
+  ...(sourceIssue ? [] : overview.issues),
+ ].filter(Boolean))]);
  const previousOperations = $derived(operations.filter(value => value.id !== overview.operation?.id));
  const matchingOperation = $derived(operation && (retainedRun?.preparationId === operation.id ||
   (!onboarding && !!reviewedCommit && operation.sourceCommit === reviewedCommit)) ? operation : undefined);
@@ -427,6 +436,11 @@
   return () => { mounted = false; clearInterval(timer); dismissRecoveryToast(); };
  });
 </script>
+{#snippet statusReport()}
+ <div class="space-y-1" aria-live="polite">
+  {#each preparationStatus as line (line)}<p>{line}</p>{:else}—{/each}
+ </div>
+{/snippet}
 {#snippet preparationEvidence(operation: RuntimePreparation)}
    <article class="space-y-3 rounded-md border p-4" aria-label={`Runtime preparation ${operation.id}`}>
     <p class="font-medium">{operation.state === 'ready' ? 'Runtime ready' : operation.state.replaceAll('_', ' ')} · {runtimeStages[operation.stage] || operation.stage}</p>
@@ -662,49 +676,41 @@
    <div class="flex flex-wrap gap-4"><div class="space-y-2"><Label for={`runtime-platform-${repo.id}`}>Runtime platform</Label><NativeSelect.Root id={`runtime-platform-${repo.id}`} bind:value={platform} disabled={busy || !!pending}><NativeSelect.Option value="linux/arm64">Linux arm64</NativeSelect.Option><NativeSelect.Option value="linux/amd64">Linux amd64</NativeSelect.Option></NativeSelect.Root></div><div class="space-y-2"><Label for={`runtime-seconds-${repo.id}`}>Time limit (seconds)</Label><Input id={`runtime-seconds-${repo.id}`} type="number" min={1} max={86400} bind:value={seconds} disabled={busy || !!pending}/></div></div>
    <label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowBuild} onchange={() => { if (!allowBuild) allowReplace = false; }} disabled={busy || !!pending}/>Allow a bounded build if the image is missing</label>
    {#if allowBuild}<div class="space-y-2"><Label for={`runtime-builds-${repo.id}`}>Maximum build attempts</Label><Input id={`runtime-builds-${repo.id}`} type="number" min={1} max={10} bind:value={builds} disabled={busy || !!pending}/><p class="text-xs text-muted-foreground">The qualified deployment resource limits also apply. Interrupted builds consume their retained attempt allowance.</p></div><label class="flex items-start gap-2 text-sm"><input type="checkbox" bind:checked={allowReplace} disabled={busy || !!pending}/>Also allow replacement if an existing image is invalid</label>{/if}
-   {:else if !pending}
+   {:else}
     <section class="rounded-md border bg-muted/30 p-4" aria-label="Preparation summary">
      <InformationTable aligned rows={[
-      {label:'Stage',value:summaryOperation ? runtimeStages[summaryOperation.stage] || summaryOperation.stage : '—'},
+      {label:'Status',value:statusReport},
       {label:'Commit',value:summaryOperation?.sourceCommit?.slice(0,12) || '—',monospace:true},
       {label:'Platform',value:summaryOperation?.platform || '—'},
       ...(currentStep === 3 ? [{label:'Build attempts',value:summaryOperation ? `${summaryOperation.buildsStarted || 0} of ${summaryOperation.maxBuilds || 0}` : '—'}] : []),
      ]}/>
     </section>
-    {#if preparationMessage || (!sourceIssue && overview.issues.length)}
-     <pre class="rounded-md bg-muted p-3 text-xs whitespace-pre-wrap [overflow-wrap:anywhere]" aria-live="polite">{[preparationMessage, ...(sourceIssue ? [] : overview.issues)].filter(Boolean).join('\n')}</pre>
-    {/if}
-    {#if currentStep === 3 && operation && (building || operation.buildsStarted) && !onboardingActive && !onboardingBlocked}
+    {#if currentStep === 3}
      <section class="space-y-2 rounded-md border p-4" aria-labelledby={`build-report-${repo.id}`}>
       <h4 id={`build-report-${repo.id}`} class="text-sm font-medium">Build report</h4>
-      {#if building || buildComplete}
-       {#if activeBuildStep < 0}<p class="text-sm text-muted-foreground">Waiting for the build worker to report progress.</p>{/if}
-       <ol class="divide-y" aria-label="Build steps">
+      <ol class="divide-y" aria-label="Build steps">
         {#each buildSteps as step, index (step.milestone)}
          <li class="flex items-center justify-between gap-3 py-2 text-sm" aria-current={index === activeBuildStep ? 'step' : undefined}>
           <span>{step.label}</span>
           {#if index < activeBuildStep}<StatusBadge status="Complete" tone="success" />
           {:else if index === activeBuildStep}<StatusBadge status="Running" tone="active" />
-          {:else}<StatusBadge status="Pending" />{/if}
+          {:else}<StatusBadge status={inactiveBuildStatus} />{/if}
          </li>
         {/each}
-       </ol>
-      {:else}
-       <p class="text-sm text-muted-foreground">There is no active build. See Activity for preparation details.</p>
-      {/if}
+      </ol>
      </section>
-    {:else if currentStep === 4 && operation}
+    {:else if currentStep === 4 && !pending && operation}
      <InformationTable rows={[
       {label:'Content verification',value:operation.contentVerified ? 'Verified' : 'Not verified'},
       {label:'Managed compatibility',value:operation.managedCompatible ? 'Verified' : 'Not verified'},
       {label:'Cleanup',value:operation.cleanupComplete ? 'Complete' : 'Not complete'},
      ]}/>
     {/if}
-  {#if currentStep === 4 && image}<div class="space-y-2 border-t pt-3"><p class="text-sm font-medium">{image.confirmed ? 'Registry image available' : 'Image destination'}</p><code class="block break-all text-xs">{image.reference || image.destination}</code>{#if !image.confirmed}<p class="text-xs text-muted-foreground">No published image is confirmed by this status yet.</p>{/if}{#if image.reference && verified}
+  {#if currentStep === 4 && !pending && image}<div class="space-y-2 border-t pt-3"><p class="text-sm font-medium">{image.confirmed ? 'Registry image available' : 'Image destination'}</p><code class="block break-all text-xs">{image.reference || image.destination}</code>{#if !image.confirmed}<p class="text-xs text-muted-foreground">No published image is confirmed by this status yet.</p>{/if}{#if image.reference && verified}
    {@const reference = image.reference}
    <Button variant="outline" onclick={() => perform(() => navigator.clipboard.writeText(reference))}>Copy image reference</Button>
   {/if}<a class="text-sm text-primary underline underline-offset-4" href={image.url} target="_blank" rel="noreferrer">Open registry package</a></div>{/if}
-    {#if operation && (retryStates.has(operation.state) || (activeStates.has(operation.state) && operation.state !== 'cancelling'))}
+    {#if !pending && operation && (retryStates.has(operation.state) || (activeStates.has(operation.state) && operation.state !== 'cancelling'))}
     <div class="flex flex-wrap gap-2">
      {#if operation && retryStates.has(operation.state)}{@const current = operation}<Button disabled={busy || !!pending} onclick={() => perform(() => command('RetryRuntimePreparation',current))}>{current.state === 'publication_uncertain' ? 'Reconcile publication' : 'Retry preparation'}</Button>{/if}
      {#if operation && activeStates.has(operation.state) && operation.state !== 'cancelling'}{@const current = operation}<Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => command('CancelRuntimePreparation',current))}>Cancel preparation</Button>{/if}
