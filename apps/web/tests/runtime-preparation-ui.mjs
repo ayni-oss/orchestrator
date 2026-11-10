@@ -169,7 +169,18 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  assert.ok(await integrations.isEnabled());
  assert.equal(await integrations.locator('svg').count(),0);
  assert.ok(await steps.getByRole('button',{name:/Check ayni\.lock/}).isDisabled());
- await status.getByText('3 of 3 integrations ready',{exact:true}).waitFor();
+ const readiness=status.getByRole('list',{name:'Integration readiness',exact:true});
+ await readiness.getByRole('listitem',{name:'Source control: Ready',exact:true}).waitFor();
+ await readiness.getByRole('listitem',{name:'Runtime registry: Ready',exact:true}).waitFor();
+ await readiness.getByRole('listitem',{name:'Signing key: Ready',exact:true}).waitFor();
+ assert.equal(await readiness.locator('svg').count(),3);
+ await status.locator('[data-title-content]').getByText('Ready',{exact:true}).waitFor();
+ assert.equal(await status.getByText('Source control connection',{exact:true}).count(),0);
+ await status.getByRole('button',{name:'View source control connection',exact:true}).hover();
+ await page.getByRole('tooltip').getByText('Source control connection',{exact:true}).waitFor();
+ await page.getByRole('tooltip').getByText('Fixture GitHub',{exact:true}).waitFor();
+ await status.getByRole('heading',{name:'Connect integrations',exact:true}).hover();
+ await page.getByRole('tooltip').waitFor({state:'hidden'});
  const refresh=status.getByRole('button',{name:'Refresh integrations',exact:true});
  const [connectionsReloaded,signersReloaded]=await Promise.all([
   page.waitForResponse(response=>response.url().endsWith('/api/ListConnections')),
@@ -183,7 +194,8 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  const saved = field => field.locator('xpath=ancestor::*[@data-slot="input-group"][1]').locator('[data-autosave-state="saved"]');
  await registryPicker.selectOption('');
  await saved(registryPicker).waitFor();
- await status.getByText('2 of 3 integrations ready',{exact:true}).waitFor();
+ await readiness.getByRole('listitem',{name:'Runtime registry: Not ready',exact:true}).waitFor();
+ await status.locator('[data-title-content]').getByText('Needs attention',{exact:true}).waitFor();
  assert.ok(await next().isDisabled());
  await signerPicker.selectOption('');
  await saved(signerPicker).waitFor();

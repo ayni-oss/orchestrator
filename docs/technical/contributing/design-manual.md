@@ -82,6 +82,11 @@ commit inspection form. Previous preparations and inspection history are
 collapsed by default. Preserve full identifiers and retained evidence in the
 entry's extended details.
 
+For integration setup, put overall readiness beside the section title. Name each
+requirement (source control, runtime registry and signing key) with a checkmark
+when ready or an attention icon when incomplete. Put read-only connection details
+in the shared info hover; keep the registry and signer selectors visible.
+
 ## Verification
 
 Exercise delayed responses as well as fast responses. Check that known page

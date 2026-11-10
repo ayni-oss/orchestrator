@@ -1,10 +1,11 @@
 <script lang="ts">
+ import InfoTooltip from "./info-tooltip.svelte";
  import TitleRow from "./title-row.svelte";
  import ActivitySkeleton from "./activity-skeleton.svelte";
  import RuntimeLoading from "./runtime-loading.svelte";
  import { protectUnsavedChanges } from "$lib/unsaved-changes.svelte";
  import { onMount, tick, untrack, type Snippet } from 'svelte';
- import { Copy, RefreshCw } from '@lucide/svelte';
+ import { CircleCheck, CircleAlert, Copy, RefreshCw } from '@lucide/svelte';
  import { Button } from '$lib/components/ui/button/index.js';
  import { Input } from '$lib/components/ui/input/index.js';
  import { Label } from '$lib/components/ui/label/index.js';
@@ -91,7 +92,11 @@
  const registryReady = $derived(!!registry?.enabled && !!registry.activeCredentialRevision);
  const signerReady = $derived(!!signer?.enabled);
  const integrationsReady = $derived(sourceReady && registryReady && signerReady);
- const readyIntegrationCount = $derived(Number(sourceReady) + Number(registryReady) + Number(signerReady));
+ const integrationReadiness = $derived([
+  {label:'Source control',ready:sourceReady},
+  {label:'Runtime registry',ready:registryReady},
+  {label:'Signing key',ready:signerReady},
+ ]);
  const reviewedCommit = $derived(
   !inspectionPending && !checkingDefault && latestInspection?.state === 'completed' &&
   latestInspection.commitSha === checkedCommit &&
@@ -553,10 +558,16 @@
     {/key}
     {/snippet}
     {#snippet badge()}
-     {#if currentStep >= 3 && !pending}<span aria-live="polite"><StatusBadge status={runStatus.label} tone={runStatus.tone} /></span>{/if}
+     {#if currentStep === 0}
+      <span aria-live="polite"><StatusBadge status={integrationsReady ? 'Ready' : 'Needs attention'} tone={integrationsReady ? 'success' : 'warning'} /></span>
+     {:else if currentStep >= 3 && !pending}<span aria-live="polite"><StatusBadge status={runStatus.label} tone={runStatus.tone} /></span>{/if}
     {/snippet}
     {#snippet actions()}
     {#if currentStep === 0}
+     <InfoTooltip label="View source control connection" size="icon" rows={[
+      {label:'Source control connection',value:connection?.displayName || 'Unavailable',monospace:false},
+      {label:'Status',value:sourceReady ? 'Ready' : 'Unavailable or needs validation',monospace:false},
+     ]} />
      <Button variant="ghost" size="icon" aria-label="Refresh integrations" title="Reload available integrations from Configuration"
       aria-busy={refreshingIntegrations} disabled={busy} onclick={refreshIntegrations}>
       <RefreshCw class={{ 'motion-safe:animate-spin': refreshingIntegrations }} aria-hidden="true"/>
@@ -572,10 +583,15 @@
     {/snippet}
    </TitleRow>
    {#if currentStep === 0}
-    <p role="status" class="text-sm text-muted-foreground">{readyIntegrationCount} of 3 integrations ready</p>
-    <InformationTable rows={[
-     {label:'Source control connection',value:sourceReady ? connection?.displayName || 'Connected' : 'Unavailable or needs validation'},
-    ]}/>
+    <ul aria-label="Integration readiness" aria-live="polite" class="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+     {#each integrationReadiness as integration (integration.label)}
+      <li class="inline-flex items-center gap-2" aria-label={`${integration.label}: ${integration.ready ? 'Ready' : 'Not ready'}`}>
+       {#if integration.ready}<CircleCheck class="size-4 shrink-0 text-emerald-700 dark:text-emerald-300" aria-hidden="true" />
+       {:else}<CircleAlert class="size-4 shrink-0 text-amber-800 dark:text-amber-300" aria-hidden="true" />{/if}
+       <span>{integration.label}</span>
+      </li>
+     {/each}
+    </ul>
     {#if !sourceReady}<Button variant="link" class="px-0" href="/settings/source-control/github">Manage source connections</Button>{/if}
     <div class="grid gap-4 sm:grid-cols-2">
      <div class="min-w-0 space-y-2">
