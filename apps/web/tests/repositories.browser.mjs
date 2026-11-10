@@ -34,30 +34,23 @@ test('repository catalog and workspace availability and project settings use can
   assert.equal((await listBranches('999')).status(),409);
   const inspectionCard = page.locator(`[data-repository-inspection="${fixture}"]`);
   await page.getByRole('tab',{name:'Status',exact:true}).click();
-  const commitInput = inspectionCard.getByLabel('Commit SHA',{exact:true});
-  await commitInput.fill('main');
-  assert.equal(await inspectionCard.getByRole('button',{name:'Inspect commit',exact:true}).isDisabled(),true);
-  await commitInput.fill('b'.repeat(40));
-  let inspectionRequest,inspectionAcknowledge;
-  const lostInspection = new Promise(resolve=>{inspectionAcknowledge=resolve;});
-  await page.route('**/api/InspectRepository',async route=>{
-   inspectionRequest=route.request().postDataJSON();
-   const response=await route.fetch();assert.equal(response.status(),200);
-   assert.equal((await response.json()).inspection.state,'failed');
-   await route.abort('failed');inspectionAcknowledge();
-  });
-  await inspectionCard.getByRole('button',{name:'Inspect commit',exact:true}).click();
-  await lostInspection;await page.unroute('**/api/InspectRepository');await page.reload();
-  await page.locator('[data-sonner-toast]').getByText('Inspection result not confirmed',{exact:true}).waitFor();
-  await page.getByRole('tab',{name:'Status',exact:true}).click();
-  await inspectionCard.getByRole('button',{name:'Inspect commit',exact:true}).click();
+  // Exact-commit inspection remains available through the API. Status displays its saved result.
+  const inspectionRequest={idempotencyKey:crypto.randomUUID(),repositoryId:fixture,expectedConnectionRevision:'1',commitSha:'b'.repeat(40)};
+  const inspect=()=>page.request.post(`${origin}/api/InspectRepository`,{headers:{'x-console-request':'1'},data:inspectionRequest});
+  const response=await inspect();
+  assert.equal(response.status(),200);
+  const {inspection}=await response.json();
+  assert.equal(inspection.state,'failed');
+  const replay=await inspect();
+  assert.equal(replay.status(),200);
+  assert.equal((await replay.json()).inspection.id,inspection.id);
+  await page.reload();
   await inspectionCard.getByText(/Inspection history/).click();
   await inspectionCard.getByRole('article',{name:`Inspection ${'b'.repeat(40)}`,exact:true}).first()
    .getByRole('button',{name:'View inspection details',exact:true}).click();
   const inspectionDialog=page.getByRole('dialog',{name:'Inspection details',exact:true});
   await inspectionDialog.getByText('The saved App key is invalid. Update the source connection.',{exact:true}).waitFor();
   await inspectionDialog.getByRole('button',{name:'Close',exact:true}).click();
-  await page.waitForFunction(id=>sessionStorage.getItem(`ayni.repository.inspection.pending.${id}`)===null,fixture);
   const retainedInspection=await page.request.post(`${origin}/api/GetRepositoryInspection`,{headers:{'x-console-request':'1'},data:{idempotencyKey:inspectionRequest.idempotencyKey}});
   assert.equal(retainedInspection.status(),200);assert.equal((await retainedInspection.json()).inspection.commitSha,'b'.repeat(40));
   const inspectionConflict=await page.request.post(`${origin}/api/InspectRepository`,{headers:{'x-console-request':'1'},data:{...inspectionRequest,commitSha:'c'.repeat(40)}});

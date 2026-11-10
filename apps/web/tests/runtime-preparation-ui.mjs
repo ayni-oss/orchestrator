@@ -345,10 +345,9 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  const viewDetails=preparationEntry.getByRole('button',{name:'View preparation details',exact:true});
  const detailsDialog=page.getByRole('dialog',{name:'Preparation details',exact:true});
  await preparationEntry.getByText('Not complete',{exact:true}).waitFor();
- await statusPanel.getByRole('region',{name:'Inspect a specific commit',exact:true}).getByLabel('Commit SHA',{exact:true}).waitFor();
  const sectionTitles=await statusPanel.locator('h3, details > summary').allTextContents();
  assert.deepEqual(sectionTitles.map(title=>title.replace(/ \(.*\)$/,'')),[
-  'Inspect a specific commit','Previous preparations','Inspection history',
+  'Previous preparations','Inspection history',
  ]);
  assert.equal(await statusPanel.locator('details').count(),2);
  const history=statusPanel.locator('[data-preparation-history]');
@@ -472,9 +471,9 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
   localStorage.removeItem('ayni.runtime.default.signer');
  },repositoryId);
  await page.goto(`${origin}/repositories/${repositoryId}?tab=status`);
- await statusPanel.getByRole('region',{name:'Inspect a specific commit',exact:true}).waitFor();
+ await statusPanel.getByText(/^Inspection history/).waitFor();
  await page.goto(`${origin}/repositories/${repositoryId}?tab=activity`);
- await statusPanel.getByRole('region',{name:'Inspect a specific commit',exact:true}).waitFor();
+ await statusPanel.getByText(/^Inspection history/).waitFor();
  await page.goto(`${origin}/repositories/${repositoryId}?tab=source`);
  await sourceDetails.getByText('Source control connection',{exact:true}).waitFor();
  await sourceDetails.getByRole('button',{name:'Close',exact:true}).click();

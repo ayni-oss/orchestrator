@@ -52,14 +52,14 @@ test('delayed repository reads preserve the page structure and refresh keeps row
  let historyHeld=true;
  await page.route('**/api/ListRuntimePreparations',async route=>{if(historyHeld)await historyGate;await route.fulfill({json:{operations:[operation]}});});
  await page.goto(`${origin}/repositories/${repositoryId}?tab=status`);
- const inspect=page.getByRole('heading',{name:'Inspect a specific commit',exact:true});
- await inspect.waitFor();
+ const historyTitle=page.getByText(/^Previous preparations/);
+ await historyTitle.waitFor();
  const tab=page.getByRole('tab',{name:'Status',exact:true});
- const beforeTab=await tab.boundingBox(),beforeForm=await inspect.boundingBox();
+ const beforeTab=await tab.boundingBox(),beforeHistory=await historyTitle.boundingBox();
 
  assert.equal(await page.getByRole('heading',{name:'Current preparation details',exact:true}).count(),0);
  assert.ok(await page.locator('[data-slot=skeleton]').count()>0);
- assert.equal(await page.getByRole('button',{name:'Inspect commit',exact:true}).isDisabled(),true);
+ assert.equal(await page.getByRole('heading',{name:'Inspect a specific commit',exact:true}).count(),0);
  releaseCatalog();
  await page.getByRole('heading',{name:'fixture/runtime-ui',exact:true}).waitFor();
  const current=page.getByRole('region',{name:'Current preparation details',exact:true});
@@ -68,9 +68,9 @@ test('delayed repository reads preserve the page structure and refresh keeps row
  historyHeld=false;releaseHistory();
  const row=current.getByRole('article');
  await row.waitFor();
- const afterTab=await tab.boundingBox(),afterForm=await inspect.boundingBox();
+ const afterTab=await tab.boundingBox(),afterHistory=await historyTitle.boundingBox();
  assert.ok(Math.abs(beforeTab.y-afterTab.y)<2,`tabs moved ${beforeTab.y} → ${afterTab.y}`);
- assert.ok(Math.abs(beforeForm.y-afterForm.y)<2,`form moved ${beforeForm.y} → ${afterForm.y}`);
+ assert.ok(Math.abs(beforeHistory.y-afterHistory.y)<2,`history moved ${beforeHistory.y} → ${afterHistory.y}`);
  const title=page.locator('header.page-header [data-title-content]');
  assert.equal(await title.getByText('Configured',{exact:true}).count(),1);
  const sourceInfo=page.locator('header.page-header [data-title-actions]').getByRole('button',{name:'View source integration details'});

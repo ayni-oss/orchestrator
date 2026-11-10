@@ -8,7 +8,6 @@
  import AutosaveField from '$lib/components/autosave-field.svelte';
  import * as NativeSelect from '$lib/components/ui/native-select/index.js';
  import { Button } from '$lib/components/ui/button/index.js';
- import { Input } from '$lib/components/ui/input/index.js';
  import { Label } from '$lib/components/ui/label/index.js';
  import Feedback from '$lib/components/feedback.svelte';
  import InformationTable from '$lib/components/information-table.svelte';
@@ -19,7 +18,6 @@
  import { inspectionReasons, type Repository, type RepositoryInspection, type InspectRequest } from '$lib/repositories';
  import { historyBatchSize, readRecentHistory, type HistoryPage } from '$lib/repository-history';
  let { repo, connection = $bindable() }: { repo: Repository; connection?: Connection } = $props();
- let commitSha = $state('');
  let branch = $state('');
  let hasBranchPreference = false;
  let branchSavedRevision = $state(0);
@@ -45,7 +43,6 @@
  const canInspect = $derived(!!connection?.enabled && !!connection?.activeCredentialRevision);
  const currentInspection = $derived(inspections.find(value => value.commitSha === checked?.sha &&
   value.connectionRevision === connection?.revision && value.state === 'completed') ?? inspections[0] ?? null);
- const validCommit = $derived(/^[a-f0-9]{40}$/.test(commitSha));
  const inspectionStates: Record<string, {label: string; tone: StatusTone}> = {
   completed:{label:'Complete',tone:'success'},
   accepted:{label:'Awaiting retry',tone:'warning'},
@@ -128,13 +125,6 @@
   }
   await resume(request);
  }
- async function inspect() {
-  if (pending) return recoverOrRetry(pending);
-  if (!connection || !validCommit) return;
-  const request = {idempotencyKey:crypto.randomUUID(),repositoryId:repo.id,expectedConnectionRevision:connection.revision,commitSha};
-  persist(request);
-  await resume(request);
- }
  async function loadBranches(page = 1) {
   if (!connection || !canInspect || loadingBranches) return;
   const revision = connection.revision;
@@ -202,7 +192,6 @@
    const revision = connection.revision;
    const sha = await resolveBranch(selectedBranch, revision);
    if (selectedBranch !== branch.trim() || revision !== connection?.revision) return;
-   commitSha = sha;
    const request = {idempotencyKey:crypto.randomUUID(), repositoryId:repo.id, expectedConnectionRevision:revision, commitSha:sha, branch:selectedBranch};
    persist(request);
    await resume(request);
@@ -272,22 +261,6 @@
    <Button variant="outline" onclick={() => loadBranches(nextBranchPage)}>More branches</Button>
   {/if}
  </div>
-{/snippet}
-
-{#snippet inspectCommit()}
- <section class="space-y-2" aria-labelledby={`inspect-commit-heading-${repo.id}`}>
-  <h3 class="text-sm font-medium" id={`inspect-commit-heading-${repo.id}`}>Inspect a specific commit</h3>
-  <div class="space-y-4 rounded-xl border p-4">
-   <p class="text-sm text-muted-foreground">Enter an exact commit SHA to check a specific revision. The runtime branch check uses the latest commit on the selected branch.</p>
-   {#if error && !pending}<Feedback kind="error" title="Inspection needs attention" message={error}/>{/if}
-   <div class="space-y-2"><Label for={`inspection-commit-${repo.id}`}>Commit SHA</Label><Input id={`inspection-commit-${repo.id}`} bind:value={commitSha} placeholder="Full 40-character lowercase commit SHA" disabled={busy || !!pending} maxlength={40}/></div>
-   {#if !canInspect}<p class="text-sm">Enable and validate the repository's source connection before starting an inspection.</p>{/if}
-   <div class="flex flex-wrap gap-2">
-    <Button disabled={busy || (!pending && (!canInspect || !validCommit))} onclick={() => perform(inspect)}>Inspect commit</Button>
-    <Button variant="outline" disabled={busy} onclick={() => perform(async () => { await load(); inspectionHistoryRevision += 1; })}>Refresh inspections</Button>
-   </div>
-  </div>
- </section>
 {/snippet}
 
 {#snippet inspectionEntry(item: RepositoryInspection)}
@@ -372,7 +345,6 @@
    </Tabs.Content>
    <Tabs.Content value="status" class="space-y-6">
      {@render currentPreparation()}
-     {@render inspectCommit()}
      {@render preparationHistory()}
      {@render inspectionHistory()}
    </Tabs.Content>

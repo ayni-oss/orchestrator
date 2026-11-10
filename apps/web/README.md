@@ -77,13 +77,11 @@ reapplying the old name over a later edit.
 ### Inspect committed Ayni setup
 
 In Repositories, open a connected repository card and choose **ayni**.
-**Recheck default branch** resolves GitHub’s current default branch and inspects
-its latest SHA on every click. Recovery retries the frozen SHA from the original
-request. For an explicit commit, open **Status** and enter the full lowercase SHA
-under **Inspect a specific commit**. Open the matching result’s details from
+Choose a runtime branch and use the refresh icon on **Check ayni.lock** to
+inspect its latest commit. If a check is interrupted, the next check recovers
+the original request. In **Status**, open the matching result’s details from
 **Inspection history** to see policy and lock digests, locked tools, public trust
-key IDs and corrective findings. Reload after an interrupted
-request and choose **Recover inspection** or **Retry same inspection**.
+key IDs and corrective findings.
 
 Static inspection never enables preparation or starts work. Full adapter discovery
 remains pending; signer admission and independent runtime verification are separate

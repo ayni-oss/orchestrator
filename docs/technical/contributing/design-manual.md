@@ -77,10 +77,9 @@ non-interactive secondary-style labels, right aligned, with eye/eye-off and
 branch icons. They must not look disabled or enter the tab order.
 
 Status is the first tab; ayni, with its mark, is second. Status starts with the
-current preparation row, without a redundant visible heading, then the exact
-commit inspection form. Previous preparations and inspection history are
-collapsed by default. Preserve full identifiers and retained evidence in the
-entry's extended details.
+current preparation row, without a redundant visible heading. Previous
+preparations and inspection history are collapsed by default. Preserve full
+identifiers and retained evidence in the entry's extended details.
 
 For integration setup, put overall readiness beside the section title. Name each
 requirement (source control, runtime registry and signing key) with a checkmark
