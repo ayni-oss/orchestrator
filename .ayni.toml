@@ -13,7 +13,7 @@ enabled = ["rust"]
 amount = 1
 
 [environment]
-certificate = { trusted_keys = { project-2026 = "503e65851ff2ac80d18ef4a5aafeeaa4664e816be09138662c1723a75f611c3a" } }
+certificate = { trusted_keys = { project-2026 = "503e65851ff2ac80d18ef4a5aafeeaa4664e816be09138662c1723a75f611c3a" , ayni-oss = "aa5c009e2251d8e04546c735a3326c23ec13a85ee2757b3d5464f31822ea9569" } }
 
 # Fits the standard two-core GitHub-hosted runner while remaining explicit for
 # local and orchestrated managed checks.
