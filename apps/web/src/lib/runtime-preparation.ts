@@ -1,7 +1,8 @@
 export type RuntimePreparation = {
  id: string; idempotencyKey: string; repositoryId: string; inspectionId: string;
  developmentOnly?: boolean; registryConnectionId: string; signerId: string; platform: string; state: string; stage: string;
- safeReason?: string; generation: string; allowBuild: boolean; allowReplace: boolean;
+ safeReason?: string; buildMilestone?: string; generation: string; allowBuild: boolean; allowReplace: boolean;
+ buildStepTimings?: {milestone: string; elapsedMs?: string}[];
  maxBuilds: number; buildsStarted: number; deadlineUnixMs: string; frozenInputDigest: string;
  imageDigest?: string; candidateImage?: string; protectedContentRoot?: string; certificateDigest?: string;
  managedCheckDigest?: string; unsignedManifestDigest?: string; certificationLayerDigest?: string;
@@ -26,10 +27,12 @@ export const runtimeStages: Record<string, string> = {
 };
 export const runtimeReasons: Record<string, string> = {
  invalid_input: 'The frozen preparation inputs are unsupported. Review the selected inspection and deployment profile.',
- source_access_denied: 'GitHub denied source acquisition. Check the installation and repository Contents read permission before retrying.',
- source_rate_limited: 'GitHub is rate limiting source acquisition. Wait, then retry within the retained allowance.',
+ source_access_denied: 'The source provider denied source acquisition. Check the installation and repository Contents read permission before retrying.',
+ source_rate_limited: 'The source provider is rate limiting source acquisition. Wait, then retry within the retained allowance.',
  setup_failure: 'The isolated stage could not be configured. Ask the deployment administrator to check its required volumes, image and permissions before retrying.',
  source_unavailable: 'The exact source checkout could not be acquired. Check repository access before retrying.',
+ source_tree_unavailable: 'The source provider did not return the repository tree after retries. Check connectivity from the runtime worker.',
+ source_fetch_unavailable: 'Git could not fetch the inspected commit. Check worker connectivity and access to the commit before retrying.',
  source_identity_mismatch: 'The acquired source differs from the frozen commit or tree. Check the retained inspection before starting again.',
  source_path_unsupported: 'The checkout contains an unsupported path or file type. Commit supported repository files and inspect the new commit.',
  source_bounds_exceeded: 'The checkout exceeds supported source limits. Reduce the source snapshot before preparing it.',
@@ -67,9 +70,9 @@ export const runtimeReasons: Record<string, string> = {
  runtime_cancelled: 'Preparation was cancelled. Cleanup must finish before its resources can be released.',
  deadline_exceeded: 'The preparation reached its time limit. Review retained evidence and cleanup before starting a new allowance.',
  runtime_inputs_changed: 'The source, registry or signer configuration changed. Inspect the current source and start a new preparation.',
- github_access_denied: 'GitHub denied source access. Check the installation and repository Contents read permission.',
- github_rate_limited: 'GitHub is rate limiting source access. Wait before retrying.',
- github_unavailable: 'GitHub could not be reached. Retry when source access is restored.',
+ github_access_denied: 'The source provider denied source access. Check the installation and repository Contents read permission.',
+ github_rate_limited: 'The source provider is rate limiting source access. Wait before retrying.',
+ github_unavailable: 'The source provider could not be reached. Retry when source access is restored.',
 };
 
 export function runtimeOverview(input: {
@@ -77,10 +80,11 @@ export function runtimeOverview(input: {
  inspectionLoading: boolean; inspectionError: string; inspectionReason?: string;
  inspection: import('./repositories').RepositoryInspection | null;
  operations: RuntimePreparation[]; registries: import('./api').Connection[]; signers: RuntimeSigner[];
- sourceReady: boolean; sourceRevision?: string; moreHistory?: boolean;
+ sourceReady: boolean; sourceRevision?: string; moreHistory?: boolean; operationId?: string;
 }): { title: string; description: string; issues: string[]; nextAction: string; operation?: RuntimePreparation } {
  const candidate = input.inspection;
- const operation = candidate ? input.operations.find(value => value.inspectionId === candidate.id) || input.operations.find(value => ['pending','running','stopping','cancelling','cleanup_pending','publication_uncertain'].includes(value.state) || value.state !== 'ready' && !value.cleanupComplete) : input.operations[0];
+ const operation = input.operations.find(value => value.id === input.operationId) ||
+  (candidate ? input.operations.find(value => value.inspectionId === candidate.id) || input.operations.find(value => ['pending','running','stopping','cancelling','cleanup_pending','publication_uncertain'].includes(value.state) || value.state !== 'ready' && !value.cleanupComplete) : input.operations[0]);
  if (input.inspectionPending) return {title:'Inspection result needs recovery',description:'The last check has an unconfirmed result. Older saved checks do not establish the result of this request.',issues:[],nextAction:'Recover the interrupted check using the controls above.'};
  if (input.rejected) return {title:'Preparation request rejected',description:input.error,issues:[],nextAction:'Review the rejected command below, dismiss it and correct the selection before trying again.'};
  if (input.pending) return {title:'Preparation response needs recovery',description:'The last command has an uncertain response. Its retained receipt determines whether work started.',issues:[],nextAction:'Recover the preparation receipt below before starting another command.'};
@@ -96,7 +100,7 @@ export function runtimeOverview(input: {
  if (input.moreHistory) return {title:'More runtime history available',description:'No preparation for this inspection appears in the loaded history. Earlier preparations have not been checked yet.',issues:[],nextAction:'Open preparation details and load more preparations to check earlier results.'};
  const issues: string[] = [];
  if (!input.sourceReady) issues.push('The source connection is unavailable, disabled or needs validation. Enable and validate it before inspecting a commit.');
- if (!candidate) issues.push('No saved Ayni inspection is available. Inspect an exact commit to check its policy, lock and trust requirements.');
+ if (!candidate) issues.push('No saved ayni inspection is available. Inspect an exact commit to check its policy, lock and trust requirements.');
  else {
   if (candidate.connectionRevision !== input.sourceRevision) issues.push('The source connection changed after this inspection. Inspect the commit again using the current connection.');
   if (candidate.state !== 'completed') issues.push(input.inspectionReason || 'The latest inspection did not complete. Recover or retry it before preparing this commit.');
@@ -115,7 +119,7 @@ export type RepositoryRuntimeSettings = Omit<StartRuntimeRequest,'idempotencyKey
 export type RepositoryRuntimeRun = {id:string; idempotencyKey:string; settings:RepositoryRuntimeSettings; state:string; safeReason?:string; commitSha?:string; inspectionId?:string; preparationId?:string};
 export const onboardingReasons: Record<string,string> = {
  branch_head_changed: 'The branch advanced after review. Check the branch and review its new commit before starting again.',
- source_unavailable: 'The selected branch could not be read. Check the GitHub connection and repository access, then prepare again.',
+ source_unavailable: 'The selected branch could not be read. Check the source control connection and repository access, then prepare again.',
  configuration_changed: 'The source, registry or signing configuration changed. Review the current settings before preparing again.',
  inspection_failed: 'The repository inspection could not complete. Check source access and prepare again.',
  inspection_findings: 'The repository setup needs changes. Resolve the inspection issues shown below, then prepare the latest commit.',
@@ -130,4 +134,26 @@ export function runtimeRegistryImage(operation: RuntimePreparation | undefined, 
  const digest = operation?.imageDigest;
  const confirmed = !!digest && /^sha256:[a-f0-9]{64}$/.test(digest) && (operation?.state === 'ready' || !!operation?.expectedManifestDigest && digest === operation.expectedManifestDigest && ['pull_final','verify_content','verify_compatibility','cleanup'].includes(operation.stage) && operation.state !== 'publication_uncertain');
  return {destination:target, url:`https://github.com/orgs/${match[1]}/packages/container/package/${match[2]}`, reference:confirmed ? `${target}@${digest}` : '', confirmed};
+}
+
+
+export function runtimeProgressKey(repositoryId: string) {
+ return `ayni.repository.runtime.progress.${repositoryId}`;
+}
+
+export function readRuntimeProgress(repositoryId: string): {integrations: string; inspection: string; signingUpdate: string} | undefined {
+ try {
+  const saved = JSON.parse(localStorage.getItem(runtimeProgressKey(repositoryId)) ?? 'null');
+  if (saved && typeof saved.integrations === 'string' && typeof saved.inspection === 'string' && typeof saved.signingUpdate === 'string') {
+   return saved;
+  }
+ } catch {
+  // Progress is optional when browser storage is unavailable.
+ }
+}
+
+export type RuntimeIntegration = 'registry' | 'signer';
+
+export function runtimeDefaultKey(kind: RuntimeIntegration) {
+ return `ayni.runtime.default.${kind}`;
 }

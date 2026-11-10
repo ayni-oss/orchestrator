@@ -45,6 +45,7 @@ pub(super) fn empty_result() -> InspectionResult {
         lock_schema: String::new(),
         tools: vec![],
         trust_key_ids: vec![],
+        trusted_public_keys: BTreeMap::new(),
         findings: vec![
             finding(
                 "adapter_discovery_pending",
@@ -281,7 +282,8 @@ fn summarize_trust(
 ) {
     match policy.environment_certificate_trust_policy() {
             Ok(trust) => {
-                result.trust_key_ids = policy.environment.certificate.trusted_keys.keys().cloned().collect();
+                result.trusted_public_keys = policy.environment.certificate.trusted_keys.clone();
+                result.trust_key_ids = result.trusted_public_keys.keys().cloned().collect();
                 if result.trust_key_ids.is_empty() {
                     result.findings.push(finding("trust_required", POLICY, "Configure reviewed public certificate trust keys in environment.certificate.trusted_keys, regenerate the lock and commit both files."));
                 }
@@ -307,11 +309,18 @@ fn bound_summary(result: &mut InspectionResult) {
     if oversized {
         result.tools.clear();
         result.trust_key_ids.clear();
+        result.trusted_public_keys.clear();
         if result.ayni_version.len() > 128 {
             result.ayni_version.clear();
         }
         result.findings.push(finding("inspection_metadata_bounds_exceeded", LOCK,
             "Reduce the policy and lock summary to 128 tools and 128 trust keys, with identifiers and versions of at most 128 bytes, then retry. Tool and trust summaries were omitted."));
+    }
+    // Leave room for findings added while reading and validating the locked inputs.
+    if !result.trusted_public_keys.is_empty()
+        && serde_json::to_vec(result).is_ok_and(|summary| summary.len() > 56 * 1024)
+    {
+        result.trusted_public_keys.clear();
     }
 }
 
@@ -458,6 +467,13 @@ mod tests {
         .collect::<Result<_, _>>()?;
         let (mut result, lock) = inspect_headers(empty_result(), &files);
         assert_eq!(result.ayni_version, "0.17.1");
+        assert_eq!(
+            result
+                .trusted_public_keys
+                .get("runtime-fixture")
+                .map(String::as_str),
+            Some("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
+        );
         assert!(lock.is_some());
         assert!(
             !result

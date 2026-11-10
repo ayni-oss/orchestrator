@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, type Snippet } from 'svelte';
+  import { toast } from 'svelte-sonner';
   import { Button } from '$lib/components/ui/button/index.js';
   import { Input } from '$lib/components/ui/input/index.js';
   import { Textarea } from '$lib/components/ui/textarea/index.js';
@@ -7,8 +8,7 @@
   import { Label } from '$lib/components/ui/label/index.js';
   import InformationCard from '$lib/components/information-card.svelte';
   import Feedback from '$lib/components/feedback.svelte';
-  import FieldSaved from '$lib/components/field-saved.svelte';
-  import SaveStatus from '$lib/components/save-status.svelte';
+  import AutosaveField from '$lib/components/autosave-field.svelte';
   import { protectUnsavedChanges } from '$lib/unsaved-changes.svelte';
   import { rpc, RpcError, type Connection } from '$lib/api';
 
@@ -36,10 +36,12 @@
   let connections = $state.raw<Connection[]>([]);
   let loading = $state(true);
   let saving = $state(false);
-  let error = $state('');
+  let loadError = $state('');
+  let saveFailed = $state(false);
   let pending = $state.raw<Update | null>(null);
   let confirmed = $state<Partial<Record<keyof Draft, number>>>({});
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let validationToast: string | number | undefined;
   let due = false;
   let disposed = false;
 
@@ -69,9 +71,19 @@
     for (const key of fields) draft[key] = value[key];
   }
 
+  function showValidation(message: string) {
+    if (message) {
+      validationToast = toast.error('Check agent settings', { id: validationToast, description: message });
+    } else if (validationToast !== undefined) {
+      toast.dismiss(validationToast);
+      validationToast = undefined;
+    }
+  }
+
   async function load() {
     loading = true;
-    error = '';
+    loadError = '';
+    saveFailed = false;
     try {
       const result = await rpc('GetAgentConfiguration', { workspaceId, projectId, revisionId: '' });
       configuration = normalized(result.configuration);
@@ -87,8 +99,9 @@
         visited.add(afterId);
       } while (afterId);
       connections = values;
+      if (!disposed && !pending) showValidation(validationMessage);
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Configuration unavailable.';
+      loadError = cause instanceof Error ? cause.message : 'Configuration unavailable.';
     } finally {
       loading = false;
     }
@@ -101,6 +114,7 @@
       draft.model = '';
       delete confirmed.model;
     }
+    if (!validationMessage) showValidation('');
     clearTimeout(timer);
     due = false;
     timer = setTimeout(() => {
@@ -111,9 +125,12 @@
 
   async function save() {
     if (disposed || !due || saving || pending || !configuration) return;
-    if (validationMessage) return;
     due = false;
-    if (!fields.some(key => draft[key] !== configuration?.[key])) return;
+    if (!dirty) return;
+    if (validationMessage) {
+      showValidation(validationMessage);
+      return;
+    }
     pending = {
       projectId,
       idempotencyKey: crypto.randomUUID(),
@@ -124,7 +141,8 @@
       sessionStorage.setItem(storageKey, JSON.stringify(pending));
     } catch {
       pending = null;
-      error = 'Browser storage is unavailable. Keep this page open and enable storage before saving.';
+      saveFailed = true;
+      toast.error('Could not save agent settings', { description: 'Browser storage is unavailable. Keep this page open and enable storage before saving.' });
       return;
     }
     await recover();
@@ -139,7 +157,7 @@
     const request = pending;
     if (!request || saving) return;
     saving = true;
-    error = '';
+    saveFailed = false;
     try {
       const result = await rpc('UpdateAgentConfiguration', request);
       const previous = configuration;
@@ -154,7 +172,9 @@
     } catch (cause) {
       if (cause instanceof RpcError && [400, 404, 409].includes(cause.status)) clearPending();
       due = false;
-      error = cause instanceof RpcError && cause.status === 409 ? 'Settings changed elsewhere. Reload the saved settings before applying your changes again.' : cause instanceof Error ? cause.message : 'Configuration could not be saved.';
+      saveFailed = true;
+      const description = cause instanceof RpcError && cause.status === 409 ? 'Settings changed elsewhere. Reload the saved settings before applying your changes again.' : cause instanceof Error ? cause.message : 'Configuration could not be saved.';
+      toast.error('Could not save agent settings', { description });
     } finally {
       saving = false;
       if (!pending) void save();
@@ -175,21 +195,23 @@
   onDestroy(() => {
     disposed = true;
     clearTimeout(timer);
+    showValidation('');
   });
 </script>
 
 {#snippet field(id: string, label: string, key: keyof Draft, control: Snippet)}
+  {@const changed = draft[key] !== configuration?.[key]}
+  {@const inFlight = saving && pending && pending.configuration[key] !== configuration?.[key]}
   <div class="space-y-2">
     <Label for={id}>{label}</Label>
-    <div class="relative">
+    <AutosaveField saving={!!inFlight || (changed && !pending && !loading && !loadError && !saveFailed && !validationMessage)} savedRevision={confirmed[key]}>
       {@render control()}
-      <FieldSaved revision={confirmed[key]} />
-    </div>
+    </AutosaveField>
   </div>
 {/snippet}
 
 <div class="space-y-6">
-  {#if error}<Feedback kind="error" title="Configuration needs attention" message={error} />{/if}
+  {#if loadError}<Feedback kind="error" title="Configuration needs attention" message={loadError} />{/if}
   {#if pending && !saving && !loading}
     <InformationCard title="Recover a configuration update">
       <p>Retry the retained command to recover its original result.</p>
@@ -199,47 +221,42 @@
       </div>
     </InformationCard>
   {/if}
-  {#if error && !pending}<Button variant="outline" onclick={() => { due = false; void load(); }}>Reload saved settings</Button>{/if}
+  {#if (loadError || saveFailed) && !pending}<Button variant="outline" onclick={() => { due = false; void load(); }}>Reload saved settings</Button>{/if}
   {#if loading}<p role="status">Loading project settings…</p>{/if}
   {#if configuration}
     <InformationCard title="Agent configuration">
       <p class="text-sm text-muted-foreground">Instructions, model and budgets apply to this project. Connections are shared; settings and conversation history stay separate.</p>
-      <SaveStatus {saving} {dirty} pending={!!pending} saved={Object.keys(confirmed).length > 0} />
       <fieldset class="space-y-5" disabled={loading || (!!pending && !saving)}>
-        <div class="space-y-2">
-          {#snippet connectionControl()}
-            <NativeSelect.Root id="project-connection" class="w-full" value={draft.connectionId} onchange={event => edit('connectionId', event.currentTarget.value)}>
-              <NativeSelect.Option value="" disabled>Select a connection</NativeSelect.Option>
-              {#each connections as connection (connection.id)}
-                <NativeSelect.Option value={connection.id} disabled={!connection.enabled || !connection.activeCredentialRevision}>
-                  {connection.displayName}{!connection.enabled ? ' (disabled)' : !connection.activeCredentialRevision ? ' (validation required)' : ''}
-                </NativeSelect.Option>
-              {/each}
-            </NativeSelect.Root>
-          {/snippet}
-          {@render field('project-connection', 'OpenAI connection', 'connectionId', connectionControl)}
-          <p class="text-xs text-muted-foreground"><a class="underline" href="/settings/llm-providers/openai">Manage OpenAI connections</a></p>
-        </div>
+        {#snippet connectionControl()}
+          <NativeSelect.Root data-slot="input-group-control" id="project-connection" class="w-full" value={draft.connectionId} onchange={event => edit('connectionId', event.currentTarget.value)}>
+            <NativeSelect.Option value="" disabled>Select a connection</NativeSelect.Option>
+            {#each connections as connection (connection.id)}
+              <NativeSelect.Option value={connection.id} disabled={!connection.enabled || !connection.activeCredentialRevision}>
+                {connection.displayName}{!connection.enabled ? ' (disabled)' : !connection.activeCredentialRevision ? ' (validation required)' : ''}
+              </NativeSelect.Option>
+            {/each}
+          </NativeSelect.Root>
+        {/snippet}
+        {@render field('project-connection', 'LLM connection', 'connectionId', connectionControl)}
         {#snippet modelControl()}
-          <NativeSelect.Root id="project-model" class="w-full" value={draft.model === 'scripted' ? '' : draft.model} onchange={event => edit('model', event.currentTarget.value)} disabled={!selected}>
+          <NativeSelect.Root data-slot="input-group-control" id="project-model" class="w-full" value={draft.model === 'scripted' ? '' : draft.model} onchange={event => edit('model', event.currentTarget.value)} disabled={!selected}>
             <NativeSelect.Option value="" disabled>Select a discovered model</NativeSelect.Option>
             {#each models as model (model)}<NativeSelect.Option value={model}>{model}</NativeSelect.Option>{/each}
           </NativeSelect.Root>
         {/snippet}
         {@render field('project-model', 'Model', 'model', modelControl)}
         {#snippet instructionsControl()}
-          <Textarea id="project-instructions" value={draft.instructions} oninput={event => edit('instructions', event.currentTarget.value)} maxlength={16384} rows={5} />
+          <Textarea data-slot="input-group-control" id="project-instructions" value={draft.instructions} oninput={event => edit('instructions', event.currentTarget.value)} maxlength={16384} rows={5} />
         {/snippet}
         {@render field('project-instructions', 'Instructions', 'instructions', instructionsControl)}
         <div class="grid gap-4 sm:grid-cols-2">
           {#each budgets as { key, id, label, min, max } (key)}
             {#snippet numberControl()}
-              <Input {id} type="number" {min} {max} value={draft[key]} oninput={event => edit(key, event.currentTarget.value)} required />
+              <Input data-slot="input-group-control" {id} type="number" {min} {max} value={draft[key]} oninput={event => edit(key, event.currentTarget.value)} required />
             {/snippet}
             {@render field(id, label, key, numberControl)}
           {/each}
         </div>
-        {#if !loading && validationMessage}<p role="alert" class="text-sm text-destructive">{validationMessage}</p>{/if}
       </fieldset>
     </InformationCard>
   {/if}

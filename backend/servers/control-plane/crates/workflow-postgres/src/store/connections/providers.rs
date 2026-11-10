@@ -1,7 +1,7 @@
 //! Write-only provider credentials and safe configuration metadata.
 use super::{
-    Operation, ProviderSettings, StoreError, WorkflowStore, locked, new_id, operation, revision,
-    safe_json, serialize_key, validate_id, validate_key, validate_name,
+    Operation, ProviderSettings, StoreError, WorkflowStore, candidate_credential, locked, new_id,
+    operation, revision, safe_json, serialize_key, validate_id, validate_key, validate_name,
 };
 // Not Debug or Serialize: callers must not export these values.
 pub struct SaveProvider<'a> {
@@ -16,7 +16,7 @@ pub struct SaveProvider<'a> {
 }
 pub struct ProviderCandidate {
     pub operation: Operation,
-    pub credential: String,
+    pub credential: Option<String>,
 }
 fn validate(input: &SaveProvider<'_>) -> Result<String, StoreError> {
     validate_key(input.key)?;
@@ -71,6 +71,9 @@ fn validate(input: &SaveProvider<'_>) -> Result<String, StoreError> {
     .map_err(|_| StoreError::CorruptState)
 }
 fn validate_edit(current: &super::Connection, input: &SaveProvider<'_>) -> Result<(), StoreError> {
+    if current.status == "deleted" {
+        return Err(StoreError::NotFound);
+    }
     if current.provider != input.provider
         || current.capability != input.capability
         || current.settings != input.settings
@@ -177,13 +180,7 @@ impl WorkflowStore {
         ) {
             return Err(StoreError::InvalidInput("capability"));
         }
-        let credential = client
-            .query_one(
-                "SELECT value FROM workflow_connection_credentials WHERE revision_id=$1",
-                &[&row.get::<_, String>("credential_revision")],
-            )
-            .await?
-            .get(0);
+        let credential = candidate_credential(&client, id).await?;
         driver.abort();
         Ok(ProviderCandidate {
             operation,

@@ -2,7 +2,10 @@
 pub(super) mod github;
 mod providers;
 use super::{RequestContext, WorkflowGrpc, v1};
-use ayni_orchestrator_workflow_postgres::store::connections::{self, SaveGithub};
+use ayni_orchestrator_workflow_postgres::{
+    StoreError,
+    store::connections::{self, SaveGithub},
+};
 use tonic::{Request, Response, Status};
 
 fn connection(c: connections::Connection) -> v1::Connection {
@@ -112,9 +115,13 @@ impl v1::connection_service_server::ConnectionService for WorkflowGrpc {
             .await
             .map_err(|e| context.store(&e))?;
         let result = if candidate.operation.state == "accepted" {
-            let (reason, models) = match providers::validate(&candidate).await {
-                Ok(models) => ("", models),
-                Err(reason) => (reason, Vec::new()),
+            let (reason, models) = if let Some(credential) = candidate.credential {
+                match providers::validate(&candidate.operation.connection, &credential).await {
+                    Ok(models) => ("", models),
+                    Err(reason) => (reason, Vec::new()),
+                }
+            } else {
+                ("", Vec::new())
             };
             self.store
                 .finish_provider_validation(&value.operation_id, reason, &models)
@@ -159,10 +166,14 @@ impl v1::connection_service_server::ConnectionService for WorkflowGrpc {
             .await
             .map_err(|e| context.store(&e))?;
         let result = if candidate.operation.state == "accepted" {
-            let reason = github::validate(&candidate.app_id, &candidate.private_key_pem)
-                .await
-                .err()
-                .unwrap_or("");
+            let reason = if let Some(pem) = candidate.private_key_pem {
+                github::validate(&candidate.app_id, &pem)
+                    .await
+                    .err()
+                    .unwrap_or("")
+            } else {
+                ""
+            };
             self.store
                 .finish_github_validation(&value.operation_id, reason)
                 .await
@@ -172,6 +183,70 @@ impl v1::connection_service_server::ConnectionService for WorkflowGrpc {
         };
         tracing::info!(operation_id = %result.id, connection_id = %result.connection_id, state = %result.state, reason = %result.safe_reason, "GitHub connection validation observed");
         Ok(context.response(v1::ValidateGithubConnectionResponse {
+            operation: Some(operation(result)),
+        }))
+    }
+    async fn get_connection(
+        &self,
+        request: Request<v1::GetConnectionRequest>,
+    ) -> Result<Response<v1::GetConnectionResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let (current, pending_operation_id) = self
+            .store
+            .connection_settings(&value.connection_id)
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::GetConnectionResponse {
+            connection: Some(connection(current)),
+            pending_operation_id,
+        }))
+    }
+    async fn check_connection(
+        &self,
+        request: Request<v1::CheckConnectionRequest>,
+    ) -> Result<Response<v1::CheckConnectionResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let (before, credential) = self
+            .store
+            .active_connection_credential(&value.connection_id, value.expected_revision)
+            .await
+            .map_err(|e| context.store(&e))?;
+        let checked = if before.capability == "source_control" {
+            github::validate(&before.app_id, &credential).await
+        } else {
+            providers::validate(&before, &credential).await.map(|_| ())
+        };
+        let safe_reason = checked.err().unwrap_or_default().to_owned();
+        let (after, _) = self
+            .store
+            .connection_settings(&value.connection_id)
+            .await
+            .map_err(|e| context.store(&e))?;
+        if (after.revision, after.active_credential_revision)
+            != (before.revision, before.active_credential_revision)
+        {
+            return Err(context.store(&StoreError::ConfigurationRevisionConflict));
+        }
+        Ok(context.response(v1::CheckConnectionResponse { safe_reason }))
+    }
+    async fn delete_connection(
+        &self,
+        request: Request<v1::DeleteConnectionRequest>,
+    ) -> Result<Response<v1::DeleteConnectionResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let result = self
+            .store
+            .delete_connection(
+                &value.idempotency_key,
+                &value.connection_id,
+                value.expected_revision,
+            )
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::DeleteConnectionResponse {
             operation: Some(operation(result)),
         }))
     }

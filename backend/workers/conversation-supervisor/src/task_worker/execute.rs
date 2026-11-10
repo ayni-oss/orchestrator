@@ -197,7 +197,10 @@ async fn call(
 ) -> std::result::Result<ResponseEvidence, &'static str> {
     let files = task_files::selected_context(&worker.source, &c.source_commit, &c.source_paths)
         .map_err(|_| "source_context_limit")?;
-    let task = json!({"objective":c.objective,"scope":c.scope,"out_of_scope":c.out_of_scope,"acceptance_criteria":c.acceptance_criteria,"execution_limits":c.execution_limits,"source_commit":c.source_commit,"source_paths":c.source_paths,"attempt_id":c.attempt_id,"recovery":c.recovery.as_ref().map(|r|json!({"parent_attempt_id":r.parent_attempt_id,"action":r.action,"explanation":r.explanation,"quality_reason":r.quality_reason,"quality_evidence":r.quality_artifact,"answers":r.answers})),"files":files});
+    let mut task = json!({"objective":c.objective,"scope":c.scope,"out_of_scope":c.out_of_scope,"acceptance_criteria":c.acceptance_criteria,"execution_limits":c.execution_limits,"source_commit":c.source_commit,"source_paths":c.source_paths,"attempt_id":c.attempt_id,"recovery":c.recovery.as_ref().map(|r|json!({"parent_attempt_id":r.parent_attempt_id,"action":r.action,"explanation":r.explanation,"quality_reason":r.quality_reason,"quality_evidence":r.quality_artifact,"answers":r.answers})),"files":files});
+    if !c.project_goal.is_empty() {
+        task["project_goal"] = json!(c.project_goal);
+    }
     let request = coding::prepare(
         &c.model,
         &c.instructions,

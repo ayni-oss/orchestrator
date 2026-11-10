@@ -1,5 +1,6 @@
 use super::admission::current;
 use super::*;
+use ayni_orchestrator_events::runtime_preparation::{BUILD_REPORT_KEY, BUILD_STEPS, BuildReport};
 pub(super) mod transitions;
 
 async fn active_attempt(
@@ -246,6 +247,18 @@ impl WorkflowStore {
         &self,
         report: &StageReport,
     ) -> Result<Operation, StoreError> {
+        self.report_runtime_stage_with_timings(report, [None; BUILD_STEPS.len()])
+            .await
+    }
+
+    /// Retain control-plane measurements alongside the first accepted build report.
+    /// # Errors
+    /// Reject forged/stale reports, invalid stage evidence or conflicting retries.
+    pub async fn report_runtime_stage_with_timings(
+        &self,
+        report: &StageReport,
+        elapsed_ms: [Option<u64>; BUILD_STEPS.len()],
+    ) -> Result<Operation, StoreError> {
         validation::report(report)?;
         let report_digest = digest(json(report)?);
         let b = &report.binding;
@@ -264,6 +277,15 @@ impl WorkflowStore {
         }
         let (mut op, _) = authorized(&tx, b).await?;
         transitions::accept_evidence(&mut op, report)?;
+        if op.stage == "build" {
+            op.evidence.details.insert(
+                BUILD_REPORT_KEY.into(),
+                json(&BuildReport {
+                    complete: report.outcome == "completed",
+                    elapsed_ms,
+                })?,
+            );
+        }
         tx.execute("UPDATE workflow_runtime_preparation_attempts SET state='reported',report_digest=$3,report=$4 WHERE operation_id=$1 AND generation=$2",&[&op.id,&integer(op.generation)?,&report_digest,&json(report)?]).await?;
         tx.execute("UPDATE workflow_runtime_preparations SET state='stopping',evidence=$2,updated_at_unix_ms=$3 WHERE id=$1",&[&op.id,&json(&op.evidence)?,&integer(now(&tx).await?)?]).await?;
         let result = locked(&tx, &op.id).await?;

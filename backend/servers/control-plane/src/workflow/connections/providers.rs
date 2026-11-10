@@ -1,18 +1,21 @@
 //! Fixed-origin, bounded credential validation. Never retain provider diagnostics.
-use ayni_orchestrator_workflow_postgres::store::connections::ProviderCandidate;
+use ayni_orchestrator_workflow_postgres::store::connections::{Connection, ProviderSettings};
 use reqwest::{Client, Response};
 use std::time::Duration;
 
-pub(super) async fn validate(candidate: &ProviderCandidate) -> Result<Vec<String>, &'static str> {
+pub(super) async fn validate(
+    connection: &Connection,
+    credential: &str,
+) -> Result<Vec<String>, &'static str> {
     let client = Client::builder()
         .timeout(Duration::from_secs(8))
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|_| "provider_unavailable")?;
-    if candidate.operation.connection.capability == "llm" {
-        models(&client, &candidate.credential).await
+    if connection.capability == "llm" {
+        models(&client, credential).await
     } else {
-        registry(&client, candidate).await?;
+        registry(&client, &connection.settings, credential).await?;
         Ok(Vec::new())
     }
 }
@@ -71,10 +74,13 @@ fn parse_models(value: &serde_json::Value, key: &str) -> Result<Vec<String>, &'s
     models.dedup();
     Ok(models)
 }
-async fn registry(client: &Client, candidate: &ProviderCandidate) -> Result<(), &'static str> {
-    let settings = &candidate.operation.connection.settings;
+async fn registry(
+    client: &Client,
+    settings: &ProviderSettings,
+    credential: &str,
+) -> Result<(), &'static str> {
     let tokens: Vec<String> =
-        serde_json::from_str(&candidate.credential).map_err(|_| "provider_response_invalid")?;
+        serde_json::from_str(credential).map_err(|_| "provider_response_invalid")?;
     if tokens.len() != 2 {
         return Err("provider_response_invalid");
     }

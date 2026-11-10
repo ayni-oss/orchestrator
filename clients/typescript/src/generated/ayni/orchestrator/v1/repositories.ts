@@ -194,6 +194,12 @@ export interface RepositoryInspectionResult {
   tools: string[];
   trustKeyIds: string[];
   findings: RepositoryInspectionFinding[];
+  trustedPublicKeys: { [key: string]: string };
+}
+
+export interface RepositoryInspectionResult_TrustedPublicKeysEntry {
+  key: string;
+  value: string;
 }
 
 export interface RepositoryInspection {
@@ -237,6 +243,18 @@ export interface ListRepositoryInspectionsResponse {
  * Resolve fresh provider metadata and the current default-branch head without inspecting it.
  * Inspection must freeze the returned commit through InspectRepository.
  */
+export interface ListRepositoryBranchesRequest {
+  repositoryId: string;
+  expectedConnectionRevision: string;
+  page: number;
+}
+
+export interface ListRepositoryBranchesResponse {
+  branches: string[];
+  nextPage: number;
+  safeReason: string;
+}
+
 export interface ResolveRepositoryDefaultCommitRequest {
   repositoryId: string;
   expectedConnectionRevision: string;
@@ -3257,6 +3275,7 @@ function createBaseRepositoryInspectionResult(): RepositoryInspectionResult {
     tools: [],
     trustKeyIds: [],
     findings: [],
+    trustedPublicKeys: {},
   };
 }
 
@@ -3286,6 +3305,10 @@ export const RepositoryInspectionResult: MessageFns<RepositoryInspectionResult> 
     for (const v of message.findings) {
       RepositoryInspectionFinding.encode(v!, writer.uint32(66).fork()).join();
     }
+    globalThis.Object.entries(message.trustedPublicKeys).forEach(([key, value]: [string, string]) => {
+      RepositoryInspectionResult_TrustedPublicKeysEntry.encode({ key: key as any, value }, writer.uint32(74).fork())
+        .join();
+    });
     return writer;
   },
 
@@ -3366,6 +3389,17 @@ export const RepositoryInspectionResult: MessageFns<RepositoryInspectionResult> 
             message.findings.push(RepositoryInspectionFinding.decode(reader, reader.uint32()));
             continue;
           }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            const entry9 = RepositoryInspectionResult_TrustedPublicKeysEntry.decode(reader, reader.uint32());
+            if (entry9.value !== undefined) {
+              message.trustedPublicKeys[entry9.key] = entry9.value;
+            }
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3416,6 +3450,33 @@ export const RepositoryInspectionResult: MessageFns<RepositoryInspectionResult> 
       findings: globalThis.Array.isArray(object?.findings)
         ? object.findings.map((e: any) => RepositoryInspectionFinding.fromJSON(e))
         : [],
+      trustedPublicKeys: isObject(object.trustedPublicKeys)
+        ? (globalThis.Object.entries(object.trustedPublicKeys) as [string, any][]).reduce(
+          (acc: { [key: string]: string }, [key, value]: [string, any]) => {
+            globalThis.Object.defineProperty(acc, key, {
+              value: globalThis.String(value),
+              enumerable: true,
+              configurable: true,
+              writable: true,
+            });
+            return acc;
+          },
+          {},
+        )
+        : isObject(object.trusted_public_keys)
+        ? (globalThis.Object.entries(object.trusted_public_keys) as [string, any][]).reduce(
+          (acc: { [key: string]: string }, [key, value]: [string, any]) => {
+            globalThis.Object.defineProperty(acc, key, {
+              value: globalThis.String(value),
+              enumerable: true,
+              configurable: true,
+              writable: true,
+            });
+            return acc;
+          },
+          {},
+        )
+        : {},
     };
   },
 
@@ -3445,6 +3506,15 @@ export const RepositoryInspectionResult: MessageFns<RepositoryInspectionResult> 
     if (message.findings?.length) {
       obj.findings = message.findings.map((e) => RepositoryInspectionFinding.toJSON(e));
     }
+    if (message.trustedPublicKeys) {
+      const entries = globalThis.Object.entries(message.trustedPublicKeys) as [string, string][];
+      if (entries.length > 0) {
+        obj.trustedPublicKeys = {};
+        entries.forEach(([k, v]) => {
+          obj.trustedPublicKeys[k] = v;
+        });
+      }
+    }
     return obj;
   },
 
@@ -3461,6 +3531,107 @@ export const RepositoryInspectionResult: MessageFns<RepositoryInspectionResult> 
     message.tools = object.tools?.map((e) => e) || [];
     message.trustKeyIds = object.trustKeyIds?.map((e) => e) || [];
     message.findings = object.findings?.map((e) => RepositoryInspectionFinding.fromPartial(e)) || [];
+    message.trustedPublicKeys = (globalThis.Object.entries(object.trustedPublicKeys ?? {}) as [string, string][])
+      .reduce((acc: { [key: string]: string }, [key, value]: [string, string]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.String(value);
+        }
+        return acc;
+      }, {});
+    return message;
+  },
+};
+
+function createBaseRepositoryInspectionResult_TrustedPublicKeysEntry(): RepositoryInspectionResult_TrustedPublicKeysEntry {
+  return { key: "", value: "" };
+}
+
+export const RepositoryInspectionResult_TrustedPublicKeysEntry: MessageFns<
+  RepositoryInspectionResult_TrustedPublicKeysEntry
+> = {
+  encode(
+    message: RepositoryInspectionResult_TrustedPublicKeysEntry,
+    writer: BinaryWriter = new BinaryWriter(),
+  ): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RepositoryInspectionResult_TrustedPublicKeysEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRepositoryInspectionResult_TrustedPublicKeysEntry();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.key = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.value = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RepositoryInspectionResult_TrustedPublicKeysEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.String(object.value) : "",
+    };
+  },
+
+  toJSON(message: RepositoryInspectionResult_TrustedPublicKeysEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== "") {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create(
+    base?: DeepPartial<RepositoryInspectionResult_TrustedPublicKeysEntry>,
+  ): RepositoryInspectionResult_TrustedPublicKeysEntry {
+    return RepositoryInspectionResult_TrustedPublicKeysEntry.fromPartial(base ?? {});
+  },
+  fromPartial(
+    object: DeepPartial<RepositoryInspectionResult_TrustedPublicKeysEntry>,
+  ): RepositoryInspectionResult_TrustedPublicKeysEntry {
+    const message = createBaseRepositoryInspectionResult_TrustedPublicKeysEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
     return message;
   },
 };
@@ -4130,6 +4301,224 @@ export const ListRepositoryInspectionsResponse: MessageFns<ListRepositoryInspect
   },
 };
 
+function createBaseListRepositoryBranchesRequest(): ListRepositoryBranchesRequest {
+  return { repositoryId: "", expectedConnectionRevision: "0", page: 0 };
+}
+
+export const ListRepositoryBranchesRequest: MessageFns<ListRepositoryBranchesRequest> = {
+  encode(message: ListRepositoryBranchesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repositoryId !== "") {
+      writer.uint32(10).string(message.repositoryId);
+    }
+    if (message.expectedConnectionRevision !== "0") {
+      writer.uint32(16).uint64(message.expectedConnectionRevision);
+    }
+    if (message.page !== 0) {
+      writer.uint32(24).uint32(message.page);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListRepositoryBranchesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListRepositoryBranchesRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositoryId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.expectedConnectionRevision = reader.uint64().toString();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.page = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListRepositoryBranchesRequest {
+    return {
+      repositoryId: isSet(object.repositoryId)
+        ? globalThis.String(object.repositoryId)
+        : isSet(object.repository_id)
+        ? globalThis.String(object.repository_id)
+        : "",
+      expectedConnectionRevision: isSet(object.expectedConnectionRevision)
+        ? globalThis.String(object.expectedConnectionRevision)
+        : isSet(object.expected_connection_revision)
+        ? globalThis.String(object.expected_connection_revision)
+        : "0",
+      page: isSet(object.page) ? globalThis.Number(object.page) : 0,
+    };
+  },
+
+  toJSON(message: ListRepositoryBranchesRequest): unknown {
+    const obj: any = {};
+    if (message.repositoryId !== "") {
+      obj.repositoryId = message.repositoryId;
+    }
+    if (message.expectedConnectionRevision !== "0") {
+      obj.expectedConnectionRevision = message.expectedConnectionRevision;
+    }
+    if (message.page !== 0) {
+      obj.page = Math.round(message.page);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListRepositoryBranchesRequest>): ListRepositoryBranchesRequest {
+    return ListRepositoryBranchesRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListRepositoryBranchesRequest>): ListRepositoryBranchesRequest {
+    const message = createBaseListRepositoryBranchesRequest();
+    message.repositoryId = object.repositoryId ?? "";
+    message.expectedConnectionRevision = object.expectedConnectionRevision ?? "0";
+    message.page = object.page ?? 0;
+    return message;
+  },
+};
+
+function createBaseListRepositoryBranchesResponse(): ListRepositoryBranchesResponse {
+  return { branches: [], nextPage: 0, safeReason: "" };
+}
+
+export const ListRepositoryBranchesResponse: MessageFns<ListRepositoryBranchesResponse> = {
+  encode(message: ListRepositoryBranchesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.branches) {
+      writer.uint32(10).string(v!);
+    }
+    if (message.nextPage !== 0) {
+      writer.uint32(16).uint32(message.nextPage);
+    }
+    if (message.safeReason !== "") {
+      writer.uint32(26).string(message.safeReason);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListRepositoryBranchesResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListRepositoryBranchesResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.branches.push(reader.string());
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.nextPage = reader.uint32();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.safeReason = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListRepositoryBranchesResponse {
+    return {
+      branches: globalThis.Array.isArray(object?.branches) ? object.branches.map((e: any) => globalThis.String(e)) : [],
+      nextPage: isSet(object.nextPage)
+        ? globalThis.Number(object.nextPage)
+        : isSet(object.next_page)
+        ? globalThis.Number(object.next_page)
+        : 0,
+      safeReason: isSet(object.safeReason)
+        ? globalThis.String(object.safeReason)
+        : isSet(object.safe_reason)
+        ? globalThis.String(object.safe_reason)
+        : "",
+    };
+  },
+
+  toJSON(message: ListRepositoryBranchesResponse): unknown {
+    const obj: any = {};
+    if (message.branches?.length) {
+      obj.branches = message.branches;
+    }
+    if (message.nextPage !== 0) {
+      obj.nextPage = Math.round(message.nextPage);
+    }
+    if (message.safeReason !== "") {
+      obj.safeReason = message.safeReason;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListRepositoryBranchesResponse>): ListRepositoryBranchesResponse {
+    return ListRepositoryBranchesResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListRepositoryBranchesResponse>): ListRepositoryBranchesResponse {
+    const message = createBaseListRepositoryBranchesResponse();
+    message.branches = object.branches?.map((e) => e) || [];
+    message.nextPage = object.nextPage ?? 0;
+    message.safeReason = object.safeReason ?? "";
+    return message;
+  },
+};
+
 function createBaseResolveRepositoryDefaultCommitRequest(): ResolveRepositoryDefaultCommitRequest {
   return { repositoryId: "", expectedConnectionRevision: "0", branch: "" };
 }
@@ -4476,6 +4865,18 @@ export const RepositoryServiceService = {
     responseDeserialize: (value: Buffer): ListProjectRepositoriesResponse =>
       ListProjectRepositoriesResponse.decode(value),
   },
+  listRepositoryBranches: {
+    path: "/ayni.orchestrator.v1.RepositoryService/ListRepositoryBranches" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListRepositoryBranchesRequest): Buffer =>
+      Buffer.from(ListRepositoryBranchesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListRepositoryBranchesRequest => ListRepositoryBranchesRequest.decode(value),
+    responseSerialize: (value: ListRepositoryBranchesResponse): Buffer =>
+      Buffer.from(ListRepositoryBranchesResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListRepositoryBranchesResponse =>
+      ListRepositoryBranchesResponse.decode(value),
+  },
   resolveRepositoryDefaultCommit: {
     path: "/ayni.orchestrator.v1.RepositoryService/ResolveRepositoryDefaultCommit" as const,
     requestStream: false as const,
@@ -4538,6 +4939,7 @@ export interface RepositoryServiceServer extends UntypedServiceImplementation {
   setWorkspaceRepository: handleUnaryCall<SetWorkspaceRepositoryRequest, SetWorkspaceRepositoryResponse>;
   associateProjectRepository: handleUnaryCall<AssociateProjectRepositoryRequest, AssociateProjectRepositoryResponse>;
   listProjectRepositories: handleUnaryCall<ListProjectRepositoriesRequest, ListProjectRepositoriesResponse>;
+  listRepositoryBranches: handleUnaryCall<ListRepositoryBranchesRequest, ListRepositoryBranchesResponse>;
   resolveRepositoryDefaultCommit: handleUnaryCall<
     ResolveRepositoryDefaultCommitRequest,
     ResolveRepositoryDefaultCommitResponse
@@ -4698,6 +5100,21 @@ export interface RepositoryServiceClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListProjectRepositoriesResponse) => void,
   ): ClientUnaryCall;
+  listRepositoryBranches(
+    request: ListRepositoryBranchesRequest,
+    callback: (error: ServiceError | null, response: ListRepositoryBranchesResponse) => void,
+  ): ClientUnaryCall;
+  listRepositoryBranches(
+    request: ListRepositoryBranchesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListRepositoryBranchesResponse) => void,
+  ): ClientUnaryCall;
+  listRepositoryBranches(
+    request: ListRepositoryBranchesRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListRepositoryBranchesResponse) => void,
+  ): ClientUnaryCall;
   resolveRepositoryDefaultCommit(
     request: ResolveRepositoryDefaultCommitRequest,
     callback: (error: ServiceError | null, response: ResolveRepositoryDefaultCommitResponse) => void,
@@ -4777,6 +5194,10 @@ type DeepPartial<T> = T extends Builtin ? T
   : T extends { $case: string } ? { [K in keyof Omit<T, "$case">]?: DeepPartial<T[K]> } & { $case: T["$case"] }
   : T extends {} ? { [K in keyof T]?: DeepPartial<T[K]> }
   : Partial<T>;
+
+function isObject(value: any): boolean {
+  return typeof value === "object" && value !== null;
+}
 
 function isSet(value: any): boolean {
   return value !== null && value !== undefined;

@@ -13,6 +13,7 @@ service RepositoryService {
   rpc SetWorkspaceRepository(SetWorkspaceRepositoryRequest) returns (SetWorkspaceRepositoryResponse);
   rpc AssociateProjectRepository(AssociateProjectRepositoryRequest) returns (AssociateProjectRepositoryResponse);
   rpc ListProjectRepositories(ListProjectRepositoriesRequest) returns (ListProjectRepositoriesResponse);
+  rpc ListRepositoryBranches(ListRepositoryBranchesRequest) returns (ListRepositoryBranchesResponse);
   rpc ResolveRepositoryDefaultCommit(ResolveRepositoryDefaultCommitRequest) returns (ResolveRepositoryDefaultCommitResponse);
   rpc InspectRepository(InspectRepositoryRequest) returns (InspectRepositoryResponse);
   rpc GetRepositoryInspection(GetRepositoryInspectionRequest) returns (GetRepositoryInspectionResponse);
@@ -168,6 +169,7 @@ message RepositoryInspectionResult {
   repeated string tools = 6;
   repeated string trust_key_ids = 7;
   repeated RepositoryInspectionFinding findings = 8;
+  map<string, string> trusted_public_keys = 9;
 }
 message RepositoryInspection {
   string id = 1;
@@ -203,6 +205,17 @@ message ListRepositoryInspectionsResponse {
 
 // Resolve fresh provider metadata and the current default-branch head without inspecting it.
 // Inspection must freeze the returned commit through InspectRepository.
+message ListRepositoryBranchesRequest {
+  string repository_id = 1;
+  uint64 expected_connection_revision = 2;
+  uint32 page = 3;
+}
+message ListRepositoryBranchesResponse {
+  repeated string branches = 1;
+  uint32 next_page = 2;
+  string safe_reason = 3;
+}
+
 message ResolveRepositoryDefaultCommitRequest {
   string repository_id = 1;
   uint64 expected_connection_revision = 2;

@@ -181,6 +181,11 @@ destination before discovery or publication. For `ayni-oss/sandbox`, a connectio
 at `ghcr.io/ayni-oss` yields `ghcr.io/ayni-oss/sandbox`. Reuse and verification bind
 to that complete destination; a connection never supplies a package override.
 
+The Ayni configuration page shows the deployment's runtime profile status,
+platform and pinned executor image. Its registry and signing-key defaults
+are stored in the current browser. Saved repository selections and retained
+runs take precedence over those defaults.
+
 ### Local development exception
 
 An operator may explicitly enable `runtimePreparation.localDevelopment: true`
@@ -190,8 +195,18 @@ signing, allowance, verification and cleanup gates still apply. This exception
 permits testing on a cluster whose NetworkPolicy enforcement is not qualified;
 it does not establish network isolation. The canonical profile still requires
 `qualified: true`, and the development profile rejects that qualification claim.
-The frozen operation records this identity, its API exposes `development_only`,
-and the UI labels its successful result **Development runtime ready**.
+The frozen operation records this identity and its API exposes `development_only`.
+The ayni settings page shows when the active worker profile is for local development.
+
+### Build status report
+
+The build pod reports typed milestones through its bound worker capability.
+The console refreshes milestones and elapsed step times for the current build
+generation with the run status. The control plane measures elapsed time from
+observed milestone boundaries and retains those measurements when it accepts the
+build result. A retry resets the report while preserving immutable publication
+evidence and the build allowance. Timing is informational and does not affect
+stage admission.
 
 ### Supervisor diagnostics
 
@@ -203,3 +218,30 @@ operation, stage, generation and closed failure reason. Identical diagnostics ar
 limited to once every 30 seconds. Response bodies, credentials and raw client
 errors are never logged. Authority-side store failures include the closed store
 reason and SQLSTATE when available.
+
+
+## Signing key update pull requests
+
+When the selected signing key differs from the repository trust policy, the
+onboarding review can open a draft pull request. The control plane uses the
+reviewed branch and inspected commit, pins only the selected public key in
+`.ayni.toml`, and rebuilds `.ayni.lock` from the verified locked inputs through
+Ayni. It aborts if the existing lock cannot be reproduced or the target branch
+has moved. The branch is deterministic for the reviewed snapshot and regenerated
+lock. Review checks the provider for a draft, open, closed, or merged pull
+request on that branch. Retrying the same change returns the existing pull
+request, including after its branch is deleted on merge.
+
+The browser remembers integration and lock review checkpoints per repository.
+Reopening verifies current integration revisions and resolves the selected
+branch before reusing the saved inspection. A changed branch or configuration
+returns the wizard to the affected step. Inspections and preparation runs remain
+in PostgreSQL, and pull request state is read from the provider. After merge,
+check the target branch again before preparing the runtime.
+
+The source-control connection supplies the App credential. The control plane
+reads the current installation grants and requests a repository-scoped
+Pull requests read token for status. Open PR requests a separate short-lived
+installation token with Contents and Pull requests write permissions for the
+connected repository. The installation owner must grant both permissions.
+Source discovery and worker fetches continue to use Contents read tokens.

@@ -14,7 +14,8 @@ The former history and the temporary ordinal-42 baseline are incompatible. They
 are rejected before schema or data changes; `live migrate` cannot upgrade them.
 Keep existing installations and their retained data intact and use a new isolated
 local namespace. Deleting old volumes remains a separate, explicit operator action.
-After installation, migrations are immutable; new changes start at `015`.
+After installation, migrations are immutable. Migrations `015` and `016` add
+configuration deletion on top of the layer baseline.
 
 ## Start
 

@@ -20,6 +20,8 @@ changes to the same table have been folded into that definition.
 | `012` | Task publication and publication reports |
 | `013` | Task feedback and recovery |
 | `014` | Outcome assessment authorization and results |
+| `015` | GitHub source connection deletion with retained references |
+| `016` | Provider connection and runtime signer deletion with retained references |
 
 Layers are ordered by their foreign-key dependencies. Circular references between
 messages/turns, plans/versions and signers/revisions are completed at the end of
@@ -30,7 +32,7 @@ The old 41-step catalog and the temporary single migration at `0042` require a
 fresh database. The runner rejects their retained history without changing data;
 use a new local namespace rather than deleting an existing installation.
 
-Once installed, these files are immutable. Add subsequent changes from `015`
+Once installed, these files are immutable. Add subsequent changes from `017`
 and register them in `src/migrations.rs`. Before applying pending migrations, the
 runner validates the complete applied prefix and its checksums. After changing
 schema definitions, regenerate and verify the catalog fingerprint with

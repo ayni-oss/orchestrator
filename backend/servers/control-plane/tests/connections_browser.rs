@@ -3,7 +3,7 @@ use ayni_orchestrator_control_plane::{
     gateway::{Gateway, router},
     serve_grpc,
 };
-use ayni_orchestrator_workflow_postgres::WorkflowStore;
+use ayni_orchestrator_workflow_postgres::{WorkflowStore, store::connections::SaveGithub};
 use std::{
     env,
     error::Error,
@@ -34,6 +34,19 @@ async fn product_browser_uses_canonical_postgres_connections() -> Result<(), Box
     store
         .finish_provider_validation(&fixture.id, "", &["fixture-model".into()])
         .await?;
+    let github = store
+        .save_github_connection(SaveGithub {
+            key: &uuid::Uuid::now_v7().to_string(),
+            id: "",
+            expected: 0,
+            name: "Browser GitHub revalidation fixture",
+            app_id: "123",
+            private_key_pem: "synthetic-invalid-key",
+        })
+        .await?;
+    // Admit the fixture locally so the browser can verify the active-key check
+    // rejects the synthetic key without changing its configured revision.
+    store.finish_github_validation(&github.id, "").await?;
     let grpc_address = TcpListener::bind("127.0.0.1:0")?.local_addr()?;
     let (shutdown, receiver) = watch::channel(false);
     let grpc = tokio::spawn(serve_grpc(grpc_address, WorkflowStore::new(url), receiver));
@@ -49,6 +62,7 @@ async fn product_browser_uses_canonical_postgres_connections() -> Result<(), Box
             address.port().to_string(),
         )
         .env("AYNI_BROWSER_CONNECTION_ID", fixture.connection_id)
+        .env("AYNI_BROWSER_GITHUB_CONNECTION_ID", github.connection_id)
         .status()
         .await;
     gateway.abort();

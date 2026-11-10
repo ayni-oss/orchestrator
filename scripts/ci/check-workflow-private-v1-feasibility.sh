@@ -36,20 +36,21 @@ for directory in owned.rglob("*"):
 root = Path("proto/ayni/orchestrator/v1")
 expected = {
     "runtime_preparation.proto": {"RuntimePreparationService": [
-        "StartRepositoryRuntime", "GetRepositoryRuntime", "GetRepositoryRuntimeReceipt",
+        "StartRepositoryRuntime", "GetRuntimeProfile", "GetRepositoryRuntime", "GetRuntimeSigningPullRequest", "OpenRuntimeSigningPullRequest",
+        "GetRepositoryRuntimeReceipt",
         "ProvisionRuntimeSigner", "RecoverRuntimeSignerProvisioning", "SaveRuntimeSigner",
-        "SetRuntimeSignerEnabled", "ListRuntimeSigners", "GetRuntimeSignerReceipt",
+        "SetRuntimeSignerEnabled", "GetRuntimeSigner", "DeleteRuntimeSigner", "ListRuntimeSigners", "GetRuntimeSignerReceipt",
         "StartRuntimePreparation", "GetRuntimePreparation", "ListRuntimePreparations",
         "GetRuntimePreparationReceipt", "CancelRuntimePreparation", "RetryRuntimePreparation",
     ]},
     "repositories.proto": {
-        "RepositoryService": ["ListGithubInstallations", "ListGithubRepositories", "ConnectRepository", "GetRepositoryOperation", "ListRepositoryOperations", "ListRepositories", "ListWorkspaceRepositories", "SetWorkspaceRepository", "AssociateProjectRepository", "ListProjectRepositories", "ResolveRepositoryDefaultCommit", "InspectRepository", "GetRepositoryInspection", "ListRepositoryInspections"],
+        "RepositoryService": ["ListGithubInstallations", "ListGithubRepositories", "ConnectRepository", "GetRepositoryOperation", "ListRepositoryOperations", "ListRepositories", "ListWorkspaceRepositories", "SetWorkspaceRepository", "AssociateProjectRepository", "ListProjectRepositories", "ListRepositoryBranches", "ResolveRepositoryDefaultCommit", "InspectRepository", "GetRepositoryInspection", "ListRepositoryInspections"],
     },
     "connections.proto": {
-        "ConnectionService": ["SaveGithubConnection", "SaveProviderConnection", "ValidateProviderConnection", "SetConnectionEnabled", "ValidateGithubConnection", "GetConnectionOperation", "ListConnections", "ListConnectionOperations"],
+        "ConnectionService": ["SaveGithubConnection", "SaveProviderConnection", "ValidateProviderConnection", "SetConnectionEnabled", "ValidateGithubConnection", "GetConnection", "CheckConnection", "DeleteConnection", "GetConnectionOperation", "ListConnections", "ListConnectionOperations"],
     },
     "projects.proto": {
-        "ProjectService": ["CreateWorkspace", "CreateProject", "RenameWorkspace", "RenameProject", "ListWorkspaces", "ListProjects", "GetAgentConfiguration", "UpdateAgentConfiguration", "GetTurnInputs", "GetTurnContextInputs"],
+        "ProjectService": ["CreateWorkspace", "CreateProject", "RenameWorkspace", "RenameProject", "SetProjectGoal", "ListWorkspaces", "ListProjects", "GetAgentConfiguration", "UpdateAgentConfiguration", "GetTurnInputs", "GetTurnContextInputs"],
     },
     "project_conversations.proto": {
         "ProjectConversationService": [

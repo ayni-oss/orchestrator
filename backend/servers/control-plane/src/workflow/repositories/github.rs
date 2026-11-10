@@ -10,8 +10,17 @@ use sha1::{Digest as _, Sha1};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+fn signing_pull_permissions(publish: bool) -> Value {
+    if publish {
+        json!({"contents":"write","pull_requests":"write","metadata":"read"})
+    } else {
+        json!({"pull_requests":"read","metadata":"read"})
+    }
+}
+
 pub(super) struct Github {
     client: Client,
+    origin: String,
     jwt: String,
     app_id: u64,
 }
@@ -28,6 +37,7 @@ impl Github {
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .map_err(|_| "github_unavailable")?,
+            origin: "https://api.github.com".into(),
             jwt: app_jwt(&source.app_id, &source.private_key_pem)?,
             app_id: source
                 .app_id
@@ -49,7 +59,7 @@ impl Github {
         };
         let mut request = self
             .client
-            .request(method, format!("https://api.github.com{path}"))
+            .request(method, format!("{}{path}", self.origin))
             .header("User-Agent", "ayni-orchestrator")
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28")
@@ -86,7 +96,48 @@ impl Github {
         }
         serde_json::from_slice(&bytes).map_err(|_| "github_response_invalid")
     }
-    /// Resolve the provider's current default branch once; subsequent inspection uses only its SHA.
+    pub async fn branches(
+        &self,
+        installation: u64,
+        repo: u64,
+        page: u32,
+    ) -> Result<(Vec<String>, bool), &'static str> {
+        let token = self.installation_token(installation, Some(repo)).await?;
+        let metadata = self
+            .request(Method::GET, &format!("/repositories/{repo}"), &token, None)
+            .await?;
+        let metadata = parse_repository(&metadata)?;
+        if metadata.provider_repository_id != repo || !safe_path(&metadata.full_name) {
+            return Err("github_response_invalid");
+        }
+        let value = self
+            .request(
+                Method::GET,
+                &format!(
+                    "/repos/{}/branches?per_page=100&page={page}",
+                    metadata.full_name
+                ),
+                &token,
+                None,
+            )
+            .await?;
+        let items = value
+            .as_array()
+            .filter(|items| items.len() <= 100)
+            .ok_or("github_response_invalid")?;
+        let branches = items
+            .iter()
+            .map(|item| text(item, "name", 4096))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((
+            branches
+                .into_iter()
+                .filter(|name| name.len() <= 255 && safe_path(name))
+                .collect(),
+            items.len() == 100,
+        ))
+    }
+    /// Resolve the selected branch once; subsequent inspection uses only its SHA.
     pub async fn default_commit(
         &self,
         installation: u64,
@@ -225,11 +276,7 @@ impl Github {
             })
             .collect()
     }
-    pub(super) async fn installation_token(
-        &self,
-        installation: u64,
-        repo: Option<u64>,
-    ) -> Result<String, &'static str> {
+    async fn installation(&self, installation: u64) -> Result<Value, &'static str> {
         let observed = self
             .request(
                 Method::GET,
@@ -244,7 +291,61 @@ impl Github {
         {
             return Err("github_access_denied");
         }
-        let mut body = json!({"permissions":{"contents":"read","metadata":"read"}});
+        Ok(observed)
+    }
+
+    pub(super) async fn installation_token(
+        &self,
+        installation: u64,
+        repo: Option<u64>,
+    ) -> Result<String, &'static str> {
+        self.installation(installation).await?;
+        self.mint(
+            installation,
+            repo,
+            json!({"contents":"read","metadata":"read"}),
+        )
+        .await
+    }
+
+    pub(super) async fn signing_pull_access(
+        &self,
+        installation: u64,
+        repository: u64,
+        publish: bool,
+    ) -> Result<super::SigningPullAccess, &'static str> {
+        let installed = self.installation(installation).await?;
+        let permissions = &installed["permissions"];
+        let can_publish =
+            permissions["contents"] == "write" && permissions["pull_requests"] == "write";
+        if publish && !can_publish {
+            return Err("github_signing_pull_write_required");
+        }
+        let token = if matches!(
+            permissions["pull_requests"].as_str(),
+            Some("read" | "write")
+        ) {
+            Some(zeroize::Zeroizing::new(
+                self.mint(
+                    installation,
+                    Some(repository),
+                    signing_pull_permissions(publish),
+                )
+                .await?,
+            ))
+        } else {
+            None
+        };
+        Ok(super::SigningPullAccess { token, can_publish })
+    }
+
+    async fn mint(
+        &self,
+        installation: u64,
+        repo: Option<u64>,
+        permissions: Value,
+    ) -> Result<String, &'static str> {
+        let mut body = json!({"permissions":permissions});
         if let Some(repo) = repo {
             body["repository_ids"] = json!([repo]);
         }
@@ -256,7 +357,11 @@ impl Github {
                 Some(body),
             )
             .await?;
-        if value["permissions"]["contents"] != "read" || value["permissions"]["metadata"] != "read"
+        if value["permissions"] != permissions {
+            return Err("github_access_denied");
+        }
+        if let (Some(repo), Some(repositories)) = (repo, value.get("repositories"))
+            && !matches!(repositories.as_array().map(Vec::as_slice), Some([repository]) if id(repository, "id") == Ok(repo))
         {
             return Err("github_access_denied");
         }
@@ -435,6 +540,79 @@ fn parse_repository(value: &Value) -> Result<ObservedRepository, &'static str> {
 }
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn signing_pull_tokens_are_scoped_to_the_operation_and_repository()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use axum::{
+            Json, Router,
+            extract::{Path, State},
+            http::StatusCode,
+            routing::{get, post},
+        };
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        let requests = Arc::new(AtomicUsize::new(0));
+        let app = Router::new()
+            .route(
+                "/app/installations/{installation}",
+                get(|Path(installation): Path<u64>| async move {
+                    let contents = if installation == 21 { "write" } else { "read" };
+                    Json(json!({"id":installation,"app_id":9,"suspended_at":null,
+                    "permissions":{"contents":contents,"pull_requests":"write","metadata":"read"}}))
+                }),
+            )
+            .route(
+                "/app/installations/{installation}/access_tokens",
+                post(
+                    |State(requests): State<Arc<AtomicUsize>>, Json(body): Json<Value>| async move {
+                        let call = requests.fetch_add(1, Ordering::Relaxed);
+                        let expected = if call == 1 {
+                            json!({"contents":"write","pull_requests":"write","metadata":"read"})
+                        } else {
+                            json!({"pull_requests":"read","metadata":"read"})
+                        };
+                        assert_eq!(body["repository_ids"], json!([42]));
+                        assert_eq!(body["permissions"], expected);
+                        let returned_repo = if call == 2 { 43 } else { 42 };
+                        (
+                            StatusCode::CREATED,
+                            Json(json!({"token":"fixture",
+                        "permissions":expected,"repositories":[{"id":returned_repo}]})),
+                        )
+                    },
+                ),
+            )
+            .with_state(Arc::clone(&requests));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let github = Github {
+            client: Client::builder()
+                .no_proxy()
+                .timeout(Duration::from_secs(2))
+                .build()?,
+            origin: format!("http://{}", listener.local_addr()?),
+            jwt: "fixture".into(),
+            app_id: 9,
+        };
+        let server = tokio::spawn(async move { axum::serve(listener, app).await });
+        assert_eq!(
+            github.signing_pull_access(22, 42, true).await.err(),
+            Some("github_signing_pull_write_required")
+        );
+        assert_eq!(requests.load(Ordering::Relaxed), 0);
+        let read = github.signing_pull_access(22, 42, false).await?;
+        assert!(!read.can_publish && read.token.is_some());
+        let write = github.signing_pull_access(21, 42, true).await?;
+        assert!(write.can_publish && write.token.is_some());
+        assert_eq!(
+            github.signing_pull_access(21, 42, false).await.err(),
+            Some("github_access_denied")
+        );
+        server.abort();
+        Ok(())
+    }
+
     use super::*;
     #[test]
     fn rejects_wrong_identity_shapes_and_unbounded_provider_text() {

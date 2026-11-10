@@ -5,7 +5,7 @@
   const providers = [{name:'GitHub',logo:'github',description:'Connect to GitHub Container Registry with separate push and pull access.',href:'/settings/container-registries/github'}];
 </script>
 
-<svelte:head><title>Container registries · Ayni Orchestrator</title></svelte:head>
+<svelte:head><title>Container registries · ayni Orchestrator</title></svelte:head>
 <PageHeader title="Container registries" />
 <PageContent>
   <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">

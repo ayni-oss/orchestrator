@@ -124,7 +124,7 @@ async fn seed_static_inspection(
         ayni_orchestrator_workflow_postgres::store::repository_inspections::InspectionResult {
             policy_digest: "sha256:fixture-policy".into(), lock_digest: "sha256:fixture-lock".into(),
             lock_fingerprint: String::new(), ayni_version: String::new(), lock_schema: String::new(),
-            tools: vec![], trust_key_ids: vec![], findings: vec![
+            tools: vec![], trust_key_ids: vec![], trusted_public_keys: std::collections::BTreeMap::new(), findings: vec![
                 ayni_orchestrator_workflow_postgres::store::repository_inspections::Finding {
                     code: "policy_missing".into(), path: ".ayni.toml".into(),
                     action: "Commit an Ayni policy before preparing this repository.".into(),

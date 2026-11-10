@@ -2,12 +2,10 @@
  import { toast } from 'svelte-sonner';
  import { onMount, onDestroy } from 'svelte';
  import { invalidateAll } from '$app/navigation';
- import SaveStatus from '$lib/components/save-status.svelte';
  import { protectUnsavedChanges } from '$lib/unsaved-changes.svelte';
  import { rpc } from '$lib/api';
  import * as Dialog from '$lib/components/ui/dialog/index.js';
- import FieldSaved from '$lib/components/field-saved.svelte';
- import InformationCard from '$lib/components/information-card.svelte';
+ import AutosaveField from '$lib/components/autosave-field.svelte';
  import { Button } from '$lib/components/ui/button/index.js';
  import { Input } from '$lib/components/ui/input/index.js';
  import { Label } from '$lib/components/ui/label/index.js';
@@ -25,6 +23,7 @@
  onDestroy(()=>clearTimeout(saveTimer));
  function scheduleSave(value: string) {
   draft=value;
+  error='';
   savedRevision=0;
   clearTimeout(saveTimer);
   if(value.trim()&&value.trim()!==name) saveTimer=setTimeout(()=>void save(),500);
@@ -52,7 +51,12 @@
    sessionStorage.removeItem(storageKey);pending=null;open=false;await invalidateAll();
    if(inline){draft=name;savedRevision=Date.now();}
    else toast.success(kind==='workspace'?'Workspace renamed':'Project renamed');
-  }catch(cause){error=cause instanceof Error?cause.message:'The name could not be saved.';}finally{saving=false;}
+  } catch(cause) {
+   error=cause instanceof Error?cause.message:'The name could not be saved.';
+   if(inline) toast.error('Could not save the name', { description: error });
+  } finally {
+   saving=false;
+  }
  }
  async function discard(){
   sessionStorage.removeItem(storageKey);pending=null;open=false;error='';
@@ -63,6 +67,7 @@
   ready=true;
   } catch(cause) {
    error=cause instanceof Error?cause.message:'The name could not be refreshed.';
+   if(inline) toast.error('Could not refresh the name', { description: error });
   } finally {
    saving=false;
   }
@@ -84,23 +89,18 @@
  <Button type="submit" disabled={saving||!draft.trim()}>{saving?'Saving…':pending?'Retry rename':'Save name'}</Button>
 {/snippet}
 {#if inline}
- <InformationCard title={kind === 'workspace' ? 'Rename workspace' : 'Rename project'}>
-  <SaveStatus {saving} {dirty} pending={!!pending} saved={savedRevision>0} />
-  <div class="space-y-2">
-   <Label for={`rename-${kind}-${id}`}>{kind === 'workspace' ? 'Workspace name' : 'Project name'}</Label>
-   <div class="relative">
-    <Input id={`rename-${kind}-${id}`} value={draft} oninput={event=>scheduleSave(event.currentTarget.value)} required maxlength={120} readonly={!!pending||saving} />
-    <FieldSaved revision={savedRevision}/>
-   </div>
-  </div>
-  {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
+ <div class="space-y-2">
+  <Label for={`rename-${kind}-${id}`}>{kind === 'workspace' ? 'Workspace name' : 'Project Name'}</Label>
+  <AutosaveField saving={saving ? !!pending : dirty && !!draft.trim() && !pending && !error} {savedRevision}>
+   <Input data-slot="input-group-control" id={`rename-${kind}-${id}`} value={draft} oninput={event=>scheduleSave(event.currentTarget.value)} required maxlength={120} readonly={!!pending||saving} />
+  </AutosaveField>
   {#if pending&&!saving}
    <div class="flex flex-wrap gap-2">
     <Button variant="outline" onclick={discard}>Close request and refresh</Button>
     <Button onclick={()=>save()}>Retry rename</Button>
    </div>
   {/if}
- </InformationCard>
+ </div>
 {:else}
  <Dialog.Root bind:open>
   <Dialog.Content class="sm:max-w-lg">

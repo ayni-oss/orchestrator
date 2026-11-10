@@ -32,7 +32,7 @@ mod tests {
     use prost_types::FileDescriptorSet;
     use std::collections::{BTreeMap, BTreeSet};
 
-    const REPOSITORY_METHODS: [&str; 14] = [
+    const REPOSITORY_METHODS: [&str; 15] = [
         "ListGithubInstallations",
         "ListGithubRepositories",
         "ConnectRepository",
@@ -43,15 +43,19 @@ mod tests {
         "SetWorkspaceRepository",
         "AssociateProjectRepository",
         "ListProjectRepositories",
+        "ListRepositoryBranches",
         "ResolveRepositoryDefaultCommit",
         "InspectRepository",
         "GetRepositoryInspection",
         "ListRepositoryInspections",
     ];
 
-    const RUNTIME_PREPARATION_METHODS: [&str; 15] = [
+    const RUNTIME_PREPARATION_METHODS: [&str; 20] = [
         "StartRepositoryRuntime",
+        "GetRuntimeProfile",
         "GetRepositoryRuntime",
+        "GetRuntimeSigningPullRequest",
+        "OpenRuntimeSigningPullRequest",
         "GetRepositoryRuntimeReceipt",
         "ProvisionRuntimeSigner",
         "RecoverRuntimeSignerProvisioning",
@@ -63,6 +67,8 @@ mod tests {
         "CancelRuntimePreparation",
         "RetryRuntimePreparation",
         "SetRuntimeSignerEnabled",
+        "GetRuntimeSigner",
+        "DeleteRuntimeSigner",
         "ListRuntimeSigners",
         "GetRuntimeSignerReceipt",
     ];
@@ -101,6 +107,9 @@ mod tests {
                         "ValidateProviderConnection",
                         "SetConnectionEnabled",
                         "ValidateGithubConnection",
+                        "GetConnection",
+                        "CheckConnection",
+                        "DeleteConnection",
                         "GetConnectionOperation",
                         "ListConnections",
                         "ListConnectionOperations",
@@ -153,6 +162,7 @@ mod tests {
                         "CreateWorkspace",
                         "RenameWorkspace",
                         "RenameProject",
+                        "SetProjectGoal",
                         "ListWorkspaces",
                         "ListProjects",
                         "GetAgentConfiguration",

@@ -8,6 +8,9 @@ service ConnectionService {
   rpc ValidateProviderConnection(ValidateProviderConnectionRequest) returns (ValidateProviderConnectionResponse);
   rpc SetConnectionEnabled(SetConnectionEnabledRequest) returns (SetConnectionEnabledResponse);
   rpc ValidateGithubConnection(ValidateGithubConnectionRequest) returns (ValidateGithubConnectionResponse);
+  rpc GetConnection(GetConnectionRequest) returns (GetConnectionResponse);
+  rpc CheckConnection(CheckConnectionRequest) returns (CheckConnectionResponse);
+  rpc DeleteConnection(DeleteConnectionRequest) returns (DeleteConnectionResponse);
   rpc GetConnectionOperation(GetConnectionOperationRequest) returns (GetConnectionOperationResponse);
   rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse);
   rpc ListConnectionOperations(ListConnectionOperationsRequest) returns (ListConnectionOperationsResponse);
@@ -60,6 +63,29 @@ message SetConnectionEnabledRequest {
 message ValidateGithubConnectionRequest {
   // Resumes validation of the candidate retained by SaveGithubConnection.
   string operation_id = 1;
+}
+message GetConnectionRequest {
+  string connection_id = 1;
+}
+message GetConnectionResponse {
+  Connection connection = 1;
+  string pending_operation_id = 2;
+}
+message CheckConnectionRequest {
+  string connection_id = 1;
+  uint64 expected_revision = 2;
+}
+message CheckConnectionResponse {
+  // Empty when the provider authenticated the active credential.
+  string safe_reason = 1;
+}
+message DeleteConnectionRequest {
+  string idempotency_key = 1;
+  string connection_id = 2;
+  uint64 expected_revision = 3;
+}
+message DeleteConnectionResponse {
+  ConnectionOperation operation = 1;
 }
 message GetConnectionOperationRequest {
   string idempotency_key = 1;

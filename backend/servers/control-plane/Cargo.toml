@@ -16,6 +16,7 @@ ed25519-dalek.workspace = true
 getrandom = "=0.3.4"
 zeroize = "=1.9.0"
 tempfile.workspace = true
+toml_edit = "=0.22.27"
 sha1 = "=0.10.7"
 reqwest.workspace = true
 jsonwebtoken.workspace = true

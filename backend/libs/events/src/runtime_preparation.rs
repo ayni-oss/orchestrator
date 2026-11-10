@@ -224,10 +224,39 @@ pub enum SupervisorRequest {
     },
 }
 
+/// Worker-owned milestones. Repository command output is never part of this protocol.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum BuildMilestone {
+    CopySource,
+    VerifyInputs,
+    BuildImage,
+    ExportImage,
+    InspectImage,
+    ImageReady,
+}
+
+/// Control-plane-owned build report stored separately from immutable artifact evidence.
+pub const BUILD_REPORT_KEY: &str = "build_report";
+pub const BUILD_STEPS: [BuildMilestone; 5] = [
+    BuildMilestone::CopySource,
+    BuildMilestone::VerifyInputs,
+    BuildMilestone::BuildImage,
+    BuildMilestone::ExportImage,
+    BuildMilestone::InspectImage,
+];
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct BuildReport {
+    pub complete: bool,
+    pub elapsed_ms: [Option<u64>; BUILD_STEPS.len()],
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum WorkerRequest {
     Input,
+    BuildProgress { milestone: BuildMilestone },
     PreparePublication { expected_manifest_digest: String },
     Report { report: Box<StageReport> },
 }

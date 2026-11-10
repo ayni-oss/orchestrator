@@ -95,23 +95,23 @@ pub fn router(gateway: Gateway) -> Router {
 }
 
 macro_rules! forward {
-    ($body:expr, $client:expr, $method:ident, $request:ty) => {{
+    ($body:expr, $client:expr, $method:ident, $request:ty) => {
+        forward!($body, $client, $method, $request, 10)
+    };
+    ($body:expr, $client:expr, $method:ident, $request:ty, $timeout:literal) => {{
         let value: $request = decode($body)?;
         let mut request = tonic::Request::new(value);
-        request.set_timeout(Duration::from_secs(10));
-        let response = tokio::time::timeout(Duration::from_secs(12), $client.$method(request))
-            .await
-            .map_err(|_| {
-                ApiError::from(Status::deadline_exceeded("workflow request timed out"))
-            })??;
+        request.set_timeout(Duration::from_secs($timeout));
+        let response =
+            tokio::time::timeout(Duration::from_secs($timeout + 2), $client.$method(request))
+                .await
+                .map_err(|_| {
+                    ApiError::from(Status::deadline_exceeded("workflow request timed out"))
+                })??;
         encode(response.into_inner()).map(Json)
     }};
 }
 
-#[allow(
-    clippy::too_many_lines,
-    reason = "the conversation RPC allowlist is kept together for auditability"
-)]
 async fn rpc(
     State(gateway): State<Gateway>,
     Path(method): Path<String>,
@@ -153,6 +153,24 @@ async fn rpc(
             validate_github_connection,
             v1::ValidateGithubConnectionRequest
         ),
+        "GetConnection" => forward!(
+            body,
+            gateway.connections(),
+            get_connection,
+            v1::GetConnectionRequest
+        ),
+        "CheckConnection" => forward!(
+            body,
+            gateway.connections(),
+            check_connection,
+            v1::CheckConnectionRequest
+        ),
+        "DeleteConnection" => forward!(
+            body,
+            gateway.connections(),
+            delete_connection,
+            v1::DeleteConnectionRequest
+        ),
         "GetConnectionOperation" => forward!(
             body,
             gateway.connections(),
@@ -171,7 +189,20 @@ async fn rpc(
             list_connection_operations,
             v1::ListConnectionOperationsRequest
         ),
+        _ => conversation_rpc(&gateway, &method, body).await,
+    }
+}
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "the conversation RPC allowlist is kept together for auditability"
+)]
+async fn conversation_rpc(
+    gateway: &Gateway,
+    method: &str,
+    body: Value,
+) -> Result<Json<Value>, ApiError> {
+    match method {
         "CreatePlan" => forward!(
             body,
             gateway.conversations(),
@@ -286,7 +317,7 @@ async fn rpc(
             list_conversation_history,
             v1::ListConversationHistoryRequest
         ),
-        _ => task_rpc(&gateway, &method, body).await,
+        _ => task_rpc(gateway, method, body).await,
     }
 }
 
@@ -406,6 +437,12 @@ async fn project_rpc(
             rename_project,
             v1::RenameProjectRequest
         ),
+        "SetProjectGoal" => forward!(
+            body,
+            gateway.projects(),
+            set_project_goal,
+            v1::SetProjectGoalRequest
+        ),
         "CreateWorkspace" => forward!(
             body,
             gateway.projects(),
@@ -464,6 +501,12 @@ async fn repository_rpc(
     body: Value,
 ) -> Result<Json<Value>, ApiError> {
     match method {
+        "ListRepositoryBranches" => forward!(
+            body,
+            gateway.repositories(),
+            list_repository_branches,
+            v1::ListRepositoryBranchesRequest
+        ),
         "ResolveRepositoryDefaultCommit" => forward!(
             body,
             gateway.repositories(),
@@ -564,11 +607,31 @@ async fn runtime_preparation_rpc(
             start_repository_runtime,
             v1::StartRepositoryRuntimeRequest
         ),
+        "GetRuntimeProfile" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            get_runtime_profile,
+            v1::GetRuntimeProfileRequest
+        ),
         "GetRepositoryRuntime" => forward!(
             body,
             gateway.runtime_preparation(),
             get_repository_runtime,
             v1::GetRepositoryRuntimeRequest
+        ),
+        "GetRuntimeSigningPullRequest" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            get_runtime_signing_pull_request,
+            v1::GetRuntimeSigningPullRequestRequest,
+            55
+        ),
+        "OpenRuntimeSigningPullRequest" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            open_runtime_signing_pull_request,
+            v1::OpenRuntimeSigningPullRequestRequest,
+            105
         ),
         "GetRepositoryRuntimeReceipt" => forward!(
             body,
@@ -612,6 +675,16 @@ async fn runtime_preparation_rpc(
             retry_runtime_preparation,
             v1::RetryRuntimePreparationRequest
         ),
+        _ => runtime_signer_rpc(gateway, method, body).await,
+    }
+}
+
+async fn runtime_signer_rpc(
+    gateway: &Gateway,
+    method: &str,
+    body: Value,
+) -> Result<Json<Value>, ApiError> {
+    match method {
         "ProvisionRuntimeSigner" => forward!(
             body,
             gateway.runtime_preparation(),
@@ -635,6 +708,18 @@ async fn runtime_preparation_rpc(
             gateway.runtime_preparation(),
             set_runtime_signer_enabled,
             v1::SetRuntimeSignerEnabledRequest
+        ),
+        "GetRuntimeSigner" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            get_runtime_signer,
+            v1::GetRuntimeSignerRequest
+        ),
+        "DeleteRuntimeSigner" => forward!(
+            body,
+            gateway.runtime_preparation(),
+            delete_runtime_signer,
+            v1::DeleteRuntimeSignerRequest
         ),
         "ListRuntimeSigners" => forward!(
             body,
@@ -773,6 +858,7 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let code = match self.0.code() {
             Code::InvalidArgument => StatusCode::BAD_REQUEST,
+            Code::PermissionDenied => StatusCode::FORBIDDEN,
             Code::NotFound | Code::Unimplemented => StatusCode::NOT_FOUND,
             Code::AlreadyExists | Code::Aborted | Code::FailedPrecondition => StatusCode::CONFLICT,
             Code::ResourceExhausted => StatusCode::TOO_MANY_REQUESTS,
@@ -784,132 +870,4 @@ impl IntoResponse for ApiError {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use axum::{
-        body::Body,
-        http::{Request, header},
-    };
-    use prost::Message as _;
-    use tower::ServiceExt as _;
-
-    #[tokio::test]
-    async fn local_boundary_rejects_rebinding_cross_origin_and_simple_posts()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let gateway = Gateway::new("127.0.0.1:3000".parse()?, "127.0.0.1:1".parse()?)?;
-        let app = router(gateway);
-        for (host, origin, fetch_site, method) in [
-            (
-                "attacker.example:3000",
-                "http://127.0.0.1:3000",
-                "same-origin",
-                "GET",
-            ),
-            (
-                "127.0.0.1:3000",
-                "https://attacker.example",
-                "cross-site",
-                "GET",
-            ),
-            (
-                "127.0.0.1:3000",
-                "http://127.0.0.1:3000",
-                "cross-site",
-                "GET",
-            ),
-            (
-                "127.0.0.1:3000",
-                "http://127.0.0.1:3000",
-                "same-origin",
-                "POST",
-            ),
-        ] {
-            let response = app
-                .clone()
-                .oneshot(
-                    Request::builder()
-                        .uri("/")
-                        .method(method)
-                        .header("host", host)
-                        .header("origin", origin)
-                        .header("sec-fetch-site", fetch_site)
-                        .body(Body::empty())?,
-                )
-                .await?;
-            assert_eq!(response.status(), StatusCode::FORBIDDEN);
-        }
-        let response = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .uri("/")
-                    .header("host", "127.0.0.1:3000")
-                    .body(Body::empty())?,
-            )
-            .await?;
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
-        assert!(
-            response.headers()[header::CONTENT_SECURITY_POLICY]
-                .to_str()?
-                .contains("frame-ancestors 'none'")
-        );
-        for path in [
-            "/workspace/",
-            "/workspace/index.html",
-            "/app.mjs",
-            "/style.css",
-        ] {
-            let response = app
-                .clone()
-                .oneshot(
-                    Request::builder()
-                        .uri(path)
-                        .header("host", "127.0.0.1:3000")
-                        .body(Body::empty())?,
-                )
-                .await?;
-            assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        }
-        assert!(Gateway::new("0.0.0.0:3000".parse()?, "127.0.0.1:1".parse()?).is_err());
-        assert!(Gateway::new("127.0.0.1:3000".parse()?, "192.0.2.1:50051".parse()?).is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn protojson_keeps_64_bit_revisions_and_typed_expiry() -> Result<(), Box<dyn std::error::Error>>
-    {
-        let value = v1::ConversationSnapshot {
-            conversation_revision: 9_007_199_254_740_993,
-            ..Default::default()
-        };
-        assert_eq!(
-            serde_json::to_value(value)?["conversationRevision"],
-            "9007199254740993"
-        );
-        let detail = v1::ErrorDetail {
-            reason: v1::ErrorReason::WatchCursorExpired as i32,
-            ..Default::default()
-        };
-        let status = Status::with_details(
-            Code::FailedPrecondition,
-            "private content",
-            RichStatus {
-                code: 9,
-                message: String::new(),
-                details: vec![prost_types::Any {
-                    type_url: "type.googleapis.com/ayni.orchestrator.v1.ErrorDetail".into(),
-                    value: detail.encode_to_vec(),
-                }],
-            }
-            .encode_to_vec()
-            .into(),
-        );
-        assert_eq!(
-            error_body(&status)["reason"],
-            "ERROR_REASON_WATCH_CURSOR_EXPIRED"
-        );
-        assert!(!error_body(&status).to_string().contains("private content"));
-        Ok(())
-    }
-}
+mod tests;

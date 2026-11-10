@@ -2,6 +2,7 @@
  import { onMount } from 'svelte';
  import { page } from '$app/state';
  import { Tabs } from 'bits-ui';
+ import { Badge } from '$lib/components/ui/badge/index.js';
  import { Button } from '$lib/components/ui/button/index.js';
  import PageHeader from './page-header.svelte';
  import InformationTable from './information-table.svelte';
@@ -13,7 +14,11 @@
  let repo = $state.raw<Repository | null>(null);
  let connection = $state.raw<Connection | undefined>();
  let busy = $state(true), error = $state('');
- let tab = $state(page.url.searchParams.get('tab') === 'runtime' ? 'runtime' : 'source');
+ function initialTab() {
+  const requested = page.url.searchParams.get('tab');
+  return requested === 'source' || requested === 'activity' ? requested : 'runtime';
+ }
+ let tab = $state(initialTab());
  const triggerClass = 'border-b-2 border-transparent px-3 py-3 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:border-primary data-[state=active]:text-foreground';
  async function load() {
   busy = true; error = '';
@@ -40,21 +45,27 @@
 <div class="max-w-5xl space-y-5">
  {#if busy}<p role="status" class="text-sm text-muted-foreground">Loading repository…</p>{:else if error}<Feedback kind="error" title="Repository unavailable" message={error}/><Button variant="outline" onclick={load}>Try again</Button>
  {:else if repo}
- <p class="text-sm text-muted-foreground">{repo.private ? 'Private repository' : 'Public repository'} · Default branch: {repo.defaultBranch}</p>
+ <div class="flex flex-wrap gap-2">
+  <Badge variant="outline">{repo.private ? 'Private repository' : 'Public repository'}</Badge>
+  <Badge variant="outline" class="h-auto max-w-full whitespace-normal [overflow-wrap:anywhere]">Default branch: {repo.defaultBranch}</Badge>
+ </div>
  <Tabs.Root bind:value={tab}>
   <Tabs.List aria-label={`${repo.fullName} onboarding`} class="mb-6 flex gap-3 border-b">
+   <Tabs.Trigger value="runtime" class={triggerClass}>ayni runtime</Tabs.Trigger>
    <Tabs.Trigger value="source" class={triggerClass}>Source code</Tabs.Trigger>
-   <Tabs.Trigger value="runtime" class={triggerClass}>Ayni runtime</Tabs.Trigger>
+   <Tabs.Trigger value="activity" class={triggerClass}>Activity</Tabs.Trigger>
   </Tabs.List>
   <Tabs.Content value="source" class="space-y-4">
-   <div class="space-y-1"><h3 class="font-semibold">Source code connected</h3><p class="text-sm text-muted-foreground">This repository is in the shared catalog and can be selected by projects. Set up Ayni runtime to check the latest default branch and build, publish and verify its image.</p></div>
-    <InformationTable rows={[{label:'GitHub connection',value:connection?.displayName || 'Connection unavailable'},{label:'Connection status',value:!connection ? 'Unavailable' : !connection.enabled ? 'Disabled' : !connection.activeCredentialRevision ? 'Validation required' : 'Configured'}]}/>
-    {#if !connection?.enabled || !connection?.activeCredentialRevision}<p class="text-sm">Enable and validate the source connection before inspecting commits.</p>{/if}
-    <Button onclick={() => {tab='runtime';}}>Set up runtime</Button>
-    <a class="text-sm text-primary underline underline-offset-4" href="/settings/source-control/github">Manage source connection</a>
-    <details class="rounded-md border p-3"><summary class="cursor-pointer text-sm font-medium">Source integration details</summary><div class="pt-3"><InformationTable rows={[{label:'GitHub repository ID',value:repo.providerRepositoryId},{label:'GitHub installation ID',value:repo.installationId},{label:'Connected',value:new Date(Number(repo.connectedAtUnixMs)).toLocaleString()}]}/><p class="mt-3 text-xs text-muted-foreground">GitHub IDs identify this repository and the App installation that grants access. Source access was checked when the repository was connected.</p></div></details>
+   <h2 class="font-semibold">Source integration details</h2>
+   <InformationTable rows={[
+    {label:'Source control connection',value:connection?.displayName || 'Unavailable'},
+    {label:'Connection status',value:!connection ? 'Unavailable' : !connection.enabled ? 'Disabled' : !connection.activeCredentialRevision ? 'Validation required' : 'Configured'},
+    {label:'Repository ID',value:repo.providerRepositoryId},
+    {label:'Installation ID',value:repo.installationId},
+    {label:'Connected',value:new Date(Number(repo.connectedAtUnixMs)).toLocaleString()},
+   ]}/>
   </Tabs.Content>
-  <Tabs.Content value="runtime" class="space-y-4"><RepositoryInspection {repo} {connection}/></Tabs.Content>
+  <RepositoryInspection {repo} bind:connection/>
  </Tabs.Root>
  {/if}
 </div>

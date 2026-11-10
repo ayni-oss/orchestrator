@@ -36,6 +36,8 @@ pub struct TaskCommand {
     pub max_seconds: u32,
     pub max_tokens: u32,
     pub objective: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub project_goal: String,
     pub scope: String,
     pub out_of_scope: String,
     pub acceptance_criteria: Vec<String>,

@@ -2,6 +2,7 @@
 use super::repositories::Repository;
 use super::{StoreError, WorkflowStore, connections, new_id, validate_id, validate_key};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use tokio_postgres::Row;
 
 #[derive(Clone, Serialize)]
@@ -26,6 +27,8 @@ pub struct InspectionResult {
     pub lock_schema: String,
     pub tools: Vec<String>,
     pub trust_key_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub trusted_public_keys: BTreeMap<String, String>,
     pub findings: Vec<Finding>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

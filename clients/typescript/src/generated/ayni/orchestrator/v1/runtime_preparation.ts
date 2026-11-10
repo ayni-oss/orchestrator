@@ -19,6 +19,120 @@ import {
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
 
+export enum RuntimeBuildMilestone {
+  RUNTIME_BUILD_MILESTONE_UNSPECIFIED = 0,
+  RUNTIME_BUILD_MILESTONE_COPY_SOURCE = 1,
+  RUNTIME_BUILD_MILESTONE_VERIFY_INPUTS = 2,
+  RUNTIME_BUILD_MILESTONE_BUILD_IMAGE = 3,
+  RUNTIME_BUILD_MILESTONE_EXPORT_IMAGE = 4,
+  RUNTIME_BUILD_MILESTONE_INSPECT_IMAGE = 5,
+  RUNTIME_BUILD_MILESTONE_IMAGE_READY = 6,
+  UNRECOGNIZED = -1,
+}
+
+export function runtimeBuildMilestoneFromJSON(object: any): RuntimeBuildMilestone {
+  switch (object) {
+    case 0:
+    case "RUNTIME_BUILD_MILESTONE_UNSPECIFIED":
+      return RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_UNSPECIFIED;
+    case 1:
+    case "RUNTIME_BUILD_MILESTONE_COPY_SOURCE":
+      return RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_COPY_SOURCE;
+    case 2:
+    case "RUNTIME_BUILD_MILESTONE_VERIFY_INPUTS":
+      return RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_VERIFY_INPUTS;
+    case 3:
+    case "RUNTIME_BUILD_MILESTONE_BUILD_IMAGE":
+      return RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_BUILD_IMAGE;
+    case 4:
+    case "RUNTIME_BUILD_MILESTONE_EXPORT_IMAGE":
+      return RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_EXPORT_IMAGE;
+    case 5:
+    case "RUNTIME_BUILD_MILESTONE_INSPECT_IMAGE":
+      return RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_INSPECT_IMAGE;
+    case 6:
+    case "RUNTIME_BUILD_MILESTONE_IMAGE_READY":
+      return RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_IMAGE_READY;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return RuntimeBuildMilestone.UNRECOGNIZED;
+  }
+}
+
+export function runtimeBuildMilestoneToJSON(object: RuntimeBuildMilestone): string {
+  switch (object) {
+    case RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_UNSPECIFIED:
+      return "RUNTIME_BUILD_MILESTONE_UNSPECIFIED";
+    case RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_COPY_SOURCE:
+      return "RUNTIME_BUILD_MILESTONE_COPY_SOURCE";
+    case RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_VERIFY_INPUTS:
+      return "RUNTIME_BUILD_MILESTONE_VERIFY_INPUTS";
+    case RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_BUILD_IMAGE:
+      return "RUNTIME_BUILD_MILESTONE_BUILD_IMAGE";
+    case RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_EXPORT_IMAGE:
+      return "RUNTIME_BUILD_MILESTONE_EXPORT_IMAGE";
+    case RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_INSPECT_IMAGE:
+      return "RUNTIME_BUILD_MILESTONE_INSPECT_IMAGE";
+    case RuntimeBuildMilestone.RUNTIME_BUILD_MILESTONE_IMAGE_READY:
+      return "RUNTIME_BUILD_MILESTONE_IMAGE_READY";
+    case RuntimeBuildMilestone.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export enum RuntimeSigningPullRequestState {
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_UNSPECIFIED = 0,
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_DRAFT = 1,
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_OPEN = 2,
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_CLOSED = 3,
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_MERGED = 4,
+  UNRECOGNIZED = -1,
+}
+
+export function runtimeSigningPullRequestStateFromJSON(object: any): RuntimeSigningPullRequestState {
+  switch (object) {
+    case 0:
+    case "RUNTIME_SIGNING_PULL_REQUEST_STATE_UNSPECIFIED":
+      return RuntimeSigningPullRequestState.RUNTIME_SIGNING_PULL_REQUEST_STATE_UNSPECIFIED;
+    case 1:
+    case "RUNTIME_SIGNING_PULL_REQUEST_STATE_DRAFT":
+      return RuntimeSigningPullRequestState.RUNTIME_SIGNING_PULL_REQUEST_STATE_DRAFT;
+    case 2:
+    case "RUNTIME_SIGNING_PULL_REQUEST_STATE_OPEN":
+      return RuntimeSigningPullRequestState.RUNTIME_SIGNING_PULL_REQUEST_STATE_OPEN;
+    case 3:
+    case "RUNTIME_SIGNING_PULL_REQUEST_STATE_CLOSED":
+      return RuntimeSigningPullRequestState.RUNTIME_SIGNING_PULL_REQUEST_STATE_CLOSED;
+    case 4:
+    case "RUNTIME_SIGNING_PULL_REQUEST_STATE_MERGED":
+      return RuntimeSigningPullRequestState.RUNTIME_SIGNING_PULL_REQUEST_STATE_MERGED;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return RuntimeSigningPullRequestState.UNRECOGNIZED;
+  }
+}
+
+export function runtimeSigningPullRequestStateToJSON(object: RuntimeSigningPullRequestState): string {
+  switch (object) {
+    case RuntimeSigningPullRequestState.RUNTIME_SIGNING_PULL_REQUEST_STATE_UNSPECIFIED:
+      return "RUNTIME_SIGNING_PULL_REQUEST_STATE_UNSPECIFIED";
+    case RuntimeSigningPullRequestState.RUNTIME_SIGNING_PULL_REQUEST_STATE_DRAFT:
+      return "RUNTIME_SIGNING_PULL_REQUEST_STATE_DRAFT";
+    case RuntimeSigningPullRequestState.RUNTIME_SIGNING_PULL_REQUEST_STATE_OPEN:
+      return "RUNTIME_SIGNING_PULL_REQUEST_STATE_OPEN";
+    case RuntimeSigningPullRequestState.RUNTIME_SIGNING_PULL_REQUEST_STATE_CLOSED:
+      return "RUNTIME_SIGNING_PULL_REQUEST_STATE_CLOSED";
+    case RuntimeSigningPullRequestState.RUNTIME_SIGNING_PULL_REQUEST_STATE_MERGED:
+      return "RUNTIME_SIGNING_PULL_REQUEST_STATE_MERGED";
+    case RuntimeSigningPullRequestState.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
 /** Public configuration only. The referenced immutable Secret is administrator-owned. */
 export interface RuntimeSigner {
   id: string;
@@ -55,6 +169,24 @@ export interface SetRuntimeSignerEnabledRequest {
 }
 
 export interface SetRuntimeSignerEnabledResponse {
+  signer?: RuntimeSigner | undefined;
+}
+
+export interface GetRuntimeSignerRequest {
+  id: string;
+}
+
+export interface GetRuntimeSignerResponse {
+  signer?: RuntimeSigner | undefined;
+}
+
+export interface DeleteRuntimeSignerRequest {
+  idempotencyKey: string;
+  id: string;
+  expectedRevision: string;
+}
+
+export interface DeleteRuntimeSignerResponse {
   signer?: RuntimeSigner | undefined;
 }
 
@@ -116,6 +248,14 @@ export interface RuntimePreparation {
   certificationLayerDigest: string;
   /** Local development opt-in; does not establish cluster/network qualification. */
   developmentOnly: boolean;
+  /** Latest milestone of this build, including completion after the worker exits. */
+  buildMilestone: RuntimeBuildMilestone;
+  buildStepTimings: RuntimeBuildStepTiming[];
+}
+
+export interface RuntimeBuildStepTiming {
+  milestone: RuntimeBuildMilestone;
+  elapsedMs: string;
 }
 
 export interface StartRuntimePreparationRequest {
@@ -257,6 +397,16 @@ export interface StartRepositoryRuntimeResponse {
   run?: RepositoryRuntimeRun | undefined;
 }
 
+export interface GetRuntimeProfileRequest {
+}
+
+export interface GetRuntimeProfileResponse {
+  enabled: boolean;
+  developmentOnly: boolean;
+  platform: string;
+  executorImage: string;
+}
+
 export interface GetRepositoryRuntimeRequest {
   repositoryId: string;
 }
@@ -268,6 +418,34 @@ export interface GetRepositoryRuntimeResponse {
   /** Deployment configuration, independent of the retained last-run outcome. */
   preparationEnabled: boolean;
   developmentOnly: boolean;
+}
+
+export interface OpenRuntimeSigningPullRequestRequest {
+  repositoryId: string;
+  inspectionId: string;
+  expectedConnectionRevision: string;
+  signerId: string;
+  expectedSignerRevision: string;
+  baseBranch: string;
+}
+
+export interface OpenRuntimeSigningPullRequestResponse {
+  pullRequest?: RuntimeSigningPullRequest | undefined;
+}
+
+export interface GetRuntimeSigningPullRequestRequest {
+  review?: OpenRuntimeSigningPullRequestRequest | undefined;
+}
+
+export interface GetRuntimeSigningPullRequestResponse {
+  pullRequest?: RuntimeSigningPullRequest | undefined;
+  publicationAllowed: boolean;
+}
+
+export interface RuntimeSigningPullRequest {
+  url: string;
+  branch: string;
+  state: RuntimeSigningPullRequestState;
 }
 
 export interface GetRepositoryRuntimeReceiptRequest {
@@ -990,6 +1168,320 @@ export const SetRuntimeSignerEnabledResponse: MessageFns<SetRuntimeSignerEnabled
   },
 };
 
+function createBaseGetRuntimeSignerRequest(): GetRuntimeSignerRequest {
+  return { id: "" };
+}
+
+export const GetRuntimeSignerRequest: MessageFns<GetRuntimeSignerRequest> = {
+  encode(message: GetRuntimeSignerRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRuntimeSignerRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRuntimeSignerRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRuntimeSignerRequest {
+    return { id: isSet(object.id) ? globalThis.String(object.id) : "" };
+  },
+
+  toJSON(message: GetRuntimeSignerRequest): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRuntimeSignerRequest>): GetRuntimeSignerRequest {
+    return GetRuntimeSignerRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRuntimeSignerRequest>): GetRuntimeSignerRequest {
+    const message = createBaseGetRuntimeSignerRequest();
+    message.id = object.id ?? "";
+    return message;
+  },
+};
+
+function createBaseGetRuntimeSignerResponse(): GetRuntimeSignerResponse {
+  return { signer: undefined };
+}
+
+export const GetRuntimeSignerResponse: MessageFns<GetRuntimeSignerResponse> = {
+  encode(message: GetRuntimeSignerResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.signer !== undefined) {
+      RuntimeSigner.encode(message.signer, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRuntimeSignerResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRuntimeSignerResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.signer = RuntimeSigner.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRuntimeSignerResponse {
+    return { signer: isSet(object.signer) ? RuntimeSigner.fromJSON(object.signer) : undefined };
+  },
+
+  toJSON(message: GetRuntimeSignerResponse): unknown {
+    const obj: any = {};
+    if (message.signer !== undefined) {
+      obj.signer = RuntimeSigner.toJSON(message.signer);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRuntimeSignerResponse>): GetRuntimeSignerResponse {
+    return GetRuntimeSignerResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRuntimeSignerResponse>): GetRuntimeSignerResponse {
+    const message = createBaseGetRuntimeSignerResponse();
+    message.signer = (object.signer !== undefined && object.signer !== null)
+      ? RuntimeSigner.fromPartial(object.signer)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseDeleteRuntimeSignerRequest(): DeleteRuntimeSignerRequest {
+  return { idempotencyKey: "", id: "", expectedRevision: "0" };
+}
+
+export const DeleteRuntimeSignerRequest: MessageFns<DeleteRuntimeSignerRequest> = {
+  encode(message: DeleteRuntimeSignerRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.id !== "") {
+      writer.uint32(18).string(message.id);
+    }
+    if (message.expectedRevision !== "0") {
+      writer.uint32(24).uint64(message.expectedRevision);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteRuntimeSignerRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDeleteRuntimeSignerRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.expectedRevision = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): DeleteRuntimeSignerRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      expectedRevision: isSet(object.expectedRevision)
+        ? globalThis.String(object.expectedRevision)
+        : isSet(object.expected_revision)
+        ? globalThis.String(object.expected_revision)
+        : "0",
+    };
+  },
+
+  toJSON(message: DeleteRuntimeSignerRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.expectedRevision !== "0") {
+      obj.expectedRevision = message.expectedRevision;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<DeleteRuntimeSignerRequest>): DeleteRuntimeSignerRequest {
+    return DeleteRuntimeSignerRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<DeleteRuntimeSignerRequest>): DeleteRuntimeSignerRequest {
+    const message = createBaseDeleteRuntimeSignerRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.id = object.id ?? "";
+    message.expectedRevision = object.expectedRevision ?? "0";
+    return message;
+  },
+};
+
+function createBaseDeleteRuntimeSignerResponse(): DeleteRuntimeSignerResponse {
+  return { signer: undefined };
+}
+
+export const DeleteRuntimeSignerResponse: MessageFns<DeleteRuntimeSignerResponse> = {
+  encode(message: DeleteRuntimeSignerResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.signer !== undefined) {
+      RuntimeSigner.encode(message.signer, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteRuntimeSignerResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDeleteRuntimeSignerResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.signer = RuntimeSigner.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): DeleteRuntimeSignerResponse {
+    return { signer: isSet(object.signer) ? RuntimeSigner.fromJSON(object.signer) : undefined };
+  },
+
+  toJSON(message: DeleteRuntimeSignerResponse): unknown {
+    const obj: any = {};
+    if (message.signer !== undefined) {
+      obj.signer = RuntimeSigner.toJSON(message.signer);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<DeleteRuntimeSignerResponse>): DeleteRuntimeSignerResponse {
+    return DeleteRuntimeSignerResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<DeleteRuntimeSignerResponse>): DeleteRuntimeSignerResponse {
+    const message = createBaseDeleteRuntimeSignerResponse();
+    message.signer = (object.signer !== undefined && object.signer !== null)
+      ? RuntimeSigner.fromPartial(object.signer)
+      : undefined;
+    return message;
+  },
+};
+
 function createBaseListRuntimeSignersRequest(): ListRuntimeSignersRequest {
   return { afterId: "", limit: 0 };
 }
@@ -1351,6 +1843,8 @@ function createBaseRuntimePreparation(): RuntimePreparation {
     unsignedManifestDigest: "",
     certificationLayerDigest: "",
     developmentOnly: false,
+    buildMilestone: 0,
+    buildStepTimings: [],
   };
 }
 
@@ -1466,6 +1960,12 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
     }
     if (message.developmentOnly !== false) {
       writer.uint32(296).bool(message.developmentOnly);
+    }
+    if (message.buildMilestone !== 0) {
+      writer.uint32(304).int32(message.buildMilestone);
+    }
+    for (const v of message.buildStepTimings) {
+      RuntimeBuildStepTiming.encode(v!, writer.uint32(314).fork()).join();
     }
     return writer;
   },
@@ -1779,6 +2279,22 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
             message.developmentOnly = reader.bool();
             continue;
           }
+          case 38: {
+            if (tag !== 304) {
+              break;
+            }
+
+            message.buildMilestone = reader.int32() as any;
+            continue;
+          }
+          case 39: {
+            if (tag !== 314) {
+              break;
+            }
+
+            message.buildStepTimings.push(RuntimeBuildStepTiming.decode(reader, reader.uint32()));
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1958,6 +2474,16 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
         : isSet(object.development_only)
         ? globalThis.Boolean(object.development_only)
         : false,
+      buildMilestone: isSet(object.buildMilestone)
+        ? runtimeBuildMilestoneFromJSON(object.buildMilestone)
+        : isSet(object.build_milestone)
+        ? runtimeBuildMilestoneFromJSON(object.build_milestone)
+        : 0,
+      buildStepTimings: globalThis.Array.isArray(object?.buildStepTimings)
+        ? object.buildStepTimings.map((e: any) => RuntimeBuildStepTiming.fromJSON(e))
+        : globalThis.Array.isArray(object?.build_step_timings)
+        ? object.build_step_timings.map((e: any) => RuntimeBuildStepTiming.fromJSON(e))
+        : [],
     };
   },
 
@@ -2074,6 +2600,12 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
     if (message.developmentOnly !== false) {
       obj.developmentOnly = message.developmentOnly;
     }
+    if (message.buildMilestone !== 0) {
+      obj.buildMilestone = runtimeBuildMilestoneToJSON(message.buildMilestone);
+    }
+    if (message.buildStepTimings?.length) {
+      obj.buildStepTimings = message.buildStepTimings.map((e) => RuntimeBuildStepTiming.toJSON(e));
+    }
     return obj;
   },
 
@@ -2119,6 +2651,97 @@ export const RuntimePreparation: MessageFns<RuntimePreparation> = {
     message.unsignedManifestDigest = object.unsignedManifestDigest ?? "";
     message.certificationLayerDigest = object.certificationLayerDigest ?? "";
     message.developmentOnly = object.developmentOnly ?? false;
+    message.buildMilestone = object.buildMilestone ?? 0;
+    message.buildStepTimings = object.buildStepTimings?.map((e) => RuntimeBuildStepTiming.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseRuntimeBuildStepTiming(): RuntimeBuildStepTiming {
+  return { milestone: 0, elapsedMs: "0" };
+}
+
+export const RuntimeBuildStepTiming: MessageFns<RuntimeBuildStepTiming> = {
+  encode(message: RuntimeBuildStepTiming, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.milestone !== 0) {
+      writer.uint32(8).int32(message.milestone);
+    }
+    if (message.elapsedMs !== "0") {
+      writer.uint32(16).uint64(message.elapsedMs);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RuntimeBuildStepTiming {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRuntimeBuildStepTiming();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.milestone = reader.int32() as any;
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.elapsedMs = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RuntimeBuildStepTiming {
+    return {
+      milestone: isSet(object.milestone) ? runtimeBuildMilestoneFromJSON(object.milestone) : 0,
+      elapsedMs: isSet(object.elapsedMs)
+        ? globalThis.String(object.elapsedMs)
+        : isSet(object.elapsed_ms)
+        ? globalThis.String(object.elapsed_ms)
+        : "0",
+    };
+  },
+
+  toJSON(message: RuntimeBuildStepTiming): unknown {
+    const obj: any = {};
+    if (message.milestone !== 0) {
+      obj.milestone = runtimeBuildMilestoneToJSON(message.milestone);
+    }
+    if (message.elapsedMs !== "0") {
+      obj.elapsedMs = message.elapsedMs;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RuntimeBuildStepTiming>): RuntimeBuildStepTiming {
+    return RuntimeBuildStepTiming.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RuntimeBuildStepTiming>): RuntimeBuildStepTiming {
+    const message = createBaseRuntimeBuildStepTiming();
+    message.milestone = object.milestone ?? 0;
+    message.elapsedMs = object.elapsedMs ?? "0";
     return message;
   },
 };
@@ -4622,6 +5245,183 @@ export const StartRepositoryRuntimeResponse: MessageFns<StartRepositoryRuntimeRe
   },
 };
 
+function createBaseGetRuntimeProfileRequest(): GetRuntimeProfileRequest {
+  return {};
+}
+
+export const GetRuntimeProfileRequest: MessageFns<GetRuntimeProfileRequest> = {
+  encode(_: GetRuntimeProfileRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRuntimeProfileRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRuntimeProfileRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(_: any): GetRuntimeProfileRequest {
+    return {};
+  },
+
+  toJSON(_: GetRuntimeProfileRequest): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRuntimeProfileRequest>): GetRuntimeProfileRequest {
+    return GetRuntimeProfileRequest.fromPartial(base ?? {});
+  },
+  fromPartial(_: DeepPartial<GetRuntimeProfileRequest>): GetRuntimeProfileRequest {
+    const message = createBaseGetRuntimeProfileRequest();
+    return message;
+  },
+};
+
+function createBaseGetRuntimeProfileResponse(): GetRuntimeProfileResponse {
+  return { enabled: false, developmentOnly: false, platform: "", executorImage: "" };
+}
+
+export const GetRuntimeProfileResponse: MessageFns<GetRuntimeProfileResponse> = {
+  encode(message: GetRuntimeProfileResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.enabled !== false) {
+      writer.uint32(8).bool(message.enabled);
+    }
+    if (message.developmentOnly !== false) {
+      writer.uint32(16).bool(message.developmentOnly);
+    }
+    if (message.platform !== "") {
+      writer.uint32(26).string(message.platform);
+    }
+    if (message.executorImage !== "") {
+      writer.uint32(34).string(message.executorImage);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRuntimeProfileResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRuntimeProfileResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.enabled = reader.bool();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.developmentOnly = reader.bool();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.platform = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.executorImage = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRuntimeProfileResponse {
+    return {
+      enabled: isSet(object.enabled) ? globalThis.Boolean(object.enabled) : false,
+      developmentOnly: isSet(object.developmentOnly)
+        ? globalThis.Boolean(object.developmentOnly)
+        : isSet(object.development_only)
+        ? globalThis.Boolean(object.development_only)
+        : false,
+      platform: isSet(object.platform) ? globalThis.String(object.platform) : "",
+      executorImage: isSet(object.executorImage)
+        ? globalThis.String(object.executorImage)
+        : isSet(object.executor_image)
+        ? globalThis.String(object.executor_image)
+        : "",
+    };
+  },
+
+  toJSON(message: GetRuntimeProfileResponse): unknown {
+    const obj: any = {};
+    if (message.enabled !== false) {
+      obj.enabled = message.enabled;
+    }
+    if (message.developmentOnly !== false) {
+      obj.developmentOnly = message.developmentOnly;
+    }
+    if (message.platform !== "") {
+      obj.platform = message.platform;
+    }
+    if (message.executorImage !== "") {
+      obj.executorImage = message.executorImage;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRuntimeProfileResponse>): GetRuntimeProfileResponse {
+    return GetRuntimeProfileResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRuntimeProfileResponse>): GetRuntimeProfileResponse {
+    const message = createBaseGetRuntimeProfileResponse();
+    message.enabled = object.enabled ?? false;
+    message.developmentOnly = object.developmentOnly ?? false;
+    message.platform = object.platform ?? "";
+    message.executorImage = object.executorImage ?? "";
+    return message;
+  },
+};
+
 function createBaseGetRepositoryRuntimeRequest(): GetRepositoryRuntimeRequest {
   return { repositoryId: "" };
 }
@@ -4806,6 +5606,526 @@ export const GetRepositoryRuntimeResponse: MessageFns<GetRepositoryRuntimeRespon
   },
 };
 
+function createBaseOpenRuntimeSigningPullRequestRequest(): OpenRuntimeSigningPullRequestRequest {
+  return {
+    repositoryId: "",
+    inspectionId: "",
+    expectedConnectionRevision: "0",
+    signerId: "",
+    expectedSignerRevision: "0",
+    baseBranch: "",
+  };
+}
+
+export const OpenRuntimeSigningPullRequestRequest: MessageFns<OpenRuntimeSigningPullRequestRequest> = {
+  encode(message: OpenRuntimeSigningPullRequestRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repositoryId !== "") {
+      writer.uint32(10).string(message.repositoryId);
+    }
+    if (message.inspectionId !== "") {
+      writer.uint32(18).string(message.inspectionId);
+    }
+    if (message.expectedConnectionRevision !== "0") {
+      writer.uint32(24).uint64(message.expectedConnectionRevision);
+    }
+    if (message.signerId !== "") {
+      writer.uint32(34).string(message.signerId);
+    }
+    if (message.expectedSignerRevision !== "0") {
+      writer.uint32(40).uint64(message.expectedSignerRevision);
+    }
+    if (message.baseBranch !== "") {
+      writer.uint32(50).string(message.baseBranch);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OpenRuntimeSigningPullRequestRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOpenRuntimeSigningPullRequestRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositoryId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.inspectionId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.expectedConnectionRevision = reader.uint64().toString();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.signerId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.expectedSignerRevision = reader.uint64().toString();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.baseBranch = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): OpenRuntimeSigningPullRequestRequest {
+    return {
+      repositoryId: isSet(object.repositoryId)
+        ? globalThis.String(object.repositoryId)
+        : isSet(object.repository_id)
+        ? globalThis.String(object.repository_id)
+        : "",
+      inspectionId: isSet(object.inspectionId)
+        ? globalThis.String(object.inspectionId)
+        : isSet(object.inspection_id)
+        ? globalThis.String(object.inspection_id)
+        : "",
+      expectedConnectionRevision: isSet(object.expectedConnectionRevision)
+        ? globalThis.String(object.expectedConnectionRevision)
+        : isSet(object.expected_connection_revision)
+        ? globalThis.String(object.expected_connection_revision)
+        : "0",
+      signerId: isSet(object.signerId)
+        ? globalThis.String(object.signerId)
+        : isSet(object.signer_id)
+        ? globalThis.String(object.signer_id)
+        : "",
+      expectedSignerRevision: isSet(object.expectedSignerRevision)
+        ? globalThis.String(object.expectedSignerRevision)
+        : isSet(object.expected_signer_revision)
+        ? globalThis.String(object.expected_signer_revision)
+        : "0",
+      baseBranch: isSet(object.baseBranch)
+        ? globalThis.String(object.baseBranch)
+        : isSet(object.base_branch)
+        ? globalThis.String(object.base_branch)
+        : "",
+    };
+  },
+
+  toJSON(message: OpenRuntimeSigningPullRequestRequest): unknown {
+    const obj: any = {};
+    if (message.repositoryId !== "") {
+      obj.repositoryId = message.repositoryId;
+    }
+    if (message.inspectionId !== "") {
+      obj.inspectionId = message.inspectionId;
+    }
+    if (message.expectedConnectionRevision !== "0") {
+      obj.expectedConnectionRevision = message.expectedConnectionRevision;
+    }
+    if (message.signerId !== "") {
+      obj.signerId = message.signerId;
+    }
+    if (message.expectedSignerRevision !== "0") {
+      obj.expectedSignerRevision = message.expectedSignerRevision;
+    }
+    if (message.baseBranch !== "") {
+      obj.baseBranch = message.baseBranch;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<OpenRuntimeSigningPullRequestRequest>): OpenRuntimeSigningPullRequestRequest {
+    return OpenRuntimeSigningPullRequestRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<OpenRuntimeSigningPullRequestRequest>): OpenRuntimeSigningPullRequestRequest {
+    const message = createBaseOpenRuntimeSigningPullRequestRequest();
+    message.repositoryId = object.repositoryId ?? "";
+    message.inspectionId = object.inspectionId ?? "";
+    message.expectedConnectionRevision = object.expectedConnectionRevision ?? "0";
+    message.signerId = object.signerId ?? "";
+    message.expectedSignerRevision = object.expectedSignerRevision ?? "0";
+    message.baseBranch = object.baseBranch ?? "";
+    return message;
+  },
+};
+
+function createBaseOpenRuntimeSigningPullRequestResponse(): OpenRuntimeSigningPullRequestResponse {
+  return { pullRequest: undefined };
+}
+
+export const OpenRuntimeSigningPullRequestResponse: MessageFns<OpenRuntimeSigningPullRequestResponse> = {
+  encode(message: OpenRuntimeSigningPullRequestResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.pullRequest !== undefined) {
+      RuntimeSigningPullRequest.encode(message.pullRequest, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OpenRuntimeSigningPullRequestResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOpenRuntimeSigningPullRequestResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.pullRequest = RuntimeSigningPullRequest.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): OpenRuntimeSigningPullRequestResponse {
+    return {
+      pullRequest: isSet(object.pullRequest)
+        ? RuntimeSigningPullRequest.fromJSON(object.pullRequest)
+        : isSet(object.pull_request)
+        ? RuntimeSigningPullRequest.fromJSON(object.pull_request)
+        : undefined,
+    };
+  },
+
+  toJSON(message: OpenRuntimeSigningPullRequestResponse): unknown {
+    const obj: any = {};
+    if (message.pullRequest !== undefined) {
+      obj.pullRequest = RuntimeSigningPullRequest.toJSON(message.pullRequest);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<OpenRuntimeSigningPullRequestResponse>): OpenRuntimeSigningPullRequestResponse {
+    return OpenRuntimeSigningPullRequestResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<OpenRuntimeSigningPullRequestResponse>): OpenRuntimeSigningPullRequestResponse {
+    const message = createBaseOpenRuntimeSigningPullRequestResponse();
+    message.pullRequest = (object.pullRequest !== undefined && object.pullRequest !== null)
+      ? RuntimeSigningPullRequest.fromPartial(object.pullRequest)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetRuntimeSigningPullRequestRequest(): GetRuntimeSigningPullRequestRequest {
+  return { review: undefined };
+}
+
+export const GetRuntimeSigningPullRequestRequest: MessageFns<GetRuntimeSigningPullRequestRequest> = {
+  encode(message: GetRuntimeSigningPullRequestRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.review !== undefined) {
+      OpenRuntimeSigningPullRequestRequest.encode(message.review, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRuntimeSigningPullRequestRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRuntimeSigningPullRequestRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.review = OpenRuntimeSigningPullRequestRequest.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRuntimeSigningPullRequestRequest {
+    return { review: isSet(object.review) ? OpenRuntimeSigningPullRequestRequest.fromJSON(object.review) : undefined };
+  },
+
+  toJSON(message: GetRuntimeSigningPullRequestRequest): unknown {
+    const obj: any = {};
+    if (message.review !== undefined) {
+      obj.review = OpenRuntimeSigningPullRequestRequest.toJSON(message.review);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRuntimeSigningPullRequestRequest>): GetRuntimeSigningPullRequestRequest {
+    return GetRuntimeSigningPullRequestRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRuntimeSigningPullRequestRequest>): GetRuntimeSigningPullRequestRequest {
+    const message = createBaseGetRuntimeSigningPullRequestRequest();
+    message.review = (object.review !== undefined && object.review !== null)
+      ? OpenRuntimeSigningPullRequestRequest.fromPartial(object.review)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetRuntimeSigningPullRequestResponse(): GetRuntimeSigningPullRequestResponse {
+  return { pullRequest: undefined, publicationAllowed: false };
+}
+
+export const GetRuntimeSigningPullRequestResponse: MessageFns<GetRuntimeSigningPullRequestResponse> = {
+  encode(message: GetRuntimeSigningPullRequestResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.pullRequest !== undefined) {
+      RuntimeSigningPullRequest.encode(message.pullRequest, writer.uint32(10).fork()).join();
+    }
+    if (message.publicationAllowed !== false) {
+      writer.uint32(16).bool(message.publicationAllowed);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetRuntimeSigningPullRequestResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetRuntimeSigningPullRequestResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.pullRequest = RuntimeSigningPullRequest.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.publicationAllowed = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetRuntimeSigningPullRequestResponse {
+    return {
+      pullRequest: isSet(object.pullRequest)
+        ? RuntimeSigningPullRequest.fromJSON(object.pullRequest)
+        : isSet(object.pull_request)
+        ? RuntimeSigningPullRequest.fromJSON(object.pull_request)
+        : undefined,
+      publicationAllowed: isSet(object.publicationAllowed)
+        ? globalThis.Boolean(object.publicationAllowed)
+        : isSet(object.publication_allowed)
+        ? globalThis.Boolean(object.publication_allowed)
+        : false,
+    };
+  },
+
+  toJSON(message: GetRuntimeSigningPullRequestResponse): unknown {
+    const obj: any = {};
+    if (message.pullRequest !== undefined) {
+      obj.pullRequest = RuntimeSigningPullRequest.toJSON(message.pullRequest);
+    }
+    if (message.publicationAllowed !== false) {
+      obj.publicationAllowed = message.publicationAllowed;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetRuntimeSigningPullRequestResponse>): GetRuntimeSigningPullRequestResponse {
+    return GetRuntimeSigningPullRequestResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetRuntimeSigningPullRequestResponse>): GetRuntimeSigningPullRequestResponse {
+    const message = createBaseGetRuntimeSigningPullRequestResponse();
+    message.pullRequest = (object.pullRequest !== undefined && object.pullRequest !== null)
+      ? RuntimeSigningPullRequest.fromPartial(object.pullRequest)
+      : undefined;
+    message.publicationAllowed = object.publicationAllowed ?? false;
+    return message;
+  },
+};
+
+function createBaseRuntimeSigningPullRequest(): RuntimeSigningPullRequest {
+  return { url: "", branch: "", state: 0 };
+}
+
+export const RuntimeSigningPullRequest: MessageFns<RuntimeSigningPullRequest> = {
+  encode(message: RuntimeSigningPullRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.url !== "") {
+      writer.uint32(10).string(message.url);
+    }
+    if (message.branch !== "") {
+      writer.uint32(18).string(message.branch);
+    }
+    if (message.state !== 0) {
+      writer.uint32(24).int32(message.state);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RuntimeSigningPullRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRuntimeSigningPullRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.url = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.branch = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.state = reader.int32() as any;
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RuntimeSigningPullRequest {
+    return {
+      url: isSet(object.url) ? globalThis.String(object.url) : "",
+      branch: isSet(object.branch) ? globalThis.String(object.branch) : "",
+      state: isSet(object.state) ? runtimeSigningPullRequestStateFromJSON(object.state) : 0,
+    };
+  },
+
+  toJSON(message: RuntimeSigningPullRequest): unknown {
+    const obj: any = {};
+    if (message.url !== "") {
+      obj.url = message.url;
+    }
+    if (message.branch !== "") {
+      obj.branch = message.branch;
+    }
+    if (message.state !== 0) {
+      obj.state = runtimeSigningPullRequestStateToJSON(message.state);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RuntimeSigningPullRequest>): RuntimeSigningPullRequest {
+    return RuntimeSigningPullRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RuntimeSigningPullRequest>): RuntimeSigningPullRequest {
+    const message = createBaseRuntimeSigningPullRequest();
+    message.url = object.url ?? "";
+    message.branch = object.branch ?? "";
+    message.state = object.state ?? 0;
+    return message;
+  },
+};
+
 function createBaseGetRepositoryRuntimeReceiptRequest(): GetRepositoryRuntimeReceiptRequest {
   return { idempotencyKey: "" };
 }
@@ -4963,6 +6283,17 @@ export const RuntimePreparationServiceService = {
     responseDeserialize: (value: Buffer): StartRepositoryRuntimeResponse =>
       StartRepositoryRuntimeResponse.decode(value),
   },
+  getRuntimeProfile: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/GetRuntimeProfile" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetRuntimeProfileRequest): Buffer =>
+      Buffer.from(GetRuntimeProfileRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetRuntimeProfileRequest => GetRuntimeProfileRequest.decode(value),
+    responseSerialize: (value: GetRuntimeProfileResponse): Buffer =>
+      Buffer.from(GetRuntimeProfileResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetRuntimeProfileResponse => GetRuntimeProfileResponse.decode(value),
+  },
   getRepositoryRuntime: {
     path: "/ayni.orchestrator.v1.RuntimePreparationService/GetRepositoryRuntime" as const,
     requestStream: false as const,
@@ -4973,6 +6304,32 @@ export const RuntimePreparationServiceService = {
     responseSerialize: (value: GetRepositoryRuntimeResponse): Buffer =>
       Buffer.from(GetRepositoryRuntimeResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GetRepositoryRuntimeResponse => GetRepositoryRuntimeResponse.decode(value),
+  },
+  getRuntimeSigningPullRequest: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/GetRuntimeSigningPullRequest" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetRuntimeSigningPullRequestRequest): Buffer =>
+      Buffer.from(GetRuntimeSigningPullRequestRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetRuntimeSigningPullRequestRequest =>
+      GetRuntimeSigningPullRequestRequest.decode(value),
+    responseSerialize: (value: GetRuntimeSigningPullRequestResponse): Buffer =>
+      Buffer.from(GetRuntimeSigningPullRequestResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetRuntimeSigningPullRequestResponse =>
+      GetRuntimeSigningPullRequestResponse.decode(value),
+  },
+  openRuntimeSigningPullRequest: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/OpenRuntimeSigningPullRequest" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: OpenRuntimeSigningPullRequestRequest): Buffer =>
+      Buffer.from(OpenRuntimeSigningPullRequestRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): OpenRuntimeSigningPullRequestRequest =>
+      OpenRuntimeSigningPullRequestRequest.decode(value),
+    responseSerialize: (value: OpenRuntimeSigningPullRequestResponse): Buffer =>
+      Buffer.from(OpenRuntimeSigningPullRequestResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): OpenRuntimeSigningPullRequestResponse =>
+      OpenRuntimeSigningPullRequestResponse.decode(value),
   },
   getRepositoryRuntimeReceipt: {
     path: "/ayni.orchestrator.v1.RuntimePreparationService/GetRepositoryRuntimeReceipt" as const,
@@ -5034,6 +6391,28 @@ export const RuntimePreparationServiceService = {
       Buffer.from(SetRuntimeSignerEnabledResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): SetRuntimeSignerEnabledResponse =>
       SetRuntimeSignerEnabledResponse.decode(value),
+  },
+  getRuntimeSigner: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/GetRuntimeSigner" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetRuntimeSignerRequest): Buffer =>
+      Buffer.from(GetRuntimeSignerRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetRuntimeSignerRequest => GetRuntimeSignerRequest.decode(value),
+    responseSerialize: (value: GetRuntimeSignerResponse): Buffer =>
+      Buffer.from(GetRuntimeSignerResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetRuntimeSignerResponse => GetRuntimeSignerResponse.decode(value),
+  },
+  deleteRuntimeSigner: {
+    path: "/ayni.orchestrator.v1.RuntimePreparationService/DeleteRuntimeSigner" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: DeleteRuntimeSignerRequest): Buffer =>
+      Buffer.from(DeleteRuntimeSignerRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DeleteRuntimeSignerRequest => DeleteRuntimeSignerRequest.decode(value),
+    responseSerialize: (value: DeleteRuntimeSignerResponse): Buffer =>
+      Buffer.from(DeleteRuntimeSignerResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): DeleteRuntimeSignerResponse => DeleteRuntimeSignerResponse.decode(value),
   },
   listRuntimeSigners: {
     path: "/ayni.orchestrator.v1.RuntimePreparationService/ListRuntimeSigners" as const,
@@ -5135,7 +6514,16 @@ export const RuntimePreparationServiceService = {
 
 export interface RuntimePreparationServiceServer extends UntypedServiceImplementation {
   startRepositoryRuntime: handleUnaryCall<StartRepositoryRuntimeRequest, StartRepositoryRuntimeResponse>;
+  getRuntimeProfile: handleUnaryCall<GetRuntimeProfileRequest, GetRuntimeProfileResponse>;
   getRepositoryRuntime: handleUnaryCall<GetRepositoryRuntimeRequest, GetRepositoryRuntimeResponse>;
+  getRuntimeSigningPullRequest: handleUnaryCall<
+    GetRuntimeSigningPullRequestRequest,
+    GetRuntimeSigningPullRequestResponse
+  >;
+  openRuntimeSigningPullRequest: handleUnaryCall<
+    OpenRuntimeSigningPullRequestRequest,
+    OpenRuntimeSigningPullRequestResponse
+  >;
   getRepositoryRuntimeReceipt: handleUnaryCall<GetRepositoryRuntimeReceiptRequest, GetRepositoryRuntimeReceiptResponse>;
   provisionRuntimeSigner: handleUnaryCall<ProvisionRuntimeSignerRequest, ProvisionRuntimeSignerResponse>;
   recoverRuntimeSignerProvisioning: handleUnaryCall<
@@ -5144,6 +6532,8 @@ export interface RuntimePreparationServiceServer extends UntypedServiceImplement
   >;
   saveRuntimeSigner: handleUnaryCall<SaveRuntimeSignerRequest, SaveRuntimeSignerResponse>;
   setRuntimeSignerEnabled: handleUnaryCall<SetRuntimeSignerEnabledRequest, SetRuntimeSignerEnabledResponse>;
+  getRuntimeSigner: handleUnaryCall<GetRuntimeSignerRequest, GetRuntimeSignerResponse>;
+  deleteRuntimeSigner: handleUnaryCall<DeleteRuntimeSignerRequest, DeleteRuntimeSignerResponse>;
   listRuntimeSigners: handleUnaryCall<ListRuntimeSignersRequest, ListRuntimeSignersResponse>;
   getRuntimeSignerReceipt: handleUnaryCall<GetRuntimeSignerReceiptRequest, GetRuntimeSignerReceiptResponse>;
   startRuntimePreparation: handleUnaryCall<StartRuntimePreparationRequest, StartRuntimePreparationResponse>;
@@ -5173,6 +6563,21 @@ export interface RuntimePreparationServiceClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: StartRepositoryRuntimeResponse) => void,
   ): ClientUnaryCall;
+  getRuntimeProfile(
+    request: GetRuntimeProfileRequest,
+    callback: (error: ServiceError | null, response: GetRuntimeProfileResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimeProfile(
+    request: GetRuntimeProfileRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetRuntimeProfileResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimeProfile(
+    request: GetRuntimeProfileRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetRuntimeProfileResponse) => void,
+  ): ClientUnaryCall;
   getRepositoryRuntime(
     request: GetRepositoryRuntimeRequest,
     callback: (error: ServiceError | null, response: GetRepositoryRuntimeResponse) => void,
@@ -5187,6 +6592,36 @@ export interface RuntimePreparationServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetRepositoryRuntimeResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimeSigningPullRequest(
+    request: GetRuntimeSigningPullRequestRequest,
+    callback: (error: ServiceError | null, response: GetRuntimeSigningPullRequestResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimeSigningPullRequest(
+    request: GetRuntimeSigningPullRequestRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetRuntimeSigningPullRequestResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimeSigningPullRequest(
+    request: GetRuntimeSigningPullRequestRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetRuntimeSigningPullRequestResponse) => void,
+  ): ClientUnaryCall;
+  openRuntimeSigningPullRequest(
+    request: OpenRuntimeSigningPullRequestRequest,
+    callback: (error: ServiceError | null, response: OpenRuntimeSigningPullRequestResponse) => void,
+  ): ClientUnaryCall;
+  openRuntimeSigningPullRequest(
+    request: OpenRuntimeSigningPullRequestRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: OpenRuntimeSigningPullRequestResponse) => void,
+  ): ClientUnaryCall;
+  openRuntimeSigningPullRequest(
+    request: OpenRuntimeSigningPullRequestRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: OpenRuntimeSigningPullRequestResponse) => void,
   ): ClientUnaryCall;
   getRepositoryRuntimeReceipt(
     request: GetRepositoryRuntimeReceiptRequest,
@@ -5262,6 +6697,36 @@ export interface RuntimePreparationServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: SetRuntimeSignerEnabledResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimeSigner(
+    request: GetRuntimeSignerRequest,
+    callback: (error: ServiceError | null, response: GetRuntimeSignerResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimeSigner(
+    request: GetRuntimeSignerRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetRuntimeSignerResponse) => void,
+  ): ClientUnaryCall;
+  getRuntimeSigner(
+    request: GetRuntimeSignerRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetRuntimeSignerResponse) => void,
+  ): ClientUnaryCall;
+  deleteRuntimeSigner(
+    request: DeleteRuntimeSignerRequest,
+    callback: (error: ServiceError | null, response: DeleteRuntimeSignerResponse) => void,
+  ): ClientUnaryCall;
+  deleteRuntimeSigner(
+    request: DeleteRuntimeSignerRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: DeleteRuntimeSignerResponse) => void,
+  ): ClientUnaryCall;
+  deleteRuntimeSigner(
+    request: DeleteRuntimeSignerRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: DeleteRuntimeSignerResponse) => void,
   ): ClientUnaryCall;
   listRuntimeSigners(
     request: ListRuntimeSignersRequest,

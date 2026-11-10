@@ -207,6 +207,10 @@
 [data-sidebar="sidebar"][data-mobile="true"] { --sidebar-width: 18rem; }
 
 /* Use the app palette even when Sonner and the app use different theme settings. */
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled="true"] [data-description] {
+  color: inherit;
+}
+
 [data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled="true"] button[data-close-button] {
   color: var(--popover-foreground);
   background: var(--popover);

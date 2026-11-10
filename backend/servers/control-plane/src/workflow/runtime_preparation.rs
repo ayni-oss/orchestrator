@@ -3,6 +3,7 @@ pub(super) mod onboarding;
 mod operations;
 mod profile;
 mod provisioning;
+mod signing_update;
 use super::{RequestContext, WorkflowGrpc, v1};
 use ayni_orchestrator_workflow_postgres::store::runtime_signers::{SaveSigner, Signer};
 use std::collections::BTreeMap;
@@ -37,25 +38,64 @@ impl v1::runtime_preparation_service_server::RuntimePreparationService for Workf
             run: Some(onboarding::public(run)),
         }))
     }
+    async fn get_runtime_profile(
+        &self,
+        request: Request<v1::GetRuntimeProfileRequest>,
+    ) -> Result<Response<v1::GetRuntimeProfileResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let profile = profile::RuntimeConfiguration::from_environment().ok();
+        let result = profile.map_or_else(v1::GetRuntimeProfileResponse::default, |profile| {
+            v1::GetRuntimeProfileResponse {
+                enabled: true,
+                development_only: profile.development_only(),
+                platform: profile.platform,
+                executor_image: profile.executor_image,
+            }
+        });
+        Ok(context.response(result))
+    }
+
     async fn get_repository_runtime(
         &self,
         request: Request<v1::GetRepositoryRuntimeRequest>,
     ) -> Result<Response<v1::GetRepositoryRuntimeResponse>, Status> {
         let context = RequestContext::new(&request);
+        let repository_id = request.into_inner().repository_id;
         let run = self
             .store
-            .latest_repository_runtime(&request.into_inner().repository_id)
+            .latest_repository_runtime(&repository_id)
             .await
             .map_err(|e| context.store(&e))?;
         let profile = profile::RuntimeConfiguration::from_environment().ok();
         Ok(context.response(v1::GetRepositoryRuntimeResponse {
             run: run.map(onboarding::public),
             preparation_enabled: profile.is_some(),
-            development_only: profile.is_some_and(|value| {
-                value.profile_id
-                    == ayni_orchestrator_events::runtime_preparation::DEVELOPMENT_PROFILE_ID
-            }),
+            development_only: profile
+                .as_ref()
+                .is_some_and(profile::RuntimeConfiguration::development_only),
         }))
+    }
+    async fn get_runtime_signing_pull_request(
+        &self,
+        request: Request<v1::GetRuntimeSigningPullRequestRequest>,
+    ) -> Result<Response<v1::GetRuntimeSigningPullRequestResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let review = request
+            .into_inner()
+            .review
+            .ok_or_else(|| Status::invalid_argument("A signing update review is required."))?;
+        let result = signing_update::run(self, &context, review, false).await?;
+        Ok(context.response(result))
+    }
+
+    async fn open_runtime_signing_pull_request(
+        &self,
+        request: Request<v1::OpenRuntimeSigningPullRequestRequest>,
+    ) -> Result<Response<v1::OpenRuntimeSigningPullRequestResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let result = signing_update::run(self, &context, request.into_inner(), true).await?;
+        let pull_request = result.pull_request;
+        Ok(context.response(v1::OpenRuntimeSigningPullRequestResponse { pull_request }))
     }
     async fn get_repository_runtime_receipt(
         &self,
@@ -231,6 +271,35 @@ impl v1::runtime_preparation_service_server::RuntimePreparationService for Workf
             .map_err(|e| context.store(&e))?;
         Ok(context.response(v1::SetRuntimeSignerEnabledResponse {
             signer: Some(signer(saved)),
+        }))
+    }
+    async fn get_runtime_signer(
+        &self,
+        request: Request<v1::GetRuntimeSignerRequest>,
+    ) -> Result<Response<v1::GetRuntimeSignerResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = self
+            .store
+            .get_runtime_signer(&request.into_inner().id)
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::GetRuntimeSignerResponse {
+            signer: Some(signer(value)),
+        }))
+    }
+    async fn delete_runtime_signer(
+        &self,
+        request: Request<v1::DeleteRuntimeSignerRequest>,
+    ) -> Result<Response<v1::DeleteRuntimeSignerResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let removed = self
+            .store
+            .delete_runtime_signer(&value.idempotency_key, &value.id, value.expected_revision)
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::DeleteRuntimeSignerResponse {
+            signer: Some(signer(removed)),
         }))
     }
     async fn list_runtime_signers(

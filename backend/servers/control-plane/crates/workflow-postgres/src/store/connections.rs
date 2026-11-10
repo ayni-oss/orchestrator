@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 mod providers;
 pub(crate) use providers::registry_namespace;
 pub use providers::{ProviderCandidate, SaveProvider};
-use tokio_postgres::{Row, Transaction};
+use tokio_postgres::{Client, Row, Transaction};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Connection {
@@ -47,7 +47,11 @@ pub struct ProviderSettings {
 pub struct GithubCandidate {
     pub operation: Operation,
     pub app_id: String,
-    pub private_key_pem: String,
+    pub private_key_pem: Option<String>,
+}
+enum StateChange {
+    SetEnabled(bool),
+    Delete,
 }
 // Write-only input; deliberately neither Debug nor Serialize.
 pub struct SaveGithub<'a> {
@@ -141,6 +145,21 @@ fn validate_candidate_input(input: &SaveGithub<'_>) -> Result<String, StoreError
         .map_err(|_| StoreError::CorruptState)?;
     Ok(safe)
 }
+// Supply a key only while its accepted operation matches the current candidate.
+async fn candidate_credential(client: &Client, id: &str) -> Result<Option<String>, StoreError> {
+    client
+            .query_opt(
+                "SELECT k.value FROM workflow_connection_operations o
+                 JOIN workflow_connections c ON c.id=o.connection_id
+                 LEFT JOIN workflow_connection_credentials k ON k.connection_id=c.id AND k.revision_id=o.credential_revision
+                 WHERE o.id=$1 AND o.state='accepted' AND c.enabled AND c.revision=o.connection_revision
+                   AND c.candidate_credential_revision=o.credential_revision",
+                &[&id],
+            )
+            .await?
+            .map(|row| row.get::<_, Option<String>>(0).ok_or(StoreError::CorruptState))
+            .transpose()
+}
 fn model_json(models: &[String]) -> Result<String, StoreError> {
     if models.len() > 1000
         || models.iter().any(|m| {
@@ -208,6 +227,9 @@ impl WorkflowStore {
             tx.execute("INSERT INTO workflow_connections (id,display_name,provider,capability,revision,enabled,app_id,candidate_credential_revision,status) VALUES ($1,$2,'github','source_control',1,true,$3,$4,'pending')", &[&id,&input.name,&input.app_id,&credential]).await?;
         } else {
             let current = locked(&tx, &id).await?;
+            if current.status == "deleted" {
+                return Err(StoreError::NotFound);
+            }
             if current.app_id != input.app_id {
                 return Err(StoreError::InvalidInput("App identity is immutable"));
             }
@@ -240,10 +262,37 @@ impl WorkflowStore {
         expected: u64,
         enabled: bool,
     ) -> Result<Operation, StoreError> {
+        self.change_connection_state(key, id, expected, StateChange::SetEnabled(enabled))
+            .await
+    }
+    /// Permanently remove a connection from active configuration while retaining frozen references.
+    /// # Errors
+    /// Reject missing connections, stale revisions and conflicting commands.
+    pub async fn delete_connection(
+        &self,
+        key: &str,
+        id: &str,
+        expected: u64,
+    ) -> Result<Operation, StoreError> {
+        self.change_connection_state(key, id, expected, StateChange::Delete)
+            .await
+    }
+    async fn change_connection_state(
+        &self,
+        key: &str,
+        id: &str,
+        expected: u64,
+        change: StateChange,
+    ) -> Result<Operation, StoreError> {
         validate_key(key)?;
         validate_id(id, "connection_id")?;
-        let safe = serde_json::to_string(&(id, expected, enabled))
-            .map_err(|_| StoreError::CorruptState)?;
+        let (kind, safe) = match change {
+            StateChange::SetEnabled(enabled) => {
+                ("enable", serde_json::to_string(&(id, expected, enabled)))
+            }
+            StateChange::Delete => ("delete", serde_json::to_string(&(id, expected))),
+        };
+        let safe = safe.map_err(|_| StoreError::CorruptState)?;
         let (mut client, driver) = crate::connect(&self.database_url).await?;
         let tx = client.transaction().await?;
         serialize_key(&tx, key).await?;
@@ -254,8 +303,7 @@ impl WorkflowStore {
             )
             .await?
         {
-            if row.get::<_, String>("kind") != "enable"
-                || row.get::<_, String>("safe_request") != safe
+            if row.get::<_, String>("kind") != kind || row.get::<_, String>("safe_request") != safe
             {
                 return Err(StoreError::IdempotencyConflict);
             }
@@ -265,14 +313,24 @@ impl WorkflowStore {
             return Ok(result);
         }
         let current = locked(&tx, id).await?;
+        if current.status == "deleted" {
+            return Err(StoreError::NotFound);
+        }
         if current.revision != expected {
             return Err(StoreError::ConfigurationRevisionConflict);
         }
-        // Re-enabling preserves an already validated active revision, never promotes a candidate.
-        tx.execute("UPDATE workflow_connections SET enabled=$2,revision=revision+1,status=CASE WHEN NOT $2 THEN 'disabled' WHEN active_credential_revision<>'' THEN 'ready' ELSE 'failed' END,safe_reason='' WHERE id=$1", &[&id,&enabled]).await?;
+        match change {
+            StateChange::SetEnabled(enabled) => {
+                // Re-enabling preserves the active revision and never promotes a candidate.
+                tx.execute("UPDATE workflow_connections SET enabled=$2,revision=revision+1,status=CASE WHEN NOT $2 THEN 'disabled' WHEN active_credential_revision<>'' THEN 'ready' ELSE 'failed' END,safe_reason='' WHERE id=$1", &[&id,&enabled]).await?;
+            }
+            StateChange::Delete => {
+                tx.execute("UPDATE workflow_connections SET enabled=false,revision=revision+1,status='deleted',candidate_credential_revision='',safe_reason='' WHERE id=$1", &[&id]).await?;
+            }
+        }
         let value = locked(&tx, id).await?;
         let op = new_id();
-        tx.execute("INSERT INTO workflow_connection_operations (id,idempotency_key,connection_id,kind,safe_request,connection_revision,state,result) VALUES ($1,$2,$3,'enable',$4,$5,'completed',$6)", &[&op,&key,&id,&safe,&revision(value.revision)?,&safe_json(&value)?]).await?;
+        tx.execute("INSERT INTO workflow_connection_operations (id,idempotency_key,connection_id,kind,safe_request,connection_revision,state,result) VALUES ($1,$2,$3,$4,$5,$6,'completed',$7)", &[&op,&key,&id,&kind,&safe,&revision(value.revision)?,&safe_json(&value)?]).await?;
         let result = operation(
             &tx.query_one(
                 "SELECT * FROM workflow_connection_operations WHERE id=$1",
@@ -319,19 +377,51 @@ impl WorkflowStore {
         if op.connection.capability != "source_control" {
             return Err(StoreError::InvalidInput("capability"));
         }
-        let value: String = client
-            .query_one(
-                "SELECT value FROM workflow_connection_credentials WHERE revision_id=$1",
-                &[&row.get::<_, String>("credential_revision")],
-            )
-            .await?
-            .get(0);
+        let value = candidate_credential(&client, id).await?;
         driver.abort();
         Ok(GithubCandidate {
             app_id: op.connection.app_id.clone(),
             operation: op,
             private_key_pem: value,
         })
+    }
+    /// Read current connection settings and the exact candidate operation eligible for validation.
+    /// # Errors
+    /// Reject invalid IDs, missing connections or database failure.
+    pub async fn connection_settings(&self, id: &str) -> Result<(Connection, String), StoreError> {
+        validate_id(id, "connection_id")?;
+        let (client, driver) = crate::connect(&self.database_url).await?;
+        let row = client.query_opt(
+            "SELECT c.*, COALESCE((SELECT o.id FROM workflow_connection_operations o
+                WHERE o.connection_id=c.id AND o.kind='save' AND o.state='accepted'
+                  AND o.connection_revision=c.revision AND o.credential_revision=c.candidate_credential_revision
+                  AND c.enabled), '') AS pending_operation_id
+             FROM workflow_connections c WHERE c.id=$1 AND c.status<>'deleted'",
+            &[&id],
+        ).await?.ok_or(StoreError::NotFound)?;
+        let result = (connection(&row)?, row.get("pending_operation_id"));
+        driver.abort();
+        Ok(result)
+    }
+    /// Read the active credential for a bounded validation of the exact connection revision.
+    /// # Errors
+    /// Reject disabled, unvalidated, missing or stale connections.
+    pub async fn active_connection_credential(
+        &self,
+        id: &str,
+        expected: u64,
+    ) -> Result<(Connection, String), StoreError> {
+        validate_id(id, "connection_id")?;
+        let (client, driver) = crate::connect(&self.database_url).await?;
+        let row = client.query_opt(
+            "SELECT c.*, k.value AS active_value FROM workflow_connections c
+             JOIN workflow_connection_credentials k ON k.connection_id=c.id AND k.revision_id=c.active_credential_revision
+             WHERE c.id=$1 AND c.enabled AND c.revision=$2",
+            &[&id, &revision(expected)?],
+        ).await?.ok_or(StoreError::ConfigurationRevisionConflict)?;
+        let result = (connection(&row)?, row.get("active_value"));
+        driver.abort();
+        Ok(result)
     }
     /// Accept a safe validation result only for the exact current candidate generation.
     /// # Errors
@@ -459,7 +549,7 @@ impl WorkflowStore {
         let (client, driver) = crate::connect(&self.database_url).await?;
         let result = client
             .query(
-                "SELECT * FROM workflow_connections WHERE id>$1 ORDER BY id LIMIT $2",
+                "SELECT * FROM workflow_connections WHERE id>$1 AND status<>'deleted' ORDER BY id LIMIT $2",
                 &[&after, &limit],
             )
             .await?

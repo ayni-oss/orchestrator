@@ -4,12 +4,17 @@ package ayni.orchestrator.v1;
 // Trusted local-operator setup for separate runtime preparation capabilities.
 service RuntimePreparationService {
   rpc StartRepositoryRuntime(StartRepositoryRuntimeRequest) returns (StartRepositoryRuntimeResponse);
+  rpc GetRuntimeProfile(GetRuntimeProfileRequest) returns (GetRuntimeProfileResponse);
   rpc GetRepositoryRuntime(GetRepositoryRuntimeRequest) returns (GetRepositoryRuntimeResponse);
+  rpc GetRuntimeSigningPullRequest(GetRuntimeSigningPullRequestRequest) returns (GetRuntimeSigningPullRequestResponse);
+  rpc OpenRuntimeSigningPullRequest(OpenRuntimeSigningPullRequestRequest) returns (OpenRuntimeSigningPullRequestResponse);
   rpc GetRepositoryRuntimeReceipt(GetRepositoryRuntimeReceiptRequest) returns (GetRepositoryRuntimeReceiptResponse);
   rpc ProvisionRuntimeSigner(ProvisionRuntimeSignerRequest) returns (ProvisionRuntimeSignerResponse);
   rpc RecoverRuntimeSignerProvisioning(RecoverRuntimeSignerProvisioningRequest) returns (RecoverRuntimeSignerProvisioningResponse);
   rpc SaveRuntimeSigner(SaveRuntimeSignerRequest) returns (SaveRuntimeSignerResponse);
   rpc SetRuntimeSignerEnabled(SetRuntimeSignerEnabledRequest) returns (SetRuntimeSignerEnabledResponse);
+  rpc GetRuntimeSigner(GetRuntimeSignerRequest) returns (GetRuntimeSignerResponse);
+  rpc DeleteRuntimeSigner(DeleteRuntimeSignerRequest) returns (DeleteRuntimeSignerResponse);
   rpc ListRuntimeSigners(ListRuntimeSignersRequest) returns (ListRuntimeSignersResponse);
   rpc GetRuntimeSignerReceipt(GetRuntimeSignerReceiptRequest) returns (GetRuntimeSignerReceiptResponse);
   rpc StartRuntimePreparation(StartRuntimePreparationRequest) returns (StartRuntimePreparationResponse);
@@ -51,6 +56,20 @@ message SetRuntimeSignerEnabledRequest {
   bool enabled = 4;
 }
 message SetRuntimeSignerEnabledResponse {
+  RuntimeSigner signer = 1;
+}
+message GetRuntimeSignerRequest {
+  string id = 1;
+}
+message GetRuntimeSignerResponse {
+  RuntimeSigner signer = 1;
+}
+message DeleteRuntimeSignerRequest {
+  string idempotency_key = 1;
+  string id = 2;
+  uint64 expected_revision = 3;
+}
+message DeleteRuntimeSignerResponse {
   RuntimeSigner signer = 1;
 }
 message ListRuntimeSignersRequest {
@@ -108,6 +127,22 @@ message RuntimePreparation {
   string certification_layer_digest = 36;
   // Local development opt-in; does not establish cluster/network qualification.
   bool development_only = 37;
+  // Latest milestone of this build, including completion after the worker exits.
+  RuntimeBuildMilestone build_milestone = 38;
+  repeated RuntimeBuildStepTiming build_step_timings = 39;
+}
+message RuntimeBuildStepTiming {
+  RuntimeBuildMilestone milestone = 1;
+  uint64 elapsed_ms = 2;
+}
+enum RuntimeBuildMilestone {
+  RUNTIME_BUILD_MILESTONE_UNSPECIFIED = 0;
+  RUNTIME_BUILD_MILESTONE_COPY_SOURCE = 1;
+  RUNTIME_BUILD_MILESTONE_VERIFY_INPUTS = 2;
+  RUNTIME_BUILD_MILESTONE_BUILD_IMAGE = 3;
+  RUNTIME_BUILD_MILESTONE_EXPORT_IMAGE = 4;
+  RUNTIME_BUILD_MILESTONE_INSPECT_IMAGE = 5;
+  RUNTIME_BUILD_MILESTONE_IMAGE_READY = 6;
 }
 message StartRuntimePreparationRequest {
   string idempotency_key = 1;
@@ -229,6 +264,13 @@ message RepositoryRuntimeRun {
 message StartRepositoryRuntimeResponse {
   RepositoryRuntimeRun run = 1;
 }
+message GetRuntimeProfileRequest {}
+message GetRuntimeProfileResponse {
+  bool enabled = 1;
+  bool development_only = 2;
+  string platform = 3;
+  string executor_image = 4;
+}
 message GetRepositoryRuntimeRequest {
   string repository_id = 1;
 }
@@ -237,6 +279,37 @@ message GetRepositoryRuntimeResponse {
   // Deployment configuration, independent of the retained last-run outcome.
   bool preparation_enabled = 2;
   bool development_only = 3;
+}
+
+message OpenRuntimeSigningPullRequestRequest {
+  string repository_id = 1;
+  string inspection_id = 2;
+  uint64 expected_connection_revision = 3;
+  string signer_id = 4;
+  uint64 expected_signer_revision = 5;
+  string base_branch = 6;
+}
+message OpenRuntimeSigningPullRequestResponse {
+  RuntimeSigningPullRequest pull_request = 1;
+}
+message GetRuntimeSigningPullRequestRequest {
+  OpenRuntimeSigningPullRequestRequest review = 1;
+}
+message GetRuntimeSigningPullRequestResponse {
+  RuntimeSigningPullRequest pull_request = 1;
+  bool publication_allowed = 2;
+}
+message RuntimeSigningPullRequest {
+  string url = 1;
+  string branch = 2;
+  RuntimeSigningPullRequestState state = 3;
+}
+enum RuntimeSigningPullRequestState {
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_UNSPECIFIED = 0;
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_DRAFT = 1;
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_OPEN = 2;
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_CLOSED = 3;
+  RUNTIME_SIGNING_PULL_REQUEST_STATE_MERGED = 4;
 }
 message GetRepositoryRuntimeReceiptRequest {
   string idempotency_key = 1;

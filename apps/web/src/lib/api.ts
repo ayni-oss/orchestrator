@@ -3,7 +3,7 @@ export class RpcError extends Error {
 }
 
 export async function rpc(method: string, body: unknown): Promise<any> {
-  const response = await fetch(`/api/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-console-request': '1' }, body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });
+  const response = await fetch(`/api/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-console-request': '1' }, body: JSON.stringify(body), signal: AbortSignal.timeout(method === 'OpenRuntimeSigningPullRequest' ? 115000 : method === 'GetRuntimeSigningPullRequest' ? 65000 : 30000) });
   const value = await response.json();
   if (!response.ok) throw new RpcError(value.message || 'The request could not be completed. Refresh and retry.', response.status);
   return value;

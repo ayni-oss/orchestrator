@@ -7,6 +7,7 @@ use std::{
     fs,
     io::Read as _,
     path::{Component, Path},
+    time::Duration,
 };
 
 const MAX_FILES: usize = 10_000;
@@ -30,7 +31,10 @@ pub async fn acquire(
     if !repository_name(full_name) || !object_id(commit) || !object_id(tree) || token.is_empty() {
         return Err(Failure::InvalidInput);
     }
-    github_tree_preflight(full_name, tree, token).await?;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(seconds);
+    tokio::time::timeout_at(deadline, github_tree_preflight(full_name, tree, token))
+        .await
+        .map_err(|_| Failure::ExecutionDeadline)??;
     fs::create_dir(destination).map_err(|_| Failure::ArtifactConflict)?;
     let empty = tempfile::tempdir().map_err(|_| Failure::ExecutionFailed)?;
     let mut environment = BTreeMap::from([
@@ -75,21 +79,7 @@ pub async fn acquire(
         seconds,
     )
     .await?;
-    git(
-        destination,
-        &[
-            "fetch",
-            "--quiet",
-            "--no-tags",
-            "--depth=1",
-            "origin",
-            commit,
-        ],
-        &environment,
-        seconds,
-    )
-    .await
-    .map_err(|_| Failure::SourceUnavailable)?;
+    fetch_commit(destination, commit, &environment, seconds, deadline).await?;
     // No provider capability is available to checkout or any subsequent stage.
     environment.remove("GIT_CONFIG_COUNT");
     environment.remove("GIT_CONFIG_KEY_0");
@@ -127,19 +117,73 @@ pub async fn acquire(
 async fn github_tree_preflight(repository: &str, tree: &str, token: &str) -> Result<(), Failure> {
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
-        .timeout(std::time::Duration::from_secs(5))
+        .timeout(Duration::from_secs(10))
         .build()
-        .map_err(|_| Failure::SourceUnavailable)?;
-    let mut response = client
-        .get(format!(
-            "https://api.github.com/repos/{repository}/git/trees/{tree}?recursive=1"
-        ))
+        .map_err(|_| Failure::SourceTreeUnavailable)?;
+    let url = format!("https://api.github.com/repos/{repository}/git/trees/{tree}?recursive=1");
+    fetch_tree(&client, &url, tree, token).await
+}
+
+async fn fetch_commit(
+    destination: &Path,
+    commit: &str,
+    environment: &BTreeMap<String, String>,
+    seconds: u64,
+    deadline: tokio::time::Instant,
+) -> Result<(), Failure> {
+    tokio::time::timeout_at(
+        deadline,
+        git(
+            destination,
+            &[
+                "fetch",
+                "--quiet",
+                "--no-tags",
+                "--depth=1",
+                "origin",
+                commit,
+            ],
+            environment,
+            seconds,
+        ),
+    )
+    .await
+    .map_err(|_| Failure::ExecutionDeadline)?
+    .map_err(|reason| match reason {
+        Failure::ExecutionFailed => Failure::SourceFetchUnavailable,
+        other => other,
+    })?;
+    Ok(())
+}
+
+async fn fetch_tree(
+    client: &reqwest::Client,
+    url: &str,
+    tree: &str,
+    token: &str,
+) -> Result<(), Failure> {
+    let request = client
+        .get(url)
         .header("User-Agent", "ayni-runtime-source")
         .header("Accept", "application/vnd.github+json")
-        .bearer_auth(token)
+        .bearer_auth(token);
+    for delay in [250, 500] {
+        let attempt = request.try_clone().ok_or(Failure::SourceTreeUnavailable)?;
+        match tree_attempt(attempt, tree).await {
+            Err(Failure::SourceTreeUnavailable) => {
+                tokio::time::sleep(Duration::from_millis(delay)).await;
+            }
+            result => return result,
+        }
+    }
+    tree_attempt(request, tree).await
+}
+
+async fn tree_attempt(request: reqwest::RequestBuilder, tree: &str) -> Result<(), Failure> {
+    let mut response = request
         .send()
         .await
-        .map_err(|_| Failure::SourceUnavailable)?;
+        .map_err(|_| Failure::SourceTreeUnavailable)?;
     match response.status().as_u16() {
         200 => {}
         403 if response
@@ -149,8 +193,9 @@ async fn github_tree_preflight(repository: &str, tree: &str, token: &str) -> Res
         {
             return Err(Failure::SourceRateLimited);
         }
-        401 | 403 => return Err(Failure::SourceAccessDenied),
+        401 | 403 | 404 => return Err(Failure::SourceAccessDenied),
         429 => return Err(Failure::SourceRateLimited),
+        500..=599 => return Err(Failure::SourceTreeUnavailable),
         _ => return Err(Failure::SourceUnavailable),
     }
     if response
@@ -163,7 +208,7 @@ async fn github_tree_preflight(repository: &str, tree: &str, token: &str) -> Res
     while let Some(chunk) = response
         .chunk()
         .await
-        .map_err(|_| Failure::SourceUnavailable)?
+        .map_err(|_| Failure::SourceTreeUnavailable)?
     {
         if body.len().saturating_add(chunk.len()) > 4 * 1024 * 1024 {
             return Err(Failure::SourceBoundsExceeded);
@@ -503,6 +548,41 @@ mod snapshot_tests {
 mod tree_metadata_tests {
     use super::*;
     type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    #[tokio::test]
+    async fn tree_preflight_retries_transient_responses_and_stops_on_denial() -> TestResult {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let url = format!("http://{}/tree", listener.local_addr()?);
+        let tree = "b".repeat(40);
+        let body = serde_json::json!({"sha":tree,"truncated":false,"tree":[]}).to_string();
+        let server = tokio::spawn(async move {
+            for (status, body) in [
+                ("503 Service Unavailable", ""),
+                ("200 OK", &body),
+                ("403 Forbidden", ""),
+            ] {
+                let (mut stream, _) = listener.accept().await?;
+                let request_size = stream.read(&mut [0; 4096]).await?;
+                assert!(request_size > 0);
+                let response = format!(
+                    "HTTP/1.1 {status}\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+                    body.len()
+                );
+                stream.write_all(response.as_bytes()).await?;
+            }
+            Ok::<_, std::io::Error>(())
+        });
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(2))
+            .build()?;
+        fetch_tree(&client, &url, &tree, "fixture").await?;
+        assert_eq!(
+            fetch_tree(&client, &url, &tree, "fixture").await,
+            Err(Failure::SourceAccessDenied)
+        );
+        server.await??;
+        Ok(())
+    }
     #[test]
     fn provider_tree_must_be_complete_exact_and_bounded_before_git_fetch() -> TestResult {
         let tree = "b".repeat(40);

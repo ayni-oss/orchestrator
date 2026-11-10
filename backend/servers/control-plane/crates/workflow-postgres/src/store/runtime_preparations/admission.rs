@@ -136,6 +136,10 @@ impl WorkflowStore {
             evidence.cleanup_complete = false;
             evidence.content_verified = false;
             evidence.managed_compatible = false;
+            evidence.details.insert(
+                ayni_orchestrator_events::runtime_preparation::BUILD_REPORT_KEY.into(),
+                json(&ayni_orchestrator_events::runtime_preparation::BuildReport::default())?,
+            );
             tx.execute("UPDATE workflow_runtime_preparations SET state='pending',stage='acquire_source',terminal_state='',safe_reason='',evidence=$3,generation=generation+1,updated_at_unix_ms=$2 WHERE id=$1",&[&id,&integer(at)?,&json(&evidence)?]).await?;
         }
         let result = locked(&tx, id).await?;

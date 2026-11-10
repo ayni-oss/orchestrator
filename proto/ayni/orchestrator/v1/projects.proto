@@ -11,6 +11,7 @@ service ProjectService {
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
   rpc RenameWorkspace(RenameWorkspaceRequest) returns (RenameWorkspaceResponse);
   rpc RenameProject(RenameProjectRequest) returns (RenameProjectResponse);
+  rpc SetProjectGoal(SetProjectGoalRequest) returns (SetProjectGoalResponse);
   rpc ListWorkspaces(ListWorkspacesRequest) returns (ListWorkspacesResponse);
   rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
   rpc GetAgentConfiguration(GetAgentConfigurationRequest) returns (GetAgentConfigurationResponse);
@@ -181,5 +182,16 @@ message RenameProjectRequest {
   string display_name = 5;
 }
 message RenameProjectResponse {
+  string command_id = 1;
+}
+
+message SetProjectGoalRequest {
+  string idempotency_key = 1;
+  string workspace_id = 2;
+  string project_id = 3;
+  uint64 expected_resource_version = 4;
+  string goal = 5;
+}
+message SetProjectGoalResponse {
   string command_id = 1;
 }

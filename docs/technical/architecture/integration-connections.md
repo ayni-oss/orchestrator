@@ -51,8 +51,9 @@ retained; it never removes accepted history.
 ## Validation and rotation
 
 Saving credentials admits an operation and candidate atomically; it does not claim
-access success. A separate explicit validation resumes that operation, signs an App
-JWT and makes a bounded, non-redirecting read to GitHub's fixed `/app` endpoint.
+access success. Connection settings starts validation after save or receipt
+recovery. The GitHub validation RPC resumes that operation, signs an App JWT and makes a
+bounded, non-redirecting read to GitHub's fixed `/app` endpoint.
 It verifies the observed App ID and retains only a closed safe reason vocabulary.
 It does not establish repository installation access or runtime readiness.
 
@@ -63,6 +64,12 @@ An outage or rate limit leaves the operation resumable with its original identit
 Concurrent validation reads are harmless; accepted terminal outcomes are stable.
 Enabling/disabling uses exact revisions, preventing stale tabs from overwriting
 current configuration. Re-enabling does not validate or promote a candidate.
+
+Each provider connection has its own settings page with credential rotation, operation
+history and a danger zone. Revalidation retries a pending candidate or reports a
+check of the active key. Deleting a connection disables it permanently and removes
+it from configuration lists. PostgreSQL retains its receipts and credential
+revisions for existing references. GitHub owns App installation and key revocation.
 
 OpenAI validation uses the standard `/v1/models` endpoint, retaining only bounded
 model identifiers. No paid conversation is sent by validation. Model discovery does
@@ -115,8 +122,9 @@ accepted metadata and exact association receipts. Catalog records are append-onl
 removal and source rebinding require a later explicit lifecycle contract.
 
 GitHub requests use the fixed API origin, bounded response bodies and timeouts.
-The saved App credential creates read-only installation tokens with Contents and
-Metadata read permissions. Connecting restricts that token to the selected repository
+For source reads, the saved App credential creates installation tokens with
+Contents and Metadata read permissions. Runtime signing-key proposals use the
+same App with permissions scoped to reading PR status or opening a draft PR. Connecting restricts that token to the selected repository
 ID and checks GitHub's returned identity; browser names and branch values grant no authority.
 Tokens and provider response text never enter catalog receipts or diagnostics.
 
@@ -141,6 +149,20 @@ credentials. It qualifies catalog authority and UI behavior, not live GitHub
 credentials, registry permissions or runtime preparation.
 
 ## Frozen static Ayni inspection
+
+The repository runtime tab lists branches through `ListRepositoryBranches`.
+The service reads one bounded page using the catalog entry's installation and
+repository-scoped credential, and checks the source connection revision before
+and after the provider request. Selecting a branch still requires resolving its
+head to an exact commit before inspection. Runtime onboarding separates
+integration checks, branch inspection, review and start, preparation, and
+verification. Starting a run requires an explicit action and submits the
+reviewed commit and integration revisions. Preparation and inspection history
+are available in the repository's Activity tab.
+
+The lock check reports whether the selected signing identity's name and public
+key match the inspected commit's trust policy. An interrupted check first looks
+up its saved receipt, then retries the same commit and idempotency key if needed.
 
 `InspectRepository` accepts an existing catalog ID, the displayed source connection
 revision and a full lowercase commit SHA. It records intent before GitHub reads;
@@ -205,8 +227,9 @@ private/public key agreement before signing.
 Signer changes use exact command receipts and immutable public revisions. Rotation
 and enable/disable operations fence stale versions. Reads and lost-response
 recovery return public configuration only. Disabling signer setup or uninstalling
-Helm retains the signing namespace and keys. Disabling a signer prevents new use
-without deleting its key; permanent cleanup is a separate operator decision.
+Helm retains the signing namespace and keys. Disabling or deleting a signer
+reference prevents new use. Kubernetes retains the signing Secret, and PostgreSQL
+retains existing revisions and receipts.
 
 Registry failures distinguish absence from access denial, rate limiting, outage,
 malformed data and unsupported platform. Manifest/config bytes must match their
