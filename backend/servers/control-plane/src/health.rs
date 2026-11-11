@@ -68,6 +68,13 @@ async fn operational_metrics(
         |durable| (StatusCode::OK, durable),
     );
     text.push_str(&durable);
+    match store.log_metrics().await {
+        Ok(logs) => {
+            text.push_str(&logs);
+            text.push_str("workflow_capture_metrics_available 1\n");
+        }
+        Err(_) => text.push_str("workflow_capture_metrics_available 0\n"),
+    }
     let _ = writeln!(
         text,
         "workflow_database_ready {}",

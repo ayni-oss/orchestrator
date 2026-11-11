@@ -35,6 +35,7 @@ for directory in owned.rglob("*"):
 
 root = Path("proto/ayni/orchestrator/v1")
 expected = {
+    "telemetry.proto": {"ExecutionTelemetryService": ["ExchangeTelemetry"], "DebugLogsService": ["GetDebugCapabilities", "ListLogSources", "ReadLogs", "WatchLogs"]},
     "runtime_preparation.proto": {"RuntimePreparationService": [
         "StartRepositoryRuntime", "GetRuntimeProfile", "GetRepositoryRuntime", "GetRuntimeSigningPullRequest", "OpenRuntimeSigningPullRequest",
         "GetRepositoryRuntimeReceipt",
@@ -115,11 +116,24 @@ else
 fi
 
 # Workflow services are wired only to the trusted loopback listener. There is
-# no public/custom workflow listener in the replacement control plane or chart.
+# no public/custom workflow listener. The authenticated ingestion-only telemetry
+# listener has its own port; it must never register workflow or debug-read APIs.
 grep -q 'DEFAULT_GRPC_BIND_ADDRESS.*' backend/servers/control-plane/src/configuration.rs
 grep -q '"127.0.0.1:50051"' backend/servers/control-plane/src/configuration.rs
 grep -q 'if !address.ip().is_loopback()' backend/servers/control-plane/src/workflow.rs
-if git grep -n -I -E --untracked --exclude-standard '50052|custom.?client' -- \
+python3 - <<'PY'
+from pathlib import Path
+import re
+source = Path('backend/servers/control-plane/src/telemetry.rs').read_text()
+listener = source.split('pub async fn serve(', 1)[1].split('#[tonic::async_trait]', 1)[0]
+services = re.findall(r'\.add_service\s*\(\s*(\w+)::new', listener)
+assert services == ['ExecutionTelemetryServiceServer'], 'telemetry ingress must expose ingestion only'
+assert listener.count('.add_service(') == 1, 'unexpected service on telemetry ingress'
+assert 'telemetry authority unavailable' in listener, 'telemetry ingress requires authority'
+workflow = Path('backend/servers/control-plane/src/workflow.rs').read_text()
+assert 'DebugLogsServiceServer::new' in workflow, 'debug reads must use the loopback workflow listener'
+PY
+if git grep -n -I -E --untracked --exclude-standard 'custom.?client' -- \
   backend/servers/control-plane/src deploy/charts/ayni-orchestrator/templates dev/charts/ayni-orchestrator-local/templates; then
   printf '%s\n' 'custom-client workflow exposure remains in the current runtime' >&2
   exit 1

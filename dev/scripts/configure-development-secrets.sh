@@ -146,3 +146,11 @@ else
   create_immutable_secret workflow-runtime-authority --from-file=token="$runtime_directory/token"
   echo "created immutable local runtime authority Secret"
 fi
+
+# Ingestion-only authority for the deployment log collector; never sent to the browser.
+if ! secret_exists workflow-telemetry-authority; then
+  telemetry_directory="$scratch/workflow-telemetry-authority"
+  mkdir -m 0700 "$telemetry_directory"
+  openssl rand -hex 32 > "$telemetry_directory/token"
+  create_immutable_secret workflow-telemetry-authority --from-file=token="$telemetry_directory/token"
+fi

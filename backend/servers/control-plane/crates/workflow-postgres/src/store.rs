@@ -9,6 +9,7 @@ mod discovery;
 mod execution;
 mod execution_diagnostics;
 mod hierarchy;
+pub mod logs;
 pub mod outcome_assessments;
 mod plans;
 pub mod progress;

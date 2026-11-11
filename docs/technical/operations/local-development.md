@@ -27,6 +27,21 @@ Conversation and task workers run in `<application-namespace>-sessions`.
 The supervisor image includes both conversation and task binaries; the scripted
 provider is a deterministic execution mode, not a separate infrastructure role.
 
+`dev/ctl deploy`, `dev/ctl live` and `make dev` automatically prepare and enable
+runtime workers on the supported native arm64 local cluster. The first run
+downloads the checksum-pinned Ayni release and builds/imports the worker and
+verifier images. Subsequent runs reuse them only while source bytes match and
+their immutable manifests remain in the selected node. Runtime source changes
+also trigger live reconciliation. Rebuilds preserve debug mode independently.
+Set `AYNI_ORCHESTRATOR_RUNTIME=false` to explicitly deploy without runtime builds.
+
+The development setup selects the local-development profile with `qualified=false`
+and public HTTP/HTTPS stage egress for source, dependencies and registry access.
+It does not establish NetworkPolicy enforcement on Docker Desktop. Image pins,
+source verification, signing and execution allowances still apply; configure
+repository access, registry and signing in the UI as needed. Production chart
+defaults remain disabled and require administrator configuration.
+
 ### Existing installations
 
 The component rename changes StatefulSet names and therefore the generated
@@ -600,3 +615,22 @@ against a synthetic HTTP authority in both dev and production modes.
 Signing keys and their namespace survive feature disablement and Helm uninstall.
 Disabling a signer prevents new use but does not delete material. Permanent key
 or namespace removal requires a separate operator cleanup decision.
+
+## Debug logs
+
+Start `dev/ctl deploy --debug` or `dev/ctl live --debug` to collect available output
+from managed containers. `make dev DEBUG=1` selects the same mode. Open **Debug →
+Logs** in the local console, select a source, and choose **Follow live**. Runtime
+preparation details also link to their execution logs. History remains available
+after pod deletion until the retention/quota limit expires.
+
+Debug output is raw. Kubernetes API capture can miss rotated output and output
+lost during abrupt pod deletion or rapid restarts; each source exposes its
+coverage state. The default limits are 24 hours/1 GiB retained raw payload,
+128 MiB per execution journal and 1 GiB collector journal. Chart `debug` values
+configure these limits. Quota loss is reported without stopping execution.
+
+Local rebuilds preserve debug mode. Deploy with `AYNI_ORCHESTRATOR_DEBUG=false`
+to disable it; new raw reads and writes are denied and active watches close during
+the rollout. Retained output expires normally. Access remains through the
+loopback console and its explicit local-cluster port forward.

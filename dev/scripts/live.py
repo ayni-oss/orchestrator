@@ -20,6 +20,11 @@ ROOT = Path(__file__).resolve().parents[2]
 COMPONENTS = ('control-plane', 'conversation-supervisor')
 sys.path.insert(0, str(ROOT / 'dev/lib'))
 from local_context import checked_context, selected_context
+import importlib.util
+
+runtime_spec = importlib.util.spec_from_file_location('runtime_development', ROOT / 'dev/scripts/runtime-development.py')
+runtime_development = importlib.util.module_from_spec(runtime_spec)
+runtime_spec.loader.exec_module(runtime_development)
 
 
 def state_directory(context, selected):
@@ -59,7 +64,8 @@ def inputs():
     executor = list((ROOT / 'backend/workers/conversation-supervisor').rglob('*'))
     schema = list((ROOT / 'backend/servers/control-plane/crates/workflow-postgres/migrations').glob('*.sql'))
     schema += [ROOT / 'backend/servers/control-plane/crates/workflow-postgres/src/migrations.rs']
-    return {COMPONENTS[0]: fingerprint(shared + control), COMPONENTS[1]: fingerprint(shared + executor), 'schema': fingerprint(schema)}
+    return {COMPONENTS[0]: fingerprint(shared + control), COMPONENTS[1]: fingerprint(shared + executor),
+            'runtime': runtime_development.fingerprint(), 'schema': fingerprint(schema)}
 
 
 def read_state(path):
@@ -164,14 +170,20 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', nargs='?', choices=('watch', 'once', 'status', 'migrate', 'reset'), default='watch')
     parser.add_argument('confirmation', nargs='?')
+    parser.add_argument('--debug', action='store_true', help='Enable raw logs in the local console')
     args = parser.parse_args()
     selected = namespace()
     env = dict(os.environ, AYNI_ORCHESTRATOR_NAMESPACE=selected, HELM_NO_PLUGINS='1')
+    if args.debug:
+        env['AYNI_ORCHESTRATOR_DEBUG'] = 'true'
     context = selected_context(env)
     directory = state_directory(context, selected)
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / 'status.json'
     state = read_state(path)
+    if 'AYNI_ORCHESTRATOR_DEBUG' not in env and state.get('debug', False):
+        env['AYNI_ORCHESTRATOR_DEBUG'] = 'true'
+    state['debug'] = env.get('AYNI_ORCHESTRATOR_DEBUG', 'false') == 'true'
     if state.get('context', context) != context:
         raise ValueError('Retained live state belongs to another Kubernetes context')
     if args.command == 'status':

@@ -46,6 +46,7 @@ if name == 'kubectl':
                        AYNI_ORCHESTRATOR_CONTEXT='kind-ayni-runtime-qualification' if qualified else 'docker-desktop',
                        KUBECONFIG='/tmp/ayni-runtime-cluster/kubeconfig' if qualified else '/tmp/unused-fixture-kubeconfig',
                        AYNI_ORCHESTRATOR_LIVE_MIGRATE='true')
+            env['AYNI_ORCHESTRATOR_RUNTIME'] = 'false'
             result = subprocess.run(['bash', 'dev/scripts/live-deploy.sh',
                                      'local/ayni-live-control-plane:test',
                                      'local/ayni-live-conversation-supervisor:test'],

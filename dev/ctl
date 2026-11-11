@@ -13,9 +13,9 @@ Usage: dev/ctl COMMAND [OPTIONS]
 
 Durable-workflow local Docker Desktop development:
   secrets                       Create immutable database and broker role Secrets
-  deploy | redeploy | up        Build and install or upgrade the Slice 3 stack
+  deploy | redeploy | up [--debug] Build and install or upgrade the Slice 3 stack
   check [--expect-empty]        Check migrations, streams, and workload readiness
-  live [once|status|migrate|reset NAMESPACE]
+  live [--debug] [once|status|migrate|reset NAMESPACE]
                                 Dev-only frontend HMR and cached Rust rebuild/rollout
   gateway [PORT]                Start the local JSON/SSE API adapter (default 3000)
   prepare-task verify CHECKOUT SELECTION_JSON FROZEN_REQUEST_JSON
@@ -87,7 +87,8 @@ case "$command" in
     "$scripts/configure-development-secrets.sh"
     ;;
   deploy | redeploy | up)
-    [[ $# -eq 0 ]] || { echo "usage: dev/ctl $command" >&2; exit 2; }
+    if [[ $# -eq 1 && "$1" == --debug ]]; then export AYNI_ORCHESTRATOR_DEBUG=true; shift; fi
+    [[ $# -eq 0 ]] || { echo "usage: dev/ctl $command [--debug]" >&2; exit 2; }
     "$scripts/deploy.sh"
     ;;
   check)

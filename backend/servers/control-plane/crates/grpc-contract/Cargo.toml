@@ -8,6 +8,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+ayni-orchestrator-telemetry = { path = "../../../../libs/telemetry" }
 pbjson.workspace = true
 pbjson-types.workspace = true
 serde.workspace = true
@@ -17,6 +18,7 @@ tonic.workspace = true
 tonic-prost.workspace = true
 
 [build-dependencies]
+ayni-orchestrator-telemetry = { path = "../../../../libs/telemetry" }
 pbjson-build.workspace = true
 prost-build.workspace = true
 protoc-bin-vendored.workspace = true

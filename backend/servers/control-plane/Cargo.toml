@@ -9,6 +9,10 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+ayni-orchestrator-execution = { path = "../../libs/execution" }
+kube.workspace = true
+k8s-openapi.workspace = true
+jiff.workspace = true
 ayni-core = { git = "https://github.com/ayni-oss/ayni.git", rev = "639ace4c180bfaef8e5d222bcd5ce7f4b0480b07" }
 ayni-environment = { git = "https://github.com/ayni-oss/ayni.git", rev = "639ace4c180bfaef8e5d222bcd5ce7f4b0480b07" }
 base64.workspace = true

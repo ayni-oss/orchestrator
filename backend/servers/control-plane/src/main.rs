@@ -84,10 +84,21 @@ async fn run() -> Result<(), io::Error> {
         shutdown_receiver.clone(),
     );
     let cleanup = maintenance::run(store.clone(), shutdown_receiver.clone());
+    let telemetry =
+        ayni_orchestrator_control_plane::telemetry::serve(store.clone(), shutdown_receiver.clone());
+    let log_cleanup = ayni_orchestrator_control_plane::telemetry::maintain(
+        store.clone(),
+        shutdown_receiver.clone(),
+    );
     let publisher = broker::run_publisher(&configuration, store, shutdown_receiver);
     let result = tokio::try_join!(
         async { http_server.await.map_err(io::Error::other) },
         grpc_server,
+        telemetry,
+        async {
+            log_cleanup.await;
+            Ok(())
+        },
         publisher,
         async {
             cleanup.await;

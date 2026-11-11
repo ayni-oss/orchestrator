@@ -30,7 +30,8 @@ export const load: LayoutServerLoad = async ({ fetch, url, params }) => {
     const projects: { projects?: Project[]; nextAfterId?: string } = workspace
       ? await request('ListProjects', { workspaceId: workspace.id, afterId: url.searchParams.get('afterProject') ?? '', limit: 50 })
       : {};
-    result = { workspaces: first.workspaces ?? [], workspace, projects: projects.projects ?? [], nextWorkspace: first.nextAfterId ?? '', nextProject: projects.nextAfterId ?? '', error: '' };
+    const debug = await request('GetDebugCapabilities', {}).catch(() => ({ enabled: false }));
+    result = { debugEnabled: debug.enabled === true, workspaces: first.workspaces ?? [], workspace, projects: projects.projects ?? [], nextWorkspace: first.nextAfterId ?? '', nextProject: projects.nextAfterId ?? '', error: '' };
   } catch {
     fail(503, 'The local service could not load workspaces. Retry when it is ready.');
   }

@@ -65,6 +65,7 @@ pub async fn serve(
             "trusted workflow gRPC listener must use loopback",
         ));
     }
+    let telemetry = crate::telemetry::Telemetry::new(store.clone()).with_shutdown(shutdown.clone());
     let api = WorkflowGrpc::new(store);
     let (health_reporter, health) = tonic_health::server::health_reporter();
     health_reporter
@@ -92,6 +93,9 @@ pub async fn serve(
         shutdown.clone(),
     ));
     let result = Server::builder()
+        .add_service(v1::debug_logs_service_server::DebugLogsServiceServer::new(
+            telemetry,
+        ))
         .add_service(
             v1::runtime_preparation_service_server::RuntimePreparationServiceServer::new(
                 api.clone(),

@@ -13,3 +13,4 @@ export * from "./ayni/orchestrator/v1/project_conversations";
 export * from "./ayni/orchestrator/v1/projects";
 export * from "./ayni/orchestrator/v1/repositories";
 export * from "./ayni/orchestrator/v1/runtime_preparation";
+export * from "./ayni/orchestrator/v1/telemetry";

@@ -6,7 +6,7 @@
  import WorkspaceShell from '$lib/components/workspace-shell.svelte';
 
  let { data, children } = $props();
- const title=$derived(page.url.pathname.startsWith('/repositories')?'Repositories':!!page.params.id && !!page.params.workspaceId?'Project settings':page.url.pathname.startsWith('/settings/runtime-signing')?'ayni':page.url.pathname.startsWith('/settings/container-registries')?'Container registries':page.url.pathname.startsWith('/settings/llm-providers')?'LLM providers':page.url.pathname.startsWith('/settings')?'Source control':page.url.pathname.endsWith('/settings') && !!page.params.workspaceId?'Workspace settings':data.workspace?'Projects':'Workspaces');
+ const title=$derived(page.url.pathname.startsWith('/debug')?'Debug logs':page.url.pathname.startsWith('/repositories')?'Repositories':!!page.params.id && !!page.params.workspaceId?'Project settings':page.url.pathname.startsWith('/settings/runtime-signing')?'ayni':page.url.pathname.startsWith('/settings/container-registries')?'Container registries':page.url.pathname.startsWith('/settings/llm-providers')?'LLM providers':page.url.pathname.startsWith('/settings')?'Source control':page.url.pathname.endsWith('/settings') && !!page.params.workspaceId?'Workspace settings':data.workspace?'Projects':'Workspaces');
  const breadcrumbs=$derived.by(() => {
   const workspaces = { href: '/', label: 'Workspaces' };
   const workspace = data.workspace && {

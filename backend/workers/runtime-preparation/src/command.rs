@@ -1,21 +1,14 @@
-//! Bounded child execution. Kubernetes owns the outer process/cgroup deadline;
-//! this timeout also kills and reaps the immediate child on interrupted stages.
+//! Every runtime command uses shared process ownership and byte capture.
 use crate::{Failure, client::WorkerClient};
 use ayni_orchestrator_events::execution_diagnostics::OutputStream;
 use std::{collections::BTreeMap, path::Path, process::Stdio, time::Duration};
-use tokio::{
-    io::{AsyncRead, AsyncReadExt as _},
-    process::{Child, Command},
-};
-
-const OUTPUT_BYTES: u64 = 1024 * 1024;
-
+use tokio::process::Command;
+const OUTPUT_BYTES: usize = 1024 * 1024;
 pub struct Captured {
     pub success: bool,
     pub stdout: Vec<u8>,
     registry_denied: bool,
 }
-
 impl Captured {
     #[must_use]
     pub const fn registry_failure(&self) -> Failure {
@@ -26,13 +19,25 @@ impl Captured {
         }
     }
 }
-
-/// Execute a fixed trusted tool with literal arguments and an explicit environment.
-///
-/// Callers must not place credentials in arguments. Ambient Git configuration,
-/// proxy variables, signing variables and credential helpers are not inherited.
+fn command(
+    program: &str,
+    args: &[String],
+    directory: &Path,
+    environment: &BTreeMap<String, String>,
+) -> Command {
+    let mut c = Command::new(program);
+    c.args(args)
+        .current_dir(directory)
+        .env_clear()
+        .env("PATH", "/usr/local/bin:/usr/bin:/bin")
+        .env("LANG", "C.UTF-8")
+        .env("TMPDIR", "/tmp")
+        .envs(environment)
+        .stdin(Stdio::null());
+    c
+}
 /// # Errors
-/// Return a closed reason on startup, timeout, IO or output-bound failures.
+/// Return safe startup, execution, deadline or artifact-bound failures.
 pub async fn run(
     program: &str,
     args: &[String],
@@ -43,65 +48,34 @@ pub async fn run(
     if seconds == 0 || !Path::new(program).is_absolute() {
         return Err(Failure::InvalidInput);
     }
-    let mut child = spawn(program, args, directory, environment)?;
-    let stdout = child.stdout.take().ok_or(Failure::ExecutionFailed)?;
-    let stderr = child.stderr.take().ok_or(Failure::ExecutionFailed)?;
-    let execution = async {
-        let (stdout, stderr) = tokio::try_join!(bounded(stdout), bounded(stderr))?;
-        let status = child.wait().await.map_err(|_| Failure::ExecutionFailed)?;
-        let diagnostic = String::from_utf8_lossy(&stderr).to_ascii_lowercase();
-        let registry_denied = [
-            "unauthorized",
-            "authentication required",
-            "access denied",
-            "requested access to the resource is denied",
-        ]
-        .iter()
-        .any(|pattern| diagnostic.contains(pattern));
-        Ok(Captured {
-            success: status.success(),
-            stdout,
-            registry_denied,
-        })
-    };
-    let result = tokio::time::timeout(Duration::from_secs(seconds), execution).await;
-    match result {
-        Ok(Ok(output)) => Ok(output),
-        Ok(Err(reason)) => {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            Err(reason)
-        }
-        Err(_) => {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            Err(Failure::ExecutionDeadline)
-        }
+    let output = ayni_orchestrator_execution::process::run(
+        command(program, args, directory, environment),
+        Duration::from_secs(seconds),
+        OUTPUT_BYTES,
+    )
+    .await
+    .map_err(|_| Failure::ExecutionFailed)?;
+    if output.outcome != "exited" {
+        return Err(Failure::ExecutionDeadline);
     }
+    if output.exceeded {
+        return Err(Failure::ExecutionOutputExceeded);
+    }
+    let diagnostic = String::from_utf8_lossy(&output.stderr).to_ascii_lowercase();
+    let registry_denied = [
+        "unauthorized",
+        "authentication required",
+        "access denied",
+        "requested access to the resource is denied",
+    ]
+    .iter()
+    .any(|p| diagnostic.contains(p));
+    Ok(Captured {
+        success: output.status.success(),
+        stdout: output.stdout,
+        registry_denied,
+    })
 }
-
-fn spawn(
-    program: &str,
-    args: &[String],
-    directory: &Path,
-    environment: &BTreeMap<String, String>,
-) -> Result<Child, Failure> {
-    Command::new(program)
-        .args(args)
-        .current_dir(directory)
-        .env_clear()
-        .env("PATH", "/usr/local/bin:/usr/bin:/bin")
-        .env("LANG", "C.UTF-8")
-        .env("TMPDIR", "/tmp")
-        .envs(environment)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|_| Failure::ToolUnavailable)
-}
-
 pub(crate) async fn checked_build(
     client: &WorkerClient,
     args: &[String],
@@ -109,46 +83,64 @@ pub(crate) async fn checked_build(
     environment: &BTreeMap<String, String>,
     seconds: u64,
 ) -> Result<(), Failure> {
-    let mut child = spawn("/usr/local/bin/ayni", args, directory, environment)?;
-    let stdout = child.stdout.take().ok_or(Failure::ExecutionFailed)?;
-    let stderr = child.stderr.take().ok_or(Failure::ExecutionFailed)?;
-    let execution = async {
-        let (status, (), ()) = tokio::join!(
-            child.wait(),
-            build_output::capture(client, OutputStream::Stdout, stdout),
-            build_output::capture(client, OutputStream::Stderr, stderr),
-        );
-        match status {
-            Ok(status) if status.success() => Ok(()),
-            _ => Err(Failure::ExecutionFailed),
-        }
-    };
-    if let Ok(result) = tokio::time::timeout(Duration::from_secs(seconds), execution).await {
-        result
-    } else {
-        let _ = child.kill().await;
-        let _ = child.wait().await;
+    // Safe diagnostics remain an independent, bounded observer of the full stream.
+    // A slow diagnostic endpoint never holds a child pipe or the raw spool hostage.
+    let (out_tx, out_rx) = tokio::sync::mpsc::channel(64);
+    let (err_tx, err_rx) = tokio::sync::mpsc::channel(64);
+    let lost = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let observer_loss = lost.clone();
+    let observer: ayni_orchestrator_execution::process::Observer =
+        std::sync::Arc::new(move |stream, bytes| {
+            let sender = if stream == "stdout" { &out_tx } else { &err_tx };
+            if sender.try_send(bytes.to_vec()).is_err() {
+                observer_loss.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+        });
+    let process = ayni_orchestrator_execution::process::run_observed(
+        command("/usr/local/bin/ayni", args, directory, environment),
+        Duration::from_secs(seconds),
+        OUTPUT_BYTES,
+        None,
+        Some(observer),
+    );
+    let (output, (), ()) = tokio::join!(
+        process,
+        build_output::observe(client, OutputStream::Stdout, out_rx, lost.clone()),
+        build_output::observe(client, OutputStream::Stderr, err_rx, lost)
+    );
+    // This build pod has an exclusive Podman store. Detached nested workloads
+    // need explicit engine cleanup in addition to POSIX process-group signals.
+    let cleanup = ayni_orchestrator_execution::process::run_cleanup(
+        command(
+            "/usr/bin/podman",
+            &[
+                "rm".into(),
+                "--all".into(),
+                "--force".into(),
+                "--time".into(),
+                "2".into(),
+            ],
+            directory,
+            environment,
+        ),
+        Duration::from_secs(10),
+    )
+    .await;
+    let output = output.map_err(|_| Failure::ExecutionFailed)?;
+    if !cleanup.is_ok_and(|result| result.status.success() && result.outcome == "exited") {
+        return Err(Failure::CleanupPending);
+    }
+    if output.outcome != "exited" {
         Err(Failure::ExecutionDeadline)
+    } else if output.status.success() {
+        Ok(())
+    } else {
+        Err(Failure::ExecutionFailed)
     }
 }
-
 mod build_output;
-
-async fn bounded(reader: impl AsyncRead + Unpin) -> Result<Vec<u8>, Failure> {
-    let mut bytes = Vec::new();
-    reader
-        .take(OUTPUT_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .await
-        .map_err(|_| Failure::ExecutionFailed)?;
-    if bytes.len() as u64 > OUTPUT_BYTES {
-        return Err(Failure::ExecutionOutputExceeded);
-    }
-    Ok(bytes)
-}
-
 /// # Errors
-/// Require successful execution without returning untrusted tool diagnostics.
+/// Require success without returning untrusted tool diagnostics.
 pub async fn checked(
     program: &str,
     args: &[String],
@@ -162,7 +154,6 @@ pub async fn checked(
     }
     Ok(output.stdout)
 }
-
 #[cfg(test)]
 mod tests {
     use super::run;

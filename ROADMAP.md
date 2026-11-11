@@ -75,6 +75,9 @@ Complete runtime acquisition, registry publication and verification on the admit
 profile. Connect those artifacts to trusted server-side Git/source preparation,
 including dependency ancestry, then freeze each admitted attempt. A configuration
 edit or removal blocks new use as appropriate but cannot rewrite existing attempts.
+Local deploy/live setup prepares pinned worker and verifier tooling automatically
+and selects the explicitly unqualified development profile; production admission
+and full runtime qualification remain separate gates.
 
 Repository onboarding should retain reviewed settings and carry one bounded run from the latest default branch through inspection, build, certification, publication and verification. Keep current progress, deployment blockers and the confirmed registry image visible; later runs may reuse reviewed settings without granting recurring builds.
 
@@ -174,6 +177,41 @@ Record three separate facts for each capability: backend implemented, usable in
 the product, and qualified on the declared deployment. Alpha requires all three
 for every in-scope journey. Existing retired browser profiles must be replaced or
 explicitly superseded by runnable coverage, not bypassed to report success.
+
+## Execution capture and debug deployments
+
+Deliver shared process supervision and acknowledged worker telemetry, then collect
+all managed container stdout/stderr through the Kubernetes API, expose retained
+history in the local debug console, and qualify the complete deployment. Raw logs
+are deployment-gated and separate from safe diagnostics. Preserve existing
+workflow authority and isolated verifier boundaries; report API rotation/deletion
+uncertainty and storage loss explicitly. See the [capture contract](docs/technical/architecture/execution-capture.md).
+
+The capture implementation now includes the shared runner and durable journals,
+canonical telemetry/debug APIs, API collector, replay jobs, deployment flag and
+local log explorer. Qualification has exercised binary/repeated output, init and
+sidecar inventory, failed starts, unrelated-pod exclusion, retained history after
+deletion and browser rendering. Full failure/recovery and every real workload
+category remain acceptance gates; implementation presence is not completion of
+those gates. Deliver the four review slices in dependency order without merging
+automatically.
+
+
+## One development environment and Rust tooling
+
+Consolidate local development onto `http://127.0.0.1:5174` and the existing
+`ayni-orchestrator-live` Docker Desktop deployment, preserving its data. Rust
+owns development orchestration, infrastructure fixtures, generators and checks;
+Svelte/TypeScript retains application code and native frontend tests. Remove the
+parallel dev/qualification launch paths and supporting-language tooling only
+after their meaningful assertions and recovery behavior have replacements.
+
+Deliver Rust tooling, the singleton hot-reload controller with automatic forward
+migration redeployment, then legacy removal and the authorized local cutover.
+The initial `cargo xtask` implementation ports documentation, security, protocol
+and Helm checks, generation, PostgreSQL/loopback runners and retained evidence
+validation. Controller, fixture and acceptance consolidation remain in progress;
+the presence of a Rust command does not establish full migration of the tooling.
 
 ## Acceptance and delivery discipline
 

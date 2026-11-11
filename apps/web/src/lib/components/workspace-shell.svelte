@@ -112,6 +112,7 @@
       {/if}
     </nav>
     <div class="sidebar-bottom">
+      {#if data.debugEnabled}<p class="section-label">Debug</p><SidebarItem href="/debug/logs" label="Logs"><PanelsTopLeft /><span class="sidebar-label">Logs</span></SidebarItem>{/if}
       <p class="section-label">Settings</p>
       <SidebarItem label="Repositories" href="/repositories" active={title==='Repositories'}><GitBranch /><span class="sidebar-label">Repositories</span></SidebarItem>
       <SidebarItem label="Configuration" active={configurationOpen} expanded={configurationOpen} controls="configuration-navigation" onclick={() => { configurationOpen = !configurationOpen; sidebarOpen = false; }}><Settings2 /><span class="sidebar-label">Configuration</span></SidebarItem>

@@ -11,7 +11,6 @@ use std::{
     process::Stdio,
     time::Duration,
 };
-use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
 const MAX_OUTPUT: u64 = 8 * 1024 * 1024;
 pub struct Prepared {
@@ -55,45 +54,27 @@ fn command(root: &Path) -> tokio::process::Command {
         .stderr(Stdio::null());
     command
 }
-async fn execute(mut command: tokio::process::Command, input: Option<&[u8]>) -> Result<Vec<u8>> {
-    tokio::time::timeout(Duration::from_secs(30), async {
-        let mut child = command.spawn().map_err(|_| "publication Git unavailable")?;
-        let mut stdin = child
-            .stdin
-            .take()
-            .ok_or("publication Git input unavailable")?;
-        if let Some(input) = input {
-            stdin
-                .write_all(input)
-                .await
-                .map_err(|_| "publication Git input failed")?;
-        }
-        drop(stdin);
-        let mut output = Vec::new();
-        child
-            .stdout
-            .take()
-            .ok_or("publication Git output unavailable")?
-            .take(MAX_OUTPUT + 1)
-            .read_to_end(&mut output)
-            .await
-            .map_err(|_| "publication Git output failed")?;
-        if output.len() as u64 > MAX_OUTPUT {
-            return Err("publication Git output limit".into());
-        }
-        if !child
-            .wait()
-            .await
-            .map_err(|_| "publication Git interrupted")?
-            .success()
-        {
-            return Err("publication Git rejected operation".into());
-        }
-        Ok(output)
-    })
+async fn execute(command: tokio::process::Command, input: Option<&[u8]>) -> Result<Vec<u8>> {
+    let output = ayni_orchestrator_execution::process::run_with_input(
+        command,
+        Duration::from_secs(30),
+        usize::try_from(MAX_OUTPUT)?,
+        input.map(<[u8]>::to_vec),
+    )
     .await
-    .map_err(|_| "publication Git timed out")?
+    .map_err(|_| "publication Git execution failed")?;
+    if output.outcome != "exited" {
+        return Err("publication Git timed out".into());
+    }
+    if output.exceeded {
+        return Err("publication Git output limit".into());
+    }
+    if !output.status.success() {
+        return Err("publication Git rejected operation".into());
+    }
+    Ok(output.stdout)
 }
+
 async fn git(root: &Path, args: &[&str], input: Option<&[u8]>) -> Result<Vec<u8>> {
     let mut c = command(root);
     c.args(args);

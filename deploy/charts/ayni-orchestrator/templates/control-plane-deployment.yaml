@@ -66,6 +66,9 @@ spec:
             - name: ORCHESTRATOR_SESSION_AUTHORITY_TOKEN_PATH
               value: /var/run/secrets/ayni/session-authority/token
           ports:
+            {{- if or .Values.debug.enabled ((.Values.runtimePreparation | default dict).enabled | default false) .Values.taskExecution.enabled .Values.publication.enabled }}
+            - {name: telemetry, containerPort: 50052, protocol: TCP}
+            {{- end }}
             - name: http
               containerPort: {{ .Values.controlPlane.httpPort }}
               protocol: TCP
@@ -101,6 +104,9 @@ spec:
               drop: ["ALL"]
             readOnlyRootFilesystem: true
           volumeMounts:
+            {{- if .Values.debug.enabled }}
+            - {name: telemetry-authority, mountPath: /var/run/secrets/ayni/telemetry-authority, readOnly: true}
+            {{- end }}
             - name: inspection-scratch
               mountPath: /tmp
             {{- if $signerProvisioning.enabled }}
@@ -129,6 +135,10 @@ spec:
               readOnly: true
             {{- end }}
       volumes:
+        {{- if .Values.debug.enabled }}
+        - name: telemetry-authority
+          secret: {secretName: {{ .Values.debug.authoritySecretName | quote }}}
+        {{- end }}
         - name: inspection-scratch
           emptyDir:
             sizeLimit: 256Mi

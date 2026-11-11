@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { page } from '$app/state';
  import BranchLabel from './branch-label.svelte';
  import CopyableCode from './copyable-code.svelte';
  import InfoTooltip from "./info-tooltip.svelte";
@@ -522,6 +523,7 @@
  {@const canCancel = activeStates.has(operation.state) && operation.state !== 'cancelling'}
  {@const canRetry = retryStates.has(operation.state)}
  {#snippet preparationActions()}
+  {#if page.data.debugEnabled}<Button variant="outline" href={`/debug/logs?executionId=${encodeURIComponent(operation.id)}`}>Debug logs</Button>{/if}
   {#if canCancel}
    <Button variant="outline" disabled={busy || !!pending} onclick={() => perform(() => command('CancelRuntimePreparation', operation))}>Cancel preparation</Button>
   {:else if canRetry}
@@ -540,7 +542,7 @@
    {label:'Managed', status:operation.managedCompatible ? 'Verified' : 'Not verified', tone:operation.managedCompatible ? 'success' : 'neutral'},
    {label:'Cleanup', status:operation.cleanupComplete ? 'Complete' : 'Not complete', tone:operation.cleanupComplete ? 'success' : 'neutral'},
   ]}
-  actions={canCancel || canRetry ? preparationActions : undefined}>
+  actions={canCancel || canRetry || page.data.debugEnabled ? preparationActions : undefined}>
   {#snippet information()}
    <span class="text-muted-foreground">Platform</span> <code>{operation.platform}</code>
   {/snippet}

@@ -60,10 +60,29 @@ impl Capture<'_> {
     }
 }
 
-pub(super) async fn capture(
+pub(super) async fn observe(
+    client: &WorkerClient,
+    stream: OutputStream,
+    mut chunks: tokio::sync::mpsc::Receiver<Vec<u8>>,
+    lost: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
+    let (mut writer, reader) = tokio::io::duplex(65536);
+    let pump = async move {
+        use tokio::io::AsyncWriteExt as _;
+        while let Some(bytes) = chunks.recv().await {
+            if writer.write_all(&bytes).await.is_err() {
+                break;
+            }
+        }
+    };
+    tokio::join!(pump, capture(client, stream, reader, lost));
+}
+
+async fn capture(
     client: &WorkerClient,
     stream: OutputStream,
     pipe: impl AsyncRead + Unpin,
+    lost: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) {
     let mut output = Capture {
         client,
@@ -116,8 +135,8 @@ pub(super) async fn capture(
             stream,
             sequence: OUTPUT_END_SEQUENCE,
             text: String::new(),
-            complete: eof && output.delivered,
-            truncated: output.truncated,
+            complete: eof && output.delivered && !lost.load(std::sync::atomic::Ordering::Relaxed),
+            truncated: output.truncated || lost.load(std::sync::atomic::Ordering::Relaxed),
         })
         .await;
 }

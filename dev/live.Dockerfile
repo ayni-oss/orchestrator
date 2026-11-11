@@ -3,6 +3,7 @@
 FROM rust:1.94.0-bookworm AS builder
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY tools ./tools
 COPY backend ./backend
 COPY proto ./proto
 COPY dev/fixtures/task-source ./dev/fixtures/task-source
@@ -14,7 +15,7 @@ RUN --mount=type=cache,id=ayni-live-registry,target=/usr/local/cargo/registry \
     set -eu; mkdir /output; \
     case "$COMPONENT" in \
       control-plane) package=ayni-orchestrator-control-plane; \
-        bins='ayni-orchestrator-control-plane workflow-migrate workflow-diagnostic workflow-acceptance workflow-publish-task' ;; \
+        bins='ayni-orchestrator-control-plane ayni-log-collector workflow-migrate workflow-diagnostic workflow-acceptance workflow-publish-task' ;; \
       conversation-supervisor) package=ayni-orchestrator-conversation-supervisor; \
         bins='ayni-orchestrator-conversation-supervisor ayni-task-worker ayni-task-supervisor ayni-task-publisher' ;; \
       *) exit 2 ;; \

@@ -1,0 +1,125 @@
+{
+  "telemetry.proto": {
+    "ExecutionTelemetryService": [
+      "ExchangeTelemetry"
+    ],
+    "DebugLogsService": [
+      "GetDebugCapabilities",
+      "ListLogSources",
+      "ReadLogs",
+      "WatchLogs"
+    ]
+  },
+  "runtime_preparation.proto": {
+    "RuntimePreparationService": [
+      "StartRepositoryRuntime",
+      "GetRuntimeProfile",
+      "GetRepositoryRuntime",
+      "GetRuntimeSigningPullRequest",
+      "OpenRuntimeSigningPullRequest",
+      "GetRepositoryRuntimeReceipt",
+      "ProvisionRuntimeSigner",
+      "RecoverRuntimeSignerProvisioning",
+      "SaveRuntimeSigner",
+      "SetRuntimeSignerEnabled",
+      "GetRuntimeSigner",
+      "DeleteRuntimeSigner",
+      "ListRuntimeSigners",
+      "GetRuntimeSignerReceipt",
+      "StartRuntimePreparation",
+      "GetRuntimePreparation",
+      "ListRuntimePreparations",
+      "GetRuntimePreparationReceipt",
+      "CancelRuntimePreparation",
+      "RetryRuntimePreparation"
+    ]
+  },
+  "repositories.proto": {
+    "RepositoryService": [
+      "ListGithubInstallations",
+      "ListGithubRepositories",
+      "ConnectRepository",
+      "GetRepositoryOperation",
+      "ListRepositoryOperations",
+      "ListRepositories",
+      "ListWorkspaceRepositories",
+      "SetWorkspaceRepository",
+      "AssociateProjectRepository",
+      "ListProjectRepositories",
+      "ListRepositoryBranches",
+      "ResolveRepositoryDefaultCommit",
+      "InspectRepository",
+      "GetRepositoryInspection",
+      "ListRepositoryInspections"
+    ]
+  },
+  "connections.proto": {
+    "ConnectionService": [
+      "SaveGithubConnection",
+      "SaveProviderConnection",
+      "ValidateProviderConnection",
+      "SetConnectionEnabled",
+      "ValidateGithubConnection",
+      "GetConnection",
+      "CheckConnection",
+      "DeleteConnection",
+      "GetConnectionOperation",
+      "ListConnections",
+      "ListConnectionOperations"
+    ]
+  },
+  "projects.proto": {
+    "ProjectService": [
+      "CreateWorkspace",
+      "CreateProject",
+      "RenameWorkspace",
+      "RenameProject",
+      "SetProjectGoal",
+      "ListWorkspaces",
+      "ListProjects",
+      "GetAgentConfiguration",
+      "UpdateAgentConfiguration",
+      "GetTurnInputs",
+      "GetTurnContextInputs"
+    ]
+  },
+  "project_conversations.proto": {
+    "ProjectConversationService": [
+      "AuthorizeOutcomeAssessments",
+      "GetOutcomeAssessmentStatus",
+      "StartTaskPublication",
+      "CancelTaskPublication",
+      "StartTaskExecution",
+      "CancelTaskExecution",
+      "GetTaskAttempt",
+      "PrepareTaskExecution",
+      "GetTaskExecution",
+      "ApprovePlan",
+      "GetPlanApproval",
+      "ListTasks",
+      "ConfirmTaskRecovery",
+      "RecordTaskRecovery",
+      "ListTaskRecovery",
+      "ListTaskFeedback",
+      "GetTask",
+      "CreatePlan",
+      "RevisePlan",
+      "GetPlanVersion",
+      "ListPlans",
+      "ListPlanVersions",
+      "ListProviderCalls",
+      "AcknowledgeProviderUncertainty",
+      "CancelTurn",
+      "CreateConversation",
+      "SendMessage",
+      "GetConversationSnapshot",
+      "ListExecutionProgress",
+      "ListExecutionTimeline",
+      "ListConversationHistory",
+      "WatchConversation",
+      "ListConversations",
+      "ListConversationSessions",
+      "ReplaceConversationSession"
+    ]
+  }
+}

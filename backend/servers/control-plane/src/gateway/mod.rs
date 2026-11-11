@@ -1,4 +1,5 @@
 //! Local contributor gateway. It owns no workflow state or execution authority.
+mod debug;
 mod security;
 
 use axum::{
@@ -86,6 +87,8 @@ pub fn router(gateway: Gateway) -> Router {
     Router::new()
         .route("/api/{method}", post(rpc))
         .route("/watch", get(watch))
+        .route("/debug/logs/stream", get(debug::watch))
+        .route("/debug/logs/download", get(debug::download))
         .layer(DefaultBodyLimit::max(64 * 1024))
         .layer(middleware::from_fn_with_state(
             gateway.clone(),
@@ -123,6 +126,24 @@ async fn rpc(
         .try_acquire_owned()
         .map_err(|_| ApiError::from(Status::resource_exhausted("gateway request limit")))?;
     match method.as_str() {
+        "GetDebugCapabilities" => forward!(
+            body,
+            v1::debug_logs_service_client::DebugLogsServiceClient::new(gateway.channel.clone()),
+            get_debug_capabilities,
+            v1::GetDebugCapabilitiesRequest
+        ),
+        "ListLogSources" => forward!(
+            body,
+            v1::debug_logs_service_client::DebugLogsServiceClient::new(gateway.channel.clone()),
+            list_log_sources,
+            v1::ListLogSourcesRequest
+        ),
+        "ReadLogs" => forward!(
+            body,
+            v1::debug_logs_service_client::DebugLogsServiceClient::new(gateway.channel.clone()),
+            read_logs,
+            v1::ReadLogsRequest
+        ),
         "SaveProviderConnection" => forward!(
             body,
             gateway.connections(),

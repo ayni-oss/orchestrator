@@ -31,6 +31,9 @@ spec:
           imagePullPolicy: {{ .Values.images.pullPolicy }}
           command: ["/usr/local/bin/ayni-task-supervisor"]
           env:
+            - {name: ORCHESTRATOR_TELEMETRY_ENDPOINT, value: "http://control-plane.{{ .Release.Namespace }}.svc:50052"}
+            - {name: ORCHESTRATOR_TELEMETRY_SPOOL_BYTES, value: {{ .Values.debug.workerSpoolBytes | int64 | quote }}}
+            - {name: ORCHESTRATOR_DEBUG, value: {{ .Values.debug.enabled | quote }}}
             {{- with include "ayni-orchestrator.traceEndpoint" . }}
             - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
               value: {{ . | quote }}

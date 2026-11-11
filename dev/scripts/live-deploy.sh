@@ -9,6 +9,8 @@ dev_check_component_names "$context" "$namespace"
 [[ "$(helm version --template '{{ .Version }}')" == v4.1.1* ]] || { echo 'Helm 4.1.1 required' >&2; exit 1; }
 "$DEV_DIRECTORY/scripts/configure-development-secrets.sh"
 dev_build_chart_dependencies
+# Prepare tooling before quiescing the serving control plane for a migration.
+runtime_values="$(python3 "$DEV_DIRECTORY/scripts/runtime-development.py")"
 # Explicit migrations quiesce the serving control plane before its migration
 # init container can alter the schema. Workers retain identity and retry reports.
 restore_serving=false
@@ -22,8 +24,14 @@ if [[ "${AYNI_ORCHESTRATOR_LIVE_MIGRATE:-false}" == true ]]; then
   fi
 fi
 # Keep explicit provider and fixture settings while using the current chart defaults.
+debug_args=()
+if [[ -n "${AYNI_ORCHESTRATOR_DEBUG:-}" ]]; then
+  [[ "$AYNI_ORCHESTRATOR_DEBUG" == true || "$AYNI_ORCHESTRATOR_DEBUG" == false ]] || exit 2
+  debug_args+=(--set "ayni-orchestrator.debug.enabled=$AYNI_ORCHESTRATOR_DEBUG")
+fi
 helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-then-reuse-values \
-  --kube-context "$context" --namespace "$namespace" \
+  --kube-context "$context" --namespace "$namespace" "${debug_args[@]}" \
+  --values "$runtime_values" \
   --set-string "ayni-orchestrator.images.controlPlane=$1" \
   --set-string "ayni-orchestrator.images.conversationSupervisor=$2" \
   --timeout 5m
@@ -35,6 +43,9 @@ fi
 for workload in statefulset/postgres statefulset/jetstream deployment/control-plane statefulset/conversation-supervisor deployment/task-supervisor; do
   kubectl --context "$context" --namespace "$namespace" rollout status "$workload" --timeout=5m
 done
+if [[ "${AYNI_ORCHESTRATOR_RUNTIME:-true}" == true ]]; then
+  kubectl --context "$context" --namespace "$namespace" rollout status deployment/runtime-preparation-supervisor --timeout=5m
+fi
 
 if [[ -n "$(kubectl --context "$context" --namespace "$namespace" get deployment/task-publisher --ignore-not-found -o name)" ]]; then
   kubectl --context "$context" --namespace "$namespace" rollout status deployment/task-publisher --timeout=5m

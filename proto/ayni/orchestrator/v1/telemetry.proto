@@ -1,0 +1,103 @@
+syntax = "proto3";
+package ayni.orchestrator.v1;
+
+// Separate authenticated worker listener; observations never grant execution authority.
+service ExecutionTelemetryService {
+  rpc ExchangeTelemetry(stream ExchangeTelemetryRequest) returns (stream ExchangeTelemetryResponse);
+}
+
+// Trusted loopback API, exposed through the local console only.
+service DebugLogsService {
+  rpc GetDebugCapabilities(GetDebugCapabilitiesRequest) returns (GetDebugCapabilitiesResponse);
+  rpc ListLogSources(ListLogSourcesRequest) returns (ListLogSourcesResponse);
+  rpc ReadLogs(ReadLogsRequest) returns (ReadLogsResponse);
+  rpc WatchLogs(WatchLogsRequest) returns (stream WatchLogsResponse);
+}
+message LogSource {
+  string id = 1;
+  string deployment = 2;
+  string namespace = 3;
+  string pod_name = 4;
+  string pod_uid = 5;
+  string container = 6;
+  uint32 restart = 7;
+  string component = 8;
+  string execution_id = 9;
+  uint64 generation = 10;
+  string stage = 11;
+  string repository_id = 12;
+  string project_id = 13;
+  string provenance = 14;
+  string capture_status = 15;
+  int64 observed_at_unix_ms = 16;
+}
+message TelemetryRecord {
+  LogSource source = 1;
+  uint64 sequence = 2;
+  string action_id = 3;
+  string parent_action_id = 4;
+  string event = 5;
+  string stream = 6;
+  bytes data = 7;
+  int64 observed_at_unix_ms = 8;
+  optional int32 exit_code = 9;
+  optional int32 signal = 10;
+  uint64 lost_bytes = 11;
+  string command_digest = 12;
+  uint64 pending_bytes = 13;
+  int64 deadline_unix_ms = 14;
+  uint64 duration_ms = 15;
+}
+message ExchangeTelemetryRequest {
+  TelemetryRecord record = 1;
+}
+message WatchLogsRequest {
+  ReadLogsRequest query = 1;
+}
+message WatchLogsResponse {
+  ReadLogsResponse page = 1;
+}
+message ExchangeTelemetryResponse {
+  string source_id = 1;
+  uint64 sequence = 2;
+  bool cancel_requested = 3;
+}
+message GetDebugCapabilitiesRequest {}
+message GetDebugCapabilitiesResponse {
+  bool enabled = 1;
+  uint64 retention_seconds = 2;
+  uint64 max_retained_bytes = 3;
+  string collection = 4;
+}
+message ListLogSourcesRequest {
+  string execution_id = 1;
+  string after_id = 2;
+}
+message ListLogSourcesResponse {
+  repeated LogSource sources = 1;
+  string next_after_id = 2;
+}
+message ReadLogsRequest {
+  int64 after = 1;
+  string source_id = 2;
+  string component = 3;
+  string execution_id = 4;
+  string namespace = 5;
+  string pod_uid = 6;
+  string container = 7;
+  optional uint32 restart = 8;
+  string stream = 9;
+  int64 from_unix_ms = 10;
+  int64 until_unix_ms = 11;
+  string text = 12;
+}
+message LogEntry {
+  int64 cursor = 1;
+  TelemetryRecord record = 2;
+}
+message ReadLogsResponse {
+  repeated LogEntry entries = 1;
+  int64 next_cursor = 2;
+  int64 expired_through_cursor = 3;
+  int64 high_water_cursor = 4;
+}

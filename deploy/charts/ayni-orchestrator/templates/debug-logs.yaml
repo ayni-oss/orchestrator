@@ -1,0 +1,132 @@
+{{- if and .Values.enabled .Values.debug.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: log-collector
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: log-collector
+  labels:
+    {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
+spec:
+  serviceName: log-collector
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: ayni-log-collector}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ayni-log-collector
+        app.kubernetes.io/part-of: ayni-orchestrator
+        ayni.build/deployment: {{ .Release.Namespace | quote }}
+    spec:
+      serviceAccountName: log-collector
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: collector
+          image: {{ .Values.images.controlPlane | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: [/usr/local/bin/ayni-log-collector]
+          env:
+            - {name: ORCHESTRATOR_DEPLOYMENT, value: {{ .Release.Namespace | quote }}}
+            - name: ORCHESTRATOR_LOG_NAMESPACES
+              value: {{ printf "%s,%s-sessions%s" .Release.Namespace .Release.Namespace (ternary (printf ",%s" (include "ayni-orchestrator.runtimeNamespace" .)) "" .Values.runtimePreparation.enabled) | quote }}
+            - {name: ORCHESTRATOR_TELEMETRY_ENDPOINT, value: "http://control-plane.{{ .Release.Namespace }}.svc:50052"}
+            - {name: ORCHESTRATOR_TELEMETRY_TOKEN_PATH, value: /authority/token}
+            - {name: ORCHESTRATOR_TELEMETRY_SPOOL, value: /spool}
+            - {name: ORCHESTRATOR_TELEMETRY_SPOOL_BYTES, value: {{ .Values.debug.collectorSpoolBytes | int64 | quote }}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: "1", memory: 256Mi}
+          volumeMounts:
+            - {name: spool, mountPath: /spool}
+            - {name: authority, mountPath: /authority, readOnly: true}
+      volumes:
+        - name: authority
+          secret:
+            secretName: {{ .Values.debug.authoritySecretName }}
+  volumeClaimTemplates:
+    - metadata: {name: spool}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: {{ .Values.debug.collectorStorage | quote }}}
+{{- $namespaces := list .Release.Namespace (printf "%s-sessions" .Release.Namespace) }}
+{{- if .Values.runtimePreparation.enabled }}
+{{- $namespaces = append $namespaces (include "ayni-orchestrator.runtimeNamespace" .) }}
+{{- end }}
+{{- range $namespace := $namespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ayni-log-reader
+  namespace: {{ $namespace }}
+rules:
+  - apiGroups: [""]
+    resources: [pods, events]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ayni-log-reader
+  namespace: {{ $namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: log-collector
+    namespace: {{ $.Release.Namespace }}
+roleRef:
+  kind: Role
+  name: ayni-log-reader
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- end }}
+{{- if and .Values.enabled ((.Values.runtimePreparation | default dict).enabled | default false) }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: runtime-telemetry-replay
+  namespace: {{ include "ayni-orchestrator.runtimeNamespace" . }}
+spec:
+  podSelector:
+    matchLabels: {ayni.build/telemetry-replay: "true"}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: {{ .Release.Namespace }}}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: ayni-orchestrator-control-plane}
+      ports: [{protocol: TCP, port: 50052}]
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+{{- end }}
+{{- if and .Values.enabled ((.Values.taskExecution | default dict).enabled | default false) }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: task-telemetry
+  namespace: {{ .Release.Namespace }}-sessions
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: ayni-task-worker}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: {{ .Release.Namespace }}}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: ayni-orchestrator-control-plane}
+      ports: [{protocol: TCP, port: 50052}]
+{{- end }}
