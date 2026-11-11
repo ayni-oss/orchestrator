@@ -102,6 +102,8 @@ impl From<tokio_postgres::Error> for StoreError {
 #[derive(Clone, Debug)]
 pub struct WorkflowStore {
     database_url: Arc<str>,
+    log_writer: Arc<tokio::sync::Mutex<Option<tokio_postgres::Client>>>,
+    log_reader: Arc<tokio::sync::Mutex<Option<tokio_postgres::Client>>>,
 }
 
 impl WorkflowStore {
@@ -109,6 +111,8 @@ impl WorkflowStore {
     pub fn new(database_url: impl Into<Arc<str>>) -> Self {
         Self {
             database_url: database_url.into(),
+            log_writer: Arc::default(),
+            log_reader: Arc::default(),
         }
     }
 

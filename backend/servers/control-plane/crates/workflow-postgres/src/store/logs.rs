@@ -4,10 +4,24 @@ use ayni_orchestrator_telemetry::v1::{
     LogEntry, LogSource, ReadLogsRequest, ReadLogsResponse, TelemetryRecord,
 };
 use sha2::{Digest as _, Sha256};
-use tokio::sync::Semaphore;
+use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard, Semaphore};
 
 static CONNECTIONS: Semaphore = Semaphore::const_new(4);
 const LOCK: i64 = 4_702_199_126_064_922;
+
+async fn connection<'a>(
+    slot: &'a Mutex<Option<tokio_postgres::Client>>,
+    database_url: &str,
+) -> Result<MappedMutexGuard<'a, tokio_postgres::Client>, StoreError> {
+    let mut client = slot.lock().await;
+    if client
+        .as_ref()
+        .is_none_or(tokio_postgres::Client::is_closed)
+    {
+        *client = Some(crate::connect(database_url).await?.0);
+    }
+    MutexGuard::try_map(client, Option::as_mut).map_err(|_| StoreError::CorruptState)
+}
 
 struct PreparedLog<'a> {
     source: &'a LogSource,
@@ -233,7 +247,10 @@ impl WorkflowStore {
             metadata,
             digest,
         } = prepare_log(record)?;
-        let (mut client, _driver) = crate::connect(&self.database_url).await?;
+        // Raw writes already serialize on the commit-safe cursor lock. Reuse one
+        // dedicated connection rather than authenticating for every output chunk;
+        // the bounded log permits and workflow connections remain independent.
+        let mut client = connection(&self.log_writer, &self.database_url).await?;
         let tx = client.transaction().await?;
         tx.batch_execute("SET LOCAL statement_timeout='3s'").await?;
         // Allocate cursors only under the same commit lock across all producers.
@@ -281,6 +298,7 @@ impl WorkflowStore {
             tx.execute("UPDATE workflow_log_sources SET source=CASE WHEN coalesce(($2::text::jsonb->>'observedAtUnixMs')::bigint,0)>=coalesce((source::jsonb->>'observedAtUnixMs')::bigint,0) THEN $2 ELSE source END,sequence=$3,digest=$4,observed_at=clock_timestamp(),receipts=$5 WHERE id=$1",&[&source.id,&metadata,&seq,&digest,&receipts]).await?;
         }
         tx.commit().await?;
+        drop(client);
         Ok(())
     }
 
@@ -294,8 +312,9 @@ impl WorkflowStore {
         let _permit = CONNECTIONS
             .try_acquire()
             .map_err(|_| StoreError::Capacity("log connections"))?;
-        let (client, _driver) = crate::connect(&self.database_url).await?;
+        let client = connection(&self.log_reader, &self.database_url).await?;
         let rows=client.query("SELECT source FROM workflow_log_sources WHERE id>$1 AND ($2='' OR source::jsonb->>'executionId'=$2) ORDER BY id LIMIT 100",&[&after,&execution]).await?;
+        drop(client);
         rows.iter()
             .map(|r| {
                 serde_json::from_str(r.get::<_, &str>(0)).map_err(|_| StoreError::CorruptState)
@@ -312,7 +331,7 @@ impl WorkflowStore {
         let _permit = CONNECTIONS
             .try_acquire()
             .map_err(|_| StoreError::Capacity("log connections"))?;
-        let (client, _driver) = crate::connect(&self.database_url).await?;
+        let client = connection(&self.log_reader, &self.database_url).await?;
         let rows=client.query("SELECT cursor,record FROM workflow_log_records WHERE cursor>$1 ORDER BY cursor LIMIT 100",&[&query.after]).await?;
         let expired: i64 = client
             .query_one("SELECT expired_through FROM workflow_log_retention", &[])
@@ -325,6 +344,7 @@ impl WorkflowStore {
             )
             .await?
             .get(0);
+        drop(client);
         let mut response = ReadLogsResponse {
             high_water_cursor,
             next_cursor: query.after.max(expired),

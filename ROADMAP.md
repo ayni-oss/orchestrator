@@ -193,8 +193,18 @@ local log explorer. Qualification has exercised binary/repeated output, init and
 sidecar inventory, failed starts, unrelated-pod exclusion, retained history after
 deletion and browser rendering. Full failure/recovery and every real workload
 category remain acceptance gates; implementation presence is not completion of
-those gates. Deliver the four review slices in dependency order without merging
-automatically.
+those gates. The implementation is consolidated on the existing development
+branch; remaining corrections stay there without creating additional PRs.
+
+Telemetry now bounds outstanding records instead of periodically queueing
+duplicates on a healthy stream. Separate log-reader/writer connection reuse removes
+per-record and per-page PostgreSQL authentication while preserving commit-safe cursors,
+sequence conflict checks and independent workflow connections. Regression tests
+cover slow acknowledgements, lost acknowledgements and database disconnection.
+The [qualification record](docs/technical/operations/debug-capture-qualification.md)
+records passing capture/browser and recovery checks against the singleton
+environment, including a preserved 6,070-record backlog draining to zero and
+collector restart without replacing its PVC.
 
 
 ## One development environment and Rust tooling
