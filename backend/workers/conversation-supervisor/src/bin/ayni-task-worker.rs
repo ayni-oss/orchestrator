@@ -77,8 +77,47 @@ fn main() -> ExitCode {
 }
 #[tokio::main]
 async fn asynchronous() -> Result {
+    if env::args().nth(1).as_deref() == Some("replay-telemetry") {
+        let root = required("ORCHESTRATOR_TELEMETRY_SPOOL")?;
+        let endpoint = required("ORCHESTRATOR_TELEMETRY_ENDPOINT")?;
+        let token = fs::read_to_string(required("ORCHESTRATOR_TASK_TOKEN_PATH")?)?;
+        return Ok(ayni_orchestrator_execution::transport::replay(
+            std::path::Path::new(&root),
+            &endpoint,
+            token.trim(),
+        )
+        .await?);
+    }
     let telemetry = ayni_orchestrator_observability::init("task-worker");
+    let delivery = ayni_orchestrator_execution::transport::Delivery::from_environment(
+        "ORCHESTRATOR_TASK_TOKEN_PATH",
+    )
+    .unwrap_or_else(|_| {
+        eprintln!("task telemetry unavailable; capture incomplete");
+        None
+    });
+    let capture = ayni_orchestrator_execution::capture();
+    if let Some(c) = &capture {
+        let _ = c.record("task", "started", "", &[], None, None);
+    }
     let result = run().await;
+    if let Some(c) = &capture {
+        let _ = c.record(
+            "task",
+            if result.is_ok() {
+                "succeeded"
+            } else {
+                "failed"
+            },
+            "",
+            &[],
+            None,
+            None,
+        );
+    }
+    if let Some(delivery) = delivery {
+        delivery.finish().await;
+    }
     telemetry.shutdown();
     result
 }

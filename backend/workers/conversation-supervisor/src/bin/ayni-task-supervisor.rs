@@ -98,6 +98,7 @@ async fn run() -> Result {
     let client = kube::Client::try_default().await?;
     loop {
         let operation = async {
+            let _ = pods::retire_replays(&s, client.clone()).await;
             if let Some(run) = s.call(&SupervisorRequest::Poll).await? {
                 let c = &run.command;
                 let parent = c
@@ -122,9 +123,9 @@ async fn run() -> Result {
                 );
                 span.record("execution", run.state.as_str());
                 link_recovery(&span, parent);
-                let reconciled = pods::reconcile(&s, client.clone(), &run)
-                    .instrument(span.clone())
-                    .await;
+                let reconciled =
+                    Box::pin(pods::reconcile(&s, client.clone(), &run).instrument(span.clone()))
+                        .await;
                 finish(&span, reconciled.is_ok());
                 reconciled?;
             }

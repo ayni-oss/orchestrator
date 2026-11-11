@@ -68,3 +68,22 @@ shutdown. Cancellation notifications can stop processes but never start them.
 
 The foundation alone does not establish complete capture. Deployment-wide
 collection, frontend activation and full deployed acceptance are subsequent slices.
+
+## Collection and recovery
+
+The Rust collector watches only configured release/execution namespaces, checks
+managed ownership labels, inventories regular/init/ephemeral containers, follows
+current output and attempts previous-instance output. Sources identify pod UIDs
+and restart instances; API output is marked `combined`. Timestamp overlap uses
+occurrence counts, never text-only deduplication. Reconnection and deletion remain
+explicitly uncertain. Journals rotate delivery across producers so a noisy source
+cannot indefinitely hide another source's inventory.
+
+Task quality and compatibility parents observe their protected regular files.
+Their children receive no telemetry credentials or network permissions. Supervisors
+arm retained PVCs with restricted replay pod specifications and discover abandoned
+spools after restart. Replay only sends records; it cannot re-run a command or
+accept a workflow result. Normal runtime pod retirement allows a final collection
+window; cancellation does not wait for logging. Failed replay volumes remain
+available for recovery.
+

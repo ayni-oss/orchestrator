@@ -35,9 +35,7 @@ pub fn verify(checkout: &Path, repository: &str, source: &str) -> Result<(String
         return Err(io::Error::other("frozen Ayni lock is empty or exceeds 4 MiB").into());
     }
     // cat-file reads the exact blob, ignoring dirty files, attributes and filters.
-    let lock = command(checkout)
-        .args(["cat-file", "blob", &object])
-        .output()?;
+    let lock = run(command(checkout).args(["cat-file", "blob", &object]))?;
     if !lock.status.success() || lock.stdout.len() != size {
         return Err(io::Error::other("cannot read frozen Ayni lock blob").into());
     }
@@ -53,8 +51,24 @@ fn command(checkout: &Path) -> Command {
     ]);
     command
 }
+fn run(command: &Command) -> Result<ayni_orchestrator_execution::process::Output> {
+    let mut owned = Command::new(command.get_program());
+    owned.args(command.get_args());
+    if let Some(directory) = command.get_current_dir() {
+        owned.current_dir(directory);
+    }
+    let output = ayni_orchestrator_execution::process::run_blocking(
+        owned,
+        std::time::Duration::from_secs(120),
+        8 * 1024 * 1024,
+    )?;
+    if output.exceeded || output.outcome != "exited" {
+        return Err(io::Error::other("Git evidence exceeded execution bounds").into());
+    }
+    Ok(output)
+}
 fn git(checkout: &Path, args: &[&str]) -> Result<String> {
-    let output = command(checkout).args(args).output()?;
+    let output = run(command(checkout).args(args))?;
     if !output.status.success() {
         // Git stderr can contain credential-bearing remote URLs; do not expose it.
         return Err(io::Error::other("local Git evidence verification failed").into());
@@ -76,9 +90,7 @@ pub fn verify_upstreams(checkout: &Path, source: &str, commits: &[String]) -> Re
         return Err(io::Error::other("frozen upstream commit invalid").into());
     }
     for commit in commits {
-        let status = command(checkout)
-            .args(["merge-base", "--is-ancestor", commit, source])
-            .output()?;
+        let status = run(command(checkout).args(["merge-base", "--is-ancestor", commit, source]))?;
         if !status.status.success() {
             return Err(io::Error::other(
                 "selected source does not contain every frozen upstream commit",
@@ -91,18 +103,12 @@ pub fn verify_upstreams(checkout: &Path, source: &str, commits: &[String]) -> Re
 
 /// Export only the frozen commit and its reachable snapshot objects, excluding history.
 pub fn snapshot_pack(checkout: &Path, commit: &str) -> Result<Vec<u8>> {
-    use std::{
-        collections::BTreeSet,
-        io::{Read as _, Write as _},
-        process::Stdio,
-    };
+    use std::{collections::BTreeSet, process::Stdio};
     if commit.len() != 40 || !commit.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(io::Error::other("frozen commit invalid").into());
     }
     let tree = git(checkout, &["rev-parse", &format!("{commit}^{{tree}}")])?;
-    let output = command(checkout)
-        .args(["ls-tree", "-r", "-t", "-z", commit])
-        .output()?;
+    let output = run(command(checkout).args(["ls-tree", "-r", "-t", "-z", commit]))?;
     if !output.status.success() {
         return Err(io::Error::other("frozen tree unavailable").into());
     }
@@ -119,34 +125,21 @@ pub fn snapshot_pack(checkout: &Path, commit: &str) -> Result<Vec<u8>> {
         }
         ids.insert(fields[2].to_owned());
     }
-    let mut child = command(checkout)
+    let mut command = command(checkout);
+    command
         .args(["pack-objects", "--stdout"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()?;
+        .stdin(Stdio::piped());
     let input = ids.into_iter().collect::<Vec<_>>().join("\n") + "\n";
-    let mut stdin = child.stdin.take().ok_or("pack input missing")?;
-    let producer = std::thread::spawn(move || stdin.write_all(input.as_bytes()));
-    let mut pack = Vec::new();
-    child
-        .stdout
-        .take()
-        .ok_or("pack output missing")?
-        .take(8 * 1024 * 1024 + 1)
-        .read_to_end(&mut pack)?;
-    if pack.len() > 8 * 1024 * 1024 {
-        let _ = child.kill();
-        let _ = child.wait();
-        let _ = producer.join();
-        return Err(io::Error::other("source pack exceeds 8 MiB").into());
+    let output = ayni_orchestrator_execution::process::run_blocking_with_input(
+        command,
+        std::time::Duration::from_secs(120),
+        8 * 1024 * 1024,
+        Some(input.into_bytes()),
+    )?;
+    if output.exceeded || !output.status.success() || output.outcome != "exited" {
+        return Err(io::Error::other("source pack failed or exceeded 8 MiB").into());
     }
-    let status = child.wait()?;
-    producer.join().map_err(|_| "pack input failed")??;
-    if !status.success() {
-        return Err(io::Error::other("source pack failed").into());
-    }
-    Ok(pack)
+    Ok(output.stdout)
 }
 
 #[cfg(test)]

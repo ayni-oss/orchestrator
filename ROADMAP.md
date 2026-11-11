@@ -210,3 +210,7 @@ uncertainty and storage loss explicitly. See the [capture contract](docs/technic
 The first slice adds the shared runner, canonical telemetry contract, durable
 journals, PostgreSQL replay and runtime-build integration. Collection, the local
 frontend and complete deployed qualification remain subsequent review slices.
+
+The second slice integrates task/publication command capture, namespace-scoped
+Kubernetes API collection and abandoned-spool replay. Deployment activation and
+frontend availability follow in slice 3; failure qualification remains a gate.

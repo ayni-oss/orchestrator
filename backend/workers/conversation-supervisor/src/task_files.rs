@@ -37,15 +37,17 @@ pub fn git(root: &Path, args: &[&str], input: Option<&[u8]>) -> io::Result<Vec<u
         })
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
-    let mut child = c.spawn()?;
-    if let Some(bytes) = input {
-        child
-            .stdin
-            .take()
-            .ok_or_else(|| io::Error::other("git input unavailable"))?
-            .write_all(bytes)?;
+    let out = ayni_orchestrator_execution::process::run_blocking_with_input(
+        c,
+        std::time::Duration::from_secs(120),
+        16 * 1024 * 1024,
+        input.map(<[u8]>::to_vec),
+    )?;
+    if out.exceeded || out.outcome != "exited" {
+        return Err(io::Error::other(
+            "task source operation exceeded execution bound",
+        ));
     }
-    let out = child.wait_with_output()?;
     if !out.status.success() {
         return Err(io::Error::other("task source operation failed"));
     }

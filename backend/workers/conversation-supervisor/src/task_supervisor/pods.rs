@@ -15,6 +15,9 @@ pub async fn reconcile(s: &Supervisor, client: Client, run: &TaskRun) -> Result 
     );
     let api: Api<Pod> = Api::namespaced(client.clone(), &s.namespace);
     let pod = api.get_opt(&name).await?;
+    if let Some(pod) = &pod {
+        let _ = arm_capture(s, client.clone(), run, &name, pod).await;
+    }
     if run.state == "cancelling" {
         if let Some(pod) = pod {
             verify(&pod, run)?;
@@ -24,6 +27,7 @@ pub async fn reconcile(s: &Supervisor, client: Client, run: &TaskRun) -> Result 
             delete(&api, &name, &pod).await?;
             return Ok(());
         }
+        let _ = recover_capture(s, client.clone(), run, &name, None).await;
         s.call(&SupervisorRequest::Stopped {
             attempt_id: run.command.attempt_id.clone(),
             generation: run.command.generation,
@@ -49,6 +53,7 @@ pub async fn reconcile(s: &Supervisor, client: Client, run: &TaskRun) -> Result 
             Some("Succeeded" | "Failed")
         ) {
             retain_lifecycle(s, run, "finished", Some(&pod)).await?;
+            let _ = recover_capture(s, client.clone(), run, &name, Some(&pod)).await;
             s.call(&SupervisorRequest::Stopped {
                 attempt_id: run.command.attempt_id.clone(),
                 generation: run.command.generation,
@@ -61,6 +66,7 @@ pub async fn reconcile(s: &Supervisor, client: Client, run: &TaskRun) -> Result 
     }
     if !run.pod_uid.is_empty() {
         retain_lifecycle(s, run, "pod_lost", None).await?;
+        let _ = recover_capture(s, client.clone(), run, &name, None).await;
         // Pod loss is interruption, never permission to resend a possibly paid call.
         s.call(&SupervisorRequest::Stopped {
             attempt_id: run.command.attempt_id.clone(),
@@ -164,6 +170,19 @@ async fn storage(s: &Supervisor, client: Client, run: &TaskRun, name: &str) -> R
             Err(e) => return Err(e.into()),
         }
     }
+    if std::env::var_os("ORCHESTRATOR_TELEMETRY_ENDPOINT").is_some() {
+        let spool_name = format!("{name}-telemetry");
+        if pvcs.get_opt(&spool_name).await?.is_none() {
+            let pvc = serde_json::from_value(
+                json!({"apiVersion":"v1","kind":"PersistentVolumeClaim","metadata":{"name":spool_name,"labels":labels},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"1Gi"}}}}),
+            )?;
+            match pvcs.create(&PostParams::default(), &pvc).await {
+                Ok(_) => {}
+                Err(kube::Error::Api(e)) if e.code == 409 => {}
+                Err(e) => return Err(e.into()),
+            }
+        }
+    }
     let secrets: Api<Secret> = Api::namespaced(client, &s.namespace);
     if let Some(secret) = secrets.get_opt(name).await? {
         if secret
@@ -192,10 +211,14 @@ async fn storage(s: &Supervisor, client: Client, run: &TaskRun, name: &str) -> R
     }
     Ok(())
 }
+#[allow(
+    clippy::too_many_lines,
+    reason = "pod security topology remains reviewed together"
+)]
 fn pod_spec(s: &Supervisor, run: &TaskRun, name: &str) -> Result<Pod> {
     let command = &run.command;
     let security = json!({"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"]}});
-    let launcher_security = json!({"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"runAsUser":0,"runAsGroup":10001,"runAsNonRoot":false,"capabilities":{"drop":["ALL"],"add":["SETUID","SETGID"]}});
+    let launcher_security = json!({"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"runAsUser":0,"runAsGroup":10001,"runAsNonRoot":false,"capabilities":{"drop":["ALL"],"add":["SETUID","SETGID","KILL"]}});
     let env = task_environment(s, command)?;
     let runtime_env = json!([
         {"name":"HOME","value":"/tmp/home"},{"name":"XDG_CACHE_HOME","value":"/tmp/cache"},
@@ -262,7 +285,7 @@ fn pod_spec(s: &Supervisor, run: &TaskRun, name: &str) -> Result<Pod> {
     ]);
     let quality_mounts = json!([source_ro, artifacts, tools_ro, frozen_ro,
         {"name":"work","mountPath":"/quality-private","subPath":"quality/runtime"}, runtime_temp]);
-    let pod = json!({"apiVersion":"v1","kind":"Pod","metadata":{"name":name,"labels":{"app.kubernetes.io/name":"ayni-task-worker","app.kubernetes.io/part-of":"ayni-orchestrator","build.ayni/attempt":command.attempt_id},"annotations":{"build.ayni/command-digest":digest(&serde_json::to_vec(command)?)}},"spec":{
+    let mut pod = json!({"apiVersion":"v1","kind":"Pod","metadata":{"name":name,"labels":{"app.kubernetes.io/name":"ayni-task-worker","app.kubernetes.io/part-of":"ayni-orchestrator","build.ayni/attempt":command.attempt_id},"annotations":{"build.ayni/command-digest":digest(&serde_json::to_vec(command)?)}},"spec":{
         "automountServiceAccountToken":false,"restartPolicy":"OnFailure","activeDeadlineSeconds":command.max_seconds,"terminationGracePeriodSeconds":10,
         "securityContext":{"runAsNonRoot":true,"runAsUser":10001,"runAsGroup":10001,"fsGroup":10001,"seccompProfile":{"type":"RuntimeDefault"}},
         "initContainers":[
@@ -276,6 +299,40 @@ fn pod_spec(s: &Supervisor, run: &TaskRun, name: &str) -> Result<Pod> {
         "containers":[{"name":"collector","image":s.image,"imagePullPolicy":"IfNotPresent","command":["/opt/ayni-task/worker","quality-collect"],"env":env,"securityContext":security,"volumeMounts":[work,tools_ro,capability,frozen_ro,private_ro,coding_temp],"resources":small}],
         "volumes":volumes
     }});
+    if let Ok(endpoint) = std::env::var("ORCHESTRATOR_TELEMETRY_ENDPOINT") {
+        pod["spec"]["volumes"].as_array_mut().ok_or("task volumes")?.push(json!({"name":"telemetry","persistentVolumeClaim":{"claimName":format!("{name}-telemetry")}}));
+        for group in ["initContainers", "containers"] {
+            for container in pod["spec"][group].as_array_mut().ok_or("task containers")? {
+                let component = container["name"]
+                    .as_str()
+                    .ok_or("container name")?
+                    .to_owned();
+                if container.get("env").is_none() {
+                    container["env"] = json!([]);
+                }
+                container["env"].as_array_mut().ok_or("task environment")?.extend([
+                    json!({"name":"ORCHESTRATOR_CAPTURE_SOURCE","value":json!({"component":"task-worker","container":component,"executionId":command.attempt_id,"generation":command.generation,"stage":component}).to_string()}),
+                    json!({"name":"ORCHESTRATOR_CAPTURE_POD_UID","valueFrom":{"fieldRef":{"fieldPath":"metadata.uid"}}}),
+                    json!({"name":"ORCHESTRATOR_CAPTURE_POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}}),
+                    json!({"name":"ORCHESTRATOR_CAPTURE_NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}}),
+                    json!({"name":"ORCHESTRATOR_TELEMETRY_SPOOL","value":"/telemetry"}),
+                    json!({"name":"ORCHESTRATOR_TELEMETRY_SPOOL_BYTES","value":(std::env::var("ORCHESTRATOR_TELEMETRY_SPOOL_BYTES").ok().and_then(|v|v.parse::<u64>().ok()).unwrap_or(134_217_728)/7).max(1).to_string()}),
+                    json!({"name":"ORCHESTRATOR_DEBUG","value":std::env::var("ORCHESTRATOR_DEBUG").unwrap_or_else(|_|"false".into())}),
+                ]);
+                // Network-isolated parents only capture files. Connected trusted stages deliver them.
+                if !matches!(component.as_str(), "prepare" | "quality" | "seal") {
+                    container["env"]
+                        .as_array_mut()
+                        .ok_or("task environment")?
+                        .push(json!({"name":"ORCHESTRATOR_TELEMETRY_ENDPOINT","value":endpoint}));
+                }
+                container["volumeMounts"]
+                    .as_array_mut()
+                    .ok_or("task mounts")?
+                    .push(json!({"name":"telemetry","mountPath":"/telemetry"}));
+            }
+        }
+    }
     Ok(serde_json::from_value(pod)?)
 }
 
@@ -304,6 +361,188 @@ fn task_environment(
             .push(json!({"name":"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT","value":endpoint}));
     }
     Ok(env)
+}
+
+async fn recover_capture(
+    s: &Supervisor,
+    client: Client,
+    run: &TaskRun,
+    name: &str,
+    original: Option<&Pod>,
+) -> Result {
+    let Ok(endpoint) = std::env::var("ORCHESTRATOR_TELEMETRY_ENDPOINT") else {
+        return Ok(());
+    };
+    let pvcs: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), &s.namespace);
+    let volume = format!("{name}-telemetry");
+    let Some(pvc) = pvcs.get_opt(&volume).await? else {
+        return Ok(());
+    };
+    if pvc
+        .metadata
+        .labels
+        .as_ref()
+        .and_then(|l| l.get("build.ayni/attempt"))
+        != Some(&run.command.attempt_id)
+    {
+        return Err("telemetry volume identity mismatch".into());
+    }
+    let api: Api<Pod> = Api::namespaced(client, &s.namespace);
+    let recovery = format!("{name}-logs");
+    if api.get_opt(&recovery).await?.is_some() {
+        return Ok(());
+    }
+    let pod = task_replay_spec(s, &run.command.attempt_id, name, &endpoint, original)?;
+    match api.create(&PostParams::default(), &pod).await {
+        Ok(_) => Ok(()),
+        Err(kube::Error::Api(e)) if e.code == 409 => Ok(()),
+        Err(e) => Err(e.into()),
+    }
+}
+
+fn task_replay_spec(
+    s: &Supervisor,
+    attempt: &str,
+    name: &str,
+    endpoint: &str,
+    original: Option<&Pod>,
+) -> Result<Pod> {
+    let recovery = format!("{name}-logs");
+    let volume = format!("{name}-telemetry");
+    let mut pod = json!({"apiVersion":"v1","kind":"Pod","metadata":{"name":recovery,"labels":{"app.kubernetes.io/name":"ayni-task-worker","app.kubernetes.io/part-of":"ayni-orchestrator","build.ayni/attempt":attempt,"ayni.build/telemetry-replay":"true"}},"spec":{
+        "automountServiceAccountToken":false,"restartPolicy":"OnFailure","activeDeadlineSeconds":86400,
+        "securityContext":{"runAsUser":10001,"runAsGroup":10001,"runAsNonRoot":true,"fsGroup":10001,"seccompProfile":{"type":"RuntimeDefault"}},
+        "containers":[{"name":"replay","image":s.image,"command":["/usr/local/bin/ayni-task-worker","replay-telemetry"],
+        "env":[{"name":"ORCHESTRATOR_TELEMETRY_ENDPOINT","value":endpoint},{"name":"ORCHESTRATOR_TELEMETRY_SPOOL","value":"/telemetry"},{"name":"ORCHESTRATOR_TASK_TOKEN_PATH","value":"/capability/token"}],
+        "securityContext":{"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"]}},
+        "resources":{"requests":{"cpu":"10m","memory":"32Mi"},"limits":{"cpu":"250m","memory":"128Mi"}},
+        "volumeMounts":[{"name":"spool","mountPath":"/telemetry"},{"name":"capability","mountPath":"/capability","readOnly":true}]}],
+        "volumes":[{"name":"spool","persistentVolumeClaim":{"claimName":volume}},{"name":"capability","secret":{"secretName":name}}]}});
+    if let Some(node) = original
+        .and_then(|p| p.spec.as_ref())
+        .and_then(|s| s.node_name.as_ref())
+    {
+        pod["spec"]["nodeName"] = json!(node);
+    }
+    Ok(serde_json::from_value(pod)?)
+}
+async fn arm_capture(
+    s: &Supervisor,
+    client: Client,
+    run: &TaskRun,
+    name: &str,
+    pod: &Pod,
+) -> Result {
+    let Ok(endpoint) = std::env::var("ORCHESTRATOR_TELEMETRY_ENDPOINT") else {
+        return Ok(());
+    };
+    let api: Api<PersistentVolumeClaim> = Api::namespaced(client, &s.namespace);
+    let volume = format!("{name}-telemetry");
+    let Some(pvc) = api.get_opt(&volume).await? else {
+        return Ok(());
+    };
+    if pvc
+        .metadata
+        .annotations
+        .as_ref()
+        .is_some_and(|a| a.contains_key("ayni.build/replay-spec"))
+    {
+        return Ok(());
+    }
+    let spec = serde_json::to_string(&task_replay_spec(
+        s,
+        &run.command.attempt_id,
+        name,
+        &endpoint,
+        Some(pod),
+    )?)?;
+    api.patch(&volume,&kube::api::PatchParams::default(),&kube::api::Patch::Merge(json!({"metadata":{"labels":{"ayni.build/telemetry-spool":"true"},"annotations":{"ayni.build/replay-spec":spec,"ayni.build/source-pod-uid":pod.metadata.uid}}}))).await?;
+    Ok(())
+}
+async fn recover_orphans(
+    s: &Supervisor,
+    api: &Api<Pod>,
+    pvcs: &Api<PersistentVolumeClaim>,
+) -> Result {
+    for pvc in pvcs
+        .list(
+            &kube::api::ListParams::default()
+                .labels("app.kubernetes.io/name=ayni-task-worker,ayni.build/telemetry-spool=true"),
+        )
+        .await?
+        .items
+    {
+        if pvc.metadata.deletion_timestamp.is_some() {
+            continue;
+        }
+        let Some(annotations) = &pvc.metadata.annotations else {
+            continue;
+        };
+        if annotations.contains_key("ayni.build/replay-complete") {
+            continue;
+        }
+        let Some(spec) = annotations.get("ayni.build/replay-spec") else {
+            continue;
+        };
+        let mut replay: Pod = serde_json::from_str(spec)?;
+        let name = replay.metadata.name.clone().ok_or("replay name")?;
+        let Some(original) = name.strip_suffix("-logs") else {
+            continue;
+        };
+        if api.get_opt(&name).await?.is_some() {
+            continue;
+        }
+        if let Some(pod) = api.get_opt(original).await? {
+            if pod.metadata.uid.as_ref() != annotations.get("ayni.build/source-pod-uid")
+                || !matches!(
+                    pod.status.as_ref().and_then(|p| p.phase.as_deref()),
+                    Some("Succeeded" | "Failed")
+                )
+            {
+                continue;
+            }
+        } else if let Some(spec) = replay.spec.as_mut() {
+            spec.node_name = None;
+        }
+        match api.create(&PostParams::default(), &replay).await {
+            Ok(_) => {}
+            Err(kube::Error::Api(e)) if e.code == 409 => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
+    let _ = s;
+    Ok(())
+}
+
+pub async fn retire_replays(s: &Supervisor, client: Client) -> Result {
+    let api: Api<Pod> = Api::namespaced(client.clone(), &s.namespace);
+    let pvcs: Api<PersistentVolumeClaim> = Api::namespaced(client, &s.namespace);
+    recover_orphans(s, &api, &pvcs).await?;
+    for pod in api
+        .list(
+            &kube::api::ListParams::default()
+                .labels("app.kubernetes.io/name=ayni-task-worker,ayni.build/telemetry-replay=true"),
+        )
+        .await?
+        .items
+    {
+        if pod.status.as_ref().and_then(|s| s.phase.as_deref()) == Some("Succeeded")
+            && let Some(name) = &pod.metadata.name
+        {
+            if let Some(original) = name.strip_suffix("-logs") {
+                pvcs.patch(
+                    &format!("{original}-telemetry"),
+                    &kube::api::PatchParams::default(),
+                    &kube::api::Patch::Merge(
+                        json!({"metadata":{"annotations":{"ayni.build/replay-complete":"true"}}}),
+                    ),
+                )
+                .await?;
+            }
+            delete(&api, name, &pod).await?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -414,7 +653,7 @@ mod tests {
                 .as_ref()
                 .and_then(|c| c.add.as_ref())
                 .map(Vec::as_slice),
-            Some(["SETUID".to_owned(), "SETGID".to_owned()].as_slice())
+            Some(["SETUID".to_owned(), "SETGID".to_owned(), "KILL".to_owned()].as_slice())
         );
         let mounts = stage.volume_mounts.as_ref().ok_or("runtime mounts")?;
         assert!(

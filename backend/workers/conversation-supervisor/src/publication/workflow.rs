@@ -81,7 +81,44 @@ pub async fn poll(http: &Client, c: &Configuration) -> Result {
             identity_context(&command.attempt_id).as_ref(),
             consumed(&run),
         );
-        let result = execute(http, c, run).instrument(span.clone()).await;
+        let capture = ayni_orchestrator_execution::capture().map(|mut capture| {
+            capture
+                .source
+                .execution_id
+                .clone_from(&command.publication_id);
+            capture.source.project_id.clone_from(&command.project_id);
+            capture.source.generation = run.generation;
+            capture.source.stage = "publication".into();
+            capture.source.id = format!(
+                "publication:{}:{}:{}",
+                run.pod_uid, command.publication_id, run.generation
+            );
+            capture
+        });
+        let action = Box::pin(execute(http, c, run).instrument(span.clone()));
+        let result = if let Some(capture) = capture {
+            let root = format!(
+                "{}:{}:{}",
+                capture.source.execution_id, capture.source.stage, capture.source.generation
+            );
+            let _ = capture.record(&root, "started", "", &[], None, None);
+            let result = ayni_orchestrator_execution::scope(capture.clone(), action).await;
+            let _ = capture.record(
+                &root,
+                if result.is_ok() {
+                    "succeeded"
+                } else {
+                    "failed"
+                },
+                "",
+                &[],
+                None,
+                None,
+            );
+            result
+        } else {
+            action.await
+        };
         finish(&span, result.is_ok());
         result?;
     }

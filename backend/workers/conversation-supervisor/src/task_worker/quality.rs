@@ -382,17 +382,20 @@ pub fn launch(stage: &str) -> Result {
         fs::write(&artifact, result.stdout.as_bytes())?;
         // Ayni's supported reader validates its own complete serialized schema,
         // including derived aggregate and completion views. No project code runs.
-        result.artifact_valid = Command::new("/usr/local/bin/ayni")
+        let mut compare = Command::new("/usr/local/bin/ayni");
+        compare
             .args(["results", "compare", "--baseline"])
             .arg(&artifact)
             .arg("--candidate")
             .arg(&artifact)
             .args(["--output", "json"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_ok_and(|status| status.success());
+            .stdin(Stdio::null());
+        result.artifact_valid = ayni_orchestrator_execution::process::run_blocking(
+            compare,
+            std::time::Duration::from_secs(30),
+            65536,
+        )
+        .is_ok_and(|output| output.status.success() && output.outcome == "exited");
     }
     write(destination, &result)
 }
@@ -422,6 +425,7 @@ fn prepare_cache_directories() -> Result {
 }
 fn capture(stage: &str, result: &mut RuntimeResult) -> Result {
     use std::os::unix::{fs::OpenOptionsExt as _, process::CommandExt as _};
+    let _ = ayni_orchestrator_execution::install_from_environment();
     let stdout = Path::new(PRIVATE).join(format!("{stage}.stdout"));
     let stderr = Path::new(PRIVATE).join(format!("{stage}.stderr"));
     let open = |path: &Path| {
@@ -435,6 +439,7 @@ fn capture(stage: &str, result: &mut RuntimeResult) -> Result {
     // through procfs, but does restrict reopening these private file inodes.
     let mut child = Command::new(env::current_exe()?)
         .args(["quality-child", stage])
+        .process_group(0)
         .uid(10002)
         .gid(10002)
         .current_dir(SOURCE)
@@ -442,16 +447,29 @@ fn capture(stage: &str, result: &mut RuntimeResult) -> Result {
         .stdout(open(&stdout)?)
         .stderr(open(&stderr)?)
         .spawn()?;
+    let mut observed = ayni_orchestrator_execution::files::FileCapture::open(&stdout, &stderr).ok();
     loop {
+        if let Some(capture) = &mut observed {
+            let _ = capture.poll();
+        }
         if let Some(status) = child.try_wait()? {
+            ayni_orchestrator_execution::process::kill_group(child.id());
+            if let Some(capture) = observed.take() {
+                let _ = capture.finish(status);
+            }
             result.exit_code = status.code();
             break;
         }
         if fs::metadata(&stdout)?.len() > u64::try_from(MAX_ARTIFACT)?
             || fs::metadata(&stderr)?.len() > 8192
         {
+            ayni_orchestrator_execution::process::kill_group(child.id());
             child.kill()?;
-            result.exit_code = child.wait()?.code();
+            let status = child.wait()?;
+            result.exit_code = status.code();
+            if let Some(capture) = observed.take() {
+                let _ = capture.finish(status);
+            }
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
