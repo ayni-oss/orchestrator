@@ -213,6 +213,13 @@ and Helm checks, generation, PostgreSQL/loopback runners and retained evidence
 validation. Controller, fixture and acceptance consolidation remain in progress;
 the presence of a Rust command does not establish full migration of the tooling.
 
+The published capture/debug/runtime/tooling stack is consolidated in
+[PR #294](https://github.com/ayni-oss/orchestrator/pull/294), superseding #289–#293.
+Remaining development-environment work stays together on one branch. The Rust
+controller has completed an initial rollout of the retained live deployment;
+full reload and failure qualification, supporting-tool migration and legacy
+environment retirement remain unfinished.
+
 ## Acceptance and delivery discipline
 
 - A task needs passing managed Ayni quality and evidence for its requested behavior. Missing/incomplete required evidence is a blocker; no policy weakening to achieve a green result.

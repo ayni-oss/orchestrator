@@ -19,7 +19,7 @@
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
-    "docs:check": "python3 scripts/ci/check-docs.py && node --test scripts/ci/test-diagram-initialization.mjs && pnpm docs:build && python3 scripts/ci/check-docs-site.py",
+    "docs:check": "python3 scripts/ci/check-docs.py && node --test docs/.vitepress/theme/tests/mermaid-runtime.test.mjs && pnpm docs:build && python3 scripts/ci/check-docs-site.py",
     "web:dev": "pnpm --filter @ayni-orchestrator/web dev",
     "web:build": "pnpm --filter @ayni-orchestrator/web build"
   },

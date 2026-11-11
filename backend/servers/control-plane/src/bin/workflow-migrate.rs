@@ -29,6 +29,20 @@ fn main() -> ExitCode {
 async fn migrate() -> Result<(), io::Error> {
     let configuration = Configuration::from_environment().map_err(io::Error::other)?;
     let database_url = configuration.migration_database_url()?;
+    let arguments: Vec<_> = std::env::args().skip(1).collect();
+    if arguments == ["--check"] {
+        let (client, driver) = ayni_orchestrator_workflow_postgres::connect(&database_url)
+            .await
+            .map_err(io::Error::other)?;
+        let result = ayni_orchestrator_workflow_postgres::migrations::preflight(&client).await;
+        driver.abort();
+        result.map_err(io::Error::other)?;
+        info!(target: "ayni_orchestrator_control_plane::migration", "retained migration history preflight passed");
+        return Ok(());
+    }
+    if !arguments.is_empty() {
+        return Err(io::Error::other("usage: workflow-migrate [--check]"));
+    }
     ayni_orchestrator_workflow_postgres::migrate_for_runtime(
         &database_url,
         configuration.runtime_database_role(),

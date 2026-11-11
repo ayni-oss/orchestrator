@@ -1,5 +1,6 @@
 mod checks;
 mod command;
+mod dev;
 mod evidence;
 mod generate;
 mod testing;
@@ -14,6 +15,7 @@ fn main() -> Result<()> {
     env::set_current_dir(&root)?;
     let args: Vec<String> = env::args().skip(1).collect();
     match args.first().map(String::as_str) {
+        Some("dev") => dev::run(&args[1..]),
         Some("check") => checks::run(&args[1..]),
         Some("generate") => generate::run(&args[1..]),
         Some("evidence") => evidence::run(&args[1..]),

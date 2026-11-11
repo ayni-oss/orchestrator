@@ -6,6 +6,9 @@ recovery cases have replacements.
 
 Available commands:
 
+- `cargo xtask dev` / `make dev`: start or report the singleton at
+  `http://127.0.0.1:5174`, using `docker-desktop` and `ayni-orchestrator-live`.
+- `cargo xtask dev status`, `stop`, `redeploy`: inspect or control that session.
 - `cargo xtask check docs`, `docs-site`, `security`, `api`, `protocol`, `charts`.
 - `cargo xtask generate protocol`, `schema [--write]`, `contract-bundle OUTPUT`.
 - `cargo xtask test unit`, `frontend`, `loopback`, `postgres [SUITE]`.
@@ -22,3 +25,11 @@ replays, duplicate external effects and unsupported milestone closure claims.
 
 The target development interface and cutover are recorded in the
 [roadmap](../../ROADMAP.md#one-development-environment-and-rust-tooling).
+
+Controller qualification is still in progress. The retained live deployment has
+been reconciled with debug capture and pinned, unqualified local runtime workers.
+The lock, gateway status boundary, source classification, migration-checksum
+preflight and initial rollout have focused validation. Full reload/failure
+qualification, remaining fixture migrations, legacy removal and retirement of
+the capture environment are outstanding. This checkpoint does not claim that
+supporting-language tooling is absent.

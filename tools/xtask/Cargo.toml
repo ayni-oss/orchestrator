@@ -20,6 +20,8 @@ uuid.workspace = true
 flate2 = "=1.1.10"
 tar = "=0.4.46"
 percent-encoding = "=2.3.2"
+rustix.workspace = true
+tokio.workspace = true
 
 [lints]
 workspace = true

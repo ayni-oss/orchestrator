@@ -22,7 +22,7 @@ test('browser load cannot scan diagram containers while the ELK import is pendin
   assert.equal(scan.mock.callCount(), 1)
   scan.mock.resetCalls()
 
-  const { prepareMermaid } = await import('../../docs/.vitepress/theme/mermaid-runtime.mjs')
+  const { prepareMermaid } = await import('../mermaid-runtime.mjs')
 
   let releaseLayouts
   let layoutsRequested
