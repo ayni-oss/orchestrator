@@ -164,14 +164,20 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', nargs='?', choices=('watch', 'once', 'status', 'migrate', 'reset'), default='watch')
     parser.add_argument('confirmation', nargs='?')
+    parser.add_argument('--debug', action='store_true', help='Enable raw logs in the local console')
     args = parser.parse_args()
     selected = namespace()
     env = dict(os.environ, AYNI_ORCHESTRATOR_NAMESPACE=selected, HELM_NO_PLUGINS='1')
+    if args.debug:
+        env['AYNI_ORCHESTRATOR_DEBUG'] = 'true'
     context = selected_context(env)
     directory = state_directory(context, selected)
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / 'status.json'
     state = read_state(path)
+    if 'AYNI_ORCHESTRATOR_DEBUG' not in env and state.get('debug', False):
+        env['AYNI_ORCHESTRATOR_DEBUG'] = 'true'
+    state['debug'] = env.get('AYNI_ORCHESTRATOR_DEBUG', 'false') == 'true'
     if state.get('context', context) != context:
         raise ValueError('Retained live state belongs to another Kubernetes context')
     if args.command == 'status':

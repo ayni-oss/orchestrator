@@ -10,6 +10,9 @@ spec:
   selector:
     app.kubernetes.io/name: ayni-orchestrator-control-plane
   ports:
+    {{- if or .Values.debug.enabled ((.Values.runtimePreparation | default dict).enabled | default false) .Values.taskExecution.enabled .Values.publication.enabled }}
+    - {name: telemetry, port: 50052, targetPort: telemetry, protocol: TCP}
+    {{- end }}
     - name: http
       port: {{ .Values.controlPlane.httpPort }}
       targetPort: http

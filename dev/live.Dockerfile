@@ -14,7 +14,7 @@ RUN --mount=type=cache,id=ayni-live-registry,target=/usr/local/cargo/registry \
     set -eu; mkdir /output; \
     case "$COMPONENT" in \
       control-plane) package=ayni-orchestrator-control-plane; \
-        bins='ayni-orchestrator-control-plane workflow-migrate workflow-diagnostic workflow-acceptance workflow-publish-task' ;; \
+        bins='ayni-orchestrator-control-plane ayni-log-collector workflow-migrate workflow-diagnostic workflow-acceptance workflow-publish-task' ;; \
       conversation-supervisor) package=ayni-orchestrator-conversation-supervisor; \
         bins='ayni-orchestrator-conversation-supervisor ayni-task-worker ayni-task-supervisor ayni-task-publisher' ;; \
       *) exit 2 ;; \

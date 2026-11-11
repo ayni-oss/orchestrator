@@ -22,8 +22,13 @@ if [[ "${AYNI_ORCHESTRATOR_LIVE_MIGRATE:-false}" == true ]]; then
   fi
 fi
 # Keep explicit provider and fixture settings while using the current chart defaults.
+debug_args=()
+if [[ -n "${AYNI_ORCHESTRATOR_DEBUG:-}" ]]; then
+  [[ "$AYNI_ORCHESTRATOR_DEBUG" == true || "$AYNI_ORCHESTRATOR_DEBUG" == false ]] || exit 2
+  debug_args+=(--set "ayni-orchestrator.debug.enabled=$AYNI_ORCHESTRATOR_DEBUG")
+fi
 helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-then-reuse-values \
-  --kube-context "$context" --namespace "$namespace" \
+  --kube-context "$context" --namespace "$namespace" "${debug_args[@]}" \
   --set-string "ayni-orchestrator.images.controlPlane=$1" \
   --set-string "ayni-orchestrator.images.conversationSupervisor=$2" \
   --timeout 5m

@@ -26,6 +26,12 @@ dev_check_component_names "$context" "$namespace"
 "$dev_directory/scripts/configure-development-secrets.sh"
 dev_build_chart_dependencies
 dev_check_capacity 8
+if [[ -z "${AYNI_ORCHESTRATOR_DEBUG+x}" ]]; then
+  debug="$(helm get values "$DEV_RELEASE_NAME" --kube-context "$context" --namespace "$namespace" -o json 2>/dev/null | python3 -c 'import json,sys; print(str(json.load(sys.stdin).get("ayni-orchestrator", {}).get("debug", {}).get("enabled", False)).lower())' 2>/dev/null || printf false)"
+else
+  debug="$AYNI_ORCHESTRATOR_DEBUG"
+fi
+[[ "$debug" == true || "$debug" == false ]] || { echo 'AYNI_ORCHESTRATOR_DEBUG must be true or false' >&2; exit 2; }
 task_fixture="${AYNI_ORCHESTRATOR_TASK_FIXTURE:-false}"
 [[ "$task_fixture" == true || "$task_fixture" == false ]] || { echo 'AYNI_ORCHESTRATOR_TASK_FIXTURE must be true or false' >&2; exit 2; }
 observability="${AYNI_ORCHESTRATOR_OBSERVABILITY:-false}"
@@ -39,6 +45,7 @@ echo "renderer=$(helm version --short 2>/dev/null)"
 helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-values \
   --kube-context "$context" \
   --namespace "$namespace" \
+  --set "ayni-orchestrator.debug.enabled=$debug" \
   --set "ayni-orchestrator.taskExecution.fixtureEnabled=$task_fixture" \
   --set "ayni-orchestrator.observability.collector.enabled=$observability" \
   --set-string "ayni-orchestrator.images.controlPlane=$control_plane_image_ref" \

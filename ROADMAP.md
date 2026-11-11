@@ -214,3 +214,7 @@ frontend and complete deployed qualification remain subsequent review slices.
 The second slice integrates task/publication command capture, namespace-scoped
 Kubernetes API collection and abandoned-spool replay. Deployment activation and
 frontend availability follow in slice 3; failure qualification remains a gate.
+
+The third slice adds debug deployment controls, the local log explorer, resumable
+read/download APIs and control-plane Prometheus projections. Deployment tests
+cover debug-off denial and retained output; full recovery qualification remains.

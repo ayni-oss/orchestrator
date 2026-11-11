@@ -47,6 +47,14 @@ spec:
           imagePullPolicy: {{ .Values.images.pullPolicy }}
           command: ["/usr/local/bin/ayni-task-publisher"]
           env:
+            - { name: ORCHESTRATOR_TELEMETRY_ENDPOINT, value: "http://control-plane.{{ .Release.Namespace }}.svc:50052" }
+            - { name: ORCHESTRATOR_TELEMETRY_SPOOL, value: /telemetry }
+            - { name: ORCHESTRATOR_DEBUG, value: {{ .Values.debug.enabled | quote }} }
+            - { name: ORCHESTRATOR_TELEMETRY_SPOOL_BYTES, value: {{ .Values.debug.workerSpoolBytes | int64 | quote }} }
+            - { name: ORCHESTRATOR_CAPTURE_SOURCE, value: '{"component":"task-publisher","container":"publisher","deployment":"{{ .Release.Namespace }}"}' }
+            - { name: ORCHESTRATOR_CAPTURE_POD_UID, valueFrom: { fieldRef: { fieldPath: metadata.uid } } }
+            - { name: ORCHESTRATOR_CAPTURE_POD_NAME, valueFrom: { fieldRef: { fieldPath: metadata.name } } }
+            - { name: ORCHESTRATOR_CAPTURE_NAMESPACE, valueFrom: { fieldRef: { fieldPath: metadata.namespace } } }
             {{- with include "ayni-orchestrator.traceEndpoint" . }}
             - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
               value: {{ . | quote }}
@@ -79,10 +87,13 @@ spec:
             requests: { cpu: 50m, memory: 64Mi }
             limits: { cpu: "1", memory: 512Mi, ephemeral-storage: 512Mi }
           volumeMounts:
+            - { name: telemetry, mountPath: /telemetry }
             - { name: scratch, mountPath: /tmp }
             - { name: authority, mountPath: /var/run/publication-authority, readOnly: true }
             - { name: github, mountPath: /var/run/publication-github, readOnly: true }
       volumes:
+        - name: telemetry
+          persistentVolumeClaim: { claimName: task-publisher-telemetry }
         - name: scratch
           emptyDir: { sizeLimit: 512Mi }
         - name: authority
@@ -124,7 +135,7 @@ spec:
     - to:
         - podSelector:
             matchLabels: { app.kubernetes.io/name: ayni-orchestrator-control-plane }
-      ports: [{ protocol: TCP, port: {{ .Values.controlPlane.httpPort }} }]
+      ports: [{ protocol: TCP, port: {{ .Values.controlPlane.httpPort }} }, { protocol: TCP, port: 50052 }]
     {{- if $publication.fixtureEnabled }}
     - to:
         - podSelector:
@@ -137,4 +148,14 @@ spec:
             except: [0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4]
       ports: [{ protocol: TCP, port: 443 }]
     {{- end }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: task-publisher-telemetry
+  annotations: {helm.sh/resource-policy: keep}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: {storage: 256Mi}
 {{- end }}

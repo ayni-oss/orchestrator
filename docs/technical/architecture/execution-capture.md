@@ -66,8 +66,8 @@ JetStream orchestration still decide execution authority and accepted results.
 Loopback debug reads require the deployment flag, and watches stop on server
 shutdown. Cancellation notifications can stop processes but never start them.
 
-The foundation alone does not establish complete capture. Deployment-wide
-collection, frontend activation and full deployed acceptance are subsequent slices.
+The foundation alone does not establish complete capture. Collection and frontend
+implementation are described below; complete deployed qualification remains a gate.
 
 ## Collection and recovery
 
@@ -86,3 +86,30 @@ spools after restart. Replay only sends records; it cannot re-run a command or
 accept a workflow result. Normal runtime pod retirement allows a final collection
 window; cancellation does not wait for logging. Failed replay volumes remain
 available for recovery.
+
+## Local debug console
+
+`dev/ctl deploy --debug`, `dev/ctl live --debug`, and `make dev DEBUG=1` select
+`debug.enabled`. Rebuilds preserve that setting. Set `AYNI_ORCHESTRATOR_DEBUG=false`
+when deploying to disable raw access. The flag gates the APIs, writes, collector
+and navigation. Existing lifecycle reporting remains active. Rolling shutdown
+closes existing watches; retained rows expire under their configured policy.
+
+Debug → Logs lists retained sources, pages history, follows a resumable cursor,
+filters and searches output, copies displayed text and downloads original bytes.
+The UI keeps at most 1,000 loaded records, escapes markup and terminal controls,
+and never stores raw output in browser persistent storage. Downloads concatenate
+the selected original chunks; select a source/stream to avoid mixing byte streams.
+A download fixes its upper cursor when it starts. Commit-safe cursors reflect
+storage order, not a globally synchronised clock.
+
+## Prometheus aggregation
+
+Prometheus scrapes the control plane's existing `/metrics` endpoint. The
+`workflow_telemetry_*` connection/error counters and commit duration observations
+are replica-local: aggregate rates across replicas. `workflow_capture_*` values
+are shared PostgreSQL projections: use `max` across replicas of one deployment,
+never `sum`. Retained outcome and duration projections are gauges over available
+history and can decrease on expiry; do not apply `rate` as if they were counters.
+Source/execution/pod identifiers never appear as metric labels. A failed projection
+read must be treated as unavailable monitoring, not zero outstanding work.

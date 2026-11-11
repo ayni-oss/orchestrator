@@ -49,6 +49,9 @@ rules:
     resources: [pods, persistentvolumeclaims, secrets]
     verbs: [get, list, create, delete]
   - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [patch]
+  - apiGroups: [""]
     resources: [pods/log]
     verbs: [get]
 ---
@@ -99,6 +102,10 @@ spec:
             allowPrivilegeEscalation: false
             capabilities: {drop: [ALL]}
           env:
+            - {name: ORCHESTRATOR_TELEMETRY_ENDPOINT, value: "http://control-plane.{{ .Release.Namespace }}.svc:50052"}
+            - {name: ORCHESTRATOR_DEPLOYMENT, value: {{ .Release.Namespace | quote }}}
+            - {name: ORCHESTRATOR_DEBUG, value: {{ .Values.debug.enabled | quote }}}
+            - {name: ORCHESTRATOR_TELEMETRY_SPOOL_BYTES, value: {{ .Values.debug.workerSpoolBytes | int64 | quote }}}
             - name: ORCHESTRATOR_RUNTIME_NAMESPACE
               value: {{ $runtime }}
             - name: ORCHESTRATOR_RUNTIME_AUTHORITY_URL
@@ -153,6 +160,7 @@ spec:
               app.kubernetes.io/name: ayni-orchestrator-control-plane
       ports:
         - {protocol: TCP, port: {{ .Values.controlPlane.httpPort }}}
+        - {protocol: TCP, port: 50052}
     - to:
         - namespaceSelector:
             matchLabels: {kubernetes.io/metadata.name: kube-system}

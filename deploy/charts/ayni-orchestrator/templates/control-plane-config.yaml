@@ -42,6 +42,16 @@ metadata:
     {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
     app.kubernetes.io/name: ayni-orchestrator-control-plane
 data:
+  ORCHESTRATOR_DEPLOYMENT: {{ .Release.Namespace | quote }}
+  ORCHESTRATOR_DEBUG: {{ .Values.debug.enabled | quote }}
+  ORCHESTRATOR_DEBUG_RETENTION_SECONDS: {{ .Values.debug.retentionSeconds | int64 | quote }}
+  ORCHESTRATOR_DEBUG_MAX_BYTES: {{ .Values.debug.maxRetainedBytes | int64 | quote }}
+{{- if or .Values.debug.enabled ((.Values.runtimePreparation | default dict).enabled | default false) .Values.taskExecution.enabled .Values.publication.enabled }}
+  ORCHESTRATOR_TELEMETRY_BIND_ADDRESS: "0.0.0.0:50052"
+{{- end }}
+{{- if .Values.debug.enabled }}
+  ORCHESTRATOR_TELEMETRY_TOKEN_PATH: /var/run/secrets/ayni/telemetry-authority/token
+{{- end }}
 {{- with include "ayni-orchestrator.traceEndpoint" . }}
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: {{ . | quote }}
 {{- end }}

@@ -110,3 +110,13 @@ runtimePreparation:
 # Explicit administrator provisioning capability, separate from runtime execution.
 signerProvisioning:
   enabled: false
+
+# Raw logs are available only through the trusted local debug console.
+debug:
+  enabled: false
+  authoritySecretName: workflow-telemetry-authority
+  retentionSeconds: 86400
+  maxRetainedBytes: 1073741824
+  workerSpoolBytes: 134217728
+  collectorSpoolBytes: 1073741824
+  collectorStorage: 2Gi
