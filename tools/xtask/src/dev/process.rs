@@ -51,6 +51,9 @@ impl Drop for Owned {
 
 pub fn run(command: &mut Command) -> Result<()> {
     let mut child = Owned::spawn(command)?;
+    let build = ["cargo", "docker"].contains(&command.get_program().to_string_lossy().as_ref())
+        && command.get_args().any(|arg| arg == "build");
+    let mut capacity_checked = Instant::now();
     loop {
         if STOP.load(Ordering::Relaxed) {
             bail!("development controller stopping");
@@ -63,6 +66,10 @@ pub fn run(command: &mut Command) -> Result<()> {
                 );
             }
             return Ok(());
+        }
+        if build && capacity_checked.elapsed() >= Duration::from_secs(5) {
+            super::images::capacity()?;
+            capacity_checked = Instant::now();
         }
         thread::sleep(Duration::from_millis(100));
     }

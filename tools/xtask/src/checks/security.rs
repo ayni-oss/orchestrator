@@ -48,7 +48,7 @@ pub fn check() -> Result<()> {
         !Regex::new(r"packages:\s*write")?.is_match(&pr),
         "PR validation may not write packages"
     );
-    let release: Value = serde_json::from_slice(&fs::read("scripts/ci/ayni-tool.json")?)?;
+    let release: Value = serde_json::from_slice(&fs::read("tools/xtask/ayni-tool.json")?)?;
     for (key, length) in [
         ("source_revision", 40),
         ("linux_arm64_cli_sha256", 64),

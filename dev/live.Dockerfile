@@ -8,21 +8,12 @@ COPY backend ./backend
 COPY proto ./proto
 COPY dev/fixtures/task-source ./dev/fixtures/task-source
 COPY dev/fixtures/task-quality ./dev/fixtures/task-quality
+RUN rustc --edition=2024 tools/bootstrap/src/bin/image-build.rs -o /usr/local/bin/image-build
 ARG COMPONENT
 RUN --mount=type=cache,id=ayni-live-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=ayni-live-git,target=/usr/local/cargo/git \
     --mount=type=cache,id=ayni-live-target,target=/workspace/target \
-    set -eu; mkdir /output; \
-    case "$COMPONENT" in \
-      control-plane) package=ayni-orchestrator-control-plane; \
-        bins='ayni-orchestrator-control-plane ayni-log-collector workflow-migrate workflow-diagnostic workflow-acceptance workflow-publish-task workflow-log-fixture' ;; \
-      conversation-supervisor) package=ayni-orchestrator-conversation-supervisor; \
-        bins='ayni-orchestrator-conversation-supervisor ayni-task-worker ayni-task-supervisor ayni-task-publisher' ;; \
-      *) exit 2 ;; \
-    esac; \
-    set --; for bin in $bins; do set -- "$@" --bin "$bin"; done; \
-    CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=1 cargo build --locked -p "$package" "$@"; \
-    for bin in $bins; do install -m 0755 "target/debug/$bin" "/output/$bin"; done
+    /usr/local/bin/image-build live
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install --no-install-recommends --yes ca-certificates git \
     && rm -rf /var/lib/apt/lists/* \

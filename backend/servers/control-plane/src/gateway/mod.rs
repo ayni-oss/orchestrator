@@ -102,10 +102,16 @@ fn routes(gateway: Gateway, status: Option<std::path::PathBuf>) -> Router {
                 async move {
                     tokio::task::spawn_blocking(move || {
                         let bytes =
-                            std::fs::read(path).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
-                        serde_json::from_slice::<Value>(&bytes)
-                            .map(Json)
-                            .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)
+                            std::fs::read(&path).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+                        let mut status = serde_json::from_slice::<Value>(&bytes)
+                            .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+                        if let Some(parent) = path.parent()
+                            && let Ok(gateway) =
+                                std::fs::read_to_string(parent.join("gateway-status.txt"))
+                        {
+                            status["gateway"] = gateway.into();
+                        }
+                        Ok::<_, StatusCode>(Json(status))
                     })
                     .await
                     .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?

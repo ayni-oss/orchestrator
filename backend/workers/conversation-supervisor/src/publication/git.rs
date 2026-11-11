@@ -385,7 +385,7 @@ mod tests {
         Ok((tree, first, second))
     }
     #[tokio::test]
-    #[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+    #[ignore = "requires loopback networking; run cargo xtask test loopback"]
     async fn snapshot_publication_restores_only_immutable_source_or_merge_parents_requires_loopback()
     -> Result {
         let root = tempfile::tempdir()?;
@@ -548,7 +548,7 @@ mod tests {
         Err("fixture Git daemon unavailable".into())
     }
     #[tokio::test]
-    #[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+    #[ignore = "requires loopback networking; run cargo xtask test loopback"]
     async fn create_only_push_recovers_same_commit_and_never_overwrites_another_head_requires_loopback()
     -> Result {
         let root = tempfile::tempdir()?;

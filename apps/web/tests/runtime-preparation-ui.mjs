@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 
-export async function exerciseRuntimePreparation(page, origin, repositoryId) {
+export async function exerciseRuntimePreparation(page, origin, repositoryId, fixtureRepository) {
  let inspectionId=randomUUID();
  const alternateRegistryId=randomUUID(),alternateSignerId=randomUUID();
  const registryId=randomUUID(),signerId=randomUUID(),operationId=randomUUID();
@@ -14,8 +14,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
  await page.route('**/api/GetRepositoryRuntime',route=>route.fulfill({json:{run,preparationEnabled:true}}));
  await page.route('**/api/GetRepositoryRuntimeReceipt',route=>route.fulfill({json:{run:{...run,state:'resolving',preparationId:''}}}));
  await page.route('**/api/ListRepositoryInspections',route=>route.fulfill({json:{inspections:[inspection,previousInspection]}}));
- const catalogReply=await page.request.post(`${origin}/api/ListRepositories`,{headers:{'x-console-request':'1'},data:{limit:100}});
- const repository=(await catalogReply.json()).repositories.find(value=>value.id===repositoryId);
+ const repository=fixtureRepository || (await (await page.request.post(`${origin}/api/ListRepositories`,{headers:{'x-console-request':'1'},data:{limit:100}})).json()).repositories.find(value=>value.id===repositoryId);
  await page.route('**/api/ListConnections',route=>route.fulfill({json:{connections:[{id:repository.connectionId,displayName:'Fixture GitHub',capability:'source_control',revision:'1',enabled:true,activeCredentialRevision:randomUUID()},{id:registryId,displayName:'Fixture runtime registry',provider:'github',capability:'container_registry',revision:'1',enabled:true,activeCredentialRevision:randomUUID(),registryDestination:'ghcr.io/fixture'},{id:alternateRegistryId,displayName:'Alternate registry',capability:'container_registry',enabled:true,activeCredentialRevision:'credential',registryDestination:'ghcr.io/alternate'}]}}));
  await page.route('**/api/ListRepositoryBranches',route=>route.fulfill({json:route.request().postDataJSON().page === 1
   ? {branches:['main'],nextPage:2} : {branches:['release/next']}}));
@@ -497,7 +496,7 @@ export async function exerciseRuntimePreparation(page, origin, repositoryId) {
 export async function exerciseDefaultBranchRecheck(page, origin, repositoryId) {
  let head='a'.repeat(40), resolutions=0, failResolution=false, loseResponse=false;
  let inspections=[], requests=[];
- const {connections}=await (await page.request.post(`${origin}/api/ListConnections`,{headers:{'x-console-request':'1'},data:{limit:100}})).json();
+ const {connections}=await page.evaluate(async()=> (await fetch('/api/ListConnections',{method:'POST',headers:{'content-type':'application/json','x-console-request':'1'},body:JSON.stringify({limit:100})})).json());
  const registry={id:randomUUID(),capability:'container_registry',enabled:true,activeCredentialRevision:'1'};
  const signer={id:randomUUID(),enabled:true};
  await page.route('**/api/ListConnections',route=>route.fulfill({json:{connections:[...connections,registry]}}));
@@ -640,8 +639,8 @@ export async function exerciseRepositoryHistoryPagination(page,origin,repository
  assert.equal(await inspectionRows.first().getAttribute('aria-label'),`Inspection ${inspections[0].commitSha}`);
 }
 
-export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
- const catalog=await (await page.request.post(`${origin}/api/ListRepositories`,{headers:{'x-console-request':'1'},data:{limit:100}})).json();
+export async function exerciseRepositoryOnboarding(page,origin,repositoryId,attachFixture) {
+ const catalog=await page.evaluate(async()=> (await fetch('/api/ListRepositories',{method:'POST',headers:{'content-type':'application/json','x-console-request':'1'},body:JSON.stringify({limit:100})})).json());
  const repo=catalog.repositories.find(value=>value.id===repositoryId);
  const registryId=randomUUID(),signerId=randomUUID(),inspectionId=randomUUID();
  let run,operation,starts=[],inspections=[],deploymentEnabled=false;
@@ -765,6 +764,7 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  operation={...operation,stage:'pull_final',generation:'13',buildMilestone:'RUNTIME_BUILD_MILESTONE_IMAGE_READY'};
  await summary.getByText('Independently pull published image',{exact:true}).waitFor();
  operation={...operation,state:'ready',stage:'cleanup',contentVerified:true,managedCompatible:true,cleanupComplete:true};
+ for (const close of await page.locator('[data-sonner-toast] [data-close-button]').all()) await close.click();
  await next.click();
  await status.getByRole('heading',{name:'Verify and finish',exact:true}).locator('..').getByText('Ready',{exact:true}).waitFor();
  const imageReference=`ghcr.io/fixture/sandbox@${hash}`;
@@ -783,6 +783,7 @@ export async function exerciseRepositoryOnboarding(page,origin,repositoryId) {
  const completedRun=run,completedOperation=operation;
  const fresh=await page.context().browser().newPage();
  try {
+  if(attachFixture) await attachFixture(fresh);
   await routeRetainedState(fresh);
   const url=`${origin}/repositories/${repositoryId}?tab=runtime`;
   const freshStatus=fresh.getByRole('region',{name:'Runtime status',exact:true});

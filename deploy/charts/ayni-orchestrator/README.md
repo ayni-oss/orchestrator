@@ -58,4 +58,4 @@ For the deterministic local fixture, enable `providers.openai.fixtureEgress` and
 use `http://provider-fixture.<application namespace>.svc:8080/v1`. This profile
 permits only DNS and TCP 8080 to the labeled fixture Pod in the application
 namespace; it grants no public provider egress. See the
-[fixture instructions](../../../dev/fixtures/provider/README.md).
+[fixture instructions](https://github.com/ayni-oss/orchestrator/blob/9de06f53/dev/fixtures/provider/README.md).

@@ -77,9 +77,10 @@ spec:
           readinessProbe:
             exec:
               command:
-                - /bin/sh
-                - -ec
-                - 'grep -q ''"ready":true'' /var/lib/ayni-executor/ledger.health.json'
+                - grep
+                - -q
+                - '"ready":true'
+                - /var/lib/ayni-executor/ledger.health.json
             initialDelaySeconds: 2
             periodSeconds: 5
             timeoutSeconds: 2

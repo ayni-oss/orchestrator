@@ -133,7 +133,7 @@ async fn ambiguous_mcp_invocation_replay_cannot_send_again() {
     clippy::too_many_lines,
     reason = "one retained-ledger external-effect scenario"
 )]
-#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+#[ignore = "requires loopback networking; run cargo xtask test loopback"]
 async fn exact_external_effect_consent_is_consumed_once_and_survives_ledger_reopen_requires_loopback()
  {
     use axum::{Json, Router, response::IntoResponse, routing::post};

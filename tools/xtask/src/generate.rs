@@ -30,6 +30,7 @@ pub fn tree_bytes(root: &str) -> Result<BTreeMap<String, Vec<u8>>> {
 pub fn run(args: &[String]) -> Result<()> {
     match args.first().map(String::as_str) {
         Some("protocol") => command::run("buf", &["generate"]),
+        Some("fixtures") => crate::fixtures::generate(),
         Some("schema") => schema(args.get(1).is_some_and(|arg| arg == "--write")),
         Some("contract-bundle") => bundle(
             args.get(1)

@@ -173,14 +173,7 @@ fn deploy(
         "Waiting for migrations and updated workloads to become ready",
     )?;
     // Restore the singleton replicas even after a previous dev stop or failed rollout.
-    process::run(kube().args([
-        "scale",
-        "deployment/control-plane",
-        "deployment/task-supervisor",
-        "deployment/runtime-preparation-supervisor",
-        "statefulset/conversation-supervisor",
-        "--replicas=1",
-    ]))?;
+    resume_workloads()?;
     for workload in [
         "statefulset/postgres",
         "statefulset/jetstream",
@@ -195,12 +188,31 @@ fn deploy(
     Ok(())
 }
 fn backend_ready() -> Result<bool> {
-    Ok(process::output(kube().args([
-        "get",
+    for name in [
         "deployment/control-plane",
-        "-o",
-        "jsonpath={.status.readyReplicas}",
-    ]))? == "1")
+        "deployment/task-supervisor",
+        "deployment/runtime-preparation-supervisor",
+        "statefulset/conversation-supervisor",
+        "statefulset/log-collector",
+    ] {
+        if process::output(kube().args(["get", name, "-o", "jsonpath={.status.readyReplicas}"]))?
+            != "1"
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+pub fn resume_workloads() -> Result<()> {
+    process::run(kube().args([
+        "scale",
+        "deployment/control-plane",
+        "deployment/task-supervisor",
+        "deployment/runtime-preparation-supervisor",
+        "statefulset/conversation-supervisor",
+        "statefulset/log-collector",
+        "--replicas=1",
+    ]))
 }
 fn preflight_migration(image: &str, directory: &Path) -> Result<()> {
     let deployment: Value = serde_json::from_str(&process::output(kube().args([
@@ -253,12 +265,83 @@ pub fn stop_workloads() -> Result<()> {
             "deployment/task-supervisor",
             "deployment/runtime-preparation-supervisor",
             "statefulset/conversation-supervisor",
+            "statefulset/log-collector",
             "--replicas=0",
         ])
         .status()?;
     ensure!(
         result.success(),
         "could not stop application controllers; storage was retained"
+    );
+    stop_execution_pods()?;
+    Ok(())
+}
+fn stop_execution_pods() -> Result<()> {
+    // These namespaces are fixed isolation boundaries, not discovered environments.
+    for (suffix, selector) in [
+        (
+            "sessions",
+            "app.kubernetes.io/name in (ayni-conversation-session,ayni-task-worker)",
+        ),
+        (
+            "runtime",
+            "app.kubernetes.io/managed-by=ayni-runtime-supervisor",
+        ),
+    ] {
+        let namespace = format!("{}-{suffix}", super::NAMESPACE);
+        let output = kube()
+            .args([
+                "get",
+                "namespace",
+                &namespace,
+                "--ignore-not-found",
+                "-o",
+                "json",
+            ])
+            .output()?;
+        ensure!(
+            output.status.success(),
+            "cannot verify execution namespace ownership"
+        );
+        if output.stdout.is_empty() {
+            continue;
+        }
+        let owner: Value = serde_json::from_slice(&output.stdout)?;
+        ensure!(
+            owner["metadata"]["annotations"]["meta.helm.sh/release-namespace"] == super::NAMESPACE
+                || owner["metadata"]["labels"]["build.ayni/parent-namespace"] == super::NAMESPACE,
+            "execution namespace ownership mismatch"
+        );
+        ensure!(
+            kube()
+                .args([
+                    "delete",
+                    "pods",
+                    "-n",
+                    &namespace,
+                    "-l",
+                    selector,
+                    "--wait=false",
+                    "--ignore-not-found"
+                ])
+                .status()?
+                .success(),
+            "could not stop owned execution pods"
+        );
+    }
+    ensure!(
+        kube()
+            .args([
+                "delete",
+                "pods",
+                "-l",
+                "app.kubernetes.io/name=ayni-task-publisher",
+                "--wait=false",
+                "--ignore-not-found"
+            ])
+            .status()?
+            .success(),
+        "could not stop owned publisher"
     );
     Ok(())
 }

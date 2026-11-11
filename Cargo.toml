@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "tools/xtask",
+    "tools/bootstrap",
     "backend/libs/telemetry",
     "backend/libs/events",
     "backend/libs/execution",

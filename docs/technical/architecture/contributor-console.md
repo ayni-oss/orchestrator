@@ -1,5 +1,8 @@
 # Local API gateway
 
+> Legacy command examples below describe historical qualification. Use the
+> [single-environment guide](../operations/local-development.md) for current commands.
+
 `dev/ctl gateway [PORT]` forwards the control-plane Pod's loopback gRPC listener
 onto a random host loopback port and starts `workflow-gateway` on
 `http://127.0.0.1:3000` by default. Both listener and upstream require loopback IP

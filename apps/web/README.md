@@ -17,7 +17,7 @@ and project/task runtime handoff remain outstanding.
 See the [alpha UI contract](../../docs/technical/architecture/project-workspace.md)
 for project chat, plans, task graphs and delivery journeys still to implement.
 
-Run `pnpm web:dev` with the local gateway, or `dev/ctl live` for one frontend plus
+Run `pnpm web:dev` with the local gateway, or `cargo xtask dev` for one frontend plus
 backend rebuild/rollout. The default web URL is http://127.0.0.1:5174.
 Configuration uses the original `/settings/source-control` and
 `/settings/source-control/github` routes, alongside `/settings/container-registries`,

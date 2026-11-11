@@ -1,5 +1,6 @@
 mod publication;
 mod recovery;
+mod traces;
 
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
@@ -12,6 +13,7 @@ use std::{
 
 pub fn run(args: &[String]) -> Result<()> {
     match args.first().map(String::as_str) {
+        Some("traces") => traces::run(&args[1..])?,
         Some("manifest") => {
             let root = Path::new(
                 args.get(1)

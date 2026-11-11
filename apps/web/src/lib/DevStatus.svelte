@@ -35,7 +35,7 @@
 </aside>
 
 <style>
-  .dev-status { position: fixed; z-index: 100; bottom: .5rem; right: .75rem; max-width: min(36rem, 95vw); font-size: .75rem; color: #e2e8f0; background: #17202f; border: 1px solid #475569; border-radius: .4rem; padding: .4rem .65rem; }
+  .dev-status { margin: .5rem 1rem 0; font-size: .75rem; color: #e2e8f0; background: #17202f; border: 1px solid #475569; border-radius: .4rem; padding: .4rem .65rem; overflow-wrap: anywhere; }
   summary { cursor: pointer; }
   p { margin: .4rem 0; overflow-wrap: anywhere; }
 </style>

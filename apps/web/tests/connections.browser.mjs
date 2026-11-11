@@ -1,23 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { once } from 'node:events';
-import { createServer } from 'node:net';
 import { chromium } from 'playwright';
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
 
-async function freePort() {
- const server=createServer();server.listen(0,'127.0.0.1');await once(server,'listening');
- const port=server.address().port;await new Promise(resolve=>server.close(resolve));return port;
-}
 test('real canonical API: workspaces, credential recovery, validation, scope and reload', { timeout: 180000 }, async () => {
- assert.match(process.env.AYNI_ORCHESTRATOR_LIVE_GATEWAY_PORT || '', /^[0-9]+$/, 'run through the PostgreSQL/browser acceptance gate or supply a real gateway');
- const port=await freePort();const origin=`http://127.0.0.1:${port}`;
- const production=process.env.AYNI_PRODUCT_PRODUCTION==='1';
- const child=production
-  ?spawn('node',['apps/web/build/index.js'],{stdio:'ignore',env:{...process.env,HOST:'127.0.0.1',PORT:String(port)},detached:true})
-  :spawn('pnpm',['--dir','apps/web','exec','vite','dev','--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:'ignore',env:process.env,detached:true});
+ const origin='http://127.0.0.1:5174';
  let browser;
  try {
   let ready=false;for(let i=0;i<120;i++){try{const response=await fetch(origin);if(response.ok){ready=true;break;}}catch{}await delay(250);}
@@ -343,7 +331,7 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   assert.equal(await page.getByLabel('Instructions',{exact:true}).inputValue(),'Recover this exact revision');
   await page.setViewportSize({width:390,height:844});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-  await page.screenshot({path:`/tmp/ayni-project-settings-${production?'production':'development'}.png`,fullPage:true});
+  await page.screenshot({path:'/tmp/ayni-project-settings-development.png',fullPage:true});
   await page.setViewportSize({width:1280,height:900});
 
   await page.reload();await page.waitForFunction(id=>document.querySelector('#project-connection')?.value===id,process.env.AYNI_BROWSER_CONNECTION_ID);
@@ -382,5 +370,5 @@ test('real canonical API: workspaces, credential recovery, validation, scope and
   await page.screenshot({path:'/tmp/integrations-product.png',fullPage:true});
   console.log('product-browser: hierarchy, lost-response recovery, reload, redaction, validation, concurrent stale-write rejection and origin boundary, GHCR/OpenAI credential recovery and project model selection passed');
  } catch(error) { if(browser){const pages=browser.contexts()[0]?.pages()||[];if(pages[0]){await pages[0].screenshot({path:'/tmp/integrations-browser-failure.png',fullPage:true});console.error('Product alert:',await pages[0].getByRole('alert').allTextContents());}}throw error;
- } finally {if(browser)await browser.close();if(child.exitCode===null){process.kill(-child.pid,'SIGTERM');await once(child,'exit');}}
+ } finally {if(browser)await browser.close();}
 });

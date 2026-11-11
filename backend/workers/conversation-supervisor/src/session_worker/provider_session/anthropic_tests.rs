@@ -41,7 +41,7 @@ async fn anthropic_fixture(malformed: bool) -> Fixture {
 }
 
 #[tokio::test]
-#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+#[ignore = "requires loopback networking; run cargo xtask test loopback"]
 async fn anthropic_uses_selected_transport_and_retained_uncertainty_without_resending_requires_loopback()
  {
     for malformed in [false, true] {

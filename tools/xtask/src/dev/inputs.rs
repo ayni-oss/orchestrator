@@ -73,7 +73,26 @@ pub fn freeze(expected: &BTreeMap<String, String>) -> Result<tempfile::TempDir> 
 }
 
 fn components(name: &str) -> Vec<&'static str> {
-    if name.starts_with("tools/") || name == ".cargo/config.toml" {
+    if Path::new(name)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("md"))
+    {
+        return Vec::new();
+    }
+    if name == "tools/xtask/ayni-tool.json" {
+        return vec!["runtime"];
+    }
+    if name == "tools/bootstrap/src/bin/local-infrastructure.rs"
+        || name == "tools/bootstrap/src/bin/image-build.rs"
+    {
+        return vec!["control-plane", "conversation-supervisor", "runtime"];
+    }
+    if (name.starts_with("tools/xtask/")
+        && Path::new(name)
+            .extension()
+            .is_none_or(|ext| !ext.eq_ignore_ascii_case("md")))
+        || name == ".cargo/config.toml"
+    {
         return vec!["controller"];
     }
     if name.starts_with("dev/charts/") || name.starts_with("deploy/charts/") {
@@ -106,7 +125,7 @@ fn components(name: &str) -> Vec<&'static str> {
     }
     if name.starts_with("backend/workers/runtime-")
         || name.starts_with("deploy/images/runtime-")
-        || name == "scripts/ci/ayni-tool.json"
+        || name == "tools/xtask/ayni-tool.json"
     {
         return vec!["runtime"];
     }
@@ -124,6 +143,13 @@ mod tests {
     #[test]
     fn reload_boundaries() {
         assert!(components("apps/web/src/routes/+page.svelte").is_empty());
+        assert!(
+            components(
+                "backend/servers/control-plane/crates/workflow-postgres/migrations/README.md"
+            )
+            .is_empty()
+        );
+        assert_eq!(components("tools/xtask/ayni-tool.json"), vec!["runtime"]);
         assert_eq!(
             components("backend/workers/conversation-supervisor/src/main.rs"),
             vec!["conversation-supervisor"]

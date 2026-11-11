@@ -166,8 +166,9 @@ impl ExecutionTelemetryService for Telemetry {
                 }
                 let began=std::time::Instant::now();
                 api.store.append_log_bounded(&record,max_bytes()).await.map_err(|error| match error {
-                    ayni_orchestrator_workflow_postgres::StoreError::IdempotencyConflict => Status::already_exists("conflicting telemetry sequence"),
-                    ayni_orchestrator_workflow_postgres::StoreError::InvalidInput(_) => Status::invalid_argument("invalid telemetry sequence"),
+                    ayni_orchestrator_workflow_postgres::StoreError::IdempotencyConflict => { tracing::warn!("telemetry replay identity conflict; pending records retained"); Status::already_exists("conflicting telemetry sequence") },
+                    ayni_orchestrator_workflow_postgres::StoreError::InvalidInput(reason) => { tracing::warn!(reason, "invalid telemetry record; pending records retained"); Status::invalid_argument("invalid telemetry sequence") },
+                    ayni_orchestrator_workflow_postgres::StoreError::Database(error) => { ayni_orchestrator_workflow_postgres::metrics::increment("workflow_telemetry_persistence_errors_total"); tracing::warn!(sqlstate=error.code().map_or("connection", |code| code.code()), "telemetry database write failed; pending records retained"); Status::unavailable("log persistence unavailable") },
                     _ => { ayni_orchestrator_workflow_postgres::metrics::increment("workflow_telemetry_persistence_errors_total"); Status::unavailable("log persistence unavailable") }
                 })?;
                 ayni_orchestrator_workflow_postgres::metrics::observe("workflow_telemetry_commit_seconds",began.elapsed());

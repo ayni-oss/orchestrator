@@ -1,5 +1,8 @@
 # Execution capture and debug logs
 
+> Legacy command examples below describe historical qualification. Use the
+> [single-environment guide](../operations/local-development.md) for current commands.
+
 The worker owns command execution; Kubernetes supervisors own pod lifecycle.
 The execution library drains stdout and stderr independently of network delivery,
 records action identities and outcomes, and terminates owned process groups on
@@ -89,7 +92,7 @@ available for recovery.
 
 ## Local debug console
 
-`dev/ctl deploy --debug`, `dev/ctl live --debug`, and `make dev DEBUG=1` select
+`dev/ctl deploy --debug`, `cargo xtask dev --debug`, and `make dev DEBUG=1` select
 `debug.enabled`. Rebuilds preserve that setting. Set `AYNI_ORCHESTRATOR_DEBUG=false`
 when deploying to disable raw access. The flag gates the APIs, writes, collector
 and navigation. Existing lifecycle reporting remains active. Rolling shutdown

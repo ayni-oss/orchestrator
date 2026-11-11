@@ -61,13 +61,12 @@
 - Exercise deployable behavior on Docker Desktop Kubernetes when the change
   affects runtime behavior. Use the `dev/charts/ayni-orchestrator-local` Helm chart and the
   explicit `docker-desktop` context as defined in
-  docs/technical/operations/local-development.md. Runtime qualification may instead
-  use the separately authorized `kind-ayni-runtime-qualification` context with
-  its dedicated `/tmp/ayni-runtime-cluster/kubeconfig` and documented isolated
-  namespace. Keep the existing Desktop deployment and credentials separate.
-  Never fall back to another current cluster when the selected local context is
-  absent; do not modify the global context. Local deployment
-  is authorized; destructive cluster resets and retained-data deletion are separate.
+  docs/technical/operations/local-development.md. Use the single
+  `ayni-orchestrator-live` environment and its session/runtime isolation namespaces.
+  Deployment acceptance runs serially there with scoped fixture resources; never
+  create another development stack or change the global context. Docker Desktop
+  remains unqualified for NetworkPolicy enforcement. Local deployment is authorized;
+  destructive resets and retained-data deletion require separate authorization.
 - Keep each PR small and end-to-end. Define its observable outcome and
   failure/recovery cases before expanding resources or integrations.
 - Consume Ayni's supported CLI and artifact contracts first. Do not duplicate its

@@ -15,6 +15,23 @@ pub fn run(args: &[String]) -> Result<()> {
         Some("tooling") => tooling::check(),
         Some("api") => protocol::check(),
         Some("charts") => charts::check(),
+        Some("contract-baseline") => {
+            let current = std::fs::read_to_string("proto/BASELINE")?;
+            let base = std::fs::read_to_string(".contract-base/proto/BASELINE")?;
+            ensure!(
+                current.trim() == "workflow-m1-private-v1",
+                "canonical baseline changed"
+            );
+            ensure!(
+                base == current || base.trim() == "repository-builders-v4",
+                "incompatible contract baseline"
+            );
+            let mut args = vec!["protocol".into()];
+            if base == current {
+                args.push(".contract-base/proto".into());
+            }
+            run(&args)
+        }
         Some("protocol") => {
             command::run("buf", &["format", "--diff", "--exit-code", "proto"])?;
             command::run("buf", &["lint", "proto"])?;

@@ -32,6 +32,15 @@ fn create(name: &str, data: Value) -> Result<()> {
     fs::write(&path, serde_json::to_vec(&value)?)?;
     process::run(kube().args(["create", "-f"]).arg(path))
 }
+fn require_fresh_storage() -> Result<()> {
+    let volumes: Value =
+        serde_json::from_str(&process::output(kube().args(["get", "pvc", "-o", "json"]))?)?;
+    ensure!(
+        volumes["items"].as_array().is_some_and(Vec::is_empty),
+        "credentials missing while retained storage exists; restore the original Secrets"
+    );
+    Ok(())
+}
 pub fn ensure_local() -> Result<()> {
     // The canonical retained namespace must already exist. Startup never discovers,
     // deletes, or adopts another environment.
@@ -52,12 +61,7 @@ pub fn ensure_local() -> Result<()> {
         "workflow-postgres-runtime",
     ])? {
         // Missing credentials on a retained database require recovery, never new passwords.
-        let volumes: Value =
-            serde_json::from_str(&process::output(kube().args(["get", "pvc", "-o", "json"]))?)?;
-        ensure!(
-            volumes["items"].as_array().is_some_and(Vec::is_empty),
-            "database credentials missing while retained storage exists; restore the original Secrets"
-        );
+        require_fresh_storage()?;
         create(
             "workflow-postgres-admin",
             json!({"username":"ayni_admin","password":random()?,"database":"ayni_workflow"}),
@@ -79,6 +83,7 @@ pub fn ensure_local() -> Result<()> {
         "workflow-jetstream-executor",
         "workflow-jetstream-acceptance",
     ])? {
+        require_fresh_storage()?;
         for name in [
             "workflow-jetstream-admin",
             "workflow-jetstream-application",
@@ -98,6 +103,7 @@ pub fn ensure_local() -> Result<()> {
         "workflow-telemetry-authority",
     ] {
         if !exists(name)? {
+            require_fresh_storage()?;
             create(name, json!({"token":random()?}))?;
         }
     }

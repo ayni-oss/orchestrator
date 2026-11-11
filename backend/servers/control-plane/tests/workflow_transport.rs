@@ -48,7 +48,7 @@ async fn context(role: &str) -> Result<jetstream::Context> {
 }
 
 #[tokio::test]
-#[ignore = "requires scripts/ci/check-workflow-jetstream.sh"]
+#[ignore = "requires cargo xtask test jetstream"]
 async fn disposable_profile_setup() -> Result {
     let root = std::path::PathBuf::from(env::var("M1_TRANSPORT_FIXTURE_DIRECTORY")?);
     let administrator = context("ADMIN").await?;
@@ -84,7 +84,7 @@ async fn disposable_profile_setup() -> Result {
 }
 
 #[tokio::test]
-#[ignore = "requires scripts/ci/check-workflow-jetstream.sh"]
+#[ignore = "requires cargo xtask test jetstream"]
 async fn diagnostic_stream_replays_after_publisher_disconnect_and_deduplicates() -> Result {
     use ayni_orchestrator_events::execution_diagnostics::SUBJECT;
     let application = context("APPLICATION").await?;
@@ -118,7 +118,7 @@ async fn diagnostic_stream_replays_after_publisher_disconnect_and_deduplicates()
 }
 
 #[tokio::test]
-#[ignore = "requires scripts/ci/check-workflow-jetstream.sh"]
+#[ignore = "requires cargo xtask test jetstream"]
 async fn profile_authorization_capacity_and_payload() -> Result {
     let administrator = context("ADMIN").await?;
     // Restore long retention before the payload and capacity checks. The earlier

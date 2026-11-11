@@ -13,14 +13,11 @@ metadata:
     {{- include "local.commonLabels" . | nindent 4 }}
     app.kubernetes.io/name: postgres
 data:
-  10-bootstrap-roles.sh: |
-    #!/usr/bin/env bash
-    set -euo pipefail
-    psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
-      --set=migrator_user="$POSTGRES_MIGRATOR_USER" \
-      --set=migrator_password="$POSTGRES_MIGRATOR_PASSWORD" \
-      --set=runtime_user="$POSTGRES_RUNTIME_USER" \
-      --set=runtime_password="$POSTGRES_RUNTIME_PASSWORD" <<'SQL'
+  10-bootstrap-roles.sql: |
+    \getenv migrator_user POSTGRES_MIGRATOR_USER
+    \getenv migrator_password POSTGRES_MIGRATOR_PASSWORD
+    \getenv runtime_user POSTGRES_RUNTIME_USER
+    \getenv runtime_password POSTGRES_RUNTIME_PASSWORD
     SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'migrator_user', :'migrator_password')
       WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'migrator_user') \gexec
     SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'runtime_user', :'runtime_password')
@@ -30,7 +27,6 @@ data:
     REVOKE CREATE ON SCHEMA public FROM PUBLIC;
     GRANT USAGE, CREATE ON SCHEMA public TO :"migrator_user";
     GRANT USAGE ON SCHEMA public TO :"runtime_user";
-    SQL
 ---
 apiVersion: v1
 kind: Service
@@ -77,15 +73,8 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: initialize-postgres-volume
-          image: {{ .Values.postgres.image | quote }}
-          command:
-            - sh
-            - -ec
-            - |
-              if [ "$(stat -c '%u:%g' /var/lib/postgresql/data)" != "999:999" ]; then
-                chown -R 999:999 /var/lib/postgresql/data
-              fi
-              chmod 0700 /var/lib/postgresql/data
+          image: {{ index .Values "ayni-orchestrator" "images" "controlPlane" | quote }}
+          command: ["/usr/local/bin/ayni-local-infrastructure", "postgres-volume"]
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -140,13 +129,13 @@ spec:
               containerPort: 5432
           readinessProbe:
             exec:
-              command: ["sh", "-ec", "pg_isready --username=\"$POSTGRES_USER\" --dbname=\"$POSTGRES_DB\""]
+              command: ["pg_isready", "--username=$(POSTGRES_USER)", "--dbname=$(POSTGRES_DB)"]
             periodSeconds: 3
             timeoutSeconds: 2
             failureThreshold: 20
           livenessProbe:
             exec:
-              command: ["sh", "-ec", "pg_isready --username=\"$POSTGRES_USER\" --dbname=\"$POSTGRES_DB\""]
+              command: ["pg_isready", "--username=$(POSTGRES_USER)", "--dbname=$(POSTGRES_DB)"]
             periodSeconds: 10
             timeoutSeconds: 2
             failureThreshold: 6
@@ -163,8 +152,8 @@ spec:
             - name: data
               mountPath: /var/lib/postgresql/data
             - name: bootstrap
-              mountPath: /docker-entrypoint-initdb.d/10-bootstrap-roles.sh
-              subPath: 10-bootstrap-roles.sh
+              mountPath: /docker-entrypoint-initdb.d/10-bootstrap-roles.sql
+              subPath: 10-bootstrap-roles.sql
               readOnly: true
       volumes:
         - name: bootstrap

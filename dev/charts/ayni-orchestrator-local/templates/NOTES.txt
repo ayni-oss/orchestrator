@@ -1,27 +1,14 @@
-The local PostgreSQL-authoritative development stack is installed.
+The retained local development stack is installed in {{ .Release.Namespace }}.
 
-Run these commands from the checkout root, preserving the installation's
-KUBECONFIG, AYNI_ORCHESTRATOR_CONTEXT, AYNI_ORCHESTRATOR_NAMESPACE and live
-UI/gateway port settings. Validate the selected local context before diagnostics:
-  CONTEXT=$(python3 dev/lib/local_context.py check) || exit 1
+Start or inspect the single development controller:
+  cargo xtask dev
+  cargo xtask dev status
 
-Verify dependencies and workloads:
-  dev/ctl check
+Open http://127.0.0.1:5174. Debug logs and the pinned local runtime profile are
+configured by the controller. Docker Desktop NetworkPolicy enforcement is not qualified.
 
-Run the message-to-scripted-response scenario:
-  dev/ctl scenario
+Stop owned host processes and application controllers while retaining storage:
+  cargo xtask dev stop
 
-Local JSON/SSE API adapter (no browser UI):
-  dev/ctl gateway "${AYNI_ORCHESTRATOR_LIVE_GATEWAY_PORT:-3000}"
-  Open http://127.0.0.1:${AYNI_ORCHESTRATOR_LIVE_GATEWAY_PORT:-3000} while the command runs.
-
-Health:
-  kubectl --context "$CONTEXT" --namespace {{ .Release.Namespace }} port-forward service/control-plane 8080:8080
-
-Trusted private-v1 diagnostics:
-  POD=$(kubectl --context "$CONTEXT" --namespace {{ .Release.Namespace }} get pod -l app.kubernetes.io/name=ayni-orchestrator-control-plane -o jsonpath='{.items[0].metadata.name}')
-  kubectl --context "$CONTEXT" --namespace {{ .Release.Namespace }} port-forward pod/$POD 50051:50051
-
-PostgreSQL, JetStream, and executor-ledger PVCs are retained when the Helm
-release is removed. Use the explicit `dev/ctl purge` confirmation flow to
-delete the development namespace and all retained workflow data.
+Do not create another namespace to recover from a development failure.
+See docs/technical/operations/local-development.md.

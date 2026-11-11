@@ -1,66 +1,22 @@
 # Observable execution acceptance
 
-> This combined browser profile is unavailable because the console and product UI
-> are removed. `dev/ctl acceptance ... --observable` exits before cluster work.
-> The procedure below is historical reference, not current validation evidence.
-> See [the UI reference status](../../../apps/web/README.md).
+Current checks use the [single local environment](local-development.md).
+There is one frontend at **http://127.0.0.1:5174** and no separate acceptance stack.
 
-
-Run this profile from a clean, committed checkout on Docker Desktop Kubernetes.
-It combines retained task delivery and recovery with browser progress, inspector
-reads and locally exported correlated traces. It does not require a live provider
-credential or publish to GitHub.
-
-## Prepare and run
-
-```sh
-pnpm install --frozen-lockfile
-pnpm exec playwright install chromium
-dev/ctl quality-runtime
-AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-observable \
-  AYNI_ORCHESTRATOR_TASK_FIXTURE=true \
-  AYNI_ORCHESTRATOR_OBSERVABILITY=true dev/ctl deploy
-AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-observable \
-  dev/ctl acceptance /absolute/new/observable-evidence --observable
+```text
+cargo xtask test deployment debug
 ```
 
-Both runtime images must be built from the current clean commit. The profile
-checks their source labels and refuses to overwrite evidence. The collector must
-be enabled before execution. See [execution tracing](execution-tracing.md) for
-collector configuration, export limits and diagnostics.
+These checks establish their named contracts only. The PostgreSQL and worker
+Rust suites retain admission, frozen-input, cancellation, stale-generation,
+publication and replay assertions. Native frontend assertions run through
+`cargo xtask test deployment browser`; debug source collection and recovery use
+`cargo xtask test deployment debug` and `cargo xtask test deployment recovery`.
+Deployment checks serialize against the canonical environment.
 
-The task phase runs the existing publication profile, including isolated coding,
-managed Ayni quality, cancellation, Pod loss, publication reconciliation and
-retained-store restarts. Publication uses real Git against the local GitHub
-protocol fixture. These are deterministic coding fixtures; this does not qualify
-autonomous coding or live GitHub authentication.
-
-The browser phase uses the deployed loopback gateway and actual PostgreSQL,
-JetStream and isolated sessions. It observes provisional scripted text before
-terminal acceptance, reloads during generation, checks failed-progress-read
-recovery and exact interrupted-command retry, then inspects the retained task's
-coding, quality, publication, timing and recovery evidence through canonical APIs.
-The scripted streaming journey begins with `Observe streaming` and intentionally
-holds three bounded partial observations for one second each. Ordinary scripted
-execution retains its normal timing.
-
-The trace phase verifies correlated API, outbox, broker, supervisor, Pod and worker
-spans for a conversation, plus source, coding, quality and publication for a task.
-Repeated operation links and cancellation observations supplement the authoritative
-replay and fencing evidence from the cumulative task profile. Traces are diagnostic
-samples and never establish accepted work or exact accounting.
-
-## Evidence and limits
-
-The output includes the source revision and manifest, task-profile evidence,
-browser screenshots and outcome report, local OTLP exports, trace assertions and
-final readiness. Every failure leaves `outcome.json` marked failed. The namespace,
-PVCs and accepted work remain retained; only the profile's gateway and local
-port-forward processes stop automatically. Collector data is bounded diagnostic
-storage and can be lost when its Pod is replaced.
-
-OpenAI and Anthropic streaming adapters are exercised separately against loopback
-HTTP SSE fixtures. The deployed browser profile uses the scripted provider and
-makes no paid model calls. Live provider qualification and sustained production
-capacity remain separate [operational acceptance](operational-acceptance.md)
-requirements. Browser fixtures alone do not establish deployed behavior.
+The combined milestone harness that previously occupied this page depended on
+retired browser flows. It has been removed rather than reported as qualified.
+Its [historical protocol and evidence](https://github.com/ayni-oss/orchestrator/blob/9de06f53/docs/technical/operations/observable-execution-acceptance.md)
+remain available in Git history. Those reports are not current-source acceptance
+or evidence of live provider/GitHub operation, production capacity, or Docker
+Desktop NetworkPolicy enforcement.

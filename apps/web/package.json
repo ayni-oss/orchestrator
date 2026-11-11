@@ -8,9 +8,9 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "build": "vite build",
     "test": "node --test tests/*.test.mjs",
-    "test:browser": "node --test tests/*.browser.mjs",
+    "test:browser": "cargo xtask test deployment browser",
     "start": "node build",
-    "test:hmr": "node --test tests/hmr.browser.mjs"
+    "test:hmr": "cargo xtask test deployment hmr"
   },
   "dependencies": {
     "@sveltejs/kit": "3.0.0",

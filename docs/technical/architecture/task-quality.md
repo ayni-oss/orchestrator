@@ -91,7 +91,7 @@ strict socket filter. Pure tests and network-denial assertions run there. Tests
 that require a real loopback HTTP, gRPC or Git fixture declare that prerequisite
 and remain ignored in this environment, following the existing disposable
 PostgreSQL and JetStream fixture pattern. The required host gate
-`scripts/ci/check-workflow-loopback.sh` verifies socket capability and the complete
+`cargo xtask test loopback` verifies socket capability and the complete
 declared test inventory before running all loopback fixtures. CI requires this
 gate in addition to workspace tests and the database/broker integration gates.
 A passing managed artifact alone does not claim those host integration proofs.

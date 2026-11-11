@@ -59,9 +59,12 @@ impl Status {
         phase: &str,
         message: impl Into<String>,
     ) -> Result<()> {
+        let message = message.into();
+        if self.phase != phase || self.message != message {
+            eprintln!("{phase}: {message}");
+        }
         self.phase = phase.into();
-        self.message = message.into();
-        eprintln!("{}: {}", self.phase, self.message);
+        self.message = message;
         self.save(directory)
     }
 }

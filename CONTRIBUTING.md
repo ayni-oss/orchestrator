@@ -75,7 +75,7 @@ Use the pinned toolchain in `rust-toolchain.toml`:
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --all-targets
-scripts/ci/check-workflow-loopback.sh
+cargo xtask test loopback
 cargo check --workspace --all-targets
 pnpm install --frozen-lockfile
 pnpm typecheck
@@ -83,13 +83,13 @@ pnpm test
 pnpm proto:check
 pnpm chart:check
 pnpm docs:check
-scripts/ci/check-workflow-postgres-feasibility.sh
-scripts/ci/check-workflow-private-v1-feasibility.sh
+cargo xtask test postgres
+cargo xtask check api
 ```
 
 `apps/web` is the sole frontend, promoted from the former example UI. Extend its
 existing shell, components and design tokens; do not create parallel consoles,
-diagnostic frontends or alternate themes. `dev/ctl live` runs this same application.
+diagnostic frontends or alternate themes. `cargo xtask dev` runs this same application.
 Conversation/task browser acceptance remains unavailable until those journeys are
 wired to current canonical APIs. The current configuration and hierarchy journeys
 have their own real-API browser coverage.

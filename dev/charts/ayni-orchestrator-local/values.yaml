@@ -42,7 +42,6 @@ postgres:
     limits:
       cpu: "1"
       memory: 1Gi
-
 jetstream:
   enabled: true
   serverImage: nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4
@@ -62,8 +61,3 @@ jetstream:
     limits:
       cpu: 500m
       memory: 1Gi
-
-# Explicit local-only GitHub protocol and real bare-Git acceptance service.
-publicationFixture:
-  enabled: false
-  image: ""

@@ -94,7 +94,7 @@ spec:
         - name: reader
           image: {{ .Values.images.controlPlane | quote }}
           imagePullPolicy: {{ .Values.images.pullPolicy }}
-          command: ["/bin/sh", "-c", "sleep infinity"]
+          command: ["sleep", "infinity"]
           resources:
             requests: { cpu: 1m, memory: 4Mi }
             limits: { cpu: 25m, memory: 16Mi }

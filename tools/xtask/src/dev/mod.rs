@@ -157,14 +157,19 @@ fn start(directory: &Path) -> Result<()> {
         "Preparing the singleton development session",
     )?;
     let initial = inputs::snapshot()?;
-    process::run(Command::new("cargo").args([
-        "build",
-        "--locked",
-        "-p",
-        "ayni-orchestrator-control-plane",
-        "--bin",
-        "workflow-gateway",
-    ]))?;
+    if !status.active.is_empty() {
+        reconcile::resume_workloads()?;
+    }
+    if !Path::new("target/debug/workflow-gateway").is_file() {
+        process::run(Command::new("cargo").args([
+            "build",
+            "--locked",
+            "-p",
+            "ayni-orchestrator-control-plane",
+            "--bin",
+            "workflow-gateway",
+        ]))?;
+    }
     process::run(Command::new("pnpm").args(["install", "--frozen-lockfile"]))?;
     let mut serving = serving::Serving::start(directory)?;
     let outcome = watch(directory, &mut status, &initial);
@@ -233,6 +238,7 @@ fn watch(
         }
         status.gateway = fs::read_to_string(directory.join("gateway-status.txt"))
             .unwrap_or_else(|_| "starting".into());
+        status.branch = process::output(Command::new("git").args(["branch", "--show-current"]))?;
         status.save(directory)?;
         thread::sleep(Duration::from_millis(500));
     }

@@ -9,3 +9,6 @@ The evaluation starts from a pinned commit containing this defect. The worker co
 changes and runs the mandatory full repository check against that final commit.
 The evaluator verifies these numbers and the retained full-check evidence
 independently of tests written by the agent.
+
+Run `cargo xtask test retry-backoff` to evaluate those four cases. It deliberately
+fails against the initial defective input and passes only after the workload repair.

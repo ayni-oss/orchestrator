@@ -463,7 +463,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+    #[ignore = "requires loopback networking; run cargo xtask test loopback"]
     async fn http_profile_initializes_scoped_tool_and_returns_only_bounded_result_requires_loopback()
     -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::post};

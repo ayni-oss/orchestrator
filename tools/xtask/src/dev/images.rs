@@ -39,6 +39,23 @@ pub fn capacity() -> Result<()> {
             "build paused: less than 10 GiB free; reclaim unused build cache or expand storage (data is never pruned automatically)"
         );
     }
+    let node = process::output(Command::new("docker").args([
+        "exec",
+        "desktop-control-plane",
+        "df",
+        "-Pk",
+        "/var/lib/containerd",
+    ]))?;
+    let free: u64 = node
+        .lines()
+        .nth(1)
+        .and_then(|line| line.split_whitespace().nth(3))
+        .context("cannot read node disk capacity")?
+        .parse()?;
+    ensure!(
+        free >= 10 * 1024 * 1024,
+        "build paused: Docker Desktop node has less than 10 GiB free; storage is never pruned automatically"
+    );
     Ok(())
 }
 
@@ -209,7 +226,7 @@ fn cached_runtime(cache: &Path) -> Result<Option<serde_json::Value>> {
 fn build_runtime(identity: &str, source: &Path) -> Result<serde_json::Value> {
     capacity()?;
     let pins: serde_json::Value =
-        serde_json::from_slice(&fs::read(source.join("scripts/ci/ayni-tool.json"))?)?;
+        serde_json::from_slice(&fs::read(source.join("tools/xtask/ayni-tool.json"))?)?;
     let pin = |key: &str| -> Result<&str> {
         pins[key].as_str().with_context(|| format!("missing {key}"))
     };
