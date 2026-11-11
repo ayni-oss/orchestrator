@@ -86,4 +86,3 @@ spools after restart. Replay only sends records; it cannot re-run a command or
 accept a workflow result. Normal runtime pod retirement allows a final collection
 window; cancellation does not wait for logging. Failed replay volumes remain
 available for recovery.
-
