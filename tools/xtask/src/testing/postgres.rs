@@ -19,7 +19,16 @@ impl Drop for Fixture {
 }
 
 pub fn run(suite: Option<&str>) -> Result<()> {
-    let name = format!("ayni-postgres-test-{}", uuid::Uuid::new_v4().simple());
+    with_fixture(|env| run_suites(env, suite))
+}
+
+pub fn with_fixture(
+    check: impl FnOnce(BTreeMap<&'static str, String>) -> Result<()>,
+) -> Result<()> {
+    let name = format!("ayni-m1-postgres-test-{}", uuid::Uuid::new_v4().simple());
+    let port = std::net::TcpListener::bind(("127.0.0.1", 0))?
+        .local_addr()?
+        .port();
     command::run(
         "docker",
         &[
@@ -33,7 +42,7 @@ pub fn run(suite: Option<&str>) -> Result<()> {
             "--env",
             &format!("POSTGRES_DB={DATABASE}"),
             "--publish",
-            "127.0.0.1::5432",
+            &format!("127.0.0.1:{port}:5432"),
             IMAGE,
         ],
     )?;
@@ -62,6 +71,7 @@ pub fn run(suite: Option<&str>) -> Result<()> {
         std::thread::sleep(Duration::from_secs(1));
     }
     ensure!(ready, "PostgreSQL fixture readiness failed");
+    bootstrap_roles(&name)?;
     let address = command::output("docker", &["port", &name, "5432/tcp"])?;
     let address = address.trim();
     ensure!(
@@ -99,7 +109,48 @@ pub fn run(suite: Option<&str>) -> Result<()> {
         ),
         ("AYNI_POSTGRES_RUNTIME_FEASIBILITY_ROLE", ROLE.into()),
     ]);
-    run_suites(env, suite)
+    check(env)
+}
+
+fn bootstrap_roles(name: &str) -> Result<()> {
+    use anyhow::Context as _;
+    let chart =
+        std::fs::read_to_string("dev/charts/ayni-orchestrator-local/templates/postgres.yaml")?;
+    let block = chart
+        .split("10-bootstrap-roles.sql: |\n")
+        .nth(1)
+        .and_then(|part| part.split("\n---").next())
+        .context("bootstrap SQL missing")?;
+    let mut sql = block
+        .lines()
+        .map(|line| line.strip_prefix("    ").unwrap_or(line))
+        .collect::<Vec<_>>()
+        .join("\n");
+    sql.push_str("\nSELECT 1 / (has_schema_privilege('bootstrap_migrator', 'public', 'CREATE') AND NOT has_schema_privilege('bootstrap_runtime', 'public', 'CREATE') AND has_database_privilege('bootstrap_runtime', current_database(), 'CONNECT'))::int;\n");
+    // Fixture-only values exercise SQL quoting without reading deployment credentials.
+    let args = [
+        "exec",
+        "-i",
+        "--env",
+        "POSTGRES_MIGRATOR_USER=bootstrap_migrator",
+        "--env",
+        "POSTGRES_MIGRATOR_PASSWORD=fixture'quoted\\value",
+        "--env",
+        "POSTGRES_RUNTIME_USER=bootstrap_runtime",
+        "--env",
+        "POSTGRES_RUNTIME_PASSWORD=fixture-only",
+        name,
+        "psql",
+        "-U",
+        "postgres",
+        "-d",
+        DATABASE,
+        "-v",
+        "ON_ERROR_STOP=1",
+    ];
+    crate::command::input("docker", &args, sql.as_bytes())?;
+    crate::command::input("docker", &args, sql.as_bytes())?;
+    Ok(())
 }
 
 fn run_suites(env: BTreeMap<&str, String>, suite: Option<&str>) -> Result<()> {

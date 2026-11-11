@@ -46,6 +46,10 @@ async fn retained_pre_baseline_history_is_rejected_without_changes() -> TestResu
     client.batch_execute(hierarchy).await?;
     client.batch_execute("INSERT INTO workflow_schema_migrations(version,description,checksum) VALUES (1,'Hierarchy','corrupt-checksum')").await?;
     assert!(matches!(
+        ayni_orchestrator_workflow_postgres::migrations::preflight(&client).await,
+        Err(MigrationError::ChecksumMismatch)
+    ));
+    assert!(matches!(
         migrate_client(&mut client).await,
         Err(MigrationError::ChecksumMismatch)
     ));
@@ -60,6 +64,15 @@ async fn retained_pre_baseline_history_is_rejected_without_changes() -> TestResu
             &[&checksum],
         )
         .await?;
+    ayni_orchestrator_workflow_postgres::migrations::preflight(&client).await?;
+    let count: i64 = client
+        .query_one("SELECT count(*) FROM workflow_schema_migrations", &[])
+        .await?
+        .get(0);
+    assert_eq!(
+        count, 1,
+        "preflight must not apply pending forward migrations"
+    );
     client.batch_execute("DROP TABLE retained_evidence").await?;
     migrate_client(&mut client).await?;
     migrate_client(&mut client).await?;

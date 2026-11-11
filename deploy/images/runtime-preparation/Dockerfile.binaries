@@ -9,27 +9,11 @@ COPY proto ./proto
 COPY dev/fixtures/task-source ./dev/fixtures/task-source
 COPY dev/fixtures/task-quality ./dev/fixtures/task-quality
 COPY dev/fixtures/runtime-preparation ./dev/fixtures/runtime-preparation
+RUN rustc --edition=2024 tools/bootstrap/src/bin/image-build.rs -o /usr/local/bin/image-build
 ARG KEEP_TARGET_CACHE=false
 RUN --mount=type=cache,id=ayni-runtime-preparation-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=ayni-runtime-preparation-git,target=/usr/local/cargo/git \
     --mount=type=cache,id=ayni-runtime-preparation-target,target=/workspace/target \
-    set -eu; \
-    build_target="$(rustc -vV | sed -n 's/^host: //p')"; \
-    find backend -type f -exec touch {} +; \
-    CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_DEBUG=0 \
-    CARGO_PROFILE_RELEASE_LTO=false RUSTFLAGS='-C target-feature=+crt-static' \
-      cargo build --locked --release --target "$build_target" \
-      --package ayni-orchestrator-runtime-preparation --package ayni-orchestrator-runtime-verifier; \
-    mkdir /output; \
-    cp "target/$build_target/release/ayni-orchestrator-runtime-preparation" /output/runtime-worker; \
-    cp "target/$build_target/release/ayni-runtime-supervisor" /output/runtime-supervisor; \
-    cp "target/$build_target/release/ayni-orchestrator-runtime-verifier" /output/runtime-verifier; \
-    for binary in /output/runtime-*; do \
-      readelf --program-headers "$binary" > /tmp/program-headers; \
-      readelf --dynamic "$binary" > /tmp/dynamic; \
-      if grep -q INTERP /tmp/program-headers || grep -q '(NEEDED)' /tmp/dynamic; then exit 1; fi; \
-      chmod 0555 "$binary"; \
-    done; \
-    if [ "$KEEP_TARGET_CACHE" != true ]; then find /workspace/target -mindepth 1 -maxdepth 1 -exec rm -rf {} +; fi
+    /usr/local/bin/image-build runtime
 FROM scratch AS binaries
 COPY --from=builder /output/ /

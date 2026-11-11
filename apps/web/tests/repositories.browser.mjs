@@ -1,8 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
-import {once} from 'node:events';
-import {createServer} from 'node:net';
 import {setTimeout as delay} from 'node:timers/promises';
 import {chromium} from 'playwright';
 import {exerciseRuntimePreparation} from './runtime-preparation-ui.mjs';
@@ -10,10 +7,7 @@ import {exerciseRuntimePreparation} from './runtime-preparation-ui.mjs';
 test('repository catalog and workspace availability and project settings use canonical APIs', {timeout:120000}, async()=>{
  const fixture=process.env.AYNI_REPOSITORY_FIXTURE;
  assert.ok(fixture,'run through the repository PostgreSQL/browser gate');
- const server=createServer();server.listen(0,'127.0.0.1');await once(server,'listening');const port=server.address().port;await new Promise(resolve=>server.close(resolve));
- const origin=`http://127.0.0.1:${port}`;
- const production=process.env.AYNI_PRODUCT_PRODUCTION==='1';
- const child=production?spawn('node',['apps/web/build/index.js'],{stdio:'ignore',env:{...process.env,HOST:'127.0.0.1',PORT:String(port)},detached:true}):spawn('pnpm',['--dir','apps/web','exec','vite','dev','--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:'ignore',env:process.env,detached:true});
+ const origin='http://127.0.0.1:5174';
  let browser;
  try {
   let ready=false;for(let i=0;i<120;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await delay(250);}assert.ok(ready,'product did not start');
@@ -147,13 +141,13 @@ test('repository catalog and workspace availability and project settings use can
   assert.equal(startRuntime.status(),200);const runtimeReceipt=(await startRuntime.json()).run;
   assert.equal(runtimeReceipt.state,'resolving');
   await page.goto(`${origin}/repositories/${fixture}?tab=runtime`);
-  await page.getByText('Runtime onboarding needs attention',{exact:true}).waitFor();
-  await page.getByText('The selected branch could not be read. Check the source control connection and repository access, then prepare again.',{exact:true}).waitFor();
+  await page.locator('[data-sonner-toast]').getByText('Preparation needs attention',{exact:true}).waitFor();
+  await page.getByRole('region',{name:'Runtime status',exact:true}).getByText('The selected branch could not be read. Check the source control connection and repository access, then prepare again.',{exact:true}).waitFor();
   const recovered=await page.request.post(`${origin}/api/GetRepositoryRuntimeReceipt`,{headers:{'x-console-request':'1'},data:{idempotencyKey:runtimeSettings.idempotencyKey}});
   assert.equal(recovered.status(),200);assert.deepEqual((await recovered.json()).run,runtimeReceipt);
   const currentRun=await page.request.post(`${origin}/api/GetRepositoryRuntime`,{headers:{'x-console-request':'1'},data:{repositoryId:fixture}});
   assert.equal((await currentRun.json()).run.safeReason,'source_unavailable');
   await exerciseRuntimePreparation(page,origin,fixture);
   console.log('repository-browser: real PostgreSQL/gRPC/gateway catalog, exact loss/reload recovery, rejected false readiness, inherited workspace repository availability and scope rejection passed; GitHub provider discovery uses fixtures.');
- } finally {await browser?.close();try{process.kill(-child.pid,'SIGTERM');}catch{}}
+ } finally {await browser?.close();}
 });

@@ -1,5 +1,8 @@
 # Task execution preparation
 
+> Legacy command examples below describe historical qualification. Use the
+> [single-environment guide](../operations/local-development.md) for current commands.
+
 ## Planned alpha preparation
 
 The [alpha contract](alpha-product.md) requires workspace-scoped project repository
@@ -98,11 +101,7 @@ Create a selection JSON containing full task scope and `inputs` with
 commit, lock digest and an idempotency key. Use a trusted checkout containing the
 approved Git objects; dirty working files are ignored.
 
-```sh
-dev/ctl prepare-task verify /absolute/trusted/checkout selection.json frozen-request.json
-# Review the generated request before authorizing the selection.
-dev/ctl prepare-task submit frozen-request.json
-```
+Historical command sequences are retained in the [previous revision](https://github.com/ayni-oss/orchestrator/blob/9de06f53/docs/technical/architecture/task-execution.md).
 
 The utility never overwrites a frozen request. Preserve it through response loss
 and resubmit the same file without re-resolving a moving ref or generating another
@@ -119,10 +118,7 @@ fixture proves dirty files cannot change the frozen lock digest. Deployed gates
 exercise private-v1 preparation and receipt recovery through control-plane,
 executor, broker and database restarts, including preparation during broker outage:
 
-```sh
-AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-m4-preparation dev/ctl deploy
-AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-m4-preparation dev/ctl acceptance /absolute/new/evidence --tasks-only
-```
+Historical command sequences are retained in the [previous revision](https://github.com/ayni-oss/orchestrator/blob/9de06f53/docs/technical/architecture/task-execution.md).
 
 The deployed preparation scenario uses synthetic source/image identities and
 asserts no coding dispatch. It does not establish real image compatibility or

@@ -20,8 +20,8 @@ Broker unavailability does not make PostgreSQL readiness false. Both broker clie
 Use the local operational checks:
 
 ```sh
-dev/ctl check
-dev/ctl scenario
+cargo xtask dev status
+cargo xtask test deployment debug
 ```
 
 `check` verifies all StatefulSets/Deployments, migrations through ordinal 30, exact stream policy/capacity, named consumers, and executor-ledger initialization. `scenario` proves one private-v1 message reaches one accepted scripted response.
@@ -111,18 +111,18 @@ The reusable chart consumes four differently named immutable Secrets:
 
 The local chart additionally owns separate NATS administrative and acceptance-harness passwords. The database administrator belongs only to PostgreSQL. Secret contents never enter ConfigMaps, command arguments, logs, events, gRPC, or JetStream payloads.
 
-Rotate immutable credentials with new Secret names and an ordered workload rollout. Do not retire the executor credential, key, consumer, or ledger while a targeted decision is unresolved. The disposable local reset is `dev/ctl purge <exact-namespace>` followed by deploy; do not patch an immutable Secret in place.
+Rotate immutable credentials with new Secret names and an ordered workload rollout. Do not retire the executor credential, key, consumer, or ledger while a targeted decision is unresolved. Local development never resets retained data automatically. Do not patch an immutable Secret in place.
 
 ## Backup and restore
 
-The session namespace has Helm keep policy. `dev/ctl cleanup` stops the supervisor
+The session namespace has Helm keep policy. `cargo xtask dev stop` stops the supervisor
 before removing owned session Pods and preserves all workflow/session PVCs and
-immutable Secrets. Exact-parent `dev/ctl purge` deletes both ownership-labelled
-namespaces; it permanently removes those stores.
+immutable Secrets. There is no automatic purge command. Deleting retained namespaces
+or storage requires a separately authorized, ownership-verified operator action.
 
 A consistent backup quiesces admission and preserves PostgreSQL, JetStream,
 the supervisor ledger and every unresolved session ledger with its scoped
-credentials. PostgreSQL alone is insufficient while any command/report/decision handoff is unresolved. Restore only matching migration/checksum and protocol revisions, start stateful dependencies first, then one control plane and the retained executor, and run `dev/ctl check` before admitting new work.
+credentials. PostgreSQL alone is insufficient while any command/report/decision handoff is unresolved. Restore only matching migration/checksum and protocol revisions, start stateful dependencies first, then one control plane and the retained executor, and run `cargo xtask dev status` before admitting new work.
 
 SQLite workflow files from the superseded implementation are not backups. The executor ledger is a separate current protocol store and must not be imported into PostgreSQL.
 

@@ -1,0 +1,14 @@
+[package]
+name = "ayni-orchestrator-bootstrap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "ayni-local-infrastructure"
+path = "src/bin/local-infrastructure.rs"
+
+[[bin]]
+name = "ayni-image-build"
+path = "src/bin/image-build.rs"

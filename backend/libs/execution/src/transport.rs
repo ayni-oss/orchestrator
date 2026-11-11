@@ -1,7 +1,12 @@
 //! A reconnecting stream only replays observations, never commands.
 use crate::Spool;
 use ayni_orchestrator_telemetry::v1::execution_telemetry_service_client::ExecutionTelemetryServiceClient;
-use std::{io, sync::Arc, time::Duration};
+use std::{
+    collections::VecDeque,
+    io,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use tokio::sync::watch;
 use tonic::{Request, transport::Endpoint};
 
@@ -25,9 +30,13 @@ pub async fn deliver(
         let attempt = async {
             let channel = endpoint.connect().await.map_err(io::Error::other)?;
             let journal = spool.clone();
+            let outstanding = Arc::new(Mutex::new(VecDeque::new()));
+            let expected = outstanding.clone();
+            let (committed, mut progress) = watch::channel(0_u64);
             let output = async_stream::stream! {
                 let mut heartbeat = tokio::time::Instant::now();
-                loop {
+                let mut sent = 0_u64;
+                'delivery: loop {
                     if heartbeat.elapsed() >= Duration::from_secs(10) && !crate::capture_finished() {
                         if let Some(capture) = crate::capture() {
                             let _ = capture.record("worker", "heartbeat", "", &[], None, None);
@@ -35,9 +44,26 @@ pub async fn deliver(
                         heartbeat = tokio::time::Instant::now();
                     }
                     if *stop.borrow() { break; }
-                    match journal.pending() {
-                        Ok(records) => for record in records { yield ayni_orchestrator_telemetry::v1::ExchangeTelemetryRequest { record: Some(record) }; },
-                        Err(_) => break,
+                    let Ok(records) = journal.pending() else { break; };
+                    if !records.is_empty() {
+                        // One bounded window per connection. Replaying an unacknowledged
+                        // window on a healthy stream only queues duplicates ahead of
+                        // new output; reconnect is the replay boundary.
+                        {
+                            let Ok(mut expected) = expected.lock() else { break; };
+                            expected.extend(records.iter().filter_map(|record| record.source.as_ref().map(|source| (source.id.clone(), record.sequence))));
+                        }
+                        for record in records {
+                            sent += 1;
+                            yield ayni_orchestrator_telemetry::v1::ExchangeTelemetryRequest { record: Some(record) };
+                        }
+                        while *progress.borrow() < sent {
+                            tokio::select! {
+                                result = progress.changed() => if result.is_err() { break 'delivery; },
+                                _ = stop.changed() => break 'delivery,
+                            }
+                        }
+                        continue;
                     }
                     tokio::select! {
                         () = tokio::time::sleep(Duration::from_millis(250)) => {},
@@ -54,8 +80,20 @@ pub async fn deliver(
                 .await
                 .map_err(io::Error::other)?
                 .into_inner();
-            while let Some(ack) = incoming.message().await.map_err(io::Error::other)? {
+            while let Some(ack) = tokio::time::timeout(Duration::from_secs(30), incoming.message())
+                .await
+                .map_err(io::Error::other)?
+                .map_err(io::Error::other)?
+            {
+                let expected = outstanding
+                    .lock()
+                    .map_err(|_| io::Error::other("telemetry window lock"))?
+                    .pop_front();
+                if expected.as_ref() != Some(&(ack.source_id.clone(), ack.sequence)) {
+                    return Err(io::Error::other("acknowledgement outside telemetry window"));
+                }
                 spool.acknowledge(&ack.source_id, ack.sequence)?;
+                committed.send_modify(|count| *count += 1);
                 if ack.cancel_requested {
                     crate::request_cancellation();
                 }

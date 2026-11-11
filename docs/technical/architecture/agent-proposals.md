@@ -82,7 +82,7 @@ The cumulative provider fixture includes valid, malformed, scope-spoofing, mixed
 read/proposal and delayed cancellation responses. The PostgreSQL and executor
 gates cover retained replay and authority fencing. Run the deployed scenario with
 `node apps/console/provider-acceptance.mjs` against the explicit Docker Desktop
-stack; see [fixture setup](../../../dev/fixtures/provider/README.md).
+stack; see [fixture setup](https://github.com/ayni-oss/orchestrator/blob/9de06f53/dev/fixtures/provider/README.md).
 
 For a separately reported live smoke, use the existing scoped credential mount
 and `apps/console/provider-live-smoke.mjs` with `AYNI_SMOKE_PLAN_PROPOSAL=1` and

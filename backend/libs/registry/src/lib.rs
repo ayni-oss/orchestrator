@@ -181,7 +181,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+    #[ignore = "requires loopback networking; run cargo xtask test loopback"]
     async fn streaming_body_rejects_oversized_chunked_responses_requires_loopback()
     -> Result<(), Box<dyn std::error::Error>> {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};

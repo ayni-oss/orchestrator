@@ -142,7 +142,7 @@ async fn disabled_profile(mode: &'static str) -> (ExecutionResult, usize, usize)
 }
 
 #[tokio::test]
-#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+#[ignore = "requires loopback networking; run cargo xtask test loopback"]
 async fn disabled_supervisor_profile_replays_paid_result_without_new_admission_requires_loopback() {
     let (result, admitted, sent) = disabled_profile("retained").await;
     assert_eq!(result.response_content, "retained paid response");
@@ -151,7 +151,7 @@ async fn disabled_supervisor_profile_replays_paid_result_without_new_admission_r
 }
 
 #[tokio::test]
-#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+#[ignore = "requires loopback networking; run cargo xtask test loopback"]
 async fn disabled_supervisor_profile_reports_missing_credentials_for_fresh_work_requires_loopback()
 {
     let (result, admitted, sent) = disabled_profile("fresh").await;
@@ -161,7 +161,7 @@ async fn disabled_supervisor_profile_reports_missing_credentials_for_fresh_work_
 }
 
 #[tokio::test]
-#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+#[ignore = "requires loopback networking; run cargo xtask test loopback"]
 async fn disabled_supervisor_profile_recovers_sending_as_uncertain_without_admission_requires_loopback()
  {
     let (result, admitted, sent) = disabled_profile("sending").await;

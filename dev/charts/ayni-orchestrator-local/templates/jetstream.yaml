@@ -9,8 +9,6 @@ metadata:
   labels:
     {{- include "local.commonLabels" . | nindent 4 }}
 data:
-  start.sh: |
-    {{- .Files.Get "files/jetstream-start.sh" | nindent 4 }}
   nats.conf: |
     server_name: jetstream
     port: 4222
@@ -281,11 +279,23 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        - name: infrastructure-tools
+          image: {{ index .Values "ayni-orchestrator" "images" "controlPlane" | quote }}
+          command: ["cp", "/usr/local/bin/ayni-local-infrastructure", "/tools/ayni-local-infrastructure"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tools
+              mountPath: /tools
       containers:
         - name: nats
           image: {{ .Values.jetstream.serverImage | quote }}
           imagePullPolicy: IfNotPresent
-          command: ["/bin/sh", "/config/start.sh"]
+          command: ["/tools/ayni-local-infrastructure", "nats"]
           args: ["--config=/config/nats.conf"]
           env:
             - name: WORKFLOW_ADMIN_PASSWORD
@@ -334,12 +344,17 @@ spec:
               drop: ["ALL"]
             readOnlyRootFilesystem: true
           volumeMounts:
+            - name: tools
+              mountPath: /tools
+              readOnly: true
             - name: config
               mountPath: /config
               readOnly: true
             - name: data
               mountPath: /data
       volumes:
+        - name: tools
+          emptyDir: {}
         - name: config
           configMap:
             name: workflow-jetstream-config
@@ -391,8 +406,21 @@ spec:
         runAsNonRoot: true
         runAsUser: 10001
         runAsGroup: 10001
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        - name: infrastructure-tools
+          image: {{ index .Values "ayni-orchestrator" "images" "controlPlane" | quote }}
+          command: ["cp", "/usr/local/bin/ayni-local-infrastructure", "/tools/ayni-local-infrastructure"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tools
+              mountPath: /tools
       containers:
         - name: provision
           image: {{ .Values.jetstream.toolingImage | quote }}
@@ -404,41 +432,8 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.jetstream.secrets.admin | quote }}
                   key: password
-          command: ["/bin/sh", "-ec"]
-          args:
-            - |
-              export NATS_URL=nats://jetstream:4222
-              export NATS_USER=workflow-admin
-              export NATS_PASSWORD="$WORKFLOW_ADMIN_PASSWORD"
-              for attempt in $(seq 1 60); do
-                if nats --timeout=2s account info >/dev/null 2>&1; then break; fi
-                sleep 2
-              done
-              nats stream ls --names >/tmp/streams
-              configure_stream() {
-                stream="$1"; config="$2"
-                if grep -qx "$stream" /tmp/streams; then
-                  nats stream edit "$stream" --config="$config" --force
-                else
-                  nats stream add --config="$config" --defaults
-                fi
-              }
-              configure_consumer() {
-                stream="$1"; consumer="$2"; config="$3"
-                if nats consumer info "$stream" "$consumer" >/dev/null 2>&1; then
-                  nats consumer edit "$stream" "$consumer" --config="$config" --force
-                else
-                  nats consumer add "$stream" --config="$config"
-                fi
-              }
-              configure_stream ORCHESTRATOR_WORKFLOW_COMMAND_V1 /config/command.json
-              configure_stream ORCHESTRATOR_WORKFLOW_REPORT_V1 /config/report.json
-              configure_stream ORCHESTRATOR_WORKFLOW_DECISION_V1 /config/decision.json
-              configure_stream ORCHESTRATOR_EXECUTION_DIAGNOSTICS_V1 /config/diagnostics.json
-              configure_consumer ORCHESTRATOR_WORKFLOW_COMMAND_V1 scripted-executor /config/command-consumer.json
-              configure_consumer ORCHESTRATOR_WORKFLOW_REPORT_V1 workflow-application /config/report-consumer.json
-              configure_consumer ORCHESTRATOR_WORKFLOW_DECISION_V1 executor-{{ .Values.jetstream.executorInstanceId }} /config/executor-decision-consumer.json
-              configure_consumer ORCHESTRATOR_WORKFLOW_DECISION_V1 acceptance-harness /config/acceptance-consumer.json
+          command: ["/tools/ayni-local-infrastructure", "provision"]
+          args: [{{ .Values.jetstream.executorInstanceId | quote }}]
           resources:
             requests:
               cpu: 10m
@@ -452,12 +447,17 @@ spec:
               drop: ["ALL"]
             readOnlyRootFilesystem: true
           volumeMounts:
+            - name: tools
+              mountPath: /tools
+              readOnly: true
             - name: config
               mountPath: /config
               readOnly: true
             - name: scratch
               mountPath: /tmp
       volumes:
+        - name: tools
+          emptyDir: {}
         - name: config
           configMap:
             name: workflow-jetstream-config

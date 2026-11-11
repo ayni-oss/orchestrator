@@ -194,7 +194,7 @@ fn sending(prepared: &Preparation, allowed: bool, state: &str) -> SendInput {
 }
 
 #[tokio::test]
-#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+#[ignore = "requires loopback networking; run cargo xtask test loopback"]
 async fn retained_response_replays_across_worker_restart_without_another_paid_call_requires_loopback()
  {
     let fixture = fixture(SUCCESS, Duration::ZERO).await;
@@ -270,7 +270,7 @@ async fn retained_response_replays_across_worker_restart_without_another_paid_ca
 }
 
 #[tokio::test]
-#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+#[ignore = "requires loopback networking; run cargo xtask test loopback"]
 async fn sending_intent_after_restart_is_uncertain_and_never_resent_requires_loopback() {
     let fixture = fixture(SUCCESS, Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
@@ -310,7 +310,7 @@ async fn sending_intent_after_restart_is_uncertain_and_never_resent_requires_loo
 }
 
 #[tokio::test]
-#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+#[ignore = "requires loopback networking; run cargo xtask test loopback"]
 async fn ambiguous_body_is_retained_once_without_a_second_request_requires_loopback() {
     let fixture = fixture("{truncated", Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
@@ -338,7 +338,7 @@ async fn ambiguous_body_is_retained_once_without_a_second_request_requires_loopb
 }
 
 #[tokio::test]
-#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+#[ignore = "requires loopback networking; run cargo xtask test loopback"]
 async fn cancelled_prepared_request_cannot_send_requires_loopback() {
     let fixture = fixture(SUCCESS, Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
@@ -364,7 +364,7 @@ async fn cancelled_prepared_request_cannot_send_requires_loopback() {
 }
 
 #[tokio::test]
-#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+#[ignore = "requires loopback networking; run cargo xtask test loopback"]
 async fn cancellation_interrupts_locally_and_keeps_external_outcome_unknown_requires_loopback() {
     let fixture = fixture(SUCCESS, Duration::from_secs(60)).await;
     let directory = tempfile::tempdir().unwrap();
@@ -415,7 +415,7 @@ async fn cancellation_interrupts_locally_and_keeps_external_outcome_unknown_requ
     assert_eq!(fixture.count.load(Ordering::SeqCst), 1);
 }
 #[tokio::test]
-#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+#[ignore = "requires loopback networking; run cargo xtask test loopback"]
 async fn unknown_usage_retains_request_and_reservation_after_application_decision_requires_loopback()
  {
     let fixture=fixture(r#"{"id":"resp_unknown","model":"fixture-model","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"answer"}]}]}"#,Duration::ZERO).await;
@@ -461,7 +461,7 @@ async fn unknown_usage_retains_request_and_reservation_after_application_decisio
 }
 
 #[tokio::test]
-#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+#[ignore = "requires loopback networking; run cargo xtask test loopback"]
 async fn output_limit_retains_terminal_usage_and_never_retries_requires_loopback() {
     let fixture=fixture(r#"{"id":"resp_incomplete","model":"fixture-model","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[],"usage":{"input_tokens":4,"output_tokens":16,"total_tokens":20}}"#,Duration::ZERO).await;
     let directory = tempfile::tempdir().unwrap();
@@ -494,7 +494,7 @@ async fn output_limit_retains_terminal_usage_and_never_retries_requires_loopback
 }
 
 #[tokio::test]
-#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+#[ignore = "requires loopback networking; run cargo xtask test loopback"]
 async fn credentials_appearing_after_worker_start_are_loaded_before_preparation_requires_loopback()
 {
     let fixture = fixture(SUCCESS, Duration::ZERO).await;

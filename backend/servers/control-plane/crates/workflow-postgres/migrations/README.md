@@ -36,4 +36,4 @@ Once installed, these files are immutable. Add subsequent changes from `017`
 and register them in `src/migrations.rs`. Before applying pending migrations, the
 runner validates the complete applied prefix and its checksums. After changing
 schema definitions, regenerate and verify the catalog fingerprint with
-`scripts/ci/generate-workflow-schema-manifest.py --write` from the repository root.
+`cargo xtask generate schema --write` from the repository root.

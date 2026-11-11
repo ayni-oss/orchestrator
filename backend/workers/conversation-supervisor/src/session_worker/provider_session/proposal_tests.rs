@@ -33,7 +33,7 @@ async fn proposal_fixture(args: Value, mixed: bool) -> Fixture {
 }
 
 #[tokio::test]
-#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+#[ignore = "requires loopback networking; run cargo xtask test loopback"]
 async fn retained_proposal_recovers_exact_invocation_and_bytes_without_paid_replay_requires_loopback()
  {
     let mut args = arguments();
@@ -85,7 +85,7 @@ async fn retained_proposal_recovers_exact_invocation_and_bytes_without_paid_repl
 }
 
 #[tokio::test]
-#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+#[ignore = "requires loopback networking; run cargo xtask test loopback"]
 async fn malformed_mixed_and_scope_selecting_proposals_fail_without_plan_output_requires_loopback()
 {
     let mut foreign = arguments();
@@ -117,7 +117,7 @@ async fn malformed_mixed_and_scope_selecting_proposals_fail_without_plan_output_
 }
 
 #[tokio::test]
-#[ignore = "requires loopback networking; run scripts/ci/check-workflow-loopback.sh"]
+#[ignore = "requires loopback networking; run cargo xtask test loopback"]
 async fn cancellation_before_checkpoint_recovery_cannot_emit_retained_proposal_requires_loopback() {
     let fixture = proposal_fixture(arguments(), false).await;
     let directory = tempfile::tempdir().unwrap();

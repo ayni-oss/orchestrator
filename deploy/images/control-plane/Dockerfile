@@ -21,6 +21,8 @@ RUN --mount=type=cache,id=ayni-orchestrator-control-cargo-registry,target=/usr/l
     && install --mode=0755 target/release/workflow-acceptance /tmp/workflow-acceptance \
     && install --mode=0755 target/release/workflow-publish-task /tmp/workflow-publish-task
 
+RUN rustc --edition=2024 -C target-feature=+crt-static -O tools/bootstrap/src/bin/local-infrastructure.rs -o /tmp/ayni-local-infrastructure
+
 FROM debian:bookworm-slim
 
 RUN apt-get update \
@@ -38,3 +40,5 @@ ENTRYPOINT ["/usr/local/bin/ayni-orchestrator-control-plane"]
 COPY --from=builder /tmp/workflow-publish-task /usr/local/bin/workflow-publish-task
 
 COPY --from=builder /tmp/ayni-log-collector /usr/local/bin/ayni-log-collector
+
+COPY --from=builder /tmp/ayni-local-infrastructure /usr/local/bin/ayni-local-infrastructure

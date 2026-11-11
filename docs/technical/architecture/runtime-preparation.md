@@ -1,5 +1,8 @@
 # Kubernetes runtime preparation
 
+> Legacy command examples below describe historical qualification. Use the
+> [single-environment guide](../operations/local-development.md) for current commands.
+
 Runtime preparation produces a verified immutable image for one exact inspected
 repository commit. It does not approve plans, start tasks or change task runtime
 selection. The [repository preparation contract](repository-preparation.md) owns
@@ -197,7 +200,7 @@ it does not establish network isolation. The canonical profile still requires
 `qualified: true`, and the development profile rejects that qualification claim.
 The frozen operation records this identity and its API exposes `development_only`.
 The ayni settings page shows when the active worker profile is for local development.
-The guarded local `dev/ctl deploy` and `dev/ctl live` setup selects this exception
+The guarded local `dev/ctl deploy` and `cargo xtask dev` setup selects this exception
 automatically after building checksum-verified tooling and resolving immutable
 worker/verifier manifests. `AYNI_ORCHESTRATOR_RUNTIME=false` opts out. This local
 convenience does not change production chart defaults or qualify the topology.

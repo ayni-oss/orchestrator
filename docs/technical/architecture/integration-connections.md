@@ -143,7 +143,7 @@ conversation history and confer no execution or publication grant.
 establish current availability, committed Ayni compatibility or runtime readiness.
 Task source verification and runtime artifact selection remain separate future work.
 
-`AYNI_REPOSITORIES_ONLY=1 scripts/ci/check-workflow-postgres-feasibility.sh`
+`AYNI_REPOSITORIES_ONLY=1 cargo xtask test postgres`
 checks real PostgreSQL, gRPC, gateway and browser recovery using synthetic source
 credentials. It qualifies catalog authority and UI behavior, not live GitHub
 credentials, registry permissions or runtime preparation.

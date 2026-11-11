@@ -56,8 +56,8 @@ reports can leave only its observed Kubernetes metadata and earlier checkpoints.
 
 Run the supported Docker Desktop deployment with the optional collector:
 
-```sh
-AYNI_ORCHESTRATOR_OBSERVABILITY=true dev/ctl deploy
+```text
+cargo xtask evidence traces /absolute/traces.jsonl /absolute/new-report full
 ```
 
 The local chart enables `ayni-orchestrator.observability.collector.enabled`. The
@@ -122,11 +122,8 @@ fixed-name request/failure counters and duration histograms through `/metrics`.
 After a real runtime journey, extract the collector's allowlisted correlation
 projection and validate coverage:
 
-```sh
-python3 scripts/ci/check-execution-traces.py \
-  --namespace ayni-orchestrator-acceptance-observable \
-  --output /absolute/new/evidence/traces \
-  --profile full
+```text
+cargo xtask evidence traces /absolute/traces.jsonl /absolute/new-report full
 ```
 
 The checker uses only `kubectl --context docker-desktop` and the collector's

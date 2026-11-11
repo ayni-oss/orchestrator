@@ -1,5 +1,8 @@
 # Task draft publication
 
+> Legacy command examples below describe historical qualification. Use the
+> [single-environment guide](../operations/local-development.md) for current commands.
+
 ## Planned alpha publication
 
 The [alpha delivery contract](alpha-product.md#task-graphs-and-pr-structure) lets
@@ -45,10 +48,7 @@ defines pending-command recovery and stale-review fencing.
 Alternatively, use the trusted local helper to review the exact title, body, repository, source,
 branch and evidence before submission:
 
-```sh
-dev/ctl publish-task prepare selection.json frozen-publication.json
-dev/ctl publish-task submit frozen-publication.json
-```
+Historical command sequences are retained in the [previous revision](https://github.com/ayni-oss/orchestrator/blob/9de06f53/docs/technical/architecture/task-publication.md).
 
 `selection.json` contains the full `GetTaskAttemptRequest` scope. Preparation
 writes a new file and does not authorize external actions. Retain that file and

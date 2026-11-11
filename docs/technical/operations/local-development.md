@@ -1,636 +1,130 @@
 # Local development
 
-> UI status: the local product supports configuration and basic workspace/project
-> navigation; see [integration connections](../architecture/integration-connections.md).
-> Conversation/task browser steps below describe the retired UI and remain
-> historical. Their acceptance profiles require replacement coverage. The API
-> gateway itself serves no UI assets.
+Run `cargo xtask dev` (or `make dev`) from the Orchestrator checkout and open
+**http://127.0.0.1:5174**. This is the only development application. The Rust
+controller owns Vite, the loopback gateway at port 3000, port forwarding, image
+builds and Kubernetes reconciliation.
 
-The supported stack builds on M1 Slice 3 and runs one control plane, PostgreSQL 17.6, an isolated authenticated NATS/JetStream server, and one retained conversation supervisor on Docker Desktop Kubernetes. The supervisor
-provisions isolated conversation workers in a dedicated session namespace. PostgreSQL is the workflow authority; JetStream is durable transport, and broker storage never implies executor ownership.
+Use Docker Desktop with its `docker-desktop` Kubernetes context, Rust 1.94.0,
+Node 24.14.0, pnpm 10.31.0 and Helm 4.1.1. Local runtime images currently require
+the native arm64 Desktop node. The controller checks these prerequisites and
+never falls back to another Kubernetes context, namespace or frontend port.
 
-## Runtime component names
+The application namespace is `ayni-orchestrator-live`. Its `-sessions` and
+`-runtime` namespaces isolate managed workloads; they are parts of the same
+environment. Database, broker, credentials, execution ledgers and collector
+spools persist across controller restarts. Startup does not delete environments.
 
-The application models workspaces, projects, conversations, tasks and runtimes.
-“Workflow” in internal persistence or transport names means coordination of those
-entities; it does not identify another product entity.
+## Commands
 
-| Kubernetes workload | Responsibility |
+| Command | Result |
 | --- | --- |
-| `deployment/control-plane` | API, admission, authoritative state transitions and accepted results |
-| `deployment/task-supervisor` | Dispatch and reconciliation of isolated coding-task workers |
-| `statefulset/conversation-supervisor` | Conversation command delivery, session-worker supervision and retained report handoffs |
-| `statefulset/postgres` | Authoritative application database |
-| `statefulset/jetstream` | Durable conversation command, report and decision transport |
-
-Conversation and task workers run in `<application-namespace>-sessions`.
-The supervisor image includes both conversation and task binaries; the scripted
-provider is a deterministic execution mode, not a separate infrastructure role.
-
-`dev/ctl deploy`, `dev/ctl live` and `make dev` automatically prepare and enable
-runtime workers on the supported native arm64 local cluster. The first run
-downloads the checksum-pinned Ayni release and builds/imports the worker and
-verifier images. Subsequent runs reuse them only while source bytes match and
-their immutable manifests remain in the selected node. Runtime source changes
-also trigger live reconciliation. Rebuilds preserve debug mode independently.
-Set `AYNI_ORCHESTRATOR_RUNTIME=false` to explicitly deploy without runtime builds.
-
-The development setup selects the local-development profile with `qualified=false`
-and public HTTP/HTTPS stage egress for source, dependencies and registry access.
-It does not establish NetworkPolicy enforcement on Docker Desktop. Image pins,
-source verification, signing and execution allowances still apply; configure
-repository access, registry and signing in the UI as needed. Production chart
-defaults remain disabled and require administrator configuration.
-
-### Existing installations
-
-The component rename changes StatefulSet names and therefore the generated
-PostgreSQL and supervisor PVC names. Deployment scripts and cluster-connected
-Helm rendering reject namespaces containing `scripted-executor`,
-`workflow-postgres` or `workflow-jetstream` StatefulSets before replacing them.
-They also reject retained `ledger-scripted-executor-0` and
-`data-workflow-postgres-0` PVCs after an uninstall.
-Use a fresh namespace for a separate installation. Keeping an existing
-installation requires an operator-managed retained-data migration; this change
-does not provide an automatic migration. Do not delete individual old workloads
-or retained volumes to bypass the check.
-
-For a disposable live environment whose retained data can be deleted, an
-explicitly authorized full reset recreates both owned namespaces with the new
-component names:
-
-```sh
-dev/ctl live reset ayni-orchestrator-live
-dev/ctl live once
-```
-
-Existing Secret names, database/schema identifiers, broker streams and the
-`scripted-executor` durable consumer remain stable internal contracts. The
-`workflow-postgres` Rust crate retains its persistence-specific name. They do not
-introduce a workflow entity. Current Helm settings use `postgres`, `jetstream`,
-`conversationSupervisor` and `images.conversationSupervisor`; old values files
-must be updated before deploying to a new namespace.
-
-## Live editing
-
-The [development-only live loop](../../../dev/LIVE.md) provides frontend HMR and
-cached Rust debug rebuild/rollout in a separate local namespace. It preserves the
-canonical API, database, broker and isolated-worker boundaries. Schema changes
-require an explicit migration command or deliberate disposable-environment reset.
-The live loop serves the sole example-derived application; immutable-image acceptance remains required.
-
-## Prerequisites
-
-- Docker Desktop Kubernetes with current context `docker-desktop`;
-- Helm 4.1.1;
-- `kubectl`, Docker, OpenSSL, Rust 1.94, Node 24.14, pnpm 10.31, and Buf 1.71;
-- at least 8 GiB free in the Docker Desktop VM before building the two Rust workload images.
-
-The capacity guard does not prune caches, volumes, or unrelated data. Reclaiming Docker storage is an explicit operator decision.
-
-## Deploy and check
-
-```sh
-dev/ctl deploy
-dev/ctl check --expect-empty
-dev/ctl scenario
-```
-
-The first deploy creates the namespace and seven immutable Secrets without printing their values:
-
-- `workflow-postgres-admin`, mounted only into PostgreSQL;
-- `workflow-postgres-migrator`, mounted only into the migration init container;
-- `workflow-postgres-runtime`, mounted only into the serving container;
-- `workflow-jetstream-admin`, mounted only into NATS and the stream-provisioning hook;
-- `workflow-jetstream-application`, mounted into NATS and the control plane;
-- `workflow-jetstream-executor`, mounted into NATS and the executor; and
-- `workflow-jetstream-acceptance`, mounted only into NATS for the later acceptance harness.
-
-The executor Secret also owns its fixed local instance ID and Ed25519 seed. The private seed never leaves that Pod or enters broker events. Anonymous access is disabled. Workload ACLs allow only the contracted command, report, targeted-decision, consumer-info/fetch, and ACK subjects; stream administration remains exclusive to the administrative identity.
-
-The pinned broker provisions three file-backed, `discard=new` streams:
-
-| Stream | Subject | Limit |
-| --- | --- | --- |
-| `ORCHESTRATOR_WORKFLOW_COMMAND_V1` | `orchestrator.workflow.command.conversation.v1` | 25,000 / 256 MiB |
-| `ORCHESTRATOR_WORKFLOW_REPORT_V1` | `orchestrator.workflow.report.conversation.v1` | 50,000 / 192 MiB |
-| `ORCHESTRATOR_WORKFLOW_DECISION_V1` | `orchestrator.workflow.accepted.conversation.v1.*` | 50,000 / 64 MiB |
-
-The broker launcher encodes Secret-backed passwords as quoted NATS strings in
-process memory. This preserves numeric-looking and escaped values without changing
-the credentials or writing them to configuration files.
-
-All use seven-day age limits, a two-minute duplicate window, one local replica, and a 260-KiB maximum stored message. The combined 512-MiB stream budget sits below the 1-GiB server budget on a retained 2-GiB PVC. The executor has a retained 512-MiB PVC and enforces a 192-MiB authority ledger plus a 64-MiB quarantine subquota within a 256-MiB combined logical cap.
-
-`dev/ctl check` verifies workload readiness, migration history through ordinal 30, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
-
-## Local API access
-
-The local product covers configuration and workspace/project navigation.
-Run `dev/ctl gateway [PORT]` for the trusted
-loopback JSON/SSE adapter. It serves `/api/{method}` and `/watch`, with no pages or
-assets. See [the gateway boundary](../architecture/contributor-console.md).
-The [web application](../../../apps/web/README.md) is the sole frontend and uses
-the example design against current APIs. Source preparation and publication helpers remain CLI
-operations. Conversation/task browser acceptance profiles remain unavailable pending their
-replacement coverage. The configuration foundation has its own combined browser
-gate; backend-only checks remain required.
-
-## Plan review
-
-Open **Plans** in a selected conversation. Expand **Write or revise a plan**,
-enter objective, scope, constraints and unresolved questions, and optionally add
-proposed tasks. Saving retains a new immutable version with the project and
-originating conversation. Repository/source references are visibly unverified.
-
-Select a plan to review its content and history. **Edit current version** copies
-that version into a local draft. Another tab can publish a newer version, but
-watch refresh never overwrites your draft; stale saves require fresh review.
-The retry panel preserves ambiguous saves and approvals across reloads.
-
-Resolve scope questions and give every proposed task acceptance criteria before
-approval. Review the retained version and digest, check the explicit approval
-consent, then choose **Approve reviewed version and admit tasks**. A newer streamed
-version never changes what you reviewed; select the plan again and review it
-before approval. Approval freezes the plan and atomically admits its complete task
-set. The receipt and task detail retain workspace, project, originating conversation,
-version and digest. Tasks initially await source verification, runtime
-selection and an authorized execution budget. Approval dispatches no coding work;
-inspect **Tasks** for the current execution state. A follow-up requires a new plan.
-
-The cumulative browser acceptance includes structured task editing, lost-response
-replay, two-tab revision and approval conflicts, exact approval retry, draft preservation, history, task pagination and scope checks.
-See [M3 acceptance](plan-acceptance.md) for cumulative outage/restart gates,
-[plan review](../architecture/plan-review.md) and [task admission](../architecture/task-admission.md) for limits and retained-state rules.
-
-## Task inspection and controls
-
-Open **Tasks** in a selected conversation to browse admitted work across its plans.
-**Refresh tasks** reloads the catalog; **Load more tasks** reads the next bounded
-page. Select a task to inspect preparation, coding, managed quality and draft
-publication separately. The selected task is restored after reload. Automatic
-refresh reads its current state every five seconds while the tab is visible;
-uncheck it for manual inspection. A failed read clears stale controls and reports
-that current state could not be loaded.
-
-Preparation shows frozen repository, source commit, runtime and execution budgets.
-Coding shows the retained outcome and provider state, with expandable accepted
-patch and worker identities. Quality shows target completion, exit code and
-expandable identities and artifacts. Failed quality preserves coding completion
-and blocks publication. Provider uncertainty remains explicit and never enables
-a fresh coding retry. Recovery or repair requires an exact reviewed proposal with explicit consent and a bounded
-additional allowance, or a new reviewed plan for materially changed inputs.
-
-**Download task selection** supplies the full originating scope and task ID for
-the trusted [preparation helper](../architecture/task-execution.md#operator-workflow).
-Add `inputs` with `runtimeImage`, `maxSeconds` and `maxTokens` to the downloaded
-selection before running verification. Verify source and upload the frozen source
-snapshot through the local helper;
-the browser cannot read a host checkout or submit source packs. **Cancel task
-execution** fences queued or active work. An already sent provider request may
-have incurred a charge; cancelling work does not resolve its external outcome.
-
-After reviewing an accepted patch and passing quality evidence, choose **Review
-draft publication**. Inspect the exact repository, source, branch, base, title,
-body, commit identity and evidence digests. Check the explicit consent and choose
-**Authorize draft publication**. This creates publication authority without
-rerunning coding or quality. A configured publisher with its own scoped
-credential is still required to perform external work.
-
-**Cancel draft publication** is available before draft creation begins. A pushed
-branch may remain. Creating or uncertain publication permits reconciliation of the
-original request, with no second create command. The retained PR link validates
-against the recorded GitHub repository and PR number. External PR state is the
-last retained observation, not a live GitHub poll.
-
-Task commands use the same pending panel as plan approval. After a lost response,
-reload and **Retry the same command** to replay its exact scope, attempt, evidence
-and key. Switching conversations clears review consent; late responses cannot
-replace another task's details. Concurrent operators can see stale controls, but
-the canonical command rechecks publication eligibility and cancellation fences.
-
-## Task feedback and attention
-
-The originating conversation shows retained execution and quality problems,
-including interrupted work, uncertain provider outcomes and failed checks.
-Project attention exposes the same notices across its conversations. Open a notice
-to inspect its originating task and saved patch or quality evidence.
-
-Feedback is factual system activity, separate from assistant messages. Notices
-remain in conversation history after recovery is authorized. Project attention hides those
-resolved decisions; the original notice links to the continued attempt and its separate coding
-and quality outcomes. Reading them grants no permission to retry or continue. See [task feedback](../architecture/task-feedback.md).
-
-For M6 acceptance, use owned test namespaces on explicit `docker-desktop`.
-Preserve stores within restart tests, then purge the owned test deployment and
-its ownership-labelled session namespace after testing. Leave unrelated
-development environments and retained user work intact.
-
-## Shared configuration and session controls
-
-Open **Shared agent configuration** after selecting a workspace. Save workspace
-instructions, provider/model, token limits and idle timeout. These settings apply
-to subsequently admitted messages in every conversation in that workspace.
-Already admitted turns retain their original configuration revision, including
-queued turns. Configuration edits from a stale tab are rejected; refresh the
-resources and review the current instructions before saving again.
-
-`scripted`/`scripted` is the default provider/model. Selecting OpenAI requires an
-explicit model. Newly admitted turns retain that provider binding; deployment
-enablement and a workspace-scoped credential mounted directly into the worker
-are required before a paid call. Existing admitted scripted turns remain scripted. The fixed interface version is
-v1; displayed configuration revision IDs identify immutable content.
-
-Open **Session** in a conversation's activity panel and select **Refresh session**.
-The first eligible message creates a scoped session. Different conversations use
-separate retained ledgers and workload generations. After work and report
-handoffs settle, **Replace idle session** fences that generation. The next
-eligible message starts the next generation. An active session cannot be replaced
-through this control; restore its retained executor and ledger instead.
-
-The replacement button uses the server's advisory `can_replace` readiness flag.
-While the panel shows finishing accepted work, select **Refresh session** after
-the remaining outbox handoffs settle. The replacement command rechecks readiness
-transactionally, so a stale enabled button cannot bypass active-work protection.
-
-Context manifests retain at most 10,000 message references. Admission reserves
-space for possible predecessor responses before accepting a new input. A capacity
-rejection requires available room, an explicit new conversation or reviewed
-context policy; the runtime does not silently discard older inputs.
-
-Idle expiry preserves retained evidence. Restart within a valid generation
-adopts its retained identity and storage. Work after expiry or replacement starts
-the next generation with separate storage. Replacing a generation preserves accepted
-conversation history; it does not authorize deleting ledger volumes or retrying
-uncertain provider calls. See [session authority](../architecture/conversation-execution.md#isolated-session-authority)
-for the full lifecycle contract.
-
-The supervisor provisions workers in `<workflow-namespace>-sessions`, for example
-`ayni-orchestrator-dev-sessions`. The parent namespace must be at most 54
-characters. Each generation has a distinct 512 MiB result-ledger PVC and immutable
-bearer Secret. A worker mounts neither broker/database credentials nor a Kubernetes
-API token. Its request listener checks the bearer and complete parent scope.
-NetworkPolicy declares supervisor-only ingress and an explicit provider egress policy;
-enforcement depends on the local cluster network plugin.
-
-## Provider conversations and recovery
-
-Select **OpenAI** and an explicit model in shared configuration only after the
-operator enables OpenAI execution and configures a workspace-scoped credential
-for direct session injection. Never paste credentials into instructions, messages
-or the browser configuration form. Provider credentials do not pass through the
-console, canonical API, broker or transcript.
-
-The **Provider calls and usage** panel shows retained call IDs, the frozen
-provider/model, reservations and nullable reported usage. **Unknown** means the
-provider did not report that counter; it does not mean zero usage. Select
-**Refresh provider calls** to reread the retained projection.
-
-Use **Cancel turn** to cancel a specific queued or active turn. Disconnecting a
-watch only stops observation. An ambiguous cancellation command retains its exact
-turn, scope and command key; **Retry the same command** replays it. A sending or
-uncertain call may have incurred cost even after cancellation is requested.
-
-An uncertain external outcome blocks automatic resending and session retirement.
-Restore the retained worker ledger and reconcile the exact call ID. Do not delete
-its PVC, replace its identity or generate a new attempt to make the warning go
-away. Use the explicit possible-charge acknowledgement only after reviewing the exact
-call ID and request digest. It closes the held turn and retires its generation
-after the accepted uncertainty report and outbox handoffs settle. Queued work can
-then start in a fresh session; the uncertain request is never resent. Unknown
-usage, its reservation, the acknowledgement receipt and the old ledger remain
-retained. Accepted results replay from retained evidence and appear once.
-
-The deterministic [provider fixture](../../../dev/fixtures/provider/README.md)
-exercises request mapping, reported and missing usage, uncertainty, cancellation
-receipts and reconnect without a real provider credential. Its browser acceptance
-is separate from the scripted console suite and does not establish real-provider
-latency or availability. The final M2 fixture also exercises scoped tool reads and tool-limit failures.
-The initial tool profile requires a model that emits function calls without
-reasoning items; mixed reasoning/tool responses fail explicitly as
-`provider_tool_rejected`.
-
-## Happy-path diagnostic
-
-`dev/ctl scenario` executes the credential-free diagnostic inside the control-plane Pod. It uses the pod-loopback private-v1 listener to create a workspace, project, and conversation; admit one message; observe the signed executor claim and accepted scripted response through a watch, reconnect after each update; and verify the terminal snapshot and stable history. It prints generated resource IDs and the final revision, never credentials or message content.
-
-For manual access, port-forward the Pod rather than the Service:
-
-```sh
-pod=$(kubectl --context docker-desktop -n ayni-orchestrator-dev get pod \
-  -l app.kubernetes.io/name=ayni-orchestrator-control-plane \
-  -o jsonpath='{.items[0].metadata.name}')
-kubectl --context docker-desktop -n ayni-orchestrator-dev \
-  port-forward "pod/$pod" 50051:50051
-
-cargo run -p ayni-orchestrator-control-plane --bin workflow-diagnostic
-```
-
-Health and readiness remain separate:
-
-```sh
-kubectl --context docker-desktop -n ayni-orchestrator-dev \
-  port-forward service/control-plane 8080:8080
-curl --fail http://127.0.0.1:8080/healthz
-curl --fail http://127.0.0.1:8080/readyz
-curl --fail http://127.0.0.1:8080/metrics
-```
-
-Broker unavailability leaves PostgreSQL readiness honest and delivery pending. PostgreSQL unavailability makes the command/snapshot boundary unavailable.
-
-## Watch recovery and retention
-
-Keep the last received cursor to resume `WatchConversation`. An empty cursor starts with a consistent snapshot; a valid cursor starts with the next durable update. Heartbeats have no cursor. A disconnected watch never cancels admitted work.
-
-`WATCH_CURSOR_EXPIRED` means the cursor predates the seven-day watermark. Reconnect without a cursor to recover authoritative current state. `RESOURCE_EXHAUSTED` closes a slow reader; resume from its last consumed cursor. Cleanup bounds each pass and preserves immutable receipts and unresolved transport evidence.
-
-`/readyz` names a full application report quarantine or unsupported retained version. Stop the incompatible producer, deploy a compatible consumer, and allow retained replay to resolve the entries. Malformed entries retain identity/digest diagnostics for eight days; unsupported exact bytes have no automatic expiry.
-
-## Restart and retention check
-
-After a successful scenario, restart each owner and rerun the checks:
-
-```sh
-kubectl --context docker-desktop -n ayni-orchestrator-dev rollout restart statefulset/postgres
-kubectl --context docker-desktop -n ayni-orchestrator-dev rollout restart statefulset/jetstream
-kubectl --context docker-desktop -n ayni-orchestrator-dev rollout restart deployment/control-plane
-kubectl --context docker-desktop -n ayni-orchestrator-dev rollout restart statefulset/conversation-supervisor
-
-dev/ctl check
-dev/ctl scenario
-```
-
-PostgreSQL, JetStream, and executor-ledger PVCs survive ordinary restarts and Helm uninstall. The control plane reruns schema/checksum/privilege validation, exact outbox bytes remain authoritative until claim acceptance, and the executor resumes retained reports before accepting new work.
-
-## Validation gates
-
-```sh
+| `cargo xtask dev` | Start the singleton, or report its current owner and URL |
+| `cargo xtask dev status` | Show checkout, branch, component build identities and readiness |
+| `cargo xtask dev stop` | Stop owned host processes and application controllers; retain storage |
+| `cargo xtask dev redeploy` | Reconcile the same environment again, including after a failed build |
+
+The controller holds a per-user OS lock shared by all checkouts. Stop the current
+owner before starting from another checkout. An occupied port is an error with
+no fallback URL. The compact development indicator in the frontend shows the
+checkout, branch, backend phase and gateway state. Its `/__dev/status` endpoint
+exists only on the development gateway and is not a workflow API.
+
+## Editing and recovery
+
+Frontend components and CSS use Vite HMR. Backend, worker, collector and chart
+changes are debounced. The controller freezes source files, rebuilds affected
+components using persistent compiler caches and checks source identity before
+rollout. Edits made during compilation queue another build. Compilation failure
+leaves the installed backend available and appears in development status.
+
+New executions receive the updated image identities. Running executions retain
+their frozen images, deadlines and authority fences. Gateway forwarding selects
+a ready control-plane pod and reconnects when that pod changes. Changes to the
+controller itself require `cargo xtask dev stop` followed by `cargo xtask dev`;
+status reports this explicitly.
+
+Forward migration edits trigger a build and a read-only retained-checksum
+preflight. On success the controller quiesces control-plane admission and runs
+the normal migration init container before restoring services. The frontend
+stays at the same URL. Changed applied migrations or future schema versions
+fail preflight. A migration failure remains visible; repair forward. The
+controller never resets data or automatically rolls back a partially applied
+schema.
+
+## Debug logs and runtime workers
+
+Development always enables debug capture and the pinned local runtime profile.
+Open **Debug → Logs** to inspect managed sources and retained output. Raw debug
+output is accessible only through the existing local console boundary. API-only
+Kubernetes capture can miss rotation, rapid restarts and abrupt deletion; the
+source coverage state records gaps and uncertainty.
+
+The local profile supplies pinned worker, executor and verifier images. Docker
+Desktop is **not qualified for NetworkPolicy enforcement**. Enabling runtime
+builds here does not establish isolation qualification or change production
+chart defaults. Production deployment guidance remains in
+[operations](operations.md).
+
+## Validation
+
+Infrastructure and fixture orchestration belong to Rust. Svelte/TypeScript
+application tests and browser assertions remain in the frontend. Workload inputs
+under `dev/fixtures/*/source` are example repositories, not supporting runners.
+
+```text
 cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace --all-targets
-scripts/ci/check-workflow-postgres-feasibility.sh
-scripts/ci/check-workflow-private-v1-feasibility.sh
-scripts/ci/check-helm.sh
-pnpm proto:check
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo xtask check tooling
+cargo xtask check security
+cargo xtask check api
+cargo xtask check protocol
+cargo xtask check charts
+cargo xtask test unit
+cargo xtask test frontend
+cargo xtask test loopback
+cargo xtask test postgres
+cargo xtask test jetstream
+cargo xtask test durability
+pnpm typecheck
+pnpm web:build
 pnpm docs:check
 ```
 
-The PostgreSQL gate covers migrations through ordinal 30, frozen configuration, scoped context and session generations, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. Task-quality coverage additionally verifies immutable evidence retries, accepted snapshot/runtime identities, scoped reads and cancellation/deadline fencing. Task feedback coverage verifies failed quality, interrupted work, empty success and exact notice replay through owner restarts. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
+PostgreSQL and JetStream integration checks own disposable fixture containers,
+not development stacks. They use public fixture credentials and remove only
+the containers they created. Protocol and schema generation use
+`cargo xtask generate protocol` and `cargo xtask generate schema --write`.
+Regenerate deterministic workload packs with `cargo xtask generate fixtures`.
 
-After browser acceptance creates at least two conversations, inspect the deployed
-session boundary without reading Secret data:
+With the singleton running, deployed checks run serially under a separate lock:
 
-```sh
-python3 scripts/ci/check-session-topology.py --context docker-desktop --namespace ayni-orchestrator-dev
+```text
+cargo xtask test deployment debug
+cargo xtask test deployment recovery
+cargo xtask test deployment browser
+cargo xtask test deployment hmr
 ```
 
-The check verifies retained namespace ownership, full worker scope, distinct
-per-generation PVCs, token mount boundaries and supervisor RBAC. It does not
-establish NetworkPolicy enforcement by the cluster network plugin.
+Debug/recovery checks create named test pods and remove those exact pods.
+Browser acceptance seeds synthetic connection/repository/workspace records in
+the canonical database and retains their evidence. It never uses real provider
+credentials. UI-only response fixtures use browser interception and start no
+servers. The HMR check temporarily edits a component and CSS, restoring their
+original bytes in cleanup; do not edit those two files during this check.
 
-## Managed task quality acceptance
+`cargo xtask test deployment topology` requires two retained conversation and
+task fixtures plus a publisher fixture. It fails when those prerequisites are
+missing; an empty inventory cannot prove isolation. The former combined M4/M6/M8
+browser harnesses had already been retired. Their historical reports do not
+qualify current UI behavior. Backend recovery, publication and admission
+contracts remain covered by the Rust PostgreSQL, worker and durable-handoff
+suites; new product qualification must name the scenarios actually exercised.
 
-Build and load the dependency-free [managed fixture](../../../dev/fixtures/task-quality/README.md)
-using the pinned Ayni 0.17.1 CLI:
+## Transition cleanup
 
-```sh
-dev/ctl quality-runtime
-AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-quality \
-  AYNI_ORCHESTRATOR_TASK_FIXTURE=true dev/ctl deploy
-AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-quality \
-  dev/ctl acceptance /absolute/new/evidence-directory --quality-only
-```
-
-The quality profile also runs real browser recovery acceptance; install Chromium once with
-`pnpm exec playwright install chromium`. It prepares a separate failed-quality task whose
-recovery decision is left to the browser, then exercises two-tab answers and consent,
-lost-response replay across reload and conversation navigation, and continued outcomes.
-
-The runtime command records its local manifest digest in
-`.ayni/task-quality-runtime.json`; acceptance freezes that exact image. Set
-`AYNI_ORCHESTRATOR_QUALITY_RUNTIME_IMAGE` to the printed local digest to select it
-explicitly. Nothing is published to a registry. The selected context remains
-`docker-desktop` and the acceptance namespace must use the shown prefix.
-
-This profile includes the existing coding cancellation, Pod loss, supervisor
-adoption and retained-volume restart gates. It also runs actual Ayni dependency
-preparation and checks in the selected runtime, retains passing and failing
-quality evidence separately from successful scripted coding, and rereads each
-result after control-plane, supervisor, executor, broker and PostgreSQL restarts.
-The fixture has no external dependencies. Its unsigned certificate proves local
-lock/runtime consistency and protected content; it does not claim a trusted
-builder signature or real paid-provider execution. See the
-[quality contract](../architecture/task-quality.md) for evidence requirements and
-failure boundaries. Retained acceptance state is preserved for inspection.
-
-## Task publication acceptance
-
-Use the actual managed Ayni 0.17.1 fixture runtime and an isolated namespace:
-
-```sh
-dev/ctl quality-runtime
-AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-publication \
-  AYNI_ORCHESTRATOR_TASK_FIXTURE=true dev/ctl deploy
-AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-publication \
-  dev/ctl acceptance /absolute/new/publication-evidence --publication-only
-```
-
-Install the browser once with `pnpm exec playwright install chromium`.
-The profile first runs the cumulative quality gates, then builds and loads the
-local publication fixture. It binds the publisher's workspace and repository
-explicitly in Helm after creating the approved source task. It supplies only a
-public synthetic fixture token, never an existing GitHub credential.
-
-The fixture uses a real bare Git remote and GitHub-compatible HTTP responses.
-Its Git objects and PR ledger have retained storage. The profile loses a create
-response after durable acceptance, verifies one exact draft/commit, rejects failed
-quality, cancels an unclaimed intent and checks branch-collision fencing. It then
-restarts every owner, including the fixture, and verifies the original identity.
-A closed external PR is retried through the same retained intent without creating
-another draft. It also exercises canonical publication preview, consent, a lost
-accepted response, reload/exact retry and queued cancellation through the browser
-on a separate managed-quality task. Desktop/mobile screenshots and retained
-command/evidence identities are saved under `console/`.
-
-This establishes actual Git transport and protocol recovery. It does not establish
-live GitHub authentication or compatibility with protected-branch signing policy.
-The [publication contract](../architecture/task-publication.md) describes the
-separate credential boundary and trusted operator submission workflow.
-
-## Complete task delivery acceptance
-
-Use the [M4 acceptance matrix](task-acceptance.md) and the cumulative profile:
-
-```sh
-export AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-m4
-dev/ctl quality-runtime
-AYNI_ORCHESTRATOR_TASK_FIXTURE=true dev/ctl deploy
-dev/ctl acceptance /absolute/new/m4-evidence --m4
-```
-
-This extends the publication profile with a live stale-worker cancellation fence,
-publisher interruption around draft creation, uncertainty without a remote PR and
-retained cleanup/redeployment. It preserves all authoritative stores and writes
-`acceptance.json` only after the complete deployed matrix passes. Use a separate
-deployment for ordinary console acceptance to keep retained PVC inventories stable.
-The matrix documents fixture boundaries, required repository checks and recovery.
-
-## Cumulative task recovery acceptance
-
-Use [cumulative recovery acceptance](recovery-acceptance.md) to test the conversation journey
-and faults in continued attempts, including queued/active cancellation, stale-worker output,
-Pod loss and retained cleanup. The `--m6` profile includes the existing managed-quality/browser
-profile and records unmet milestone prerequisites separately from passed independent-task gates.
-
-## Cleanup
-
-```sh
-dev/ctl cleanup
-```
-
-Cleanup stops the Helm release and supervisor, then removes owned session Pods.
-It preserves PostgreSQL, JetStream, supervisor/session ledger PVCs, immutable
-Secrets and the owned session namespace. A later deploy reuses them. Do not roll back while a command/report/decision handoff is unresolved; repair forward or intentionally reset the disposable namespace.
-
-Permanent deletion requires the exact local namespace:
-
-```sh
-dev/ctl purge ayni-orchestrator-dev
-```
-
-The purge command refuses absent, unlabelled, or non-local namespaces. It deletes the exact parent namespace and its ownership-labelled session
-namespace, including all Secrets and retained workflow/session stores.
-
-## Product configuration foundation
-
-`dev/ctl live` now also starts the new SvelteKit product at
-`http://127.0.0.1:5174`. This is the only frontend. The local canonical API gateway
-stays on port 3000; those two ports must be available.
-The application schema uses layer migrations `001`–`014`, with each table defined
-once in its final form, and requires a fresh database. Pre-baseline
-installations are rejected without altering retained data; use a new isolated
-local namespace and keep the previous installation for recovery. See
-[the live-development guide](../../../dev/LIVE.md).
-
-Alternatively, run `dev/ctl gateway` against the deployed stack and `pnpm web:dev`
-in another terminal. `pnpm web:build` builds the Node application; start it with
-`HOST=127.0.0.1 PORT=5174 pnpm --filter @ayni-orchestrator/web start`.
-The API gateway remains required; the frontend owns no database credentials.
-
-In Configuration → Source control, add a named GitHub App connection with its App ID
-and PEM private key. Saving starts validation. Open the app's settings to retry
-validation, replace its key, or disable or delete the connection. Failed validation
-leaves any active credential in place. Recover an interrupted save before submitting
-again. The Repositories page uses validated connections to discover installations.
-
-Configuration → Container registries manages named GHCR destinations with separate
-push/pull classic PATs. Validation currently checks both accounts' authentication;
-it does not yet publish a disposable artifact or establish push/pull permissions.
-Configuration → LLM providers manages named OpenAI keys. Save and validate a key to
-discover models, then choose a connection, model and budgets in Project settings.
-OpenAI validation does not issue a paid conversation. Conversation execution uses
-the existing API; the full chat UI remains outside this slice.
-
-Selected connection turns retain the admission-time credential revision. The
-trusted supervisor receives that credential through the scoped internal authority
-endpoint and creates an immutable read-only session Secret. After terminal
-acknowledgement the session consumer and derived credential copy are removed;
-PostgreSQL retains the authoritative revision. Workers have no database access.
-
-Credentials live in PostgreSQL without application-level encryption. Hosting must
-protect database storage and backups; local development does not require encryption.
-Never commit real credentials or put them in shell arguments.
-
-Run frontend checks with `pnpm typecheck`, `pnpm test` and `pnpm web:build`.
-Run the real PostgreSQL/gRPC/gateway/browser journey with:
-
-```sh
-pnpm exec playwright install chromium
-AYNI_CONNECTION_BROWSER=1 scripts/ci/check-workflow-postgres-feasibility.sh
-```
-
-This builds the frontend and checks both Vite development and production Node
-serving against its own disposable PostgreSQL fixture. The fixture is removed
-after the gate. It does not use a
-live GitHub App or establish registry, provider or runtime readiness. See
-[connection authority](../architecture/integration-connections.md).
-
-## Repository catalog development
-
-Use **Repositories** to discover installations and repositories through a validated
-GitHub App source connection. The App requires repository Contents read permission;
-its installation must include the selected repository. Connect the repository once,
-then use **Workspace settings** to make it available to every project in that workspace.
-Source access status remains separate from the planned Ayni/runtime gates.
-
-The application baseline includes catalog, workspace membership, and project
-configuration receipts. Install it in a fresh database; `dev/ctl live migrate`
-does not upgrade pre-baseline installations. Test the authority and browser journey separately with
-`AYNI_REPOSITORIES_ONLY=1 scripts/ci/check-workflow-postgres-feasibility.sh`.
-The test uses synthetic credentials and a disposable database; it does not prove
-live GitHub installation access.
-
-## Parallel runtime qualification UI
-
-The ordinary live environment keeps its Desktop context, data, ports and state directory. A separately authorized policy-enforcing cluster can host a fresh stack with these explicit settings:
-
-```sh
-export AYNI_ORCHESTRATOR_CONTEXT=kind-ayni-runtime-qualification
-export KUBECONFIG=/tmp/ayni-runtime-cluster/kubeconfig
-export AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-runtime-qualification
-export AYNI_ORCHESTRATOR_LIVE_UI_PORT=5175
-export AYNI_ORCHESTRATOR_LIVE_GATEWAY_PORT=3001
-dev/ctl live
-```
-
-Wait for that cluster's CNI health, network allow/deny checks and runtime qualification before deploying or enabling its preparation profile. The helper accepts only this exact context, kubeconfig and namespace combination; it never switches global context or falls back to Desktop. Image imports verify the selected node's kind cluster/role labels. The normal local chart creates fresh PostgreSQL, broker and internal authority credentials in the new namespace; existing Desktop credentials and user data are not copied. External connections must be configured independently in the new UI.
-
-The parallel watcher retains state under `.local/live/kind-ayni-runtime-qualification/ayni-orchestrator-runtime-qualification`; Desktop retains its existing `.local/live/<namespace>` path. Automatic image pruning is disabled for the parallel environment. The [supervisor lifecycle fixture](../../../dev/scripts/runtime-supervisor-qualify.py) also accepts `--context kind-ayni-runtime-qualification` with that dedicated kubeconfig and uses its own disposable namespace. Its synthetic authority does not qualify control-plane admission or the complete runtime profile.
-
-
-### Signer setup acceptance
-
-New local deployments enable the independently gated signer-setup service. Reused
-Helm releases retain their existing values; explicitly enable
-`orchestrator.signerProvisioning.enabled` when upgrading an older local deployment.
-The production chart defaults this feature off. Setup does not require enabling
-runtime builds or adding repository trust.
-
-Use a separate disposable deployment and UI port for synthetic signer acceptance;
-never create fixture keys in an operator's live configuration. With that local UI
-running, exercise the actual UI, gateway and control plane without RPC mocks:
-
-```sh
-AYNI_SIGNER_SETUP_UI_ORIGIN=http://127.0.0.1:5176 \
-  node apps/web/tests/runtime-signing-live.mjs
-```
-
-The driver generates one fresh synthetic identity, imports the public RFC8032
-fixture seed, simulates lost responses, reloads and recovers the same public
-identity/Secret UID. Its output contains public identifiers only. Check the exact
-owned namespace's immutable Secret UID separately. These checks are distinct from
-`runtime-signing.browser.mjs`, which tests UI error/re-entry/privacy behavior
-against a synthetic HTTP authority in both dev and production modes.
-
-Signing keys and their namespace survive feature disablement and Helm uninstall.
-Disabling a signer prevents new use but does not delete material. Permanent key
-or namespace removal requires a separate operator cleanup decision.
-
-## Debug logs
-
-Start `dev/ctl deploy --debug` or `dev/ctl live --debug` to collect available output
-from managed containers. `make dev DEBUG=1` selects the same mode. Open **Debug →
-Logs** in the local console, select a source, and choose **Follow live**. Runtime
-preparation details also link to their execution logs. History remains available
-after pod deletion until the retention/quota limit expires.
-
-Debug output is raw. Kubernetes API capture can miss rotated output and output
-lost during abrupt pod deletion or rapid restarts; each source exposes its
-coverage state. The default limits are 24 hours/1 GiB retained raw payload,
-128 MiB per execution journal and 1 GiB collector journal. Chart `debug` values
-configure these limits. Quota loss is reported without stopping execution.
-
-Local rebuilds preserve debug mode. Deploy with `AYNI_ORCHESTRATOR_DEBUG=false`
-to disable it; new raw reads and writes are denied and active watches close during
-the rollout. Retained output expires normally. Access remains through the
-loopback console and its explicit local-cluster port forward.
+The retired `ayni-orchestrator-capture`, `-capture-sessions` and
+`-capture-runtime` namespaces and their retained data were explicitly selected
+for deletion. The old 5176 and orphan test frontends were stopped. Normal dev
+startup never repeats that discovery or deletion. Keep the live namespace and
+its retained storage; do not create a second stack to work around a failure.

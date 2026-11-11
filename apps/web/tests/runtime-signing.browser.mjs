@@ -1,8 +1,6 @@
+import { createFixture, origin } from './ui-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createServer} from 'node:http';
-import {createServer as createSocket} from 'node:net';
-import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
@@ -25,7 +23,7 @@ test('multiple named signers survive reload, edit independently and recover with
   }
   return {operation,signer:operation.signer};
  }
- const gateway=createServer(async(request,response)=>{
+ const gateway=createFixture(async(request,response)=>{
   let body='';for await(const bytes of request)body+=bytes;
   const data=body?JSON.parse(body):{};requests.push({method:request.url,data});
   function send(value,status=200){response.writeHead(status,{'Content-Type':'application/json'});response.end(JSON.stringify(value));}
@@ -65,14 +63,9 @@ test('multiple named signers survive reload, edit independently and recover with
   }
   return send(request.url==='/api/ListWorkspaces'?{workspaces:[]}:{});
  });
- let child,browser;
+ let browser;
  try{
-  gateway.listen(0,'127.0.0.1');await once(gateway,'listening');
-  const socket=createSocket();socket.listen(0,'127.0.0.1');await once(socket,'listening');const port=socket.address().port;await new Promise(resolve=>socket.close(resolve));
-  const origin=`http://127.0.0.1:${port}`;const env={...process.env,AYNI_ORCHESTRATOR_LIVE_GATEWAY_PORT:String(gateway.address().port),HOST:'127.0.0.1',PORT:String(port)};
-  child=process.env.AYNI_PRODUCT_PRODUCTION==='1'?spawn('node',['apps/web/build/index.js'],{env,stdio:'ignore',detached:true}):spawn('pnpm',['--dir','apps/web','exec','vite','dev','--host','127.0.0.1','--port',String(port),'--strictPort'],{env,stdio:'ignore',detached:true});
-  let ready=false;for(let i=0;i<120;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await delay(250);}assert.ok(ready,'UI fixture server did not start');
-  browser=await chromium.launch({headless:true});const page=await browser.newPage();
+  browser=await chromium.launch({headless:true});const page=await browser.newPage();await gateway.attach(page);
   const visit=async()=>{await page.goto(`${origin}/settings/runtime-signing`);await page.waitForFunction(()=>document.documentElement.dataset.hydrated==='true');await page.getByRole('button',{name:'Refresh signers',exact:true}).waitFor();};
   async function openSigner(name) {
    await page.getByRole('region',{name,exact:true}).getByRole('button',{name:`${name} actions`,exact:true}).click();
@@ -89,7 +82,7 @@ test('multiple named signers survive reload, edit independently and recover with
   };
   await visit();assert.equal(await page.getByLabel('Name',{exact:true}).count(),0);await page.getByRole('button',{name:'Add signing key',exact:true}).click();assert.equal(await page.getByRole('radio',{name:'Generate a new key',exact:true}).isChecked(),true);
   await fill('generated.fixture','generated.fixture');
-  await page.route('**/api/ProvisionRuntimeSigner',async route=>{await route.fetch();await route.abort('failed');});
+  await page.route('**/api/ProvisionRuntimeSigner',async route=>{await gateway.dispatch(route.request());await route.abort('failed');});
   await page.getByRole('button',{name:'Generate signer',exact:true}).click();
   await page.getByRole('region',{name:'Recover signer setup',exact:true}).waitFor();
   await page.getByText(/setup response was interrupted/).waitFor();
@@ -190,6 +183,6 @@ test('multiple named signers survive reload, edit independently and recover with
   assert.equal(requests.some(value=>/RuntimePreparation|StartTask/.test(value.method)),false);
   await page.screenshot({path:'/tmp/runtime-signing-setup-browser.png',fullPage:true});
  }finally{
-  releaseImport?.();await browser?.close();if(child&&child.exitCode===null){process.kill(-child.pid,'SIGTERM');await once(child,'exit');}await new Promise(resolve=>gateway.close(resolve));
+  releaseImport?.();await browser?.close();
  }
 });

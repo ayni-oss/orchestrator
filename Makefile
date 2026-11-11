@@ -1,8 +1,7 @@
 .PHONY: dev dev-status
 
 dev:
-	pnpm install --frozen-lockfile
-	dev/ctl live $(if $(filter 1,$(DEBUG)),--debug,)
+	cargo xtask dev
 
 dev-status:
-	dev/ctl live $(if $(filter 1,$(DEBUG)),--debug,) status
+	cargo xtask dev status

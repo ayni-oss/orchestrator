@@ -239,6 +239,19 @@ async fn validate_history(transaction: &Transaction<'_>) -> Result<(), Migration
     validate_retained_history(&rows)
 }
 
+/// Validate applied checksums and reject schema downgrades, permitting pending forward migrations.
+/// This read-only preflight does not grant privileges or apply SQL.
+///
+/// # Errors
+/// Returns an error for unavailable, corrupt, or newer retained migration history.
+pub async fn preflight(client: &Client) -> Result<(), MigrationError> {
+    let rows = client.query(
+        "SELECT version, description, checksum FROM public.workflow_schema_migrations ORDER BY version",
+        &[],
+    ).await?;
+    validate_retained_history(&rows)
+}
+
 fn validate_retained_history(rows: &[Row]) -> Result<(), MigrationError> {
     // Ordinals restart at 001. Identify the old catalog before interpreting its
     // overlapping versions, and never modify a retained installation of it.

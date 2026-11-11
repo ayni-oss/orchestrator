@@ -1,82 +1,87 @@
 # Debug capture qualification
 
-Delivery remains in progress. The implementation and these checks do not yet
-establish the full four-slice acceptance contract. See the
-[architecture contract](../architecture/execution-capture.md).
+Run deployment acceptance serially against the existing `docker-desktop` context
+and `ayni-orchestrator-live` deployment. Start the singleton with `cargo xtask dev`;
+the frontend stays at `http://127.0.0.1:5174`, with debug collection and the local
+development runtime profile enabled. Do not create a separate acceptance stack.
+See the [capture contract](../architecture/execution-capture.md) and
+[local development guide](local-development.md).
 
-## Local evidence, 11 November 2026
+## Canonical checks
 
-The explicitly selected `docker-desktop` context and isolated
-`ayni-orchestrator-capture` namespace exercised the real control plane,
-PostgreSQL, collector, loopback gateway and frontend. Retained stores were not
-reset or deleted.
+With the repository-pinned Rust and Node tools available:
 
-The deployed browser/Kubernetes fixture passed:
+```text
+cargo xtask test deployment debug
+cargo xtask test deployment recovery
+```
 
-- Regular, init and sidecar source registration; failed-to-start registration.
-- Exclusion of an unrelated pod without managed ownership labels.
-- Repeated identical lines, binary bytes and original-byte download.
-- Retained output after deleting the fixture pod.
-- Frontend history, follow/pause, inert HTML and terminal controls.
-- Debug-off direct reads, streams and downloads returning 403, page access
-  returning 404, and hidden navigation. Debug mode was then restored.
+The Rust harness owns scoped fixture pods and serializes deployment acceptance
+through the singleton's acceptance lock. Native frontend tests own browser
+assertions. The recovery check deliberately restarts the collector while retaining
+its PVC. Neither check resets PostgreSQL, JetStream or the collector journal.
 
-The qualification scripts are `scripts/ci/check-debug-logs-deployed.mjs` and
-`scripts/ci/check-debug-recovery-deployed.mjs`. Set
-`AYNI_ORCHESTRATOR_NAMESPACE` to the dedicated acceptance namespace, optionally
-`AYNI_DEBUG_GATEWAY` and `AYNI_DEBUG_FRONTEND` to its loopback listeners, and run
-with the repository-pinned Node version. The recovery script has not yet passed
-against the final deployment; it covers crash-loop inventory, OOM, forced deletion
-and collector restart. These scripts delete only their own disposable fixture
-pods, except for the intentional collector restart, which preserves its PVC.
+The debug check covers regular, init and sidecar registration, failed-to-start
+inventory, unrelated-pod exclusion, repeated identical lines, binary bytes,
+original-byte download after pod deletion, and frontend history/follow/pause with
+inert HTML and terminal controls. The recovery check covers crash-loop restart
+inventory, an observed OOM, forced-deletion uncertainty, and retained source
+inventory across collector restart.
 
-The last successfully deployed images were:
+## Collector backlog regression
 
-- `local/ayni-orchestrator-control-plane:git-67982799f071-31c0d3025049`
-- `local/ayni-orchestrator-conversation-supervisor:git-67982799f071-f1526f645d19`
+The telemetry sender previously resubmitted pending batches every 250 ms on the
+same healthy stream. When commits were slower, queued duplicates delayed fresh
+records. The sender now keeps one bounded window of at most 32 records, refills it
+after committed acknowledgements, and replays unacknowledged records only after
+reconnection. A stalled connection is retried after 30 seconds without progress.
 
-These images include the source-status, loss-marker and publication correlation
-fixes. The debug-enabled rollout completed with all six pods ready. The local
-frontend loaded 45 retained sources and passed follow/pause with no browser errors.
-This does not replace the remaining full failure/recovery qualification.
+The slow-acknowledgement regression commits 96 records with a 25 ms delay per
+acknowledgement. The former sender issued 373 requests without draining within
+10 seconds; the corrected sender issues exactly 96 and drains in about 2.6 seconds.
+The lost-acknowledgement replay regression continues to preserve exact records.
 
-Host validation passed formatting, Clippy, 247 Rust tests (98 environment-dependent
-tests skipped), 13 frontend tests, production frontend build, generated protocol
-checks, Helm/topology checks and documentation validation. After Docker recovery,
-the focused PostgreSQL replay/retention fixture passed against the final
-source-status query changes. The Svelte diagnostic
-runner also emitted its existing TypeScript compatibility error, so its zero-error
-summary is not treated as a completed typecheck.
+The control plane also opened and authenticated a PostgreSQL connection for each
+record. Under local resource limits, live metrics showed commits averaging about
+250 ms. History pages also authenticated separately, causing downloads of the
+retained backlog to exceed the existing 15-second timeout. Separate dedicated
+connections now serve log reads and writes from a store and its clones; workflow
+connections remain separate. The PostgreSQL regression verifies reuse, terminates
+both connections independently, and confirms reconnection and idempotent replay.
 
-## Remaining gates
+## Singleton qualification, 11 November 2026
 
-Run the final pinned Rust, protocol, frontend, chart and PostgreSQL checks on
-frozen inputs, rebuild both images, then repeat the deployed fixtures. Qualify
-all real runtime/task/verification/publication paths, nested-container cleanup,
-cancellation and abandoned-spool recovery, worker/control-plane/collector outages,
-rotation, eviction and storage exhaustion. Preserve verifier parsing/isolation and
-stale-generation rejection while doing so. Existing task-quality acceptance has a
-repository-declared retired-browser-coverage block; replace that path before
-claiming complete product coverage.
+Both canonical deployment checks passed after the fixes, with their existing
+assertions and deadlines unchanged. The debug check exercised the actual browser
+at port 5174. The recovery check restarted the collector and passed crash-loop,
+OOM and forced-deletion coverage without creating another environment.
 
-A managed Ayni environment was built from the generated lock. Its frozen-source
-check reached test/size/complexity/dependency phases, then failed to persist the
-final artifact because Docker storage was exhausted. Docker reported its metadata
-filesystem read-only. No successful final managed report exists. The repository's
-8 GiB free-space guard also blocked the final image rebuild. Restore storage
-without deleting retained deployment data before continuing qualification.
+The preserved collector journal started with 6,070 pending records (4,341,486
+serialized bytes) and drained to zero after rollout, remaining at zero after the
+collector restart. Its cumulative durable
+acknowledgements advanced; no journal reset or retained-data deletion was used.
+PostgreSQL, JetStream, supervisor ledger and collector PVC identities were
+unchanged. A retained-source download that exceeded 15 seconds before reader
+connection reuse completed in about 2.1 seconds afterward.
 
-Signing was subsequently approved through the existing 1Password SSH agent.
-The foundation, collector and frontend slices are signed and pushed as draft PRs
-[#289](https://github.com/ayni-oss/orchestrator/pull/289),
-[#290](https://github.com/ayni-oss/orchestrator/pull/290), and
-[#291](https://github.com/ayni-oss/orchestrator/pull/291). This fourth slice adds
-qualification gates and records outstanding coverage; it does not claim closure.
-All PRs target `alpha` and must merge in order. Nothing was merged automatically.
+Pinned workspace Clippy and tests, the PostgreSQL replay/reconnection tests,
+frontend typecheck/tests/build, protocol generation checks, Helm validation,
+security/tooling checks and document validation passed. Managed Ayni quality
+completed with all four signals passing against the pinned image and lock.
+These results retain the qualification limits below.
 
-Removing only regenerable Rust incremental caches recovered approximately 38 GiB
-of host capacity. A Docker Desktop restart was explicitly approved to restore the
-local test server. Docker and Kubernetes recovered, all retained workload pods
-restarted, and the local frontend successfully loaded 40 sources and exercised
-follow/pause without browser errors. Final managed and full deployed qualification
-must still be rerun.
+## Remaining qualification boundary
+
+These fixtures do not establish complete four-slice acceptance or coverage of
+every real workload. Qualify real runtime/task/verification/publication paths,
+nested-container cleanup, cancellation and abandoned-spool recovery,
+worker/control-plane outages, rotation, eviction and storage exhaustion. Preserve
+verifier parsing/isolation and stale-generation rejection while doing so.
+
+Kubernetes API collection cannot guarantee complete output across rotation,
+rapid restarts or abrupt deletion. Docker Desktop remains unqualified for
+NetworkPolicy enforcement. Neither a passing fixture nor the enabled local
+development runtime profile changes those limits.
+
+Earlier dedicated-environment evidence and retired launcher names remain in Git
+history. They are not commands or qualification claims for the singleton setup.

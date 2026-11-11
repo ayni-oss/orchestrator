@@ -5,7 +5,7 @@ use std::{
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-// Invoke the same installed client used by dev/ctl acceptance. No broker or
+// Invoke the same installed client used by cargo xtask test deployment. No broker or
 // executor is started: review and admission depend only on PostgreSQL authority.
 pub async fn run(endpoint: String, retained: Option<Vec<u8>>) -> Result<Vec<u8>> {
     tokio::task::spawn_blocking(move || {

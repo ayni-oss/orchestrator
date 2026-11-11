@@ -486,7 +486,8 @@
  async function poll() {
   if (!loaded || busy || polling) return;
   const now = Date.now();
-  if (!onboardingActive && !operations.some(value => activeStates.has(value.state)) &&
+  const awaitingPreparation = !!onboarding?.preparationId && !operations.some(value => value.id === onboarding?.preparationId);
+  if (!onboardingActive && !awaitingPreparation && !operations.some(value => activeStates.has(value.state)) &&
    (currentStep < 3 || document.visibilityState !== 'visible' || now - lastPoll < 10000)) return;
   lastPoll = now;
   polling = true;

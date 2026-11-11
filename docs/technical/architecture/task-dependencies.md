@@ -1,5 +1,8 @@
 # Task dependencies and concurrent execution
 
+> Legacy command examples below describe historical qualification. Use the
+> [single-environment guide](../operations/local-development.md) for current commands.
+
 ## Planned alpha extension
 
 The [alpha contract](alpha-product.md#task-graphs-and-pr-structure) requires modular

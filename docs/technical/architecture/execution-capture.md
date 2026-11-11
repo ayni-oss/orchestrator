@@ -1,5 +1,8 @@
 # Execution capture and debug logs
 
+> Legacy command examples below describe historical qualification. Use the
+> [single-environment guide](../operations/local-development.md) for current commands.
+
 The worker owns command execution; Kubernetes supervisors own pod lifecycle.
 The execution library drains stdout and stderr independently of network delivery,
 records action identities and outcomes, and terminates owned process groups on
@@ -53,13 +56,22 @@ Protected verification files remain regular files outside repository access.
 Trusted launchers retain identity-switch and kill capabilities; executed
 repository children must prove empty effective, permitted and inherited sets.
 
-The sender permits 32 unacknowledged records per batch. PostgreSQL keeps the most
-recent 64 sequence digests independently of raw retention, so losing an ACK does
+The sender permits at most 32 unacknowledged records on each connection. It waits
+for committed acknowledgements for the current window before reading another
+fairly selected journal batch, without periodically resending records on a healthy
+stream. Acknowledgements must match the outstanding source and sequence. A stalled
+acknowledgement stream reconnects after 30 seconds; only reconnection replays the
+remaining durable records. PostgreSQL keeps the most recent 64 sequence digests
+independently of raw retention, so losing an ACK does
 not make an expired payload look like a new record. Conflicting duplicates fail.
 A transaction lock orders cursor allocation and commit across producers. Raw
 payload quotas expire the oldest records atomically; four log database operations
 may run concurrently, separately from workflow writes. A source inventory and
-expiry watermark survive payload expiry.
+expiry watermark survive payload expiry. Each store and its clones reuse separate
+log-reader and log-writer connections, replacing either after disconnection.
+Output chunks and history pages do not repeatedly authenticate to PostgreSQL;
+reads remain independent of writes, and commits, sequence checks and quota
+enforcement remain per record.
 
 The telemetry listener accepts observations only. Existing HTTP fences and
 JetStream orchestration still decide execution authority and accepted results.
@@ -89,9 +101,9 @@ available for recovery.
 
 ## Local debug console
 
-`dev/ctl deploy --debug`, `dev/ctl live --debug`, and `make dev DEBUG=1` select
-`debug.enabled`. Rebuilds preserve that setting. Set `AYNI_ORCHESTRATOR_DEBUG=false`
-when deploying to disable raw access. The flag gates the APIs, writes, collector
+`cargo xtask dev` and `make dev` enable debug collection in the singleton local
+deployment. Production charts retain `debug.enabled: false` by default.
+The flag gates the APIs, writes, collector
 and navigation. Existing lifecycle reporting remains active. Rolling shutdown
 closes existing watches; retained rows expire under their configured policy.
 

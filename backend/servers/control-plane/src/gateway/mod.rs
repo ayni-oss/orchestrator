@@ -84,7 +84,45 @@ impl Gateway {
 
 /// Serve the explicitly allowlisted canonical API adapter without UI assets.
 pub fn router(gateway: Gateway) -> Router {
+    routes(gateway, None)
+}
+
+/// Serve development-controller status through the same guarded loopback gateway.
+pub fn development_router(gateway: Gateway, status: std::path::PathBuf) -> Router {
+    routes(gateway, Some(status))
+}
+
+fn routes(gateway: Gateway, status: Option<std::path::PathBuf>) -> Router {
+    let dev = Router::new();
+    let dev = if let Some(path) = status {
+        dev.route(
+            "/__dev/status",
+            get(move || {
+                let path = path.clone();
+                async move {
+                    tokio::task::spawn_blocking(move || {
+                        let bytes =
+                            std::fs::read(&path).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+                        let mut status = serde_json::from_slice::<Value>(&bytes)
+                            .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+                        if let Some(parent) = path.parent()
+                            && let Ok(gateway) =
+                                std::fs::read_to_string(parent.join("gateway-status.txt"))
+                        {
+                            status["gateway"] = gateway.into();
+                        }
+                        Ok::<_, StatusCode>(Json(status))
+                    })
+                    .await
+                    .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?
+                }
+            }),
+        )
+    } else {
+        dev
+    };
     Router::new()
+        .merge(dev)
         .route("/api/{method}", post(rpc))
         .route("/watch", get(watch))
         .route("/debug/logs/stream", get(debug::watch))

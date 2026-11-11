@@ -1,5 +1,8 @@
 # Isolated task execution
 
+> Legacy command examples below describe historical qualification. Use the
+> [single-environment guide](../operations/local-development.md) for current commands.
+
 ## Planned alpha execution
 
 The [alpha engineering contract](alpha-product.md#reviewed-plans-and-autonomous-execution)
@@ -129,10 +132,7 @@ volumes. Retention and reclamation policies belong to operational acceptance.
 
 After verifying and submitting preparation, freeze the exact start request:
 
-```sh
-dev/ctl prepare-task start /absolute/trusted/checkout frozen-request.json frozen-start.json
-dev/ctl prepare-task submit-start frozen-start.json
-```
+Historical command sequences are retained in the [previous revision](https://github.com/ayni-oss/orchestrator/blob/9de06f53/docs/technical/architecture/isolated-task-execution.md).
 
 Retain the start file for response-loss retries. It contains a source snapshot,
 so store it under the same access boundary as the checkout. Starting work is a

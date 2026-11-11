@@ -193,8 +193,18 @@ local log explorer. Qualification has exercised binary/repeated output, init and
 sidecar inventory, failed starts, unrelated-pod exclusion, retained history after
 deletion and browser rendering. Full failure/recovery and every real workload
 category remain acceptance gates; implementation presence is not completion of
-those gates. Deliver the four review slices in dependency order without merging
-automatically.
+those gates. The implementation is consolidated on the existing development
+branch; remaining corrections stay there without creating additional PRs.
+
+Telemetry now bounds outstanding records instead of periodically queueing
+duplicates on a healthy stream. Separate log-reader/writer connection reuse removes
+per-record and per-page PostgreSQL authentication while preserving commit-safe cursors,
+sequence conflict checks and independent workflow connections. Regression tests
+cover slow acknowledgements, lost acknowledgements and database disconnection.
+The [qualification record](docs/technical/operations/debug-capture-qualification.md)
+records passing capture/browser and recovery checks against the singleton
+environment, including a preserved 6,070-record backlog draining to zero and
+collector restart without replacing its PVC.
 
 
 ## One development environment and Rust tooling
@@ -208,10 +218,31 @@ after their meaningful assertions and recovery behavior have replacements.
 
 Deliver Rust tooling, the singleton hot-reload controller with automatic forward
 migration redeployment, then legacy removal and the authorized local cutover.
-The initial `cargo xtask` implementation ports documentation, security, protocol
-and Helm checks, generation, PostgreSQL/loopback runners and retained evidence
-validation. Controller, fixture and acceptance consolidation remain in progress;
-the presence of a Rust command does not establish full migration of the tooling.
+`cargo xtask` now owns development, documentation/security/protocol/Helm checks,
+generation, PostgreSQL/JetStream/loopback runners, retained evidence validation,
+and serial deployment fixtures. Rust bootstrap binaries replace container shell
+implementations. Browser assertions run against the canonical frontend; request
+fixtures stay in native frontend tests. A tooling boundary check rejects the
+retired Python, shell, and supporting JavaScript launchers.
+
+The published capture/debug/runtime/tooling stack is consolidated in
+[PR #294](https://github.com/ayni-oss/orchestrator/pull/294), superseding #289–#293.
+Remaining development-environment work stays together on one branch. The Rust
+controller owns the retained live deployment, debug collection, pinned local
+runtime workers, frontend HMR, and affected-component rebuilds. It rejects mixed
+source snapshots, preserves the working backend after compilation errors, checks
+migration history before admission is quiesced, and reconnects the gateway after
+rollout. Its per-user lock is shared across checkouts.
+
+The authorized local cutover retired the capture namespace trio, old frontends
+and gateways, and the ownership-verified dedicated qualification node/network.
+The live database, broker, credentials, and PVC identities were preserved through
+restart and rollout. Normal startup does not search for or delete environments.
+Docker Desktop remains unqualified for NetworkPolicy enforcement. Serial native
+acceptance replaces isolated dev stacks; historical M4/M6/M8 closure reports do
+not establish current full-product qualification. A real new forward migration
+and failure recovery must still be qualified before claiming that full gate;
+retained-history preflight and PostgreSQL rejection tests are narrower evidence.
 
 ## Acceptance and delivery discipline
 

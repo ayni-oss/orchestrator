@@ -74,7 +74,7 @@
     } catch { if (version === requestVersion) error = 'Logs are unavailable. Retry when the local service is ready.'; }
     finally { if (version === requestVersion) loading = false; }
   }
-  async function apply() { pause(); await loadSources(); await read(true); }
+  async function apply() { pause(); loading = true; await loadSources(); await read(true); }
   async function copy() {
     try { await navigator.clipboard.writeText(entries.map(entry => decoded.get(entry.cursor) ?? '').join('')); }
     catch { error = 'Could not copy the displayed logs.'; }

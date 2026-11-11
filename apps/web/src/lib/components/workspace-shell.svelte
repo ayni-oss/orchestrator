@@ -1,5 +1,6 @@
 <script lang="ts">
  import { projectSettingsPath, withCursor, workspacePath } from '$lib/paths';
+ import DevStatus from '$lib/DevStatus.svelte';
 
   import { provideCreateWorkspace } from "$lib/workspace-actions";
   import type { Snippet } from "svelte";
@@ -147,6 +148,7 @@
       <AppBreadcrumb items={breadcrumbs} />
       <ThemeToggle />
     </header>
+    {#if import.meta.env.DEV}<DevStatus />{/if}
     <main id="main-content">{@render children()}</main>
   </div>
 </div>

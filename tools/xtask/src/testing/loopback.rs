@@ -34,7 +34,7 @@ pub fn run() -> Result<()> {
         ],
     )?;
     let declaration = Regex::new(
-        r#"(?s)#\[ignore\s*=\s*"requires loopback networking; run (?:scripts/ci/check-workflow-loopback.sh|cargo xtask test loopback)"\s*\](?:[^f]|f[^n]|fn[^\s])*?\bfn\s+(\w+)"#,
+        r#"(?s)#\[ignore\s*=\s*"requires loopback networking; run (?:cargo xtask test loopback|cargo xtask test loopback)"\s*\](?:[^f]|f[^n]|fn[^\s])*?\bfn\s+(\w+)"#,
     )?;
     let mut declared = BTreeMap::new();
     for entry in walkdir::WalkDir::new("backend") {
