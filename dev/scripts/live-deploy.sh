@@ -9,6 +9,8 @@ dev_check_component_names "$context" "$namespace"
 [[ "$(helm version --template '{{ .Version }}')" == v4.1.1* ]] || { echo 'Helm 4.1.1 required' >&2; exit 1; }
 "$DEV_DIRECTORY/scripts/configure-development-secrets.sh"
 dev_build_chart_dependencies
+# Prepare tooling before quiescing the serving control plane for a migration.
+runtime_values="$(python3 "$DEV_DIRECTORY/scripts/runtime-development.py")"
 # Explicit migrations quiesce the serving control plane before its migration
 # init container can alter the schema. Workers retain identity and retry reports.
 restore_serving=false
@@ -29,6 +31,7 @@ if [[ -n "${AYNI_ORCHESTRATOR_DEBUG:-}" ]]; then
 fi
 helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-then-reuse-values \
   --kube-context "$context" --namespace "$namespace" "${debug_args[@]}" \
+  --values "$runtime_values" \
   --set-string "ayni-orchestrator.images.controlPlane=$1" \
   --set-string "ayni-orchestrator.images.conversationSupervisor=$2" \
   --timeout 5m
@@ -40,6 +43,9 @@ fi
 for workload in statefulset/postgres statefulset/jetstream deployment/control-plane statefulset/conversation-supervisor deployment/task-supervisor; do
   kubectl --context "$context" --namespace "$namespace" rollout status "$workload" --timeout=5m
 done
+if [[ "${AYNI_ORCHESTRATOR_RUNTIME:-true}" == true ]]; then
+  kubectl --context "$context" --namespace "$namespace" rollout status deployment/runtime-preparation-supervisor --timeout=5m
+fi
 
 if [[ -n "$(kubectl --context "$context" --namespace "$namespace" get deployment/task-publisher --ignore-not-found -o name)" ]]; then
   kubectl --context "$context" --namespace "$namespace" rollout status deployment/task-publisher --timeout=5m

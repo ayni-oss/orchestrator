@@ -26,6 +26,7 @@ dev_check_component_names "$context" "$namespace"
 "$dev_directory/scripts/configure-development-secrets.sh"
 dev_build_chart_dependencies
 dev_check_capacity 8
+runtime_values="$(python3 "$dev_directory/scripts/runtime-development.py")"
 if [[ -z "${AYNI_ORCHESTRATOR_DEBUG+x}" ]]; then
   debug="$(helm get values "$DEV_RELEASE_NAME" --kube-context "$context" --namespace "$namespace" -o json 2>/dev/null | python3 -c 'import json,sys; print(str(json.load(sys.stdin).get("ayni-orchestrator", {}).get("debug", {}).get("enabled", False)).lower())' 2>/dev/null || printf false)"
 else
@@ -45,6 +46,7 @@ echo "renderer=$(helm version --short 2>/dev/null)"
 helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-values \
   --kube-context "$context" \
   --namespace "$namespace" \
+  --values "$runtime_values" \
   --set "ayni-orchestrator.debug.enabled=$debug" \
   --set "ayni-orchestrator.taskExecution.fixtureEnabled=$task_fixture" \
   --set "ayni-orchestrator.observability.collector.enabled=$observability" \
@@ -62,6 +64,9 @@ for workload in \
   kubectl --context "$context" --namespace "$namespace" rollout status \
     "$workload" --timeout=5m
 done
+if [[ "${AYNI_ORCHESTRATOR_RUNTIME:-true}" == true ]]; then
+  kubectl --context "$context" --namespace "$namespace" rollout status deployment/runtime-preparation-supervisor --timeout=5m
+fi
 
 verify_workload_image() {
   local selector="$1" container="$2" expected="$3" pod actual image_id

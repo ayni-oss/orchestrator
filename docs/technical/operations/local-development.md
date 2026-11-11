@@ -27,6 +27,21 @@ Conversation and task workers run in `<application-namespace>-sessions`.
 The supervisor image includes both conversation and task binaries; the scripted
 provider is a deterministic execution mode, not a separate infrastructure role.
 
+`dev/ctl deploy`, `dev/ctl live` and `make dev` automatically prepare and enable
+runtime workers on the supported native arm64 local cluster. The first run
+downloads the checksum-pinned Ayni release and builds/imports the worker and
+verifier images. Subsequent runs reuse them only while source bytes match and
+their immutable manifests remain in the selected node. Runtime source changes
+also trigger live reconciliation. Rebuilds preserve debug mode independently.
+Set `AYNI_ORCHESTRATOR_RUNTIME=false` to explicitly deploy without runtime builds.
+
+The development setup selects the local-development profile with `qualified=false`
+and public HTTP/HTTPS stage egress for source, dependencies and registry access.
+It does not establish NetworkPolicy enforcement on Docker Desktop. Image pins,
+source verification, signing and execution allowances still apply; configure
+repository access, registry and signing in the UI as needed. Production chart
+defaults remain disabled and require administrator configuration.
+
 ### Existing installations
 
 The component rename changes StatefulSet names and therefore the generated

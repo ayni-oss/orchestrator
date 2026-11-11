@@ -75,6 +75,9 @@ Complete runtime acquisition, registry publication and verification on the admit
 profile. Connect those artifacts to trusted server-side Git/source preparation,
 including dependency ancestry, then freeze each admitted attempt. A configuration
 edit or removal blocks new use as appropriate but cannot rewrite existing attempts.
+Local deploy/live setup prepares pinned worker and verifier tooling automatically
+and selects the explicitly unqualified development profile; production admission
+and full runtime qualification remain separate gates.
 
 Repository onboarding should retain reviewed settings and carry one bounded run from the latest default branch through inspection, build, certification, publication and verification. Keep current progress, deployment blockers and the confirmed registry image visible; later runs may reuse reviewed settings without granting recurring builds.
 

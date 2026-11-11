@@ -1,5 +1,10 @@
 # Runtime preparation packaging
 
+The guarded `dev/ctl deploy` and `dev/ctl live` commands automate the following
+packaging steps and enable the separate local-development profile. They cache
+tooling by source content and check node image availability before reuse.
+Use `AYNI_ORCHESTRATOR_RUNTIME=false` to skip runtime setup.
+
 This profile currently targets native Linux arm64 Kubernetes with pod user namespaces. The separate policy-enforcing local cluster runs through Docker Desktop; see [cluster setup](../../../dev/fixtures/runtime-preparation/cluster/README.md). The chart defaults remain `runtimePreparation.enabled: false` and `profile.qualified: false`. Qualified profiles require their measured topology; engine qualification alone is insufficient. The explicit local-development exception described in the runtime preparation architecture permits development testing without a claim of topology qualification.
 
 Run `dev/scripts/runtime-preparation-images.sh <ayni-linux-arm64-cli> <expected-sha256>` to build all three static MUSL binaries with the pinned Rust Alpine Dockerfile, package both images, and import them into the explicitly selected local node. `AYNI_RUNTIME_KUBE_CONTEXT=kind-ayni-runtime-qualification` selects the separate cluster; the default remains `docker-desktop`. The script cancels its own build below ten GiB host free space. An optional third argument reuses an existing verified static binary directory. No release is modified.

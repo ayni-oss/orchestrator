@@ -197,6 +197,10 @@ it does not establish network isolation. The canonical profile still requires
 `qualified: true`, and the development profile rejects that qualification claim.
 The frozen operation records this identity and its API exposes `development_only`.
 The ayni settings page shows when the active worker profile is for local development.
+The guarded local `dev/ctl deploy` and `dev/ctl live` setup selects this exception
+automatically after building checksum-verified tooling and resolving immutable
+worker/verifier manifests. `AYNI_ORCHESTRATOR_RUNTIME=false` opts out. This local
+convenience does not change production chart defaults or qualify the topology.
 
 ### Build status report
 

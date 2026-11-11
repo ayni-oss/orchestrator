@@ -20,6 +20,11 @@ ROOT = Path(__file__).resolve().parents[2]
 COMPONENTS = ('control-plane', 'conversation-supervisor')
 sys.path.insert(0, str(ROOT / 'dev/lib'))
 from local_context import checked_context, selected_context
+import importlib.util
+
+runtime_spec = importlib.util.spec_from_file_location('runtime_development', ROOT / 'dev/scripts/runtime-development.py')
+runtime_development = importlib.util.module_from_spec(runtime_spec)
+runtime_spec.loader.exec_module(runtime_development)
 
 
 def state_directory(context, selected):
@@ -59,7 +64,8 @@ def inputs():
     executor = list((ROOT / 'backend/workers/conversation-supervisor').rglob('*'))
     schema = list((ROOT / 'backend/servers/control-plane/crates/workflow-postgres/migrations').glob('*.sql'))
     schema += [ROOT / 'backend/servers/control-plane/crates/workflow-postgres/src/migrations.rs']
-    return {COMPONENTS[0]: fingerprint(shared + control), COMPONENTS[1]: fingerprint(shared + executor), 'schema': fingerprint(schema)}
+    return {COMPONENTS[0]: fingerprint(shared + control), COMPONENTS[1]: fingerprint(shared + executor),
+            'runtime': runtime_development.fingerprint(), 'schema': fingerprint(schema)}
 
 
 def read_state(path):
