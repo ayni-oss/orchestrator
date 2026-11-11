@@ -566,6 +566,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ayni-orchestrator-xtask"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "flate2",
+ "percent-encoding",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tar",
+ "tempfile",
+ "toml",
+ "url",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
 name = "base16ct"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

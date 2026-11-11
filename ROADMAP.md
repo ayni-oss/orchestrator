@@ -197,6 +197,22 @@ those gates. Deliver the four review slices in dependency order without merging
 automatically.
 
 
+## One development environment and Rust tooling
+
+Consolidate local development onto `http://127.0.0.1:5174` and the existing
+`ayni-orchestrator-live` Docker Desktop deployment, preserving its data. Rust
+owns development orchestration, infrastructure fixtures, generators and checks;
+Svelte/TypeScript retains application code and native frontend tests. Remove the
+parallel dev/qualification launch paths and supporting-language tooling only
+after their meaningful assertions and recovery behavior have replacements.
+
+Deliver Rust tooling, the singleton hot-reload controller with automatic forward
+migration redeployment, then legacy removal and the authorized local cutover.
+The initial `cargo xtask` implementation ports documentation, security, protocol
+and Helm checks, generation, PostgreSQL/loopback runners and retained evidence
+validation. Controller, fixture and acceptance consolidation remain in progress;
+the presence of a Rust command does not establish full migration of the tooling.
+
 ## Acceptance and delivery discipline
 
 - A task needs passing managed Ayni quality and evidence for its requested behavior. Missing/incomplete required evidence is a blocker; no policy weakening to achieve a green result.

@@ -3,6 +3,7 @@ FROM rust:1.94.0-alpine3.23 AS builder
 RUN apk add --no-cache build-base musl-dev binutils git
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY tools ./tools
 COPY backend ./backend
 COPY proto ./proto
 COPY dev/fixtures/task-source ./dev/fixtures/task-source
