@@ -175,6 +175,25 @@ the product, and qualified on the declared deployment. Alpha requires all three
 for every in-scope journey. Existing retired browser profiles must be replaced or
 explicitly superseded by runnable coverage, not bypassed to report success.
 
+## Execution capture and debug deployments
+
+Deliver shared process supervision and acknowledged worker telemetry, then collect
+all managed container stdout/stderr through the Kubernetes API, expose retained
+history in the local debug console, and qualify the complete deployment. Raw logs
+are deployment-gated and separate from safe diagnostics. Preserve existing
+workflow authority and isolated verifier boundaries; report API rotation/deletion
+uncertainty and storage loss explicitly. See the [capture contract](docs/technical/architecture/execution-capture.md).
+
+The capture implementation now includes the shared runner and durable journals,
+canonical telemetry/debug APIs, API collector, replay jobs, deployment flag and
+local log explorer. Qualification has exercised binary/repeated output, init and
+sidecar inventory, failed starts, unrelated-pod exclusion, retained history after
+deletion and browser rendering. Full failure/recovery and every real workload
+category remain acceptance gates; implementation presence is not completion of
+those gates. Deliver the four review slices in dependency order without merging
+automatically.
+
+
 ## Acceptance and delivery discipline
 
 - A task needs passing managed Ayni quality and evidence for its requested behavior. Missing/incomplete required evidence is a blocker; no policy weakening to achieve a green result.
@@ -197,24 +216,3 @@ explicitly superseded by runnable coverage, not bypassed to report success.
 Ayni's [independent roadmap](https://github.com/ayni-oss/ayni/blob/main/ROADMAP.md)
 owns its tool, environment and compatibility evolution. Orchestrator-specific
 workflow requirements belong here.
-
-## Execution capture and debug deployments
-
-Deliver shared process supervision and acknowledged worker telemetry, then collect
-all managed container stdout/stderr through the Kubernetes API, expose retained
-history in the local debug console, and qualify the complete deployment. Raw logs
-are deployment-gated and separate from safe diagnostics. Preserve existing
-workflow authority and isolated verifier boundaries; report API rotation/deletion
-uncertainty and storage loss explicitly. See the [capture contract](docs/technical/architecture/execution-capture.md).
-
-The first slice adds the shared runner, canonical telemetry contract, durable
-journals, PostgreSQL replay and runtime-build integration. Collection, the local
-frontend and complete deployed qualification remain subsequent review slices.
-
-The second slice integrates task/publication command capture, namespace-scoped
-Kubernetes API collection and abandoned-spool replay. Deployment activation and
-frontend availability follow in slice 3; failure qualification remains a gate.
-
-The third slice adds debug deployment controls, the local log explorer, resumable
-read/download APIs and control-plane Prometheus projections. Deployment tests
-cover debug-off denial and retained output; full recovery qualification remains.

@@ -67,7 +67,7 @@ Loopback debug reads require the deployment flag, and watches stop on server
 shutdown. Cancellation notifications can stop processes but never start them.
 
 The foundation alone does not establish complete capture. Collection and frontend
-implementation are described below; complete deployed qualification remains a gate.
+implementation are described below; the [qualification record](../operations/debug-capture-qualification.md) tracks the remaining acceptance gates.
 
 ## Collection and recovery
 

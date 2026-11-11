@@ -358,3 +358,5 @@ PYTHON
 done
 
 python3 "$repository_root/scripts/ci/check-signer-provisioning-chart.py"
+
+python3 "$repository_root/scripts/ci/check-debug-chart.py"
