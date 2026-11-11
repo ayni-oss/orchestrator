@@ -5,6 +5,12 @@ example-derived web application with Svelte HMR and rebuilds/redeploys the Rust
 backend. There is no separate diagnostic frontend. Immutable-image acceptance is
 still required; live debug builds are development evidence only.
 
+Runtime workers are enabled automatically using the local-development profile.
+The first deployment builds the pinned worker/verifier tooling; source changes
+invalidate its cache and trigger a fresh runtime rollout. Set
+`AYNI_ORCHESTRATOR_RUNTIME=false` to opt out. The profile remains unqualified;
+see [local runtime setup](../docs/technical/operations/local-development.md).
+
 ## Application database baseline
 
 The fresh-install schema is organized into 14 layer migrations, `001`–`014`.

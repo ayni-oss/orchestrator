@@ -60,6 +60,16 @@ class LiveTests(unittest.TestCase):
                 with live.exclusive(self.path.parent):
                     self.fail('second owner acquired the lock')
 
+    def test_runtime_only_edit_rolls_out_without_rebuilding_other_components(self):
+        self.old['runtime'] = 'old-runtime'
+        changed = dict(self.old, runtime='new-runtime')
+        with patch.object(live, 'inputs', return_value=changed), patch.object(live, 'run', return_value='revision') as run:
+            self.assertTrue(live.reconcile(self.path, self.state, {}))
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertTrue(any('live-deploy.sh' in str(command) for command in commands))
+        self.assertFalse(any('live-images.sh' in str(command) or command[0] == 'cargo' for command in commands))
+        self.assertEqual(self.state['active']['runtime'], 'new-runtime')
+
     def test_cluster_state_is_separate_and_desktop_retains_its_existing_path(self):
         selected = 'ayni-orchestrator-runtime-qualification'
         self.assertEqual(live.state_directory('docker-desktop', selected), live.ROOT / '.local/live' / selected)

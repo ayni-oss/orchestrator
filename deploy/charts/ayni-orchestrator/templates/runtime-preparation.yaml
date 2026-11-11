@@ -85,6 +85,8 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: runtime-preparation-supervisor
+        app.kubernetes.io/part-of: ayni-orchestrator
+        ayni.build/deployment: {{ .Release.Namespace | quote }}
     spec:
       serviceAccountName: runtime-preparation-supervisor
       securityContext:
