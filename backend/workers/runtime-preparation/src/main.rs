@@ -24,6 +24,19 @@ fn main() -> ExitCode {
                 ExitCode::from(2)
             }
         }
+        ["--replay-telemetry"] => tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .map_or(ExitCode::FAILURE, |runtime| {
+                if runtime
+                    .block_on(ayni_orchestrator_runtime_preparation::telemetry::replay())
+                    .is_ok()
+                {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::FAILURE
+                }
+            }),
         ["--compat-launch"] => compatibility::launch(),
         ["--compat-prepare"] => compatibility::prepare(),
         ["--compat-child", stage] => compatibility::child(stage),
@@ -59,7 +72,7 @@ async fn run() -> Result<(), Failure> {
     let client = WorkerClient::new(
         &configured("ORCHESTRATOR_RUNTIME_AUTHORITY_URL")?,
         capability.trim().into(),
-        binding,
+        binding.clone(),
     )?;
     // The pod can start while the supervisor is recording the observed UID. It
     // must wait for that authority fence before acquiring credentials or inputs.
@@ -74,6 +87,14 @@ async fn run() -> Result<(), Failure> {
         }
     }
     let claim = claim.ok_or(Failure::ExecutionFailed)?;
+    let telemetry = ayni_orchestrator_runtime_preparation::telemetry::Delivery::start(
+        &binding,
+        capability.trim().into(),
+    )
+    .unwrap_or_else(|_| {
+        eprintln!("runtime telemetry unavailable; capture incomplete");
+        None
+    });
     let report = match pipeline::execute(&client, &claim).await {
         Ok(result) => StageReport {
             binding: client.binding.clone(),
@@ -83,6 +104,9 @@ async fn run() -> Result<(), Failure> {
         },
         Err(reason) => pipeline::failure_report(&client, reason),
     };
+    if let Some(telemetry) = telemetry {
+        telemetry.finish().await;
+    }
     if client.binding.stage == "certify" {
         // Only the trusted supervisor can recheck the mounted Secret UID after
         // this workload terminates, then accept the exact certification report.

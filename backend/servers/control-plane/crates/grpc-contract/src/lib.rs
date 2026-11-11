@@ -6,6 +6,7 @@
 /// The canonical `ayni.orchestrator.v1` private workflow package.
 #[allow(clippy::all, clippy::pedantic, clippy::nursery)]
 pub mod v1 {
+    pub use ayni_orchestrator_telemetry::v1::*;
     tonic::include_proto!("ayni.orchestrator.v1");
     include!(concat!(env!("OUT_DIR"), "/ayni.orchestrator.v1.serde.rs"));
 }
@@ -74,6 +75,10 @@ mod tests {
     ];
 
     #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "canonical service inventory is reviewed as one contract"
+    )]
     fn descriptor_exposes_only_the_canonical_workflow_services() -> Result<(), prost::DecodeError> {
         let descriptor = FileDescriptorSet::decode(super::FILE_DESCRIPTOR_SET)?;
         let services = descriptor
@@ -94,6 +99,19 @@ mod tests {
         assert_eq!(
             services,
             BTreeMap::from([
+                (
+                    "ExecutionTelemetryService",
+                    BTreeSet::from(["ExchangeTelemetry"])
+                ),
+                (
+                    "DebugLogsService",
+                    BTreeSet::from([
+                        "GetDebugCapabilities",
+                        "ListLogSources",
+                        "ReadLogs",
+                        "WatchLogs"
+                    ])
+                ),
                 ("RepositoryService", BTreeSet::from(REPOSITORY_METHODS)),
                 (
                     "RuntimePreparationService",

@@ -30,7 +30,7 @@ docker run --detach --rm \
 
 ready=false
 for _ in $(seq 1 60); do
-  if docker exec "$CONTAINER" pg_isready --username postgres --dbname "$DATABASE" >/dev/null 2>&1; then
+  if docker exec "$CONTAINER" pg_isready --host 127.0.0.1 --username postgres --dbname "$DATABASE" >/dev/null 2>&1; then
     ready=true
     break
   fi
@@ -64,7 +64,10 @@ connection_browser() {
   AYNI_PRODUCT_PRODUCTION=1 cargo test --locked -p ayni-orchestrator-control-plane --test repositories_browser -- --ignored --nocapture
 }
 
-if [[ "${AYNI_RUNTIME_PREPARATIONS_ONLY:-0}" == 1 ]]; then
+if [[ "${AYNI_LOGS_ONLY:-0}" == 1 ]]; then
+  cargo test --locked -p ayni-orchestrator-workflow-postgres --test logs -- --ignored --nocapture
+  exit 0
+elif [[ "${AYNI_RUNTIME_PREPARATIONS_ONLY:-0}" == 1 ]]; then
   cargo test --locked -p ayni-orchestrator-workflow-postgres --test runtime_preparations -- --ignored --nocapture --test-threads=1
   exit 0
 fi
@@ -91,6 +94,7 @@ if [[ "${AYNI_CONNECTIONS_ONLY:-0}" == 1 ]]; then
 fi
 
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test feasibility -- --ignored --nocapture
+cargo test --locked -p ayni-orchestrator-workflow-postgres --test logs -- --ignored --nocapture
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test plans -- --ignored --nocapture
 # Task ownership includes concurrent claims and structured worker questions.
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test task_runs -- --ignored --nocapture

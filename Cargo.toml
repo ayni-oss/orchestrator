@@ -1,6 +1,8 @@
 [workspace]
 members = [
+    "backend/libs/telemetry",
     "backend/libs/events",
+    "backend/libs/execution",
     "backend/libs/providers",
     "backend/servers/control-plane/crates/grpc-contract",
     "backend/libs/domain",
@@ -26,6 +28,7 @@ repository = "https://github.com/ayni-oss/orchestrator"
 publish = false
 
 [workspace.dependencies]
+jiff = "=0.2.38"
 async-nats = { version = "=0.50.0", default-features = false, features = ["jetstream", "aws-lc-rs"] }
 ed25519-dalek = "=2.2.0"
 url = "=2.5.8"

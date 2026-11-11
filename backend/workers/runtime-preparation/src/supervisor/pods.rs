@@ -92,7 +92,7 @@ fn stage_volumes(c: &StageClaim, profile: &RuntimeProfile) -> (Vec<Value>, Vec<V
 }
 fn stage_environment(s: &Supervisor, c: &StageClaim) -> Vec<Value> {
     let stage = c.attempt.stage.as_str();
-    let env = vec![
+    let mut env = vec![
         json!({"name":"ORCHESTRATOR_RUNTIME_OPERATION","value":c.operation.id}),
         json!({"name":"ORCHESTRATOR_RUNTIME_STAGE","value":stage}),
         json!({"name":"ORCHESTRATOR_RUNTIME_GENERATION","value":c.attempt.generation.to_string()}),
@@ -101,6 +101,17 @@ fn stage_environment(s: &Supervisor, c: &StageClaim) -> Vec<Value> {
         json!({"name":"ORCHESTRATOR_RUNTIME_AUTHORITY_URL","value":s.origin}),
         json!({"name":"ORCHESTRATOR_RUNTIME_CAPABILITY_PATH","value":"/runtime-capability/token"}),
     ];
+    if let Ok(endpoint) = std::env::var("ORCHESTRATOR_TELEMETRY_ENDPOINT") {
+        env.extend([
+            json!({"name":"ORCHESTRATOR_TELEMETRY_ENDPOINT","value":endpoint}),
+            json!({"name":"ORCHESTRATOR_TELEMETRY_SPOOL","value":"/telemetry"}),
+            json!({"name":"ORCHESTRATOR_TELEMETRY_SPOOL_BYTES","value":std::env::var("ORCHESTRATOR_TELEMETRY_SPOOL_BYTES").unwrap_or_else(|_|"134_217_728".into())}),
+            json!({"name":"ORCHESTRATOR_DEBUG","value":std::env::var("ORCHESTRATOR_DEBUG").unwrap_or_else(|_|"false".into())}),
+            json!({"name":"ORCHESTRATOR_DEPLOYMENT","value":std::env::var("ORCHESTRATOR_DEPLOYMENT").unwrap_or_default()}),
+            json!({"name":"ORCHESTRATOR_POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}}),
+            json!({"name":"ORCHESTRATOR_POD_NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}}),
+        ]);
+    }
     env
 }
 fn deadline_seconds(deadline: u64, now: u64, maximum: u32) -> Result<u64, Failure> {
@@ -134,6 +145,10 @@ fn stage_security(builder: bool) -> Value {
     }
     security
 }
+#[allow(
+    clippy::too_many_lines,
+    reason = "stage capability mounts are audited together"
+)]
 pub(super) fn render(s: &Supervisor, c: &StageClaim) -> Result<Pod, Failure> {
     let profile: RuntimeProfile = serde_json::from_str(&c.operation.frozen.profile_json)
         .map_err(|_| Failure::InvalidInput)?;
@@ -141,19 +156,23 @@ pub(super) fn render(s: &Supervisor, c: &StageClaim) -> Result<Pod, Failure> {
     let verify = matches!(stage, "verify_content" | "verify_compatibility");
     let builder = stage == "build";
     let (mut volumes, mut mounts) = stage_volumes(c, &profile);
+    if std::env::var_os("ORCHESTRATOR_TELEMETRY_ENDPOINT").is_some() && stage != "cleanup" {
+        volumes.push(json!({"name":"telemetry","persistentVolumeClaim":{"claimName":resource(c,&format!("telemetry-{}-{}",stage,c.attempt.generation))}}));
+        mounts.push(json!({"name":"telemetry","mountPath":"/telemetry"}));
+    }
     let mut security = stage_security(builder);
     let mut env = stage_environment(s, c);
     let mut command = json!(["/usr/local/bin/ayni-runtime-worker"]);
     let mut image = profile.worker_image.clone();
     let mut init = vec![];
-    if matches!(stage, "pull_existing" | "pull_final") {
-        for mount in &mut mounts {
-            if mount.get("name").and_then(Value::as_str) == Some("pull") {
-                mount["subPath"] = json!(stage);
-            }
-        }
-        init.push(json!({"name":"prepare-pull-output","image":profile.worker_image,"imagePullPolicy":s.pull_policy,"command":["/bin/sh","-c",format!("mkdir -p /pull/{stage}")],"securityContext":security,"volumeMounts":[{"name":"pull","mountPath":"/pull"}]}));
-    }
+    prepare_pull(
+        stage,
+        &mut mounts,
+        &mut init,
+        &profile.worker_image,
+        &s.pull_policy,
+        &security,
+    );
     if !verify && stage != "cleanup" {
         volumes.push(json!({"name":"capability","secret":{"secretName":resource(c,&format!("cap-{}-{}",stage,c.attempt.generation)),"defaultMode":288}}));
         mounts.push(json!({"name":"capability","mountPath":"/runtime-capability","readOnly":true}));
@@ -198,7 +217,7 @@ pub(super) fn render(s: &Supervisor, c: &StageClaim) -> Result<Pod, Failure> {
             for volume in ["workspace", "runtime-evidence", "compat-cache", "quality"] {
                 volumes.push(json!({"name":volume,"emptyDir":{"sizeLimit":format!("{}Mi",profile.max_storage_mib)}}));
             }
-            security["capabilities"]["add"] = json!(["SETUID", "SETGID"]);
+            security["capabilities"]["add"] = json!(["SETUID", "SETGID", "KILL"]);
             let compat_env = json!([
              {"name":"ORCHESTRATOR_RUNTIME_TRUSTED_CLI_SHA256","value":profile.trusted_cli_sha256},
              {"name":"ORCHESTRATOR_RUNTIME_CERTIFICATE_DIGEST","value":c.operation.evidence.certificate_digest},
@@ -208,10 +227,21 @@ pub(super) fn render(s: &Supervisor, c: &StageClaim) -> Result<Pod, Failure> {
              {"name":"ORCHESTRATOR_RUNTIME_MAX_SECONDS","value":profile.max_seconds.to_string()}
             ]);
             env = serde_json::from_value(compat_env.clone()).map_err(|_| Failure::InvalidInput)?;
+            env.extend(capture_environment(c, "stage"));
 
             mounts.retain(|m| m.get("mountPath").and_then(Value::as_str) != Some("/tmp"));
-            let prepare_mounts = json!([{"name":"trusted","mountPath":"/trusted","readOnly":true},{"name":"source","mountPath":"/inputs/source","readOnly":true},{"name":"workspace","mountPath":"/workspace"},{"name":"runtime-evidence","mountPath":"/runtime-evidence"},{"name":"compat-cache","mountPath":"/tmp"}]);
-            init.push(json!({"name":"compat-prepare","env":compat_env,"image":image,"command":["/trusted/runtime-worker","--compat-prepare"],"securityContext":security,"volumeMounts":prepare_mounts,"resources":{"limits":{"cpu":format!("{}m",profile.max_cpu_millis),"memory":format!("{}Mi",profile.max_memory_mib)}}}));
+            let mut prepare_mounts = json!([{"name":"trusted","mountPath":"/trusted","readOnly":true},{"name":"source","mountPath":"/inputs/source","readOnly":true},{"name":"workspace","mountPath":"/workspace"},{"name":"runtime-evidence","mountPath":"/runtime-evidence"},{"name":"compat-cache","mountPath":"/tmp"}]);
+            let mut prepare_env = compat_env;
+            if let Some(values) = prepare_env.as_array_mut() {
+                values.extend(capture_environment(c, "compat-prepare"));
+            }
+            if std::env::var_os("ORCHESTRATOR_TELEMETRY_ENDPOINT").is_some() {
+                prepare_mounts
+                    .as_array_mut()
+                    .ok_or(Failure::InvalidInput)?
+                    .push(json!({"name":"telemetry","mountPath":"/telemetry"}));
+            }
+            init.push(json!({"name":"compat-prepare","env":prepare_env,"image":image,"command":["/trusted/runtime-worker","--compat-prepare"],"securityContext":security,"volumeMounts":prepare_mounts,"resources":{"limits":{"cpu":format!("{}m",profile.max_cpu_millis),"memory":format!("{}Mi",profile.max_memory_mib)}}}));
             mounts.extend([
                 json!({"name":"workspace","mountPath":"/workspace","readOnly":true}),
                 json!({"name":"quality","mountPath":"/workspace/.ayni"}),
@@ -234,6 +264,40 @@ pub(super) fn render(s: &Supervisor, c: &StageClaim) -> Result<Pod, Failure> {
             json!([{"name":resource(c,&format!("pull-{}-{}",stage,c.attempt.generation))}]);
     }
     serde_json::from_value(value).map_err(|_| Failure::InvalidInput)
+}
+
+fn capture_environment(c: &StageClaim, container: &str) -> Vec<Value> {
+    if std::env::var_os("ORCHESTRATOR_TELEMETRY_ENDPOINT").is_none() {
+        return Vec::new();
+    }
+    vec![
+        json!({"name":"ORCHESTRATOR_CAPTURE_SOURCE","value":json!({"component":"runtime-worker","container":container,"executionId":c.operation.id,"generation":c.attempt.generation,"stage":c.attempt.stage}).to_string()}),
+        json!({"name":"ORCHESTRATOR_CAPTURE_COMMAND_DIGEST","value":c.attempt.command_digest}),
+        json!({"name":"ORCHESTRATOR_CAPTURE_POD_UID","valueFrom":{"fieldRef":{"fieldPath":"metadata.uid"}}}),
+        json!({"name":"ORCHESTRATOR_CAPTURE_POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}}),
+        json!({"name":"ORCHESTRATOR_CAPTURE_NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}}),
+        json!({"name":"ORCHESTRATOR_TELEMETRY_SPOOL","value":"/telemetry"}),
+        json!({"name":"ORCHESTRATOR_TELEMETRY_SPOOL_BYTES","value":(std::env::var("ORCHESTRATOR_TELEMETRY_SPOOL_BYTES").ok().and_then(|v|v.parse::<u64>().ok()).unwrap_or(134_217_728)/2).max(1).to_string()}),
+        json!({"name":"ORCHESTRATOR_DEBUG","value":std::env::var("ORCHESTRATOR_DEBUG").unwrap_or_else(|_|"false".into())}),
+    ]
+}
+
+fn prepare_pull(
+    stage: &str,
+    mounts: &mut [Value],
+    init: &mut Vec<Value>,
+    image: &str,
+    pull_policy: &str,
+    security: &Value,
+) {
+    if matches!(stage, "pull_existing" | "pull_final") {
+        for mount in mounts {
+            if mount.get("name").and_then(Value::as_str) == Some("pull") {
+                mount["subPath"] = json!(stage);
+            }
+        }
+        init.push(json!({"name":"prepare-pull-output","image":image,"imagePullPolicy":pull_policy,"command":["/bin/sh","-c",format!("mkdir -p /pull/{stage}")],"securityContext":security,"volumeMounts":[{"name":"pull","mountPath":"/pull"}]}));
+    }
 }
 
 #[cfg(test)]
@@ -386,7 +450,7 @@ mod tests {
         );
     }
     #[tokio::test]
-    async fn compatibility_parent_has_only_identity_drop_authority_in_the_pod_user_namespace()
+    async fn compatibility_parent_can_drop_identity_and_stop_children_in_the_pod_user_namespace()
     -> Result<(), Box<dyn std::error::Error>> {
         let value = serde_json::to_value(render(&supervisor()?, &claim("verify_compatibility")?)?)?;
         let context = &value["spec"]["containers"][0]["securityContext"];
@@ -395,7 +459,10 @@ mod tests {
         assert_eq!(context["runAsGroup"], 0);
         assert_eq!(context["allowPrivilegeEscalation"], false);
         assert_eq!(context["capabilities"]["drop"], json!(["ALL"]));
-        assert_eq!(context["capabilities"]["add"], json!(["SETUID", "SETGID"]));
+        assert_eq!(
+            context["capabilities"]["add"],
+            json!(["SETUID", "SETGID", "KILL"])
+        );
         assert_eq!(
             value["spec"]["initContainers"][1]["securityContext"],
             *context

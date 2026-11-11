@@ -177,6 +177,9 @@ impl Supervisor {
     /// # Errors
     /// Reject foreign or replaced workloads and unavailable authority; retries preserve identity.
     pub async fn tick(&self) -> Result<(), Failure> {
+        if resources::retire_replays(self).await.is_err() {
+            self.diagnostic("telemetry recovery reconciliation pending".into());
+        }
         let Some(claim) = self.call(&SupervisorRequest::Poll).await? else {
             return Ok(());
         };
@@ -202,6 +205,11 @@ impl Supervisor {
             return self.existing(&api, claim, &pod).await;
         }
         if !claim.attempt.pod_uid.is_empty() {
+            if resources::recover_capture(self, claim).await.is_err() {
+                self.diagnostic(
+                    "telemetry recovery pending; orphan reconciliation will retry".into(),
+                );
+            }
             if claim.operation.state == "running" {
                 let mut diagnostic = ayni_orchestrator_observability::workload::record(
                     ayni_orchestrator_observability::workload::Kind::Runtime,
@@ -314,10 +322,31 @@ impl Supervisor {
         Ok(())
     }
     async fn existing(&self, api: &Api<Pod>, claim: &StageClaim, pod: &Pod) -> Result<(), Failure> {
+        if !claim.attempt.pod_uid.is_empty() {
+            let _ = resources::arm_recovery(self, claim).await;
+        }
         if claim.attempt.pod_uid.is_empty() {
             return self.bind(claim, pod).await;
         }
         if matches!(claim.operation.state.as_str(), "stopping" | "cancelling") {
+            if claim.operation.state == "stopping"
+                && std::env::var("ORCHESTRATOR_DEBUG").is_ok_and(|v| v == "true")
+            {
+                // Give the API collector a bounded final pass over terminated containers.
+                // Cancellation never waits for diagnostics; retained spools recover separately.
+                let finished = pod
+                    .status
+                    .iter()
+                    .flat_map(|s| s.container_statuses.iter().flatten())
+                    .filter_map(|s| s.state.as_ref()?.terminated.as_ref()?.finished_at.as_ref())
+                    .map(|t| t.0.as_millisecond())
+                    .max();
+                if finished.is_some_and(|t| {
+                    ayni_orchestrator_execution::now_ms().saturating_sub(t) < 60_000
+                }) {
+                    return Ok(());
+                }
+            }
             if pod.metadata.deletion_timestamp.is_none() {
                 let diagnostic = ayni_orchestrator_observability::workload::record(
                     ayni_orchestrator_observability::workload::Kind::Runtime,

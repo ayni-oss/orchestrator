@@ -110,6 +110,7 @@ pub fn prepare() -> ExitCode {
     render(prepare_probe, "prepared")
 }
 fn render(operation: fn(&Expected) -> Result<String, Failure>, success: &'static str) -> ExitCode {
+    let _ = ayni_orchestrator_execution::install_from_environment();
     let report = match Expected::load() {
         Ok(expected) => expected.report(operation(&expected), success),
         Err(reason) => Report {

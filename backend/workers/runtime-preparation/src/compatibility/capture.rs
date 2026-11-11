@@ -19,7 +19,7 @@ pub(super) fn verify_parent() -> Result<(), Failure> {
         return Err(Failure::InvalidInput);
     }
     let caps = thread::capabilities(None).map_err(|_| Failure::InvalidInput)?;
-    let allowed = CapabilitySet::SETUID | CapabilitySet::SETGID;
+    let allowed = CapabilitySet::SETUID | CapabilitySet::SETGID | CapabilitySet::KILL;
     if caps.effective != allowed
         || caps.permitted != allowed
         || !(caps.inheritable & !allowed).is_empty()
@@ -55,6 +55,7 @@ pub(super) fn capture(stage: &str, deadline: Instant) -> Result<Vec<u8>, Failure
         fs::OpenOptions::new()
             .read(true)
             .write(true)
+            .append(true)
             .create_new(true)
             .mode(0o600)
             .open(private.path().join(name))
@@ -71,22 +72,27 @@ pub(super) fn capture(stage: &str, deadline: Instant) -> Result<Vec<u8>, Failure
         .stdin(Stdio::null())
         .stdout(stdout.try_clone().map_err(|_| Failure::ExecutionFailed)?)
         .stderr(stderr.try_clone().map_err(|_| Failure::ExecutionFailed)?);
+    command.process_group(0);
     child_environment(&mut command);
     let mut child = command.spawn().map_err(|_| Failure::ExecutionFailed)?;
+    let mut observed = ayni_orchestrator_execution::files::FileCapture::open(
+        &private.path().join("stdout"),
+        &private.path().join("stderr"),
+    )
+    .ok();
     let status = loop {
-        let oversized = stdout
-            .metadata()
-            .map_err(|_| Failure::ExecutionFailed)?
-            .len()
-            > MAX_ARTIFACT as u64
-            || stderr
-                .metadata()
-                .map_err(|_| Failure::ExecutionFailed)?
-                .len()
-                > 8192;
+        if let Some(capture) = &mut observed {
+            let _ = capture.poll();
+        }
+        let oversized = output_exceeded(&stdout, &stderr)?;
         if oversized || Instant::now() >= deadline {
+            ayni_orchestrator_execution::process::kill_group(child.id());
             let _ = child.kill();
-            let _ = child.wait();
+            if let Ok(status) = child.wait() {
+                if let Some(capture) = observed.take() {
+                    let _ = capture.finish(status);
+                }
+            }
             return Err(if oversized {
                 Failure::ExecutionOutputExceeded
             } else {
@@ -98,17 +104,11 @@ pub(super) fn capture(stage: &str, deadline: Instant) -> Result<Vec<u8>, Failure
         }
         std::thread::sleep(Duration::from_millis(10));
     };
-    if stdout
-        .metadata()
-        .map_err(|_| Failure::ExecutionFailed)?
-        .len()
-        > MAX_ARTIFACT as u64
-        || stderr
-            .metadata()
-            .map_err(|_| Failure::ExecutionFailed)?
-            .len()
-            > 8192
-    {
+    ayni_orchestrator_execution::process::kill_group(child.id());
+    if let Some(capture) = observed {
+        let _ = capture.finish(status);
+    }
+    if output_exceeded(&stdout, &stderr)? {
         return Err(Failure::ExecutionOutputExceeded);
     }
     if stage != "quality" && !status.success()
@@ -147,4 +147,17 @@ fn child_environment(command: &mut Command) {
     ] {
         command.env(name, value);
     }
+}
+
+#[cfg(target_os = "linux")]
+fn output_exceeded(stdout: &fs::File, stderr: &fs::File) -> Result<bool, Failure> {
+    let stdout_len = stdout
+        .metadata()
+        .map_err(|_| Failure::ExecutionFailed)?
+        .len();
+    let stderr_len = stderr
+        .metadata()
+        .map_err(|_| Failure::ExecutionFailed)?
+        .len();
+    Ok(stdout_len > MAX_ARTIFACT as u64 || stderr_len > 8192)
 }

@@ -197,3 +197,16 @@ explicitly superseded by runnable coverage, not bypassed to report success.
 Ayni's [independent roadmap](https://github.com/ayni-oss/ayni/blob/main/ROADMAP.md)
 owns its tool, environment and compatibility evolution. Orchestrator-specific
 workflow requirements belong here.
+
+## Execution capture and debug deployments
+
+Deliver shared process supervision and acknowledged worker telemetry, then collect
+all managed container stdout/stderr through the Kubernetes API, expose retained
+history in the local debug console, and qualify the complete deployment. Raw logs
+are deployment-gated and separate from safe diagnostics. Preserve existing
+workflow authority and isolated verifier boundaries; report API rotation/deletion
+uncertainty and storage loss explicitly. See the [capture contract](docs/technical/architecture/execution-capture.md).
+
+The first slice adds the shared runner, canonical telemetry contract, durable
+journals, PostgreSQL replay and runtime-build integration. Collection, the local
+frontend and complete deployed qualification remain subsequent review slices.

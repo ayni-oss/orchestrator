@@ -16,3 +16,5 @@ pub mod workflow;
 pub use configuration::{Configuration, ConfigurationError};
 pub use health::{WorkflowReadiness, router};
 pub use workflow::{WorkflowGrpc, serve as serve_grpc};
+
+pub mod telemetry;

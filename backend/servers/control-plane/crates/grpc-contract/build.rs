@@ -41,6 +41,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         .protoc_executable(protoc_bin_vendored::protoc_bin_path()?)
         .compile_well_known_types()
         .extern_path(".google.protobuf", "::pbjson_types");
+    for name in ayni_orchestrator_telemetry::MESSAGES {
+        prost.extern_path(
+            format!(".ayni.orchestrator.v1.{name}"),
+            format!("::ayni_orchestrator_telemetry::v1::{name}"),
+        );
+    }
     tonic_prost_build::configure()
         .file_descriptor_set_path(&descriptor)
         .compile_with_config(
@@ -49,9 +55,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             &[proto_root.clone(), protoc_bin_vendored::include_path()?],
         )?;
 
-    pbjson_build::Builder::new()
-        .register_descriptors(&fs::read(descriptor)?)?
-        .build(&[".ayni.orchestrator.v1"])?;
+    let mut json = pbjson_build::Builder::new();
+    json.register_descriptors(&fs::read(descriptor)?)?;
+    for name in ayni_orchestrator_telemetry::MESSAGES {
+        let path = format!(".ayni.orchestrator.v1.{name}");
+        json.exclude([path.clone()]);
+        json.extern_path(path, format!("::ayni_orchestrator_telemetry::v1::{name}"));
+    }
+    json.build(&[".ayni.orchestrator.v1"])?;
 
     println!("cargo:rerun-if-changed={}", proto_root.display());
     for source in sources {
