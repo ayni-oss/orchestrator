@@ -222,7 +222,7 @@ async fn supervise(
         // Only reap this action's adopted descendants; other commands retain their waits.
         for _ in 0..20 {
             match rustix::process::waitpgid(group, rustix::process::WaitOptions::NOHANG) {
-                Ok(Some(_)) => continue,
+                Ok(Some(_)) => {}
                 Ok(None) => tokio::time::sleep(Duration::from_millis(10)).await,
                 Err(_) => break,
             }

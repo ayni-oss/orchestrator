@@ -32,17 +32,19 @@ pods, except for the intentional collector restart, which preserves its PVC.
 
 The last successfully deployed images were:
 
-- `local/ayni-orchestrator-control-plane:git-98d1cdf9b018-633f755b8c94`
-- `local/ayni-orchestrator-conversation-supervisor:git-98d1cdf9b018-da9297b31d8b`
+- `local/ayni-orchestrator-control-plane:git-67982799f071-31c0d3025049`
+- `local/ayni-orchestrator-conversation-supervisor:git-67982799f071-f1526f645d19`
 
-The working tree contains subsequent source-status, loss-marker and publication
-correlation fixes. Those images are therefore not final-source qualification.
+These images include the source-status, loss-marker and publication correlation
+fixes. The debug-enabled rollout completed with all six pods ready. The local
+frontend loaded 45 retained sources and passed follow/pause with no browser errors.
+This does not replace the remaining full failure/recovery qualification.
 
 Host validation passed formatting, Clippy, 247 Rust tests (98 environment-dependent
 tests skipped), 13 frontend tests, production frontend build, generated protocol
-checks, Helm/topology checks and documentation validation. Focused PostgreSQL
-replay/retention tests passed before the last source-status query changes; the
-final rerun failed while starting the disposable database. The Svelte diagnostic
+checks, Helm/topology checks and documentation validation. After Docker recovery,
+the focused PostgreSQL replay/retention fixture passed against the final
+source-status query changes. The Svelte diagnostic
 runner also emitted its existing TypeScript compatibility error, so its zero-error
 summary is not treated as a completed typecheck.
 
@@ -74,4 +76,7 @@ All PRs target `alpha` and must merge in order. Nothing was merged automatically
 
 Removing only regenerable Rust incremental caches recovered approximately 38 GiB
 of host capacity. A Docker Desktop restart was explicitly approved to restore the
-local test server; final managed and deployed qualification must still be rerun.
+local test server. Docker and Kubernetes recovered, all retained workload pods
+restarted, and the local frontend successfully loaded 40 sources and exercised
+follow/pause without browser errors. Final managed and full deployed qualification
+must still be rerun.
