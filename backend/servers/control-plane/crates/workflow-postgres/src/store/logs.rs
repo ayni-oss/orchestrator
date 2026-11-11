@@ -9,6 +9,43 @@ use tokio::sync::Semaphore;
 static CONNECTIONS: Semaphore = Semaphore::const_new(4);
 const LOCK: i64 = 4_702_199_126_064_922;
 
+struct PreparedLog<'a> {
+    source: &'a LogSource,
+    sequence: i64,
+    body: String,
+    metadata: String,
+    digest: String,
+}
+
+fn prepare_log(record: &TelemetryRecord) -> Result<PreparedLog<'_>, StoreError> {
+    let source = record
+        .source
+        .as_ref()
+        .ok_or(StoreError::InvalidInput("log source"))?;
+    if source.id.is_empty()
+        || source.id.len() > 256
+        || record.sequence == 0
+        || record.data.len() > 8192
+    {
+        return Err(StoreError::InvalidInput("log bounds"));
+    }
+    let sequence =
+        i64::try_from(record.sequence).map_err(|_| StoreError::InvalidInput("log sequence"))?;
+    let body = serde_json::to_string(record).map_err(|_| StoreError::CorruptState)?;
+    let metadata = serde_json::to_string(source).map_err(|_| StoreError::CorruptState)?;
+    if body.len() > 65536 || metadata.len() > 8192 {
+        return Err(StoreError::InvalidInput("log bounds"));
+    }
+    let digest = format!("{:x}", Sha256::digest(body.as_bytes()));
+    Ok(PreparedLog {
+        source,
+        sequence,
+        body,
+        metadata,
+        digest,
+    })
+}
+
 impl WorkflowStore {
     /// Return only cancellation authority, never permission to start or retry work.
     /// # Errors
@@ -189,25 +226,13 @@ impl WorkflowStore {
         let _permit = CONNECTIONS
             .try_acquire()
             .map_err(|_| StoreError::Capacity("log connections"))?;
-        let source = record
-            .source
-            .as_ref()
-            .ok_or(StoreError::InvalidInput("log source"))?;
-        if source.id.is_empty()
-            || source.id.len() > 256
-            || record.sequence == 0
-            || record.data.len() > 8192
-        {
-            return Err(StoreError::InvalidInput("log bounds"));
-        }
-        let seq =
-            i64::try_from(record.sequence).map_err(|_| StoreError::InvalidInput("log sequence"))?;
-        let body = serde_json::to_string(record).map_err(|_| StoreError::CorruptState)?;
-        let metadata = serde_json::to_string(source).map_err(|_| StoreError::CorruptState)?;
-        if body.len() > 65536 || metadata.len() > 8192 {
-            return Err(StoreError::InvalidInput("log bounds"));
-        }
-        let digest = format!("{:x}", Sha256::digest(body.as_bytes()));
+        let PreparedLog {
+            source,
+            sequence: seq,
+            body,
+            metadata,
+            digest,
+        } = prepare_log(record)?;
         let (mut client, _driver) = crate::connect(&self.database_url).await?;
         let tx = client.transaction().await?;
         tx.batch_execute("SET LOCAL statement_timeout='3s'").await?;
