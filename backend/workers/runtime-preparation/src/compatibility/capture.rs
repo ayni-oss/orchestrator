@@ -54,7 +54,6 @@ pub(super) fn capture(stage: &str, deadline: Instant) -> Result<Vec<u8>, Failure
     let open = |name| {
         fs::OpenOptions::new()
             .read(true)
-            .write(true)
             .append(true)
             .create_new(true)
             .mode(0o600)
@@ -88,10 +87,10 @@ pub(super) fn capture(stage: &str, deadline: Instant) -> Result<Vec<u8>, Failure
         if oversized || Instant::now() >= deadline {
             ayni_orchestrator_execution::process::kill_group(child.id());
             let _ = child.kill();
-            if let Ok(status) = child.wait() {
-                if let Some(capture) = observed.take() {
-                    let _ = capture.finish(status);
-                }
+            if let Ok(status) = child.wait()
+                && let Some(capture) = observed.take()
+            {
+                let _ = capture.finish(status);
             }
             return Err(if oversized {
                 Failure::ExecutionOutputExceeded
